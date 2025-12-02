@@ -1,7 +1,7 @@
 import {Card, Descriptions, Spin} from 'antd';
 import React from 'react';
 import BuildLogList from "./BuildLogList";
-import {HttpUtil, PageUtil} from "@jiangood/springboot-admin-starter";
+import {HttpUtils, PageUtils} from "@jiangood/springboot-admin-starter";
 
 
 let api = 'project/';
@@ -17,9 +17,9 @@ export default class extends React.Component {
     }
 
     componentDidMount() {
-        this.id = PageUtil.currentLocationQuery().id
+        this.id = PageUtils.currentLocationQuery().id
 
-        HttpUtil.get('admin/project/get', {id: this.id}).then(rs => this.setState({project: rs}))
+        HttpUtils.get('admin/project/get', {id: this.id}).then(rs => this.setState({project: rs}))
     }
 
     render() {

@@ -2,7 +2,7 @@ import React from 'react';
 import {Alert, Card, Tabs, Typography} from "antd";
 import ContainerLog from "../../components/container/ContainerLog";
 import ContainerFile from "../../components/container/ContainerFile";
-import {HttpUtil, Page, PageUtil} from "@jiangood/springboot-admin-starter";
+import {HttpUtils, Page, PageUtils} from "@jiangood/springboot-admin-starter";
 import ContainerUpDownButton from "./ContainerUpDownButton";
 
 
@@ -15,7 +15,7 @@ export default class extends React.Component {
 
   componentDidMount() {
     const {containerId, hostId} = this.props;
-    HttpUtil.get("admin/container/status", {hostId, containerId}).then(rs => {
+    HttpUtils.get("admin/container/status", {hostId, containerId}).then(rs => {
       this.setState({status: rs})
     }).catch(() => {
       this.setState({status: '未知'})

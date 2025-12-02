@@ -1,6 +1,6 @@
 import {Button, message} from "antd";
 import React from "react";
-import {HttpUtil} from "@jiangood/springboot-admin-starter";
+import {HttpUtils} from "@jiangood/springboot-admin-starter";
 
 
 /**
@@ -18,7 +18,7 @@ export default class extends React.Component {
 
     loadStatus = () => {
         const {hostId, containerId} = this.props
-        HttpUtil.get("admin/container/status", {hostId, containerId}).then(rs => {
+        HttpUtils.get("admin/container/status", {hostId, containerId}).then(rs => {
             this.setState({status: rs})
         }).catch(() => {
             this.setState({status: '未知'})
@@ -27,7 +27,7 @@ export default class extends React.Component {
 
     start = () => {
         const {hostId, containerId} = this.props
-        HttpUtil.get("admin/container/start", {hostId, containerId}).then(rs => {
+        HttpUtils.get("admin/container/start", {hostId, containerId}).then(rs => {
             message.success("启动命令已执行")
             this.loadStatus()
         })
@@ -35,7 +35,7 @@ export default class extends React.Component {
 
     stop = () => {
         const {hostId, containerId} = this.props
-        HttpUtil.get("admin/container/stop", {hostId, containerId}).then(rs => {
+        HttpUtils.get("admin/container/stop", {hostId, containerId}).then(rs => {
             message.success("停止命令已执行")
             this.loadStatus()
         })
@@ -43,7 +43,7 @@ export default class extends React.Component {
 
     remove = () => {
         const {hostId, containerId} = this.props
-        HttpUtil.get("admin/container/remove", {hostId, containerId}).then(rs => {
+        HttpUtils.get("admin/container/remove", {hostId, containerId}).then(rs => {
             message.success("删除命令已执行")
             this.loadStatus()
         })

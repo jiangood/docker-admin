@@ -1,7 +1,7 @@
 import {AutoComplete, Button, Form, Input, Menu, Modal, Splitter} from 'antd';
 import React from 'react';
 import ContainerStatus from "../../components/ContainerStatus";
-import {FieldOrgTreeSelect, FieldSelect, HttpUtil, PageUtil, ProTable} from "@jiangood/springboot-admin-starter";
+import {FieldOrgTreeSelect, FieldRemoteSelect, HttpUtils, PageUtils, ProTable} from "@jiangood/springboot-admin-starter";
 
 
 export default class extends React.Component {
@@ -13,7 +13,7 @@ export default class extends React.Component {
             dataIndex: 'name',
             sorter: true,
             render: (name, row) => {
-                return <a onClick={() => PageUtil.open('/app/view?id=' + row.id, '应用-' + name)}>{name}</a>
+                return <a onClick={() => PageUtils.open('/app/view?id=' + row.id, '应用-' + name)}>{name}</a>
             }
         },
 
@@ -27,7 +27,7 @@ export default class extends React.Component {
                     return record.imageUrl
                 }
                 return <a
-                    onClick={() => PageUtil.open('project/view?id=' + record.project.id, '镜像-' + record.project.name)}>{record.project.name}</a>
+                    onClick={() => PageUtils.open('project/view?id=' + record.project.id, '镜像-' + record.project.name)}>{record.project.name}</a>
             }
         },
         {
@@ -74,7 +74,7 @@ export default class extends React.Component {
     }
 
     componentDidMount() {
-        HttpUtil.get("admin/appGroup/menus").then(rs => {
+        HttpUtils.get("admin/appGroup/menus").then(rs => {
             this.setState({groupData: rs})
         })
     }
@@ -85,7 +85,7 @@ export default class extends React.Component {
 
 
     handleSave = value => {
-        HttpUtil.post('admin/app/save', value).then(rs => {
+        HttpUtils.post('admin/app/save', value).then(rs => {
             this.reload()
             this.setState({deployVisible: false})
         })
@@ -121,7 +121,7 @@ export default class extends React.Component {
                         ]}
                         request={(params) => {
                             params.groupId = this.state.selectedKey
-                            return HttpUtil.pageData('admin/app/list', params);
+                            return HttpUtils.pageData('admin/app/list', params);
                         }}
                         columns={this.columns}
                         showToolbarSearch
@@ -160,7 +160,7 @@ export default class extends React.Component {
 
 
                         <Form.Item name={['host', 'id']} label='部署主机' required rules={[{required: true}]}>
-                            <FieldSelect showSearch url="admin/host/options"/>
+                            <FieldRemoteSelect showSearch url="admin/host/options"/>
                         </Form.Item>
 
 

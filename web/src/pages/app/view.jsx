@@ -1,10 +1,12 @@
 import {
-    Alert, AutoComplete,
+    Alert,
+    AutoComplete,
     Button,
     Card,
     Col,
     Descriptions,
-    Divider, Form,
+    Divider,
+    Form,
     Input,
     message,
     Modal,
@@ -19,13 +21,11 @@ import ConfigForm from "./ConfigForm";
 import {history} from "umi";
 
 import ContainerFile from "../../components/container/ContainerFile";
-import {FieldOrgTreeSelect, FieldSelect, HasPerm, HttpUtil, PageUtil,Gap} from "@jiangood/springboot-admin-starter";
+import {FieldOrgTreeSelect, FieldRemoteSelect, Gap, HttpUtils, PageUtils} from "@jiangood/springboot-admin-starter";
 import PublishForm from "./PublishForm";
-import {LogSse} from "@/components/LogSse";
+import {LogSse} from "../../components/LogSse";
 
 const Item = Descriptions.Item
-
-
 
 export default class extends React.Component {
 
@@ -47,14 +47,14 @@ export default class extends React.Component {
         newName: '',
 
 
-
         formValues: {},
         formOpen: false,
 
     }
     formRef = React.createRef()
+
     componentDidMount() {
-        let id = PageUtil.currentLocationQuery().id
+        let id = PageUtils.currentLocationQuery().id
         this.id = id;
         this.loadApp();
         this.loadContainer();
@@ -62,7 +62,7 @@ export default class extends React.Component {
 
 
     loadApp() {
-        HttpUtil.get('admin/app/get', {id: this.id}).then(rs => {
+        HttpUtils.get('admin/app/get', {id: this.id}).then(rs => {
             this.setState({app: rs, loading: false});
         })
     }
@@ -70,7 +70,7 @@ export default class extends React.Component {
     loadContainer = () => {
         console.log('loadContainer')
         this.setState({containerLoading: true})
-        HttpUtil.get("admin/app/container", {id: this.id}).then(container => {
+        HttpUtils.get("admin/app/container", {id: this.id}).then(container => {
             this.setState({container})
 
             if (container.state === 'deploying') {
@@ -93,19 +93,19 @@ export default class extends React.Component {
         const {container} = this.state
         container.state = 'deploying'
         this.setState({container})
-        HttpUtil.post('admin/app/deploy/' + this.state.app.id).then(rs => {
+        HttpUtils.post('admin/app/deploy/' + this.state.app.id).then(rs => {
             message.success('部署指令已发送，异步执行中...')
 
             this.loadContainer()
         })
     }
     start = () => {
-        HttpUtil.post('admin/app/start/' + this.state.app.id).then(() => {
+        HttpUtils.post('admin/app/start/' + this.state.app.id).then(() => {
             this.loadContainer()
         })
     }
     stop = () => {
-        HttpUtil.post('admin/app/stop/' + this.state.app.id).then(() => {
+        HttpUtils.post('admin/app/stop/' + this.state.app.id).then(() => {
             this.loadContainer()
         })
     }
@@ -115,7 +115,7 @@ export default class extends React.Component {
 
 
     onFinish = values => {
-        HttpUtil.post('admin/app/updateBaseInfo', values).then(rs => {
+        HttpUtils.post('admin/app/updateBaseInfo', values).then(rs => {
             this.setState({formOpen: false})
             this.reload()
         })
@@ -125,7 +125,7 @@ export default class extends React.Component {
     handleDelete = () => {
         const id = this.state.app.id
         const hide = message.loading('删除中...')
-        HttpUtil.get("admin/app/delete", {id}).then(rs => {
+        HttpUtils.get("admin/app/delete", {id}).then(rs => {
             hide();
 
             history.push('/app')
@@ -138,7 +138,7 @@ export default class extends React.Component {
                 okText: '强制删除数据',
                 cancelText: '取消',
                 onOk: () => {
-                    HttpUtil.get("admin/app/delete", {id, force: true}).then(rs => {
+                    HttpUtils.get("admin/app/delete", {id, force: true}).then(rs => {
                         history.push('/app')
                     })
                 }
@@ -151,7 +151,7 @@ export default class extends React.Component {
         let appId = this.state.app.id;
         let {newName} = this.state;
         const hide = message.loading('指令发送中...')
-        HttpUtil.post("admin/app/rename", {appId, newName}).then(rs => {
+        HttpUtils.post("admin/app/rename", {appId, newName}).then(rs => {
 
             message.success(rs.message)
             this.setState({app: rs, showEditName: false})
@@ -173,11 +173,11 @@ export default class extends React.Component {
                 <Button disabled={state !== 'exited'} onClick={this.start} type="primary">启动</Button>
                 <Button disabled={state !== 'running'} onClick={this.stop} type="primary" danger>停止</Button>
                 <Button onClick={this.deploy} loading={state === 'deploying'} type="primary">重新部署</Button>
-                <Button onClick={()=>this.handleEdit(this.state.app)}>修改基本信息</Button>
+                <Button onClick={() => this.handleEdit(this.state.app)}>修改基本信息</Button>
             </Space>}>
 
 
-                <Descriptions size="small" >
+                <Descriptions size="small">
                     <Item label='应用'>  {app.name} </Item>
                     <Item label='镜像' span={2}>  {app.imageUrl}:{app.imageTag} </Item>
                     <Item label='主机'>  {app.host?.name} </Item>
@@ -233,12 +233,11 @@ export default class extends React.Component {
                     </Form.Item>
 
 
-
-                    <Form.Item label='所属组织' name={['sysOrg', 'id']} >
+                    <Form.Item label='所属组织' name={['sysOrg', 'id']}>
                         <FieldOrgTreeSelect/>
                     </Form.Item>
-                    <Form.Item label='所属分组' name={['appGroup', 'id']} >
-                        <FieldSelect url='admin/appGroup/options'/>
+                    <Form.Item label='所属分组' name={['appGroup', 'id']}>
+                        <FieldRemoteSelect url='admin/appGroup/options'/>
                     </Form.Item>
                 </Form>
             </Modal>
@@ -261,24 +260,24 @@ export default class extends React.Component {
             {
                 key: 'containerLog',
                 label: '日志',
-                children: <LogSse url={'/admin/app/log/' + app.id} />
+                children: <LogSse url={'/admin/app/log/' + app.id}/>
             },
             {
                 key: 'config',
                 label: '参数',
-                children:  <ConfigForm app={app} onChange={this.reload}/>
+                children: <ConfigForm app={app} onChange={this.reload}/>
             },
             {
                 key: 'file',
                 label: '文件',
-                disabled:notFound,
+                disabled: notFound,
                 children: <ContainerFile hostId={hostId} containerId={containerId}/>
 
             },
             {
                 key: 'publish',
                 label: '发布',
-                children:  <PublishForm appId={app.id} onChange={this.reload}/>
+                children: <PublishForm appId={app.id} onChange={this.reload}/>
             },
             {
                 key: 'setting',
@@ -323,7 +322,7 @@ export default class extends React.Component {
         ]
 
 
-        return <Tabs items={items} ></Tabs>
+        return <Tabs items={items}></Tabs>
     }
 
 }

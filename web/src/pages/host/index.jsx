@@ -2,7 +2,7 @@ import {PlusOutlined} from '@ant-design/icons'
 import {Button, Form, Input, Modal, Popconfirm} from 'antd'
 import React from 'react'
 
-import {ButtonList, FieldRadioBoolean, HttpUtil, PageUtil, ProTable} from "@jiangood/springboot-admin-starter"
+import {ButtonList, FieldRadioBoolean, HttpUtils, PageUtils, ProTable} from "@jiangood/springboot-admin-starter"
 import {history} from "umi";
 
 
@@ -70,7 +70,7 @@ export default class extends React.Component {
 
 
     onFinish = values => {
-        HttpUtil.post('admin/host/save', values).then(rs => {
+        HttpUtils.post('admin/host/save', values).then(rs => {
             this.setState({formOpen: false})
             this.tableRef.current.reload()
         })
@@ -78,7 +78,7 @@ export default class extends React.Component {
 
 
     handleDelete = record => {
-        HttpUtil.postForm('admin/host/delete', {id: record.id}).then(rs => {
+        HttpUtils.postForm('admin/host/delete', {id: record.id}).then(rs => {
             this.tableRef.current.reload()
         })
     }
@@ -95,7 +95,7 @@ export default class extends React.Component {
                     </ButtonList>
                 }}
                 search={false}
-                request={(jobParamDescs, sort) => HttpUtil.pageData('admin/host/page', jobParamDescs, sort)}
+                request={(jobParamDescs, sort) => HttpUtils.pageData('admin/host/page', jobParamDescs, sort)}
                 columns={this.columns}
                 rowKey='id'
             />

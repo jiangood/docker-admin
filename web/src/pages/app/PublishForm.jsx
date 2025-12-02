@@ -1,6 +1,6 @@
 import React from "react";
 import {Button, Card, Collapse, Divider, Form, Input, message, Modal, Skeleton, Switch, Typography} from "antd";
-import {FieldSelect, Gap, HttpUtil, PageUtil} from "@jiangood/springboot-admin-starter";
+import {FieldRemoteSelect, Gap, HttpUtils, PageUtils} from "@jiangood/springboot-admin-starter";
 
 /**
  * 发布标签页
@@ -18,7 +18,7 @@ export default class extends React.Component {
         this.id = this.props.appId
 
         this.setState({appLoading: true})
-        HttpUtil.get('admin/app/get', {id: this.id}).then(rs => {
+        HttpUtils.get('admin/app/get', {id: this.id}).then(rs => {
             this.setState({app: rs})
 
 
@@ -28,27 +28,27 @@ export default class extends React.Component {
     }
 
     setAutoDeploy = (autoDeploy) => {
-        HttpUtil.get("admin/app/autoDeploy", {id: this.id, autoDeploy}).then(rs => {
+        HttpUtils.get("admin/app/autoDeploy", {id: this.id, autoDeploy}).then(rs => {
             this.props.onChange()
         })
     }
 
 
     updateVersion = (values) => {
-        HttpUtil.get("admin/app/updateVersion", {id: this.id, version: values.imageTag}).then(rs => {
+        HttpUtils.get("admin/app/updateVersion", {id: this.id, version: values.imageTag}).then(rs => {
             this.props.onChange()
         })
     }
     copyApp = (values) => {
         const hide = message.loading('复制中..', 0)
-        HttpUtil.post("admin/app/copyApp", {appId: this.id, hostId: values.hostId}).then(rs => {
+        HttpUtils.post("admin/app/copyApp", {appId: this.id, hostId: values.hostId}).then(rs => {
             const newAppId = rs.id;
             Modal.confirm({
                 icon: null,
                 title: '复制完成',
                 content: '是否打开新的应用？',
                 onOk() {
-                    PageUtil.open('/app/view?id=' + newAppId, '应用-' + rs.name)
+                    PageUtils.open('/app/view?id=' + newAppId, '应用-' + rs.name)
                 }
             })
         }).finally(hide)
@@ -96,7 +96,7 @@ export default class extends React.Component {
             <Card title='复制应用'>
             <Form onFinish={this.copyApp} layout='inline'>
                 <Form.Item name='hostId' rules={[{required: true}]}>
-                    <FieldSelect url='admin/host/options' placeholder='请选择新主机' style={{width: 300}}/>
+                    <FieldRemoteSelect url='admin/host/options' placeholder='请选择新主机' style={{width: 300}}/>
                 </Form.Item>
 
                 <Button type="primary" danger htmlType='submit'>确定复制</Button>

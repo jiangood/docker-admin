@@ -2,7 +2,7 @@ import {Button, Col, Divider, Form, Input, message, Radio, Row, Select, Spin} fr
 import React from "react";
 import EditTable from "../../components/EditTable";
 import CodeMirrorEditor from "../../components/CodeMirrorEditor";
-import {HttpUtil} from "@jiangood/springboot-admin-starter";
+import {HttpUtils} from "@jiangood/springboot-admin-starter";
 
 
 export default class extends React.Component {
@@ -20,7 +20,7 @@ export default class extends React.Component {
     ]
     update = (form) => {
         const hide = message.loading("修改配置中...", 0)
-        HttpUtil.post('admin/app/updateConfig?id=' + this.props.app.id, form).then(app => {
+        HttpUtils.post('admin/app/updateConfig?id=' + this.props.app.id, form).then(app => {
             this.props.onChange(app)
         }).finally(hide)
     }

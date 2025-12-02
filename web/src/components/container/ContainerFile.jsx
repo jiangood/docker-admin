@@ -1,6 +1,6 @@
 import React from "react";
 import {Card, Col, message, Row, Splitter, Table, Tree} from "antd";
-import {HttpUtil, Page, SysUtil} from "@jiangood/springboot-admin-starter";
+import {HttpUtils, Page, SysUtil} from "@jiangood/springboot-admin-starter";
 import {TreeUtil} from "@jiangood/springboot-admin-starter";
 
 
@@ -40,7 +40,7 @@ export default class extends React.Component {
 
       const hide = message.loading("加载文件信息中...", 0)
       this.setState({treeLoading: true})
-      HttpUtil.get("admin/container/file", {hostId, containerId, path}).then(rs => {
+      HttpUtils.get("admin/container/file", {hostId, containerId, path}).then(rs => {
         hide()
         const {dirs, files} = rs
         const node = TreeUtil.findByKey(key, treeData, "key");

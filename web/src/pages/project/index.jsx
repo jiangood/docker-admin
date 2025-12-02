@@ -5,9 +5,9 @@ import React from 'react'
 import {
     ButtonList,
     FieldOrgTreeSelect,
-    HttpUtil,
+    HttpUtils,
     OrgTree,
-    PageUtil,
+    PageUtils,
     ProTable
 } from "@jiangood/springboot-admin-starter"
 
@@ -33,7 +33,7 @@ export default class extends React.Component {
             title: '名称',
             dataIndex: 'name',
             render: (name, row) => {
-                return <a onClick={() => PageUtil.open('/project/view?id=' + row.id, "项目-" + name)}>{name}</a>
+                return <a onClick={() => PageUtils.open('/project/view?id=' + row.id, "项目-" + name)}>{name}</a>
             },
 
         },
@@ -106,7 +106,7 @@ export default class extends React.Component {
 
 
     onFinish = values => {
-        HttpUtil.post('admin/project/save', values).then(rs => {
+        HttpUtils.post('admin/project/save', values).then(rs => {
             this.setState({formOpen: false})
             this.tableRef.current.reload()
         })
@@ -114,7 +114,7 @@ export default class extends React.Component {
 
 
     handleDelete = record => {
-        HttpUtil.postForm('admin/project/delete', {id: record.id}).then(rs => {
+        HttpUtils.postForm('admin/project/delete', {id: record.id}).then(rs => {
             this.tableRef.current.reload()
         })
     }
@@ -143,7 +143,7 @@ export default class extends React.Component {
                         }}
                         request={(params) => {
                             params.orgId = this.state.selectedOrgId
-                            return HttpUtil.pageData('admin/project/page', params);
+                            return HttpUtils.pageData('admin/project/page', params);
                         }}
                         columns={this.columns}
                         showToolbarSearch

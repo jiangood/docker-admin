@@ -7,7 +7,7 @@ import {
   Loading3QuartersOutlined,
   MinusCircleTwoTone
 } from "@ant-design/icons";
-import {HttpUtil, ProTable} from "@jiangood/springboot-admin-starter";
+import {HttpUtils, ProTable} from "@jiangood/springboot-admin-starter";
 import {DateUtil, StrUtil} from "@jiangood/springboot-admin-starter";
 import LogView from "../../components/LogView";
 import dayjs from "dayjs";
@@ -118,13 +118,13 @@ export default class extends React.Component {
   ]
 
   retry = row => {
-    HttpUtil.get("admin/project/build", row).then(rs => {
+    HttpUtils.get("admin/project/build", row).then(rs => {
       this.reload()
     })
   }
 
   stop = row => {
-    HttpUtil.get("admin/project/stopBuild", row).then(rs => {
+    HttpUtils.get("admin/project/stopBuild", row).then(rs => {
       this.reload()
     })
   }
@@ -142,7 +142,7 @@ export default class extends React.Component {
     }, 1000 * 30)
 
 
-    HttpUtil.get('admin/host/options?onlyRunner=true').then(rs => {
+    HttpUtils.get('admin/host/options?onlyRunner=true').then(rs => {
       let hostOptions = rs;
       this.setState({hostOptions: hostOptions})
     })
@@ -161,13 +161,13 @@ export default class extends React.Component {
 
 
   submitTrigger = (values) => {
-    HttpUtil.get("admin/project/build", values).then(rs => {
+    HttpUtils.get("admin/project/build", values).then(rs => {
       this.setState({showTrigger: false})
       this.actionRef.current.reload()
     })
   }
   cleanError = () => {
-    HttpUtil.get("admin/project/cleanErrorLog", {id: this.props.project.id}).then(rs => {
+    HttpUtils.get("admin/project/cleanErrorLog", {id: this.props.project.id}).then(rs => {
       this.actionRef.current.reload()
     })
   }
@@ -189,7 +189,7 @@ export default class extends React.Component {
         actionRef={this.actionRef}
         request={(params) => {
           params.projectId = this.props.project.id
-          return HttpUtil.pageData("admin/buildLog/list" , params);
+          return HttpUtils.pageData("admin/buildLog/list" , params);
         }}
         columns={this.columns}
         showSearch={false}
