@@ -1,7 +1,8 @@
 package io.github.jiangood.docker.admin.controller;
 
 
-import io.admin.common.utils.SpringTool;
+
+import io.admin.common.utils.SpringUtils;
 
 import java.io.File;
 import java.io.UnsupportedEncodingException;
@@ -11,7 +12,7 @@ public class LogUrlTool {
 
 
     public static  String getLogViewUrl(String logger) throws UnsupportedEncodingException {
-        String root = SpringTool.getProperty("logging.file.path");
+        String root = SpringUtils.getProperty("logging.file.path");
 
         File file = new File(root, logger + ".log");
 
