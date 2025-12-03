@@ -51,7 +51,7 @@ export default class extends React.Component {
       title: '开始时间',
       dataIndex: 'createTime',
       render(_, row) {
-        return <Tooltip title={row.createTime}> {DateUtil.friendlyTime(row.createTime)}</Tooltip>
+        return <Tooltip title={row.createTime}> {DateUtils.friendlyTime(row.createTime)}</Tooltip>
       }
     },
     {
@@ -98,7 +98,7 @@ export default class extends React.Component {
       title: '耗时',
       dataIndex: 'timeSpend',
       render(t, row) {
-        return DateUtil.friendlyTotalTime(t)
+        return DateUtils.friendlyTotalTime(t)
       }
     },
     {

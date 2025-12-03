@@ -24,7 +24,7 @@ export default class extends React.Component {
 
   render() {
     const s = this.state.status;
-    if (s && (StrUtil.contains(s,'Up') || StrUtil.contains(s, "running"))) {
+    if (s && (StringUtils.contains(s,'Up') || StringUtils.contains(s, "running"))) {
       return <Tag color={"green"}>{s} </Tag>
     }
     return <Tag color={"red"}>{s}</Tag>

@@ -143,7 +143,7 @@ export default class extends React.Component {
                         }}
                         request={(params) => {
                             params.orgId = this.state.selectedOrgId
-                            return HttpUtils.pageData('admin/project/page', params);
+                            return HttpUtils.get('admin/project/page', params);
                         }}
                         columns={this.columns}
                         showToolbarSearch

@@ -95,7 +95,7 @@ export default class extends React.Component {
                     </ButtonList>
                 }}
                 search={false}
-                request={(jobParamDescs, sort) => HttpUtils.pageData('admin/host/page', jobParamDescs, sort)}
+                request={(jobParamDescs, sort) => HttpUtils.get('admin/host/page', jobParamDescs, sort)}
                 columns={this.columns}
                 rowKey='id'
             />
