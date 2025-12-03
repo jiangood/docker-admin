@@ -1,7 +1,7 @@
 import React from "react";
 import {Card, Col, message, Row, Splitter, Table, Tree} from "antd";
 import {HttpUtils, Page, SysUtils} from "@jiangood/springboot-admin-starter";
-import {TreeUtil} from "@jiangood/springboot-admin-starter";
+import {TreeUtils} from "@jiangood/springboot-admin-starter";
 
 
 export default class extends React.Component {
@@ -43,7 +43,7 @@ export default class extends React.Component {
       HttpUtils.get("admin/container/file", {hostId, containerId, path}).then(rs => {
         hide()
         const {dirs, files} = rs
-        const node = TreeUtil.findByKey(key, treeData, "key");
+        const node = TreeUtils.findByKey(key, treeData, "key");
         if (node) {
           node.children = dirs;
           node.fileList = files;
@@ -59,7 +59,7 @@ export default class extends React.Component {
 
   onSelect = (keys) => {
     const key = keys[0];
-    const node = TreeUtil.findByKey(key, this.state.treeData, "key")
+    const node = TreeUtils.findByKey(key, this.state.treeData, "key")
     this.setState({curNode: node})
   }
 

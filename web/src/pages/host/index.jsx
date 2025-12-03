@@ -2,7 +2,7 @@ import {PlusOutlined} from '@ant-design/icons'
 import {Button, Form, Input, Modal, Popconfirm} from 'antd'
 import React from 'react'
 
-import {ButtonList, FieldRadioBoolean, HttpUtils, PageUtils, ProTable} from "@jiangood/springboot-admin-starter"
+import {ButtonList, FieldBoolean, HttpUtils, PageUtils, ProTable} from "@jiangood/springboot-admin-starter"
 import {history} from "umi";
 
 
@@ -116,7 +116,7 @@ export default class extends React.Component {
                         <Input/>
                     </Form.Item>
                     <Form.Item label='构建节点' name='isRunner' rules={[{required: true}]}>
-                        <FieldRadioBoolean/>
+                        <FieldBoolean/>
                     </Form.Item>
 
                     <Form.Item label='dockerHost' name='dockerHost' rules={[{required: true}]}
