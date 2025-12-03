@@ -42,18 +42,7 @@
             <artifactId>spring-boot-starter-websocket</artifactId>
         </dependency>
 
-        <dependency>
-            <groupId>com.aliyun</groupId>
-            <artifactId>aliyun-java-sdk-core</artifactId>
-            <version>4.5.1</version>
-        </dependency>
 
-        <dependency>
-            <groupId>com.tencentcloudapi</groupId>
-            <artifactId>tencentcloud-sdk-java-tcr</artifactId>
-            <version>3.1.1098</version>
-
-        </dependency>
 
         <dependency>
             <groupId>org.projectlombok</groupId>
@@ -86,11 +75,7 @@
 
 
 
-        <dependency>
-            <groupId>com.github.kevinsawicki</groupId>
-            <artifactId>http-request</artifactId>
-            <version>6.0</version>
-        </dependency>
+
 
 
         <dependency>

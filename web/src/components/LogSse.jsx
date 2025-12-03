@@ -1,5 +1,5 @@
 import React from "react";
-import {Button} from "antd";
+import './LogSse.less';
 
 export class LogSse extends React.Component {
 
@@ -34,12 +34,13 @@ export class LogSse extends React.Component {
     };
 
     render() {
-
-
-        return <div style={{ padding: '20px', maxHeight:500,  overflowY: 'scroll' }}>
+        return <div className='log-container'>
+            <div className='log-content'>
                 {this.state.list.map((item,index)=>{
-                    return <div key={index} style={{whiteSpace:'nowrap' }}>{item}</div>
+                    return <div key={index}  className='log-item'>{item}</div>
                 })}
+            </div>
+
         </div>
     }
 
