@@ -121,7 +121,7 @@ export default class extends React.Component {
                         ]}
                         request={(params) => {
                             params.groupId = this.state.selectedKey
-                            return HttpUtils.pageData('admin/app/list', params);
+                            return HttpUtils.get('admin/app/list', params);
                         }}
                         columns={this.columns}
                         showToolbarSearch

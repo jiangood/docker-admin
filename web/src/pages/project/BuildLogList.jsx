@@ -8,7 +8,7 @@ import {
   MinusCircleTwoTone
 } from "@ant-design/icons";
 import {HttpUtils, ProTable} from "@jiangood/springboot-admin-starter";
-import {DateUtil, StrUtil} from "@jiangood/springboot-admin-starter";
+import {DateUtils, StrUtil} from "@jiangood/springboot-admin-starter";
 import LogView from "../../components/LogView";
 import dayjs from "dayjs";
 
@@ -189,7 +189,7 @@ export default class extends React.Component {
         actionRef={this.actionRef}
         request={(params) => {
           params.projectId = this.props.project.id
-          return HttpUtils.pageData("admin/buildLog/list" , params);
+          return HttpUtils.get("admin/buildLog/list" , params);
         }}
         columns={this.columns}
         showSearch={false}

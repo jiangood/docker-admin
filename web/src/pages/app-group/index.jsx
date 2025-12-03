@@ -81,7 +81,7 @@ export default class extends React.Component {
                         </Button>
                     </ButtonList>
                 }}
-                request={(params) => HttpUtils.pageData('admin/appGroup/page', params)}
+                request={(params) => HttpUtils.get('admin/appGroup/page', params)}
                 columns={this.columns}
 
             >
