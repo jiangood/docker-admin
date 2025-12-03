@@ -1,7 +1,7 @@
 import React from 'react';
 import {LazyLog, ScrollFollow} from 'react-lazylog';
 import {Button, Space, Switch} from "antd";
-import {SysUtil} from "@jiangood/springboot-admin-starter";
+import {SysUtils} from "@jiangood/springboot-admin-starter";
 
 
 let api = 'container/';
@@ -27,8 +27,8 @@ export default class ContainerLog extends React.Component {
             return '未指定容器'
         }
 
-        let url = SysUtil.getServerUrl() + "container/log/" + hostId + "/" + containerId;
-        const downloadUrl = SysUtil.getServerUrl() + `container/downloadLog?hostId=${hostId}&containerId=${containerId}`
+        let url = SysUtils.getServerUrl() + "container/log/" + hostId + "/" + containerId;
+        const downloadUrl = SysUtils.getServerUrl() + `container/downloadLog?hostId=${hostId}&containerId=${containerId}`
         return <div style={{height: 'calc(100vh - 350px)', minHeight: 400, width: '100%'}}>
 
 

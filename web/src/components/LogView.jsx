@@ -1,6 +1,6 @@
 import {LazyLog, ScrollFollow} from "react-lazylog";
 import React from "react";
-import {SysUtil} from "@jiangood/springboot-admin-starter";
+import {SysUtils} from "@jiangood/springboot-admin-starter";
 import {Alert} from "antd";
 import {getWebsocketBaseUrl} from "@jiangood/springboot-admin-starter";
 
@@ -10,7 +10,7 @@ import {getWebsocketBaseUrl} from "@jiangood/springboot-admin-starter";
 export default class extends React.Component {
 
     render() {
-        const headers = SysUtil.getHeaders();
+        const headers = SysUtils.getHeaders();
         let url = this.props.url;
         if(!url){
             return <Alert message='未定义组件属性url' type="error"></Alert>

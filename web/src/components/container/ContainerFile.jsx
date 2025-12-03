@@ -1,6 +1,6 @@
 import React from "react";
 import {Card, Col, message, Row, Splitter, Table, Tree} from "antd";
-import {HttpUtils, Page, SysUtil} from "@jiangood/springboot-admin-starter";
+import {HttpUtils, Page, SysUtils} from "@jiangood/springboot-admin-starter";
 import {TreeUtil} from "@jiangood/springboot-admin-starter";
 
 
@@ -104,7 +104,7 @@ export default class extends React.Component {
     }
     let {hostId, containerId} = this.props;
     let url =  'container/downloadFile?hostId=' + hostId + "&containerId=" + containerId + "&file=" +path
-    url = SysUtil.wrapServerUrl(url)
+    url = SysUtils.wrapServerUrl(url)
     return <a href={url} target='_blank'>下载</a>
   }
 }
