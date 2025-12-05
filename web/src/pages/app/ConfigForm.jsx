@@ -2,7 +2,7 @@ import {Button, Col, Divider, Form, Input, message, Radio, Row, Select, Spin} fr
 import React from "react";
 import EditTable from "../../components/EditTable";
 import CodeMirrorEditor from "../../components/CodeMirrorEditor";
-import {HttpUtils} from "@jiangood/springboot-admin-starter";
+import {FieldTable, HttpUtils} from "@jiangood/springboot-admin-starter";
 
 
 export default class extends React.Component {
