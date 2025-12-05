@@ -104,7 +104,6 @@ export default class extends React.Component {
     }
     let {hostId, containerId} = this.props;
     let url =  'container/downloadFile?hostId=' + hostId + "&containerId=" + containerId + "&file=" +path
-    url = SysUtils.wrapServerUrl(url)
     return <a href={url} target='_blank'>下载</a>
   }
 }

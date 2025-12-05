@@ -178,7 +178,6 @@ export default class extends React.Component {
 
 
                 <Descriptions size="small">
-                    <Item label='应用'>  {app.name} </Item>
                     <Item label='镜像' span={2}>  {app.imageUrl}:{app.imageTag} </Item>
                     <Item label='主机'>  {app.host?.name} </Item>
                     <Item label='主机备注'> {app.host?.remark} </Item>
@@ -189,15 +188,11 @@ export default class extends React.Component {
 
                     </Item>
 
-                    <Item label='自动发布'>  {app.autoDeploy ? '是' : '否'} </Item>
+
                     <Item label='组织机构'>  {app.sysOrg?.name} </Item>
 
                 </Descriptions>
 
-                <Gap></Gap>
-                <Space>
-                    <Button size='small' target='_blank' href={'/admin/sys/log/' + app.id}>部署日志</Button>
-                </Space>
 
             </Card>
 

@@ -64,6 +64,8 @@ export default class extends React.Component {
 
 
         return <>
+            <Button  target='_blank' href={'/admin/sys/log/' + app.id}>发布日志</Button>
+            <Gap />
             <Card title='手动发布'>
                 <Form onFinish={this.updateVersion} layout={'inline'}>
                     <Form.Item name='imageTag' rules={[{required: true}]}>
