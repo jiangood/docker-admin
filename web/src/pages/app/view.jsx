@@ -20,8 +20,7 @@ import React from 'react';
 import ConfigForm from "./ConfigForm";
 import {history} from "umi";
 
-import ContainerFile from "../../components/container/ContainerFile";
-import {FieldOrgTreeSelect, FieldRemoteSelect, Gap, HttpUtils, PageUtils} from "@jiangood/springboot-admin-starter";
+import {FieldOrgTreeSelect, FieldRemoteSelect, HttpUtils, PageUtils} from "@jiangood/springboot-admin-starter";
 import PublishForm from "./PublishForm";
 import LogView from "../../components/LogView";
 
@@ -179,14 +178,15 @@ export default class extends React.Component {
 
                 <Descriptions size="small">
                     <Item label='镜像' span={2}>  {app.imageUrl}:{app.imageTag} </Item>
-                    <Item label='主机'>  {app.host?.name} </Item>
-                    <Item label='主机备注'> {app.host?.remark} </Item>
                     <Item label='状态'>
                         {containerLoading ? "检测中..." :
                             <Tag color={state === 'running' ? 'green' : 'red'}>
                                 {container.status}</Tag>}
 
                     </Item>
+
+                    <Item label='主机'>  {app.host?.name} </Item>
+                    <Item label='主机备注'> {app.host?.remark} </Item>
 
 
                     <Item label='组织机构'>  {app.sysOrg?.name} </Item>
@@ -246,31 +246,27 @@ export default class extends React.Component {
 
         const {app} = this.state
 
-        const notFound = container.state === 'notFound'
 
-        let containerId = container.id
-        let hostId = app.host.id
 
-        let logUrl = '/admin/ws/log/'+ app.id ;
-        console.log('日志url为', logUrl)
+        let consoleLogUrl = '/admin/ws/log/' + app.id;
+        let publishLogUrl = '/admin/sys/log/' + app.id;
         const items = [
+            {
+                key: '1',
+                label: '发布日志',
+                children: <LogView url={publishLogUrl}/>
+            },
             {
                 key: 'containerLog',
                 label: '控制台日志',
-                children: <LogView url={logUrl}/>
+                children: <LogView url={consoleLogUrl}/>
             },
             {
                 key: 'config',
-                label: '参数',
+                label: '容器配置',
                 children: <ConfigForm app={app} onChange={this.reload}/>
             },
-            {
-                key: 'file',
-                label: '文件',
-                disabled: notFound,
-                children: <ContainerFile hostId={hostId} containerId={containerId}/>
 
-            },
             {
                 key: 'publish',
                 label: '发布',

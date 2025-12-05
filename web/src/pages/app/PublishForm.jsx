@@ -1,5 +1,5 @@
 import React from "react";
-import {Button, Card, Collapse, Divider, Form, Input, message, Modal, Skeleton, Switch, Typography} from "antd";
+import {Button, Card, Col, Form, Input, message, Modal, Row, Skeleton, Switch} from "antd";
 import {FieldRemoteSelect, Gap, HttpUtils, PageUtils} from "@jiangood/springboot-admin-starter";
 
 /**
@@ -64,46 +64,48 @@ export default class extends React.Component {
 
 
         return <>
-            <Button  target='_blank' href={'/admin/sys/log/' + app.id}>发布日志</Button>
-            <Gap />
-            <Card title='手动发布'>
-                <Form onFinish={this.updateVersion} layout={'inline'}>
-                    <Form.Item name='imageTag' rules={[{required: true}]}>
-                        <Input style={{width: 150}} placeholder='请输入版本号'/>
-                    </Form.Item>
-                    <Form.Item label=' '>
-                        <Button type="primary" danger htmlType='submit'>更新应用</Button>
-                    </Form.Item>
-                </Form>
-            </Card>
 
 
-            <Gap />
+            <Row gutter={24}>
 
-            <Card title='自动发布'>
-                <Form onValuesChange={changedValues => this.setAutoDeploy(changedValues.autoDeploy)}>
-                    <Form.Item
-                        name='autoDeploy'
-                        valuePropName="checked"
-                        initialValue={app.autoDeploy}>
-                        <Switch/>
-                    </Form.Item>
-                </Form>
-                项目构建成功后，自动更新
-            </Card>
+                <Col span={12}> <Card title='自动发布'>
+                    <Form onValuesChange={changedValues => this.setAutoDeploy(changedValues.autoDeploy)}>
+                        <Form.Item
+                            name='autoDeploy'
+                            valuePropName="checked"
+                            initialValue={app.autoDeploy}>
+                            <Switch/>
+                        </Form.Item>
+                    </Form>
+                    项目构建成功后，自动更新
+                </Card>
+                </Col>
+                <Col span={12}>
+                    <Card title='手动发布'>
+                        <Form onFinish={this.updateVersion} layout={'inline'}>
+                            <Form.Item name='imageTag' rules={[{required: true}]}>
+                                <Input style={{width: 150}} placeholder='请输入版本号'/>
+                            </Form.Item>
+                            <Form.Item label=' '>
+                                <Button type="primary" danger htmlType='submit'>更新应用</Button>
+                            </Form.Item>
+                        </Form>
+                    </Card>
+                </Col>
+            </Row>
 
 
-            <Gap />
+            <Gap/>
 
             <Card title='复制应用'>
-            <Form onFinish={this.copyApp} layout='inline'>
-                <Form.Item name='hostId' rules={[{required: true}]}>
-                    <FieldRemoteSelect url='admin/host/options' placeholder='请选择新主机' style={{width: 300}}/>
-                </Form.Item>
+                <Form onFinish={this.copyApp} layout='inline'>
+                    <Form.Item name='hostId' rules={[{required: true}]}>
+                        <FieldRemoteSelect url='admin/host/options' placeholder='请选择新主机' style={{width: 300}}/>
+                    </Form.Item>
 
-                <Button type="primary" danger htmlType='submit'>确定复制</Button>
-            </Form>
-                <Gap />
+                    <Button type="primary" danger htmlType='submit'>确定复制</Button>
+                </Form>
+                <Gap/>
                 注意：复制应用不会自动部署，也不会复制主机上的文件
             </Card>
 
