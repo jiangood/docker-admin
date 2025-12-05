@@ -9,8 +9,8 @@ import {Alert} from "antd";
 export default class extends React.Component {
 
     render() {
-        let url = this.props.url;
-        if (!url.startsWith("ws://") && !url.startsWith("wss://")) {
+        let {url, websocket} = this.props;
+        if (websocket && !url.startsWith("ws://") && !url.startsWith("wss://")) {
             url = DeviceUtils.getWebsocketBaseUrl() + url
         }
 
@@ -18,14 +18,17 @@ export default class extends React.Component {
         return <div style={{height: 500}}>
             <ScrollFollow
                 startFollowing={true}
-                render={({follow, onScroll}) => (
-                    <LazyLog url={url}
-                             follow={follow}
-                             fetchOptions={{credentials: 'include'}}
-                             websocket={true}
-                             selectableLines={true}
-                             onScroll={onScroll}/>
-                )}
+                render={({follow, onScroll}) => {
+
+                    return (
+                        <LazyLog url={url}
+                                 follow={follow}
+                                 fetchOptions={{credentials: 'include'}}
+                                 websocket={websocket}
+                                 selectableLines={true}
+                                 onScroll={onScroll}/>
+                    );
+                }}
             />
         </div>
 

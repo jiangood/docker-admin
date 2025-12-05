@@ -241,9 +241,6 @@ export default class extends React.Component {
     }
 
     renderTabs = () => {
-        const {container} = this.state;
-
-
         const {app} = this.state
 
 
@@ -254,12 +251,12 @@ export default class extends React.Component {
             {
                 key: '1',
                 label: '发布日志',
-                children: <LogView url={publishLogUrl}/>
+                children: <LogView url={publishLogUrl} websocket={false}/>
             },
             {
                 key: 'containerLog',
                 label: '控制台日志',
-                children: <LogView url={consoleLogUrl}/>
+                children: <LogView url={consoleLogUrl} websocket={true}/>
             },
             {
                 key: 'config',
