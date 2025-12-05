@@ -8,7 +8,7 @@ spring:
   application:
     name: docker-admin
 sys:
-  title: Docker Admin
+  title: 容器管理平台
 
 logging:
   level:

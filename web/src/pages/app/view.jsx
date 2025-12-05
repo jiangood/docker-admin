@@ -259,7 +259,7 @@ export default class extends React.Component {
         const items = [
             {
                 key: 'containerLog',
-                label: '日志',
+                label: '控制台日志',
                 children: <LogSse url={'/admin/app/log/' + app.id}/>
             },
             {
