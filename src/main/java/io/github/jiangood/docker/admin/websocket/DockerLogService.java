@@ -34,8 +34,7 @@ public class DockerLogService {
                     .withStdOut(true)
                     .withStdErr(true)
                     .withFollowStream(true)
-                    .withTail(500)
-                    .withTimestamps(false)
+                    .withTail(2000)
                     .exec(callback);
 
             sessionLogStreams.put(sessionId, callback);

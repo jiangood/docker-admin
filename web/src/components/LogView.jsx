@@ -15,9 +15,8 @@ export default class extends React.Component {
         }
 
 
-        return <div style={{height: 600}}>
+        return <div style={{height: 500}}>
             <ScrollFollow
-
                 startFollowing={true}
                 render={({follow, onScroll}) => (
                     <LazyLog url={url}

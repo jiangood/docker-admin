@@ -23,7 +23,6 @@ import {history} from "umi";
 import ContainerFile from "../../components/container/ContainerFile";
 import {FieldOrgTreeSelect, FieldRemoteSelect, Gap, HttpUtils, PageUtils} from "@jiangood/springboot-admin-starter";
 import PublishForm from "./PublishForm";
-import {LogSse} from "../../components/LogSse";
 import LogView from "../../components/LogView";
 
 const Item = Descriptions.Item
