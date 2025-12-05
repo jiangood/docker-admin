@@ -13,6 +13,7 @@
   "dependencies": {
     "@ant-design/icons": "^5.4.0",
     "@jiangood/springboot-admin-starter": "0.0.4",
+    "@melloware/react-logviewer": "^6.3.4",
     "@tinymce/tinymce-react": "^5.0.0",
     "antd": "^5.20.3",
     "antd-img-crop": "^4.23.0",
@@ -21,7 +22,6 @@
     "dayjs": "^1.11.13",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "react-lazylog": "^4.5.3",
     "umi": "^4.0.0"
   }
 }

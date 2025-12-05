@@ -1,10 +1,10 @@
-import {LazyLog, ScrollFollow} from "react-lazylog";
+import {LazyLog, ScrollFollow} from "@melloware/react-logviewer";
 import React from "react";
 import {SysUtils,DeviceUtils} from "@jiangood/springboot-admin-starter";
 import {Alert} from "antd";
 
 /**
- * https://mozilla-frontend-infra.github.io/react-lazylog/
+ * https://github.com/melloware/react-logviewer
  */
 export default class extends React.Component {
 
