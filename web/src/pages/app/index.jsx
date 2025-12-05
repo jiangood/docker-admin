@@ -85,7 +85,7 @@ export default class extends React.Component {
 
 
     handleSave = value => {
-        HttpUtils.post('admin/app/save', value).then(rs => {
+        HttpUtils.post('admin/app/save', value).then(() => {
             this.reload()
             this.setState({deployVisible: false})
         })
@@ -113,11 +113,11 @@ export default class extends React.Component {
                 <Splitter.Panel style={{paddingLeft: 16}}>
                     <ProTable
                         actionRef={this.tableRef}
-                        toolBarRender={(action, {selectedRows}) => [
+                        toolBarRender={() => [
                             <Button type="primary"
                                     onClick={this.handleAdd}>
                                 新增
-                            </Button>,
+                            </Button>
                         ]}
                         request={(params) => {
                             params.groupId = this.state.selectedKey
@@ -138,11 +138,6 @@ export default class extends React.Component {
                         layout='horizontal'
                         labelCol={{flex: '100px'}}
                         ref={this.formRef}
-                        onValuesChange={changedValues => {
-                            if (changedValues.imageUrl != null) {
-                                this.loadImageTagList();
-                            }
-                        }}
                         onFinish={this.handleSave}
                     >
                         <Form.Item name='name' label='应用名称' required rules={[{required: true}]}>

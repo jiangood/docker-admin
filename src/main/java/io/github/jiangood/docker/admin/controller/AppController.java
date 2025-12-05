@@ -5,7 +5,6 @@ import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.model.Container;
 import com.github.dockerjava.api.model.Frame;
-import com.github.dockerjava.core.command.LogContainerResultCallback;
 import io.admin.common.dto.AjaxResult;
 import io.admin.common.dto.antd.Option;
 import io.admin.framework.config.argument.RequestBodyKeys;
@@ -29,16 +28,12 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
-import org.springframework.http.MediaType;
 import org.springframework.util.Assert;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import java.io.IOException;
-import java.io.PrintWriter;
 import java.io.UnsupportedEncodingException;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -62,7 +57,7 @@ public class AppController {
 
     @HasPermission("app:list")
     @RequestMapping("list")
-    public Page<App> list(String groupId, String searchText, @PageableDefault(sort = {"updateTime", "createTime"}, direction = Sort.Direction.DESC) Pageable pageable, HttpSession session) {
+    public AjaxResult list(String groupId, String searchText, @PageableDefault(sort = {"updateTime", "createTime"}, direction = Sort.Direction.DESC) Pageable pageable, HttpSession session) {
         JpaQuery<App> q = new JpaQuery<>();
         q.searchText(searchText, "name", "remark", "host.name");
         q.eq(App.Fields.appGroup + ".id", groupId);
@@ -73,11 +68,11 @@ public class AppController {
         });
 
         Page<App> list = service.findPageByRequest(q, pageable);
-        return list;
+        return AjaxResult.ok().data(list);
     }
 
     @RequestMapping("get")
-    public App view(String id) throws UnsupportedEncodingException {
+    public AjaxResult view(String id) throws UnsupportedEncodingException {
         App app = service.findByRequest(id);
 
         if (app.getImageUrl() == null) {
@@ -87,7 +82,7 @@ public class AppController {
 
         String url = LogUrlTool.getLogViewUrl(id);
         app.setLogUrl(url);
-        return app;
+        return AjaxResult.ok().data(app);
     }
 
     @RequestMapping("container")
