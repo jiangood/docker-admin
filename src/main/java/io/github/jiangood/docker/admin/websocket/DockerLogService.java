@@ -18,7 +18,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 public class DockerLogService {
 
-    private final Map<String, Map<String, LogStreamCallback>> sessionLogStreams = new ConcurrentHashMap<>();
+    private final Map<String, LogStreamCallback> sessionLogStreams = new ConcurrentHashMap<>();
 
     @Resource
     private DockerClientManager dockerClientManager;
@@ -38,8 +38,7 @@ public class DockerLogService {
                     .withTimestamps(false)
                     .exec(callback);
 
-            sessionLogStreams.computeIfAbsent(sessionId, k -> new ConcurrentHashMap<>())
-                    .put(containerId, callback);
+            sessionLogStreams.put(sessionId, callback);
 
             // 发送开始消息
             session.sendMessage(new TextMessage("开始监听容器日志: " + containerId));
@@ -49,17 +48,9 @@ public class DockerLogService {
         }
     }
 
-    public void stopAllLogsForSession(String sessionId) {
-        Map<String, LogStreamCallback> sessionStreams = sessionLogStreams.remove(sessionId);
-        if (sessionStreams != null) {
-            sessionStreams.forEach((containerId, callback) -> {
-                try {
-                    callback.close();
-                } catch (IOException e) {
-                    log.error("关闭日志流失败", e);
-                }
-            });
-        }
+    public void stopAllLogsForSession(String sessionId) throws IOException {
+        LogStreamCallback callback = sessionLogStreams.remove(sessionId);
+        callback.close();
     }
 
     private static class LogStreamCallback extends ResultCallback.Adapter<Frame> {

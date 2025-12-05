@@ -65,7 +65,7 @@ public class ContainerLogWebSocketHandler extends TextWebSocketHandler {
 
 
     @Override
-    public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
+    public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws IOException {
         sessions.remove(session.getId());
         dockerLogService.stopAllLogsForSession(session.getId());
         System.out.println("WebSocket连接关闭: " + session.getId());

@@ -230,66 +230,9 @@ public class AppController {
         return AjaxResult.ok().data(options);
     }
 
-    private final ExecutorService logExecutor = Executors.newFixedThreadPool(10);
-
-    @GetMapping("log/{id}")
-    public SseEmitter streamLog(@PathVariable String id, @RequestParam(required = false, defaultValue = "20") Integer lines,HttpServletResponse response) {
-        response.setContentType("text/event-stream;charset=UTF-8");
-        App app = service.findOne(id);
-        Host host = app.getHost();
-        Container container = service.getContainer(app);
-        String containerId = container.getId();
-        DockerClient client = sdk.getClient(host);
-
-        SseEmitter emitter = new SseEmitter(3600000L);
-
-        // 1. 在专用线程池中执行 Docker API 调用
-        logExecutor.execute(() -> {
-            try {
-                // 发送初始信息
-                emitter.send(SseEmitter.event().name("message").data("服务端日志线程 READY (Streaming via SSE)"));
-                emitter.send(SseEmitter.event().name("message").data("===================================================================================="));
 
 
-                // 执行 Docker 命令
-                client.logContainerCmd(containerId)
-                        .withStdOut(true)
-                        .withStdErr(true)
-                        .withTail(lines)
-                        .withFollowStream(true) // 优化 3: 启用实时日志跟踪 (live follow)
-                        .exec(new ResultCallback.Adapter<Frame>() {
-                            @Override
-                            @SneakyThrows
-                            public void onNext(Frame item) {
-                                String msg = new String(item.getPayload());
-                                emitter.send(SseEmitter.event().name("message").data(msg.trim()));
-                            }
 
-                            @Override
-                            @SneakyThrows
-                            public void onComplete() {
-                                emitter.send(SseEmitter.event().name("complete").data("日志结束"));
-                            }
-
-                            @SneakyThrows
-                            @Override
-                            public void onError(Throwable throwable) {
-                                emitter.send(SseEmitter.event().name("error").data("日志获取失败: " + throwable.getMessage()));
-                                emitter.completeWithError(throwable);
-
-                            }
-                        });
-
-            } catch (Exception e) {
-                // 处理初始化阶段的异常（如找不到应用、获取客户端失败等）
-                System.err.println("Error initializing log stream: " + e.getMessage());
-                emitter.completeWithError(e);
-            }
-        });
-
-        // 请求线程立即返回
-        return emitter;
-    }
 
 
     @Data

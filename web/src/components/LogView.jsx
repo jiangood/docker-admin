@@ -10,27 +10,25 @@ export default class extends React.Component {
 
     render() {
         let url = this.props.url;
-        if (!url) {
-            return <Alert message='未定义组件属性url' type="error"></Alert>
-        }
         if (!url.startsWith("ws://") && !url.startsWith("wss://")) {
-            const baseUrl = DeviceUtils.getWebsocketBaseUrl();
-            url = baseUrl + url
-            console.log('调整后的 ws url', url)
+            url = DeviceUtils.getWebsocketBaseUrl() + url
         }
 
 
-        return <ScrollFollow startFollowing={true}
-                             render={({follow, onScroll}) => (
-                                 <LazyLog url={url}
-                                          height={500}
-                                          follow={follow}
-                                          fetchOptions={{credentials: 'include'}}
-                                          websocket={true}
-                                          selectableLines={true}
-                                          onScroll={onScroll}/>
-                             )}
-        />
+        return <div style={{height: 600}}>
+            <ScrollFollow
+
+                startFollowing={true}
+                render={({follow, onScroll}) => (
+                    <LazyLog url={url}
+                             follow={follow}
+                             fetchOptions={{credentials: 'include'}}
+                             websocket={true}
+                             selectableLines={true}
+                             onScroll={onScroll}/>
+                )}
+            />
+        </div>
 
     }
 }
