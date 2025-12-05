@@ -8,8 +8,7 @@ import {
   MinusCircleTwoTone
 } from "@ant-design/icons";
 import {HttpUtils, ProTable} from "@jiangood/springboot-admin-starter";
-import {DateUtils, StrUtil} from "@jiangood/springboot-admin-starter";
-import LogView from "../../components/LogView";
+import {DateUtils} from "@jiangood/springboot-admin-starter";
 import dayjs from "dayjs";
 
 
