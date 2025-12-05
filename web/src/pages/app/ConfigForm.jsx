@@ -57,7 +57,7 @@ export default class extends React.Component {
                 </Form.Item>
 
                 <Form.Item label='文件映射' name='binds'  >
-                    <EditTable columns={this.bindsColumns} />
+                    <FieldTable columns={this.bindsColumns} style={{width:600}}/>
                 </Form.Item>
 
                 <Form.Item label='环境变量' tooltip='yml格式' name='environmentYAML'>
