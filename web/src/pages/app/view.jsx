@@ -24,6 +24,7 @@ import ContainerFile from "../../components/container/ContainerFile";
 import {FieldOrgTreeSelect, FieldRemoteSelect, Gap, HttpUtils, PageUtils} from "@jiangood/springboot-admin-starter";
 import PublishForm from "./PublishForm";
 import {LogSse} from "../../components/LogSse";
+import LogView from "../../components/LogView";
 
 const Item = Descriptions.Item
 
@@ -256,11 +257,13 @@ export default class extends React.Component {
         let containerId = container.id
         let hostId = app.host.id
 
+        let logUrl = '/admin/ws/log/'+ app.id ;
+        console.log('日志url为', logUrl)
         const items = [
             {
                 key: 'containerLog',
                 label: '控制台日志',
-                children: <LogSse url={'/admin/app/log/' + app.id}/>
+                children: <LogView url={logUrl}/>
             },
             {
                 key: 'config',

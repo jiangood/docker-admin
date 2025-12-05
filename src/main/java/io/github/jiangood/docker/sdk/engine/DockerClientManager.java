@@ -18,7 +18,7 @@ import java.util.Map;
 
 @Service
 @Slf4j
-public class DockerSdkManager {
+public class DockerClientManager {
 
 
     public DockerClient getClient(Host host) {
@@ -28,7 +28,6 @@ public class DockerSdkManager {
 
     public DockerClient getClient(Host host, Registry registry) {
         String dockerHost = getLocalDockerHost();
-        String virtualHost = null;
         if (host != null && StrUtil.isNotEmpty(host.getDockerHost())) {
             dockerHost = host.getDockerHost();
         }
@@ -52,7 +51,18 @@ public class DockerSdkManager {
         return DockerClientImpl.getInstance(config, httpClient);
     }
 
+    public DockerClient getClient(String dockerHost) {
+        DefaultDockerClientConfig.Builder builder = DefaultDockerClientConfig.createDefaultConfigBuilder()
+                .withDockerHost(dockerHost);
 
+        DockerClientConfig config = builder.build();
+
+        DockerHttpClient httpClient =
+                new ApacheDockerHttpClient.Builder().dockerHost(config.getDockerHost()).sslConfig(config.getSSLConfig()).build();
+
+
+        return DockerClientImpl.getInstance(config, httpClient);
+    }
     public String getLocalDockerHost() {
         boolean windows = SystemUtil.getOsInfo().isWindows();
         return windows ? "tcp://localhost:2375" : "unix:///var/run/docker.sock";

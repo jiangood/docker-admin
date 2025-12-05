@@ -15,7 +15,7 @@ import io.github.jiangood.docker.config.Config;
 import io.github.jiangood.docker.config.GitRepo;
 import io.github.jiangood.docker.config.Registry;
 import io.github.jiangood.docker.sdk.engine.DefaultCallback;
-import io.github.jiangood.docker.sdk.engine.DockerSdkManager;
+import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.command.BuildImageCmd;
 import com.github.dockerjava.api.command.PushImageCmd;
@@ -53,7 +53,7 @@ public class ProjectService extends BaseService<Project> {
     HostService hostService;
 
     @Resource
-    DockerSdkManager dockerService;
+    DockerClientManager dockerService;
 
     @Resource
     GitCredentialService gitCredentialService;

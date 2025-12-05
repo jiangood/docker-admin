@@ -12,7 +12,7 @@ import io.admin.common.utils.ResponseUtils;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.service.AppService;
 import io.github.jiangood.docker.admin.service.HostService;
-import io.github.jiangood.docker.sdk.engine.DockerSdkManager;
+import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.command.ExecCreateCmdResponse;
 import com.github.dockerjava.api.model.Container;
@@ -32,8 +32,6 @@ import org.springframework.web.bind.annotation.*;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.io.PrintWriter;
-import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 @RestController
@@ -45,7 +43,7 @@ public class ContainerController {
     private  HostService hostService;
 
     @Resource
-    private DockerSdkManager sdk;
+    private DockerClientManager sdk;
 
 
     @Resource

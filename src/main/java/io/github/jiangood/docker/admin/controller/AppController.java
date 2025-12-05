@@ -16,7 +16,7 @@ import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.service.AppService;
 import io.github.jiangood.docker.admin.dto.ContainerVo;
 import io.github.jiangood.docker.config.Config;
-import io.github.jiangood.docker.sdk.engine.DockerSdkManager;
+import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
@@ -53,7 +53,7 @@ public class AppController {
     private Config config;
 
     @Resource
-    private DockerSdkManager sdk;
+    private DockerClientManager sdk;
 
     @HasPermission("app:list")
     @RequestMapping("list")

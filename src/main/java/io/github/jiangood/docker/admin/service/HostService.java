@@ -3,7 +3,7 @@ package io.github.jiangood.docker.admin.service;
 import io.admin.framework.data.service.BaseService;
 import io.github.jiangood.docker.admin.dao.HostDao;
 import io.github.jiangood.docker.admin.entity.Host;
-import io.github.jiangood.docker.sdk.engine.DockerSdkManager;
+import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.model.Container;
 import com.github.dockerjava.api.model.Image;
@@ -23,7 +23,7 @@ public class HostService extends BaseService<Host> {
 
 
     @Resource
-    DockerSdkManager sdkManager;
+    DockerClientManager sdkManager;
 
     @Resource
     HostDao hostDao;

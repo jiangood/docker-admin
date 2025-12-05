@@ -6,7 +6,7 @@ import com.github.dockerjava.api.model.PruneType;
 import io.admin.modules.job.BaseJob;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.service.HostService;
-import io.github.jiangood.docker.sdk.engine.DockerSdkManager;
+import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import jakarta.annotation.Resource;
 import org.quartz.JobDataMap;
 import org.slf4j.Logger;
@@ -22,7 +22,7 @@ public class CleanImageJob extends BaseJob {
     HostService hostService;
 
     @Resource
-    DockerSdkManager sdkManager;
+    DockerClientManager sdkManager;
 
     @Override
     public String execute(JobDataMap data, Logger log) throws Exception {

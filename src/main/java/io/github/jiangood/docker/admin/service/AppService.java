@@ -13,7 +13,7 @@ import io.github.jiangood.docker.admin.dto.ContainerVo;
 import io.github.jiangood.docker.config.Config;
 import io.github.jiangood.docker.config.Registry;
 import io.github.jiangood.docker.sdk.engine.DefaultCallback;
-import io.github.jiangood.docker.sdk.engine.DockerSdkManager;
+import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.command.CreateContainerCmd;
 import com.github.dockerjava.api.command.CreateContainerResponse;
@@ -44,7 +44,7 @@ public class AppService extends BaseService<App> {
     DeployLogDao deployLogDao;
 
     @Resource
-    DockerSdkManager dockerManager;
+    DockerClientManager dockerManager;
 
     @Resource
     private AppDao appDao;
