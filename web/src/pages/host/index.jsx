@@ -2,7 +2,7 @@ import {PlusOutlined} from '@ant-design/icons'
 import {Button, Form, Input, Modal, Popconfirm} from 'antd'
 import React from 'react'
 
-import {ButtonList, FieldBoolean, HttpUtils, PageUtils, ProTable} from "@jiangood/springboot-admin-starter"
+import {ButtonList, FieldBoolean, HttpUtils, Page, PageUtils, ProTable} from "@jiangood/springboot-admin-starter"
 import {history} from "umi";
 
 
@@ -84,7 +84,7 @@ export default class extends React.Component {
     }
 
     render() {
-        return <>
+        return <Page padding>
             <ProTable
                 actionRef={this.tableRef}
                 toolBarRender={() => {
@@ -94,10 +94,8 @@ export default class extends React.Component {
                         </Button>
                     </ButtonList>
                 }}
-                search={false}
-                request={(jobParamDescs, sort) => HttpUtils.get('admin/host/page', jobParamDescs, sort)}
+                request={(params) => HttpUtils.get('admin/host/page', params)}
                 columns={this.columns}
-                rowKey='id'
             />
 
             <Modal title='主机'
@@ -131,7 +129,7 @@ export default class extends React.Component {
 
                 </Form>
             </Modal>
-        </>
+        </Page>
 
 
     }

@@ -71,7 +71,7 @@ export default class extends React.Component {
     }
 
     render() {
-        return <Page>
+        return <Page padding>
             <ProTable
                 actionRef={this.tableRef}
                 toolBarRender={(params, {selectedRows, selectedRowKeys}) => {
