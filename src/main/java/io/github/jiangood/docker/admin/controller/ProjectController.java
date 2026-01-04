@@ -140,7 +140,7 @@ public class ProjectController {
 
 
     @RequestMapping("options")
-    public List<Option> options() throws InterruptedException, IOException, GitAPIException {
+    public AjaxResult options() throws InterruptedException, IOException, GitAPIException {
         Spec<Project> q = buildQuery();
 
         List<Project> list = service.findAll(q, Sort.by(Sort.Direction.DESC, "updateTime"));
@@ -151,7 +151,7 @@ public class ProjectController {
         }
 
 
-        return options;
+        return AjaxResult.ok().data(options);
     }
 
     @RequestMapping("versions")

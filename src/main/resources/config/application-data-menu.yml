@@ -1,0 +1,28 @@
+data:
+  menus:
+    - name: 项目
+      id: project
+      path: /project
+      icon: OrderedListOutlined
+      perm-codes: [project:view,project:save,project:delete,project:build]
+      perm-names: [查看,保存,删除,构建]
+    - name: 应用
+      id: app
+      path: /app
+      icon: AppstoreOutlined
+    - name: 其他
+      id: config
+      icon: SettingOutlined
+      children:
+        - name: 主机
+          id: host
+          path: /host
+          icon: DesktopOutlined
+          perm-codes: [host:view,host:save,host:delete]
+          perm-names: [查看,保存,删除]
+        - name: 应用分组
+          id: appGroup
+          path: /app-group
+          icon: ClusterOutlined
+          perm-codes: [appGroup:save,appGroup:delete,appGroup:view]
+          perm-names: [保存,删除,查看]

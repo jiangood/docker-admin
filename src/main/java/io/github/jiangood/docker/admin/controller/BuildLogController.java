@@ -3,6 +3,7 @@ package io.github.jiangood.docker.admin.controller;
 import cn.hutool.core.date.DateUtil;
 import io.github.jiangood.docker.admin.entity.BuildLog;
 import io.github.jiangood.docker.admin.service.BuildLogService;
+import io.github.jiangood.sa.common.dto.AjaxResult;
 import io.github.jiangood.sa.framework.data.specification.Spec;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -24,7 +25,7 @@ public class BuildLogController {
     private BuildLogService service;
 
     @RequestMapping("list")
-    public Page<BuildLog> list(String projectId, @PageableDefault(sort = "createTime", direction = Sort.Direction.DESC) Pageable pageable) throws UnsupportedEncodingException {
+    public AjaxResult list(String projectId, @PageableDefault(sort = "createTime", direction = Sort.Direction.DESC) Pageable pageable) throws UnsupportedEncodingException {
         Spec<BuildLog> q = Spec.of();
         q.eq("projectId", projectId);
         Page<BuildLog> page = service.findAll(q, pageable);
@@ -37,7 +38,7 @@ public class BuildLogController {
             }
         }
 
-        return page;
+        return AjaxResult.ok().data( page);
     }
 
 
