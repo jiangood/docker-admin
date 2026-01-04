@@ -27,7 +27,7 @@ public class HostController  {
     @Resource
     private HostService service;
 
-    @PreAuthorize("hasAuthority('host:view')")
+    @PreAuthorize("hasAuthority('host:list')")
     @RequestMapping("page")
     public AjaxResult page(Host request, @PageableDefault(direction = Sort.Direction.DESC, sort = "updateTime") Pageable pageable) throws Exception {
         Spec<Host> q = Spec.of();

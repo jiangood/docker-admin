@@ -46,7 +46,7 @@ public class AppController {
     private Config config;
 
 
-    @PreAuthorize("hasAuthority('app:list')")
+    @PreAuthorize("hasAuthority('app:view')")
     @RequestMapping("list")
     public AjaxResult list(String groupId, String searchText, @PageableDefault(sort = {"updateTime", "createTime"}, direction = Sort.Direction.DESC) Pageable pageable, HttpSession session) {
         Spec<App> q = Spec.of();

@@ -10,6 +10,9 @@ data:
       id: app
       path: /app
       icon: AppstoreOutlined
+      perm-codes: [app:view,app:save,app:config,app:delete,app:deploy]
+      perm-names: [查看,保存,配置,删除,部署]
+
     - name: 其他
       id: config
       icon: SettingOutlined
@@ -18,7 +21,7 @@ data:
           id: host
           path: /host
           icon: DesktopOutlined
-          perm-codes: [host:view,host:save,host:delete]
+          perm-codes: [host:list,host:save,host:delete]
           perm-names: [查看,保存,删除]
         - name: 应用分组
           id: appGroup
