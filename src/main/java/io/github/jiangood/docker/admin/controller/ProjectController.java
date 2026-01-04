@@ -92,8 +92,9 @@ public class ProjectController {
 
     @HasPermission("project:view")
     @RequestMapping("get")
-    public Project get(String id) {
-        return service.findOne(id);
+    public AjaxResult get(String id) {
+        Project project = service.findOne(id);
+        return AjaxResult.ok().data(project);
     }
 
 
