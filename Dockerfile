@@ -2,13 +2,12 @@
 FROM node AS web
 WORKDIR /build
 
-RUN npm install -g pnpm --registry https://registry.npmmirror.com/
 
 ADD web/package.json ./
-RUN pnpm install --registry https://registry.npmmirror.com/
+RUN npm install --registry https://registry.npmmirror.com/
 
 ADD web/ ./
-RUN pnpm run build
+RUN npm run build
 
 # build jar
 FROM maven:3-openjdk-17 AS java
