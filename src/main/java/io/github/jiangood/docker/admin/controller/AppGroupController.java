@@ -28,7 +28,7 @@ public class AppGroupController  {
     @Resource
     private AppGroupService service;
 
-    @PreAuthorize("hasAuthority('group:view')")
+    @PreAuthorize("hasAuthority('appGroup:view')")
     @RequestMapping("page")
     public AjaxResult page(String searchText, @PageableDefault(direction = Sort.Direction.DESC, sort = "updateTime") Pageable pageable) throws Exception {
         Spec<AppGroup> q = Spec.of();
@@ -52,7 +52,7 @@ public class AppGroupController  {
         return AjaxResult.ok().data(options);
     }
     @RequestMapping("menus")
-    public AjaxResult menus() throws Exception {
+    public AjaxResult menus() {
         Spec<AppGroup> q = Spec.of();
 
         List<AppGroup> list = service.findAll(q, Sort.by("seq"));
@@ -66,7 +66,7 @@ public class AppGroupController  {
 
 
 
-    @PreAuthorize("hasAuthority('group:save')")
+    @PreAuthorize("hasAuthority('appGroup:save')")
     @PostMapping("save")
     public AjaxResult save(@RequestBody AppGroup input, RequestBodyKeys updateFields) throws Exception {
         service.saveOrUpdateByRequest(input, updateFields);
@@ -74,7 +74,7 @@ public class AppGroupController  {
     }
 
 
-    @PreAuthorize("hasAuthority('group:delete')")
+    @PreAuthorize("hasAuthority('appGroup:delete')")
     @RequestMapping("delete")
     public AjaxResult delete(String id) {
         service.deleteByRequest(id);
