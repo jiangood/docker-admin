@@ -4,7 +4,7 @@ WORKDIR /build
 
 
 ADD web/package.json ./
-RUN npm install --registry https://registry.npmmirror.com/
+RUN npm install
 
 ADD web/ ./
 RUN npm run build
