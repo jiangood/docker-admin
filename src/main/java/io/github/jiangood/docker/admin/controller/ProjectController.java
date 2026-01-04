@@ -28,8 +28,6 @@ import java.util.List;
 @RestController
 @RequestMapping("admin/project")
 public class ProjectController {
-
-
     @Resource
     private ProjectService service;
 
@@ -100,13 +98,7 @@ public class ProjectController {
 
     @PreAuthorize("hasAuthority('project:build')")
     @RequestMapping("build")
-    public AjaxResult build(
-            BuildRequest buildRequest,
-            @RequestParam String projectId,
-            String buildHostId
-    ) throws InterruptedException, IOException, GitAPIException {
-
-
+    public AjaxResult build(BuildRequest buildRequest, @RequestParam String projectId, String buildHostId) throws InterruptedException, IOException, GitAPIException {
         Project project = service.findOne(projectId);
         service.checkBuildImage();
 
@@ -157,7 +149,6 @@ public class ProjectController {
     @RequestMapping("versions")
     public List<Option> versions(String projectId) {
         List<String> versions = logService.versions(projectId);
-
 
         return versions.stream().map(v -> Option.of(v, v)).toList();
     }
