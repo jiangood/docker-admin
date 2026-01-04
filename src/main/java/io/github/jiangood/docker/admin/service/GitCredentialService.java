@@ -1,5 +1,6 @@
 package io.github.jiangood.docker.admin.service;
 
+import cn.hutool.core.collection.CollUtil;
 import io.github.jiangood.docker.config.Config;
 import io.github.jiangood.docker.config.GitRepo;
 import jakarta.annotation.Resource;
@@ -20,6 +21,9 @@ public class GitCredentialService  {
 
     public GitRepo findBestByUrl(String gitUrl) {
         List<GitRepo> list = config.getGitRepos();
+        if(CollUtil.isEmpty(list)){
+            return null;
+        }
 
 
         // url排序， 从长到短
