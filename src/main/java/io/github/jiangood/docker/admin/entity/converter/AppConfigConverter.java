@@ -1,9 +1,8 @@
 package io.github.jiangood.docker.admin.entity.converter;
 
 import cn.hutool.core.util.StrUtil;
-import io.admin.common.utils.JsonUtils;
 import io.github.jiangood.docker.admin.entity.App;
-
+import io.github.jiangood.sa.common.tools.JsonTool;
 import jakarta.persistence.AttributeConverter;
 
 public class AppConfigConverter implements AttributeConverter<App.AppConfig, String> {
@@ -15,7 +14,7 @@ public class AppConfigConverter implements AttributeConverter<App.AppConfig, Str
             return null;
         }
 
-        return JsonUtils.toJsonQuietly(obj);
+        return JsonTool.toJsonQuietly(obj);
 
     }
 
@@ -25,7 +24,7 @@ public class AppConfigConverter implements AttributeConverter<App.AppConfig, Str
             return null;
         }
         try {
-            return JsonUtils.jsonToBean(dbData, App.AppConfig.class);
+            return JsonTool.jsonToBean(dbData, App.AppConfig.class);
 
         } catch (Exception e) {
             e.printStackTrace();

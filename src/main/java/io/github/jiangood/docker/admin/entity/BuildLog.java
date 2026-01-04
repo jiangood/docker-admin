@@ -1,14 +1,13 @@
 package io.github.jiangood.docker.admin.entity;
 
-import io.admin.framework.data.DBConstants;
-import io.admin.framework.data.domain.BaseEntity;
 
+import io.github.jiangood.sa.framework.data.DBConstants;
+import io.github.jiangood.sa.framework.data.domain.BaseEntity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
 import lombok.experimental.FieldNameConstants;
-
 
 import java.util.Date;
 

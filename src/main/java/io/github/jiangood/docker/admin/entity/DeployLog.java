@@ -1,12 +1,12 @@
 package io.github.jiangood.docker.admin.entity;
 
-import io.admin.framework.data.domain.BaseEntity;
+import io.github.jiangood.sa.framework.data.domain.BaseEntity;
+import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.FieldNameConstants;
 
-import jakarta.persistence.Entity;
 import java.util.Date;
 
 @Entity

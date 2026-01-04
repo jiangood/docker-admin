@@ -1,18 +1,19 @@
 package io.github.jiangood.docker.admin.controller;
 
+import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.command.InspectContainerResponse;
 import com.github.dockerjava.api.command.ListContainersCmd;
+import com.github.dockerjava.api.model.Container;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.service.HostService;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
-import com.github.dockerjava.api.DockerClient;
-import com.github.dockerjava.api.model.Container;
-import io.admin.common.dto.AjaxResult;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
-import java.util.*;
+import java.util.List;
+import java.util.Map;
 
 @RestController
 @Slf4j

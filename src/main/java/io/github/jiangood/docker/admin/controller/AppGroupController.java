@@ -1,20 +1,21 @@
 package io.github.jiangood.docker.admin.controller;
 
 import cn.hutool.core.lang.Dict;
-import io.admin.framework.config.argument.RequestBodyKeys;
-import io.admin.framework.data.domain.BaseEntity;
-import io.admin.framework.data.query.JpaQuery;
-import io.admin.common.dto.AjaxResult;
 import io.github.jiangood.docker.admin.entity.AppGroup;
 import io.github.jiangood.docker.admin.service.AppGroupService;
-import io.admin.common.dto.antd.Option;
+import io.github.jiangood.sa.common.dto.AjaxResult;
+import io.github.jiangood.sa.common.dto.antd.Option;
+import io.github.jiangood.sa.framework.config.argument.RequestBodyKeys;
+import io.github.jiangood.sa.framework.data.specification.Spec;
 import jakarta.annotation.Resource;
-import io.admin.framework.config.security.HasPermission;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
@@ -27,8 +28,8 @@ public class AppGroupController  {
 
     @HasPermission("group:view")
     @RequestMapping("page")
-    public AjaxResult page( String searchText, @PageableDefault(direction = Sort.Direction.DESC, sort = "updateTime") Pageable pageable) throws Exception {
-        JpaQuery<AppGroup> q = new JpaQuery<>();
+    public AjaxResult page(String searchText, @PageableDefault(direction = Sort.Direction.DESC, sort = "updateTime") Pageable pageable) throws Exception {
+        Spec<AppGroup> q = Spec.of();
         q.like(AppGroup.Fields.name, searchText);
 
         Page<AppGroup> page = service.findPageByRequest(q, pageable);
@@ -38,7 +39,7 @@ public class AppGroupController  {
 
     @RequestMapping("options")
     public AjaxResult options() throws Exception {
-        JpaQuery<AppGroup> q = new JpaQuery<>();
+        Spec<AppGroup> q = Spec.of();
 
         List<AppGroup> list = service.findAll(q, Sort.by("seq"));
 
@@ -50,7 +51,7 @@ public class AppGroupController  {
     }
     @RequestMapping("menus")
     public AjaxResult menus() throws Exception {
-        JpaQuery<AppGroup> q = new JpaQuery<>();
+        Spec<AppGroup> q = Spec.of();
 
         List<AppGroup> list = service.findAll(q, Sort.by("seq"));
 

@@ -1,13 +1,7 @@
 package io.github.jiangood.docker.admin.controller;
 
-import io.admin.framework.config.argument.RequestBodyKeys;
-import io.admin.framework.config.security.HasPermission;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.service.HostService;
-import io.admin.common.dto.AjaxResult;
-import io.admin.common.dto.antd.Option;
-
-import io.admin.framework.data.query.JpaQuery;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -31,7 +25,7 @@ public class HostController  {
     @HasPermission("host:view")
     @RequestMapping("page")
     public AjaxResult page(Host request,@PageableDefault(direction = Sort.Direction.DESC, sort = "updateTime") Pageable pageable) throws Exception {
-        JpaQuery<Host> q = new JpaQuery<>();
+        Spec<Host> q = Spec.of();
         // 视情况修改
         q.likeExample(request);
         Page<Host> page = service.findPageByRequest(q, pageable);
@@ -54,11 +48,11 @@ public class HostController  {
 
     @RequestMapping("options")
     public AjaxResult options(@RequestParam(defaultValue = "false") boolean onlyRunner, String searchText) {
-        JpaQuery<Host> q = new JpaQuery<>();
+        Spec<Host> q = Spec.of();
         if (onlyRunner) {
             q.eq(Host.Fields.isRunner, true);
         }
-        q.searchText(searchText, Host.Fields.name, Host.Fields.remark, Host.Fields.dockerHost);
+        q.orLike(searchText, Host.Fields.name, Host.Fields.remark, Host.Fields.dockerHost);
         List<Host> list = service.findAll(q, Sort.by(Host.Fields.name));
         List<Option> options = new ArrayList<>();
         for (Host h : list) {

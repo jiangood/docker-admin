@@ -3,8 +3,6 @@ package io.github.jiangood.docker.admin.controller;
 import cn.hutool.core.date.DateUtil;
 import io.github.jiangood.docker.admin.entity.BuildLog;
 import io.github.jiangood.docker.admin.service.BuildLogService;
-import io.admin.common.dto.AjaxResult;
-import io.admin.framework.data.query.JpaQuery;
 import jakarta.annotation.Resource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -24,7 +22,7 @@ public class HomeController {
 
     @RequestMapping("buildingPage")
     public AjaxResult buildingPage(@PageableDefault(direction = Sort.Direction.DESC,sort = "createTime") Pageable pageable) throws UnsupportedEncodingException {
-        JpaQuery<BuildLog> q = new JpaQuery<>();
+        Spec<BuildLog> q = Spec.of();
         q.isNull(BuildLog.Fields.success);
 
         Page<BuildLog> page = buildLogService.findAll(q,pageable);

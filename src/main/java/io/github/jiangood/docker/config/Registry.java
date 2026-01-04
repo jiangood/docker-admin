@@ -2,8 +2,6 @@ package io.github.jiangood.docker.config;
 
 
 import lombok.Data;
-import lombok.Getter;
-import lombok.Setter;
 
 @Data
 public class Registry {

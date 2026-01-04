@@ -2,10 +2,8 @@ package io.github.jiangood.docker.admin.dao;
 
 
 import io.github.jiangood.docker.admin.entity.Host;
-
-
-import io.admin.framework.data.repository.BaseDao;
-import io.admin.framework.data.query.JpaQuery;
+import io.github.jiangood.sa.framework.data.repository.BaseDao;
+import io.github.jiangood.sa.framework.data.specification.Spec;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Repository;
 
@@ -13,7 +11,7 @@ import org.springframework.stereotype.Repository;
 public class HostDao extends BaseDao<Host> {
 
     public Host findTop1ByIsRunnerOrderByModifyTimeDesc(boolean isRunner) {
-        JpaQuery<Host> q = new JpaQuery<>();
+        Spec<Host> q = Spec.of();
         q.eq(Host.Fields.isRunner, isRunner);
         return this.findTop1(q, Sort.by(Sort.Direction.DESC, "updateTime"));
     }

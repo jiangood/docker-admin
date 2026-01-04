@@ -2,7 +2,6 @@ package io.github.jiangood.docker.admin.websocket;// ContainerLogWebSocketHandle
 
 import cn.hutool.core.util.StrUtil;
 import com.github.dockerjava.api.model.Container;
-import io.admin.common.utils.URLTool;
 import io.github.jiangood.docker.admin.entity.App;
 import io.github.jiangood.docker.admin.service.AppService;
 import jakarta.annotation.Resource;

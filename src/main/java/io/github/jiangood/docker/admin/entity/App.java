@@ -1,14 +1,13 @@
 package io.github.jiangood.docker.admin.entity;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
-import io.admin.framework.data.DBConstants;
-import io.admin.framework.data.domain.BaseEntity;
-import io.admin.framework.validator.ValidateStartWithLetter;
-import io.admin.modules.system.entity.SysOrg;
-import io.github.jiangood.docker.admin.entity.converter.AppConfigConverter;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import io.admin.common.utils.ann.Remark;
-
+import com.fasterxml.jackson.annotation.JsonProperty;
+import io.github.jiangood.docker.admin.entity.converter.AppConfigConverter;
+import io.github.jiangood.sa.common.tools.annotation.Remark;
+import io.github.jiangood.sa.framework.data.DBConstants;
+import io.github.jiangood.sa.framework.data.domain.BaseEntity;
+import io.github.jiangood.sa.framework.validator.ValidateStartWithLetter;
+import io.github.jiangood.sa.modules.system.entity.SysOrg;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
@@ -61,7 +60,6 @@ public class App extends BaseEntity {
 
     @Lob
     @Convert(converter = AppConfigConverter.class)
-    @Column(length = DBConstants.LEN_MAX_VARCHAR)
     AppConfig config;
 
     @ManyToOne

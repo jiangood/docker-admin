@@ -1,17 +1,13 @@
 package io.github.jiangood.docker.admin.controller;
 
 import cn.hutool.core.util.StrUtil;
-import io.admin.common.dto.AjaxResult;
-import io.admin.common.dto.antd.Option;
-import io.admin.framework.config.argument.RequestBodyKeys;
-import io.admin.framework.config.security.HasPermission;
-import io.admin.framework.data.query.JpaQuery;
-import io.admin.modules.common.LoginUtils;
-import io.admin.modules.system.service.SysOrgService;
 import io.github.jiangood.docker.admin.dto.BuildRequest;
 import io.github.jiangood.docker.admin.entity.Project;
 import io.github.jiangood.docker.admin.service.BuildLogService;
 import io.github.jiangood.docker.admin.service.ProjectService;
+import io.github.jiangood.sa.common.dto.AjaxResult;
+import io.github.jiangood.sa.framework.data.specification.Spec;
+import io.github.jiangood.sa.modules.system.service.SysOrgService;
 import jakarta.annotation.Resource;
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.springframework.data.domain.Page;
@@ -43,8 +39,8 @@ public class ProjectController {
     @HasPermission("project:view")
     @RequestMapping("page")
     public AjaxResult page(String orgId, String searchText, @PageableDefault(direction = Sort.Direction.DESC, sort = {"updateTime"}) Pageable pageable) {
-        JpaQuery<Project> q = buildQuery();
-        q.searchText(searchText, "name", "remark");
+        Spec<Project> q = buildQuery();
+        q.orLike(searchText, "name", "remark");
 
 
         if (StrUtil.isNotEmpty(orgId)) {
@@ -60,8 +56,8 @@ public class ProjectController {
         return AjaxResult.ok().data(page);
     }
 
-    private JpaQuery<Project> buildQuery() {
-        JpaQuery<Project> q = new JpaQuery<>();
+    private Spec<Project> buildQuery() {
+        Spec<Project> q = Spec.of();
         q.addSubOr(qq -> {
             qq.isNull("sysOrg.id");
             qq.in("sysOrg.id", LoginUtils.getOrgPermissions());
@@ -141,7 +137,7 @@ public class ProjectController {
 
     @RequestMapping("options")
     public List<Option> options() throws InterruptedException, IOException, GitAPIException {
-        JpaQuery<Project> q = buildQuery();
+        Spec<Project> q = buildQuery();
 
         List<Project> list = service.findAll(q, Sort.by(Sort.Direction.DESC, "updateTime"));
 

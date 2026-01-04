@@ -1,9 +1,9 @@
 package io.github.jiangood.docker.admin.service;
 
-import io.admin.framework.data.query.JpaQuery;
 import io.github.jiangood.docker.admin.dao.AppGroupDao;
 import io.github.jiangood.docker.admin.entity.AppGroup;
-import io.admin.framework.data.service.BaseService;
+import io.github.jiangood.sa.framework.data.service.BaseService;
+import io.github.jiangood.sa.framework.data.specification.Spec;
 import jakarta.annotation.Resource;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
@@ -17,7 +17,7 @@ public class AppGroupService extends BaseService<AppGroup> {
     private AppGroupDao appGroupDao;
 
 
-    public List<AppGroup> findAll(JpaQuery<AppGroup> q, Sort sort) {
+    public List<AppGroup> findAll(Spec<AppGroup> q, Sort sort) {
         return appGroupDao.findAll(q,sort);
     }
 }

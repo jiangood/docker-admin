@@ -3,9 +3,8 @@ package io.github.jiangood.docker.admin.controller;
 import cn.hutool.core.date.DateUtil;
 import io.github.jiangood.docker.admin.entity.BuildLog;
 import io.github.jiangood.docker.admin.service.BuildLogService;
-
-
-import io.admin.framework.data.query.JpaQuery;
+import io.github.jiangood.sa.framework.data.specification.Spec;
+import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -13,8 +12,6 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
-import jakarta.annotation.Resource;
 
 import java.io.UnsupportedEncodingException;
 
@@ -28,7 +25,7 @@ public class BuildLogController {
 
     @RequestMapping("list")
     public Page<BuildLog> list(String projectId, @PageableDefault(sort = "createTime", direction = Sort.Direction.DESC) Pageable pageable) throws UnsupportedEncodingException {
-        JpaQuery<BuildLog> q = new JpaQuery<>();
+        Spec<BuildLog> q = Spec.of();
         q.eq("projectId", projectId);
         Page<BuildLog> page = service.findAll(q, pageable);
 

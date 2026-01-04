@@ -1,10 +1,13 @@
 package io.github.jiangood.docker.admin.entity;
 
-import io.admin.common.utils.ann.Remark;
-import io.admin.framework.validator.ValidateStartWithLetter;
-import io.admin.modules.system.entity.SysOrg;
-import io.admin.framework.data.domain.BaseEntity;
-import jakarta.persistence.*;
+import io.github.jiangood.sa.common.tools.annotation.Remark;
+import io.github.jiangood.sa.framework.data.domain.BaseEntity;
+import io.github.jiangood.sa.framework.validator.ValidateStartWithLetter;
+import io.github.jiangood.sa.modules.system.entity.SysOrg;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.Setter;

@@ -1,28 +1,17 @@
 package io.github.jiangood.docker.admin.controller;
 
 import cn.hutool.core.util.StrUtil;
-import com.github.dockerjava.api.DockerClient;
-import com.github.dockerjava.api.async.ResultCallback;
-import com.github.dockerjava.api.model.Container;
-import com.github.dockerjava.api.model.Frame;
-import io.admin.common.dto.AjaxResult;
-import io.admin.common.dto.antd.Option;
-import io.admin.framework.config.argument.RequestBodyKeys;
-import io.admin.framework.config.security.HasPermission;
-import io.admin.framework.data.query.JpaQuery;
-import io.admin.modules.common.LoginUtils;
-import io.github.jiangood.docker.admin.entity.App;
-import io.github.jiangood.docker.admin.entity.Host;
-import io.github.jiangood.docker.admin.service.AppService;
 import io.github.jiangood.docker.admin.dto.ContainerVo;
+import io.github.jiangood.docker.admin.entity.App;
+import io.github.jiangood.docker.admin.service.AppService;
 import io.github.jiangood.docker.config.Config;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
+import io.github.jiangood.sa.common.dto.AjaxResult;
+import io.github.jiangood.sa.framework.data.specification.Spec;
 import jakarta.annotation.Resource;
-import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
-import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -30,14 +19,14 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.util.Assert;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.*;
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.io.UnsupportedEncodingException;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 
 @RestController
@@ -58,8 +47,8 @@ public class AppController {
     @HasPermission("app:list")
     @RequestMapping("list")
     public AjaxResult list(String groupId, String searchText, @PageableDefault(sort = {"updateTime", "createTime"}, direction = Sort.Direction.DESC) Pageable pageable, HttpSession session) {
-        JpaQuery<App> q = new JpaQuery<>();
-        q.searchText(searchText, "name", "remark", "host.name");
+        Spec<App> q = Spec.of();
+        q.orLike(searchText, "name", "remark", "host.name");
         q.eq(App.Fields.appGroup + ".id", groupId);
 
         q.addSubOr(qq -> {
@@ -219,7 +208,7 @@ public class AppController {
 
     @RequestMapping("options")
     public AjaxResult options(String searchText) {
-        JpaQuery<App> q = new JpaQuery<>();
+        Spec<App> q = Spec.of();
         if (StrUtil.isNotBlank(searchText)) {
             q.like("name", searchText);
         }
