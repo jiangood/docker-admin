@@ -6,7 +6,10 @@ import io.github.jiangood.docker.admin.entity.Project;
 import io.github.jiangood.docker.admin.service.BuildLogService;
 import io.github.jiangood.docker.admin.service.ProjectService;
 import io.github.jiangood.sa.common.dto.AjaxResult;
+import io.github.jiangood.sa.common.dto.antd.Option;
+import io.github.jiangood.sa.framework.config.argument.RequestBodyKeys;
 import io.github.jiangood.sa.framework.data.specification.Spec;
+import io.github.jiangood.sa.modules.common.LoginTool;
 import io.github.jiangood.sa.modules.system.service.SysOrgService;
 import jakarta.annotation.Resource;
 import org.eclipse.jgit.api.errors.GitAPIException;
@@ -14,6 +17,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
@@ -36,7 +40,7 @@ public class ProjectController {
     private SysOrgService sysOrgService;
 
 
-    @HasPermission("project:view")
+    @PreAuthorize("hasAuthority('project:view')")
     @RequestMapping("page")
     public AjaxResult page(String orgId, String searchText, @PageableDefault(direction = Sort.Direction.DESC, sort = {"updateTime"}) Pageable pageable) {
         Spec<Project> q = buildQuery();
@@ -58,15 +62,15 @@ public class ProjectController {
 
     private Spec<Project> buildQuery() {
         Spec<Project> q = Spec.of();
-        q.addSubOr(qq -> {
+        q.or(qq -> {
             qq.isNull("sysOrg.id");
-            qq.in("sysOrg.id", LoginUtils.getOrgPermissions());
+            qq.in("sysOrg.id", LoginTool.getOrgPermissions());
         });
 
         return q;
     }
 
-    @HasPermission("project:save")
+    @PreAuthorize("hasAuthority('project:save')")
     @PostMapping({"save"})
     public AjaxResult save(@RequestBody Project param, RequestBodyKeys updateFields) throws Exception {
         if (param.getSysOrg().getId() == null) {
@@ -79,14 +83,14 @@ public class ProjectController {
     }
 
 
-    @HasPermission("project:delete")
+    @PreAuthorize("hasAuthority('project:delete')")
     @PostMapping({"delete"})
     public AjaxResult delete(String id) {
         this.service.deleteProject(id);
         return AjaxResult.ok().msg("删除成功");
     }
 
-    @HasPermission("project:view")
+    @PreAuthorize("hasAuthority('project:view')")
     @RequestMapping("get")
     public AjaxResult get(String id) {
         Project project = service.findOne(id);
@@ -94,7 +98,7 @@ public class ProjectController {
     }
 
 
-    @HasPermission(value = "project:build")
+    @PreAuthorize("hasAuthority('project:build')")
     @RequestMapping("build")
     public AjaxResult build(
             BuildRequest buildRequest,

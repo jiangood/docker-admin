@@ -7,7 +7,10 @@ import io.github.jiangood.docker.admin.service.AppService;
 import io.github.jiangood.docker.config.Config;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import io.github.jiangood.sa.common.dto.AjaxResult;
+import io.github.jiangood.sa.common.dto.antd.Option;
+import io.github.jiangood.sa.framework.config.argument.RequestBodyKeys;
 import io.github.jiangood.sa.framework.data.specification.Spec;
+import io.github.jiangood.sa.modules.common.LoginTool;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.constraints.NotNull;
@@ -17,6 +20,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.util.Assert;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -41,19 +45,17 @@ public class AppController {
     @Resource
     private Config config;
 
-    @Resource
-    private DockerClientManager sdk;
 
-    @HasPermission("app:list")
+    @PreAuthorize("hasAuthority('app:list')")
     @RequestMapping("list")
     public AjaxResult list(String groupId, String searchText, @PageableDefault(sort = {"updateTime", "createTime"}, direction = Sort.Direction.DESC) Pageable pageable, HttpSession session) {
         Spec<App> q = Spec.of();
         q.orLike(searchText, "name", "remark", "host.name");
         q.eq(App.Fields.appGroup + ".id", groupId);
 
-        q.addSubOr(qq -> {
+        q.or(qq -> {
             qq.isNull("sysOrg.id");
-            qq.in("sysOrg.id", LoginUtils.getOrgPermissions());
+            qq.in("sysOrg.id", LoginTool.getOrgPermissions());
         });
 
         Page<App> list = service.findPageByRequest(q, pageable);
@@ -84,7 +86,7 @@ public class AppController {
     }
 
 
-    @HasPermission("app:save")
+    @PreAuthorize("hasAuthority('app:save')")
     @RequestMapping("save")
     public AjaxResult save(@RequestBody App app, RequestBodyKeys requestBodyKeys) throws Exception {
         service.saveOrUpdateByRequest(app, requestBodyKeys);
@@ -92,14 +94,14 @@ public class AppController {
     }
 
 
-    @HasPermission("app:save")
+    @PreAuthorize("hasAuthority('app:save')")
     @RequestMapping("update")
     public AjaxResult update(@RequestBody App app) {
         service.save(app);
         return AjaxResult.ok().msg("修改成功");
     }
 
-    @HasPermission("app:save")
+    @PreAuthorize("hasAuthority('app:save')")
     @RequestMapping("updateBaseInfo")
     public AjaxResult updateBaseInfo(@RequestBody App app) {
         service.updateBaseInfo(app);
@@ -107,7 +109,7 @@ public class AppController {
     }
 
 
-    @HasPermission(value = "app:config")
+    @PreAuthorize("hasAuthority('app:config')")
     @RequestMapping("updateConfig")
     public AjaxResult updateConfig(String id, @RequestBody App.AppConfig appConfig) {
         App app = service.updateConfig(id, appConfig);
@@ -116,7 +118,7 @@ public class AppController {
         return AjaxResult.ok().msg("修改成功，应用会自动重启").data(app);
     }
 
-    @HasPermission("app:save")
+    @PreAuthorize("hasAuthority('app:save')")
     @RequestMapping("updateVersion")
     public AjaxResult updateVersion(String id, String version) {
         service.updateAppVersion(id, version);
@@ -125,7 +127,7 @@ public class AppController {
     }
 
 
-    @HasPermission("app:delete")
+    @PreAuthorize("hasAuthority('app:delete')")
     @RequestMapping("delete")
     public AjaxResult delete(String id, Boolean force) {
         if (force != null && force) {
@@ -145,7 +147,7 @@ public class AppController {
     }
 
 
-    @HasPermission("app:deploy")
+    @PreAuthorize("hasAuthority('app:deploy')")
     @RequestMapping("deploy/{id}")
     public AjaxResult deploy(@PathVariable String id) {
         log.info("开始部署");
@@ -157,7 +159,7 @@ public class AppController {
     }
 
 
-    @HasPermission(value = "app:deploy")
+    @PreAuthorize("hasAuthority('app:deploy')")
     @RequestMapping("autoDeploy")
     public AjaxResult autoDeploy(String id, boolean autoDeploy) {
 
@@ -171,21 +173,21 @@ public class AppController {
     }
 
 
-    @HasPermission(value = "app:save")
+    @PreAuthorize("hasAuthority('app:save')")
     @RequestMapping("start/{appId}")
     public AjaxResult start(@PathVariable String appId) {
         service.start(appId);
         return AjaxResult.ok().msg("启动指令已发送");
     }
 
-    @HasPermission(value = "app:save")
+    @PreAuthorize("hasAuthority('app:save')")
     @RequestMapping("stop/{appId}")
     public AjaxResult stop(@PathVariable String appId) {
         service.stop(appId);
         return AjaxResult.ok().msg("停止指令已发送");
     }
 
-    @HasPermission(value = "app:save")
+    @PreAuthorize("hasAuthority('app:save')")
     @RequestMapping("rename")
     public AjaxResult rename(@RequestBody Map<String, String> map) {
         String appId = map.get("appId");
@@ -197,7 +199,7 @@ public class AppController {
         return AjaxResult.ok().msg("部署指令已发送").data(app);
     }
 
-    @HasPermission(value = "app:save")
+    @PreAuthorize("hasAuthority('app:save')")
     @RequestMapping("copyApp")
     public AjaxResult copyApp(@RequestBody @Validated MoveParam param) {
         App app = service.copyApp(param.getAppId(), param.getHostId());

@@ -2,12 +2,17 @@ package io.github.jiangood.docker.admin.controller;
 
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.service.HostService;
+import io.github.jiangood.sa.common.dto.AjaxResult;
+import io.github.jiangood.sa.common.dto.antd.Option;
+import io.github.jiangood.sa.framework.config.argument.RequestBodyKeys;
+import io.github.jiangood.sa.framework.data.specification.Spec;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.ArrayList;
@@ -22,24 +27,23 @@ public class HostController  {
     @Resource
     private HostService service;
 
-    @HasPermission("host:view")
+    @PreAuthorize("hasAuthority('host:view')")
     @RequestMapping("page")
-    public AjaxResult page(Host request,@PageableDefault(direction = Sort.Direction.DESC, sort = "updateTime") Pageable pageable) throws Exception {
+    public AjaxResult page(Host request, @PageableDefault(direction = Sort.Direction.DESC, sort = "updateTime") Pageable pageable) throws Exception {
         Spec<Host> q = Spec.of();
-        // 视情况修改
-        q.likeExample(request);
+        q.addExample(request);
         Page<Host> page = service.findPageByRequest(q, pageable);
         return AjaxResult.ok().data(page);
     }
 
-    @HasPermission("host:save")
+    @PreAuthorize("hasAuthority('host:save')")
     @PostMapping("save")
     public AjaxResult save(@RequestBody Host input, RequestBodyKeys updateFields) throws Exception {
         service.saveOrUpdateByRequest(input, updateFields);
         return AjaxResult.ok().msg("保存成功");
     }
 
-    @HasPermission("host:delete")
+    @PreAuthorize("hasAuthority('host:delete')")
     @RequestMapping("delete")
     public AjaxResult delete(String id) {
         service.deleteByRequest(id);

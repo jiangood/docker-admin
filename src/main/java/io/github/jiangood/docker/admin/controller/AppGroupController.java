@@ -6,12 +6,14 @@ import io.github.jiangood.docker.admin.service.AppGroupService;
 import io.github.jiangood.sa.common.dto.AjaxResult;
 import io.github.jiangood.sa.common.dto.antd.Option;
 import io.github.jiangood.sa.framework.config.argument.RequestBodyKeys;
+import io.github.jiangood.sa.framework.data.domain.BaseEntity;
 import io.github.jiangood.sa.framework.data.specification.Spec;
 import jakarta.annotation.Resource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -26,7 +28,7 @@ public class AppGroupController  {
     @Resource
     private AppGroupService service;
 
-    @HasPermission("group:view")
+    @PreAuthorize("hasAuthority('group:view')")
     @RequestMapping("page")
     public AjaxResult page(String searchText, @PageableDefault(direction = Sort.Direction.DESC, sort = "updateTime") Pageable pageable) throws Exception {
         Spec<AppGroup> q = Spec.of();
@@ -64,7 +66,7 @@ public class AppGroupController  {
 
 
 
-    @HasPermission("group:save")
+    @PreAuthorize("hasAuthority('group:save')")
     @PostMapping("save")
     public AjaxResult save(@RequestBody AppGroup input, RequestBodyKeys updateFields) throws Exception {
         service.saveOrUpdateByRequest(input, updateFields);
@@ -72,7 +74,7 @@ public class AppGroupController  {
     }
 
 
-    @HasPermission("group:delete")
+    @PreAuthorize("hasAuthority('group:delete')")
     @RequestMapping("delete")
     public AjaxResult delete(String id) {
         service.deleteByRequest(id);
