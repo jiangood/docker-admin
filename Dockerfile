@@ -1,7 +1,5 @@
-# build web
 FROM node AS web
 WORKDIR /build
-
 
 ADD web/package.json ./
 RUN npm install
@@ -9,7 +7,8 @@ RUN npm install
 ADD web/ ./
 RUN npm run build
 
-# build jar
+
+
 FROM maven:3-openjdk-17 AS java
 WORKDIR /build
 
@@ -19,7 +18,8 @@ RUN mvn package -DskipTests -q  --fail-never
 ADD src src
 RUN mvn clean package -DskipTests -q
 
-# merge web and jar
+
+
 FROM amazoncorretto:17
 WORKDIR /home
 
