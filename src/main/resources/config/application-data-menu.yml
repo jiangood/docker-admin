@@ -23,9 +23,4 @@ data:
           icon: DesktopOutlined
           perm-codes: [host:list,host:save,host:delete]
           perm-names: [查看,保存,删除]
-        - name: 应用分组
-          id: appGroup
-          path: /app-group
-          icon: ClusterOutlined
-          perm-codes: [appGroup:save,appGroup:delete,appGroup:view]
-          perm-names: [保存,删除,查看]
+

@@ -1,7 +1,14 @@
 import {AutoComplete, Button, Form, Input, Menu, Modal, Splitter} from 'antd';
 import React from 'react';
 import ContainerStatus from "../../components/ContainerStatus";
-import {FieldOrgTreeSelect, FieldRemoteSelect, HttpUtils, PageUtils, ProTable} from "@jiangood/admin-spring-boot-starter";
+import {
+    FieldOrgTreeSelect,
+    FieldRemoteSelect,
+    HttpUtils,
+    Page,
+    PageUtils,
+    ProTable
+} from "@jiangood/admin-spring-boot-starter";
 
 
 export default class extends React.Component {
@@ -48,6 +55,10 @@ export default class extends React.Component {
             }
         },
         {
+            title: '标签',
+            dataIndex: 'tag',
+        },
+        {
             title: '组织机构',
             dataIndex: ['sysOrg', 'name'],
 
@@ -64,20 +75,10 @@ export default class extends React.Component {
 
         deployVisible: false,
         deployImageVisible: false,
-
-
         imageList: [],
-
-        groupData: [],
-        selectedKey: null,
-
     }
 
-    componentDidMount() {
-        HttpUtils.get("admin/appGroup/menus").then(rs => {
-            this.setState({groupData: rs})
-        })
-    }
+
 
     reload = () => {
         this.tableRef.current.reload()
@@ -101,16 +102,7 @@ export default class extends React.Component {
 
     render() {
         return (
-            <> <Splitter>
-                <Splitter.Panel size={200}>
-
-                    <div style={{padding: 12}}>
-                        <Menu items={this.state.groupData} onSelect={({key}) => {
-                            this.setState({selectedKey: key}, this.reload);
-                        }}/>
-                    </div>
-                </Splitter.Panel>
-                <Splitter.Panel style={{paddingLeft: 16}}>
+            <Page padding>
                     <ProTable
                         actionRef={this.tableRef}
                         toolBarRender={() => [
@@ -120,15 +112,12 @@ export default class extends React.Component {
                             </Button>
                         ]}
                         request={(params) => {
-                            params.groupId = this.state.selectedKey
                             return HttpUtils.get('admin/app/list', params);
                         }}
                         columns={this.columns}
                         showToolbarSearch
 
                     />
-                </Splitter.Panel>
-            </Splitter>
                 <Modal title='新增应用' open={this.state.deployVisible} destroyOnHidden={true}
                        onOk={() => this.formRef.current.submit()}
                        onCancel={() => this.setState({deployVisible: false})}
@@ -167,7 +156,7 @@ export default class extends React.Component {
                 </Modal>
 
 
-            </>
+            </Page>
 
         )
     }

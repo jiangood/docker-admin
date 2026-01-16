@@ -2,8 +2,8 @@ package io.github.jiangood.docker.admin.service;
 
 import io.github.jiangood.docker.admin.dao.AppGroupDao;
 import io.github.jiangood.docker.admin.entity.AppGroup;
-import io.github.jiangood.sa.framework.data.service.BaseService;
-import io.github.jiangood.sa.framework.data.specification.Spec;
+import io.github.jiangood.as.framework.data.service.BaseService;
+import io.github.jiangood.as.framework.data.specification.Spec;
 import jakarta.annotation.Resource;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;

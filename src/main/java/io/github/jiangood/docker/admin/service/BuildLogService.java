@@ -2,7 +2,7 @@ package io.github.jiangood.docker.admin.service;
 
 import io.github.jiangood.docker.admin.dao.BuildLogDao;
 import io.github.jiangood.docker.admin.entity.BuildLog;
-import io.github.jiangood.sa.framework.data.service.BaseService;
+import io.github.jiangood.as.framework.data.service.BaseService;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

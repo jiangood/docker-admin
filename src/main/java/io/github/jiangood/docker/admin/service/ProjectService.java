@@ -22,7 +22,7 @@ import io.github.jiangood.docker.config.GitRepo;
 import io.github.jiangood.docker.config.Registry;
 import io.github.jiangood.docker.sdk.engine.DefaultCallback;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
-import io.github.jiangood.sa.framework.data.service.BaseService;
+import io.github.jiangood.as.framework.data.service.BaseService;
 import jakarta.annotation.Resource;
 import jakarta.transaction.Transactional;
 import lombok.extern.slf4j.Slf4j;

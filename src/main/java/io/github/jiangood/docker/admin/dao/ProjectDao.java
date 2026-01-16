@@ -1,8 +1,8 @@
 package io.github.jiangood.docker.admin.dao;
 
 import io.github.jiangood.docker.admin.entity.Project;
-import io.github.jiangood.sa.framework.data.repository.BaseDao;
-import io.github.jiangood.sa.framework.data.specification.Spec;
+import io.github.jiangood.as.framework.data.repository.BaseDao;
+import io.github.jiangood.as.framework.data.specification.Spec;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
