@@ -10,7 +10,6 @@
     "build": "umi build"
   },
   "dependencies": {
-    "@ant-design/icons": "^5.4.0",
     "@jiangood/admin-spring-boot-starter": "0.2.8",
     "@melloware/react-logviewer": "^6.3.4",
     "antd": "^6.0.0",
