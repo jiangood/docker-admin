@@ -64,14 +64,7 @@ export default class extends React.Component {
             dataIndex: ['registry', 'namespace'],
         },
 
-        {
-            title: '推送latest',
-            dataIndex: 'autoPushLatest',
-            render(v) {
-                return v ? '是' : '否'
-            }
 
-        },
         {
             title: '组织机构',
             dataIndex: ['sysOrg', 'name'],

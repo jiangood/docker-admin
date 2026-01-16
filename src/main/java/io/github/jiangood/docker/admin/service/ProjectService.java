@@ -139,15 +139,13 @@ public class ProjectService extends BaseService<Project> {
             GitTool.CloneResult cloneResult = gitClone(project);
             File workDir = cloneResult.getDir();
             log.info("代码下载完毕 " + workDir);
-            log.info("代码提交信息: {}" , cloneResult.getCodeMessage());
+            log.info("代码提交信息: {}", cloneResult.getCodeMessage());
             Date commitTime = cloneResult.getCommitTime();
-            log.info("代码提交时间: {}, {}前" , DateUtil.formatDateTime(commitTime), DateUtil.formatBetween(commitTime, new Date(), BetweenFormatter.Level.MINUTE));
+            log.info("代码提交时间: {}, {}前", DateUtil.formatDateTime(commitTime), DateUtil.formatBetween(commitTime, new Date(), BetweenFormatter.Level.MINUTE));
             log.info("代码文件大小: {}", DataSizeUtil.format(FileUtil.size(workDir)));
 
 
             log.info("dockerfile {},  内容如下", dockerfile);
-
-
 
 
             buildLog.setBuildHostName(host.getName());
@@ -162,13 +160,10 @@ public class ProjectService extends BaseService<Project> {
 
             String imageUrl = registry.getUrl() + "/" + registry.getNamespace() + "/" + project.getName();
 
-            Set<String> imageTags = new HashSet<>();
-            imageTags.add(imageUrl + ":" + version);
-                imageTags.add(imageUrl + ":latest" );
+            String imageTag = imageUrl + ":" + version;
 
-            log.info("目标镜像： {}", imageTags);
+            log.info("目标镜像： {}", imageTag);
             Assert.state(!StrUtil.containsBlank(imageUrl), "镜像路径不能包含空格");
-
 
 
             buildLog.setImageUrl(imageUrl);
@@ -182,7 +177,7 @@ public class ProjectService extends BaseService<Project> {
             log.info("是否使用缓存 {}", p.isUseCache());
             File dockerfileFile = new File(buildDir, dockerfile);
             log.info("dockerfile绝对路径: {}", dockerfileFile.getAbsolutePath());
-            log.info("是否拉取基础镜像:{}",p.isPull());
+            log.info("是否拉取基础镜像:{}", p.isPull());
 
 
             log.info("构建命令执行中...");
@@ -191,19 +186,18 @@ public class ProjectService extends BaseService<Project> {
                     .withForcerm(true)
                     .withPull(p.isPull())
                     .withNetworkMode("host")
-                    .withTags(imageTags)
+                    .withTags(Collections.singleton(imageTag))
                     .withNoCache(!p.isUseCache())
                     .withDockerfile(dockerfileFile);
 
 
-            if(StrUtil.isNotEmpty(project.getBuildArg())){
+            if (StrUtil.isNotEmpty(project.getBuildArg())) {
                 Map<String, String> buildArgsMap = UriComponentsBuilder.newInstance().query(project.getBuildArg()).build().getQueryParams().toSingleValueMap();
                 for (Map.Entry<String, String> e : buildArgsMap.entrySet()) {
-                    log.info("构建参数: {}={}",e.getKey(),e.getValue());
+                    log.info("构建参数: {}={}", e.getKey(), e.getValue());
                     buildImageCmd.withBuildArg(e.getKey(), e.getValue());
                 }
             }
-
 
 
             buildImageCmd.exec(buildCallback).awaitCompletion();
@@ -220,12 +214,10 @@ public class ProjectService extends BaseService<Project> {
             buildThreadMap.remove(logId);
 
             // 推送
-            for (String imageTag : imageTags) {
-                log.info("推送镜像 {}", imageTag);
-                PushImageCmd pushImageCmd = client.pushImageCmd(imageTag);
-                pushImageCmd.exec(new DefaultCallback<>(logId)).awaitCompletion();
-                log.info("推送镜像结束 {}", imageTag);
-            }
+            log.info("推送镜像 {}", imageTag);
+            PushImageCmd pushImageCmd = client.pushImageCmd(imageTag);
+            pushImageCmd.exec(new DefaultCallback<>(logId)).awaitCompletion();
+            log.info("推送镜像结束 {}", imageTag);
 
 
             client.close();
@@ -293,7 +285,6 @@ public class ProjectService extends BaseService<Project> {
 
         projectDao.deleteById(id);
     }
-
 
 
     @Transactional

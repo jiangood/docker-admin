@@ -37,9 +37,6 @@ export default class extends React.Component {
                     <Descriptions.Item label='dockerfile'>{project.dockerfile}</Descriptions.Item>
                     <Descriptions.Item label='分支'>{project.branch}</Descriptions.Item>
                     <Descriptions.Item label='创建时间'>{project.createTime}</Descriptions.Item>
-
-                    <Descriptions.Item
-                        label='自动推送latest版本'>            {project.autoPushLatest ? '是' : '否'}                    </Descriptions.Item>
                 </Descriptions>
             </Card>
 
