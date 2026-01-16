@@ -34,10 +34,13 @@ public class App extends BaseEntity {
     @ManyToOne
     SysOrg sysOrg;
 
-    @NotNull
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     @ManyToOne(fetch = FetchType.LAZY)
     AppGroup appGroup;
+
+    @Remark("标签")
+    String tag;
+
 
     @NotNull
     @ManyToOne
@@ -77,6 +80,7 @@ public class App extends BaseEntity {
             config = new AppConfig();
             config.setNetworkMode("bridge");
         }
+
 
     }
 

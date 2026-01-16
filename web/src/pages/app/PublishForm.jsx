@@ -1,6 +1,6 @@
 import React from "react";
 import {Button, Card, Col, Form, Input, message, Modal, Row, Skeleton, Switch} from "antd";
-import {FieldRemoteSelect, Gap, HttpUtils, PageUtils} from "@jiangood/springboot-admin-starter";
+import {FieldRemoteSelect, Gap, HttpUtils, PageUtils} from "@jiangood/admin-spring-boot-starter";
 
 /**
  * 发布标签页

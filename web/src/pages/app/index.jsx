@@ -1,7 +1,7 @@
 import {AutoComplete, Button, Form, Input, Menu, Modal, Splitter} from 'antd';
 import React from 'react';
 import ContainerStatus from "../../components/ContainerStatus";
-import {FieldOrgTreeSelect, FieldRemoteSelect, HttpUtils, PageUtils, ProTable} from "@jiangood/springboot-admin-starter";
+import {FieldOrgTreeSelect, FieldRemoteSelect, HttpUtils, PageUtils, ProTable} from "@jiangood/admin-spring-boot-starter";
 
 
 export default class extends React.Component {

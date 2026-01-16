@@ -9,7 +9,7 @@ import {
     OrgTree,
     PageUtils,
     ProTable
-} from "@jiangood/springboot-admin-starter"
+} from "@jiangood/admin-spring-boot-starter"
 
 
 export default class extends React.Component {

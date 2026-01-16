@@ -2,7 +2,7 @@ import {PlusOutlined} from '@ant-design/icons'
 import {Button, Form, Input, Modal, Popconfirm} from 'antd'
 import React from 'react'
 
-import {ButtonList, FieldBoolean, HttpUtils, Page, PageUtils, ProTable} from "@jiangood/springboot-admin-starter"
+import {ButtonList, FieldBoolean, HttpUtils, Page, PageUtils, ProTable} from "@jiangood/admin-spring-boot-starter"
 import {history} from "umi";
 
 

@@ -1,7 +1,7 @@
 import {Card, Descriptions, Spin} from 'antd';
 import React from 'react';
 import BuildLogList from "./BuildLogList";
-import {HttpUtils, PageUtils} from "@jiangood/springboot-admin-starter";
+import {HttpUtils, PageUtils} from "@jiangood/admin-spring-boot-starter";
 
 
 let api = 'project/';

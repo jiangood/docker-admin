@@ -1,6 +1,6 @@
 import {Tag} from "antd";
 import React from "react";
-import {HttpUtils, StringUtils} from "@jiangood/springboot-admin-starter";
+import {HttpUtils, StringUtils} from "@jiangood/admin-spring-boot-starter";
 
 
 /**

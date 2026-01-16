@@ -1,7 +1,7 @@
 import {PlusOutlined} from '@ant-design/icons'
 import {Button, InputNumber, Popconfirm, Modal, Form, Input} from 'antd'
 import React from 'react'
-import {ButtonList, HttpUtils, Page, ProTable} from "@jiangood/springboot-admin-starter";
+import {ButtonList, HttpUtils, Page, ProTable} from "@jiangood/admin-spring-boot-starter";
 
 
 export default class extends React.Component {
