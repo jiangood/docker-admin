@@ -23,17 +23,17 @@ jobs:
         node-version: 18
         registry-url: https://registry.npmjs.org
 
-    - name: Install Node.js dependencies
+    - name: 前端构建
       run: cd web && npm install && npm run build && cp build/dist/ src/main/resources/static/
     - name: echo
       run: ls src/main/resources/static/
 
 
-    - name: Build with Maven
+    - name: 后端构建
       run: mvn package
 
 
-    - name: Upload artifact
+    - name: 上传jar包
       uses: xresloader/upload-to-github-release@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
