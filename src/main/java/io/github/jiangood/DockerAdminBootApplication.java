@@ -14,7 +14,9 @@ import org.springframework.scheduling.annotation.EnableAsync;
 public class DockerAdminBootApplication {
 
     public static void main(String[] args) {
+        long start = System.currentTimeMillis();
         SpringApplication.run(DockerAdminBootApplication.class, args);
+        log.info("启动完成，耗时：{}ms", System.currentTimeMillis() - start);
     }
 
 }

@@ -66,7 +66,7 @@ export default class extends React.Component {
 
         {
             title: '最近更新',
-            dataIndex: 'modifyTime',
+            dataIndex: 'updateTime',
         },
 
 

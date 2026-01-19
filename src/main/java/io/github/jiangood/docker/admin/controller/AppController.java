@@ -1,6 +1,7 @@
 package io.github.jiangood.docker.admin.controller;
 
 import cn.hutool.core.util.StrUtil;
+import io.github.jiangood.as.framework.perm.HasPermission;
 import io.github.jiangood.docker.admin.dto.ContainerVo;
 import io.github.jiangood.docker.admin.entity.App;
 import io.github.jiangood.docker.admin.service.AppService;
@@ -46,12 +47,11 @@ public class AppController {
     private Config config;
 
 
-    @PreAuthorize("hasAuthority('app:view')")
+    @HasPermission("app:view")
     @RequestMapping("list")
-    public AjaxResult list(String groupId, String searchText, @PageableDefault(sort = {"updateTime", "createTime"}, direction = Sort.Direction.DESC) Pageable pageable, HttpSession session) {
+    public AjaxResult list(String searchText, @PageableDefault(sort = {"updateTime", "createTime"}, direction = Sort.Direction.DESC) Pageable pageable, HttpSession session) {
         Spec<App> q = Spec.of();
-        q.orLike(searchText, "name", "remark", "host.name");
-        q.eq(App.Fields.appGroup + ".id", groupId);
+        q.orLike(searchText,  "host.name",App.Fields.name,App.Fields.tag,App.Fields.remark);
 
         q.or(qq -> {
             qq.isNull("sysOrg.id");
@@ -86,30 +86,29 @@ public class AppController {
     }
 
 
-    @PreAuthorize("hasAuthority('app:save')")
+    @HasPermission("app:save")
     @RequestMapping("save")
     public AjaxResult save(@RequestBody App app, RequestBodyKeys requestBodyKeys) throws Exception {
         service.saveOrUpdateByRequest(app, requestBodyKeys);
         return AjaxResult.ok().msg("保存成功");
     }
 
-
-    @PreAuthorize("hasAuthority('app:save')")
+    @HasPermission("app:save")
     @RequestMapping("update")
     public AjaxResult update(@RequestBody App app) {
         service.save(app);
         return AjaxResult.ok().msg("修改成功");
     }
 
-    @PreAuthorize("hasAuthority('app:save')")
+
+    @HasPermission("app:save")
     @RequestMapping("updateBaseInfo")
     public AjaxResult updateBaseInfo(@RequestBody App app) {
         service.updateBaseInfo(app);
         return AjaxResult.ok().msg("修改成功");
     }
 
-
-    @PreAuthorize("hasAuthority('app:config')")
+    @HasPermission("app:config")
     @RequestMapping("updateConfig")
     public AjaxResult updateConfig(String id, @RequestBody App.AppConfig appConfig) {
         App app = service.updateConfig(id, appConfig);
@@ -118,7 +117,8 @@ public class AppController {
         return AjaxResult.ok().msg("修改成功，应用会自动重启").data(app);
     }
 
-    @PreAuthorize("hasAuthority('app:save')")
+
+    @HasPermission("app:save")
     @RequestMapping("updateVersion")
     public AjaxResult updateVersion(String id, String version) {
         service.updateAppVersion(id, version);
