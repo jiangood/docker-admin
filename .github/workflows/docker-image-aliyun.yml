@@ -4,7 +4,6 @@ on:
   push:
     tags:
       - 'v*'
-  workflow_dispatch:
 jobs:
   push_to_registry:
     name: Push Docker image to Aliyun
