@@ -231,9 +231,7 @@ export default class extends React.Component {
                     <Form.Item label='所属组织' name={['sysOrg', 'id']}>
                         <FieldOrgTreeSelect/>
                     </Form.Item>
-                    <Form.Item label='所属分组' name={['appGroup', 'id']}>
-                        <FieldRemoteSelect url='admin/appGroup/options'/>
-                    </Form.Item>
+
                 </Form>
             </Modal>
 
