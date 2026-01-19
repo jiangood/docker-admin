@@ -10,7 +10,7 @@
     "build": "umi build"
   },
   "dependencies": {
-    "@jiangood/admin-spring-boot-starter": "0.2.8",
+    "@jiangood/admin-spring-boot-starter": "0.3.0",
     "@melloware/react-logviewer": "^6.3.4",
     "antd": "^6.0.0",
     "antd-img-crop": "^4.23.0",
