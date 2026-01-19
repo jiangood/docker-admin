@@ -26,13 +26,13 @@ jobs:
     - name: 前端构建
       run: cd web && npm install && npm run build
 
-    - name: 复制前端文件到后端源码
+    - name: 复制前端文件到后端源码的静态文件夹
       run: cp -r web/dist/* src/main/resources/static
 
     - name: 后端构建
       run: mvn package
 
-    - name: Release
+    - name: 上传jar包到GitHub Release
       uses: softprops/action-gh-release@v2
       if: github.ref_type == 'tag'
       with:
