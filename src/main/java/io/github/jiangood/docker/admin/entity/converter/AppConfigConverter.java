@@ -2,7 +2,7 @@ package io.github.jiangood.docker.admin.entity.converter;
 
 import cn.hutool.core.util.StrUtil;
 import io.github.jiangood.docker.admin.entity.App;
-import io.github.jiangood.as.common.tools.JsonTool;
+import io.github.jiangood.openadmin.common.tools.JsonTool;
 import jakarta.persistence.AttributeConverter;
 
 public class AppConfigConverter implements AttributeConverter<App.AppConfig, String> {

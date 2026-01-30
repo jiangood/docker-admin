@@ -7,8 +7,8 @@ import {
   Loading3QuartersOutlined,
   MinusCircleTwoTone
 } from "@ant-design/icons";
-import {HttpUtils, ProTable} from "@jiangood/admin-spring-boot-starter";
-import {DateUtils} from "@jiangood/admin-spring-boot-starter";
+import {HttpUtils, ProTable} from "@jiangood/open-admin";
+import {DateUtils} from "@jiangood/open-admin";
 import dayjs from "dayjs";
 
 

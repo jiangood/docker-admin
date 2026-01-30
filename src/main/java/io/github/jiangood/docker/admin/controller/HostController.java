@@ -2,10 +2,10 @@ package io.github.jiangood.docker.admin.controller;
 
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.service.HostService;
-import io.github.jiangood.as.common.dto.AjaxResult;
-import io.github.jiangood.as.common.dto.antd.Option;
-import io.github.jiangood.as.framework.config.argument.RequestBodyKeys;
-import io.github.jiangood.as.framework.data.specification.Spec;
+import io.github.jiangood.openadmin.common.dto.AjaxResult;
+import io.github.jiangood.openadmin.common.dto.antd.Option;
+import io.github.jiangood.openadmin.framework.config.argument.RequestBodyKeys;
+import io.github.jiangood.openadmin.framework.data.specification.Spec;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;

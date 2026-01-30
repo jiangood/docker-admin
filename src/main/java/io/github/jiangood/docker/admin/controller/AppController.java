@@ -1,17 +1,17 @@
 package io.github.jiangood.docker.admin.controller;
 
 import cn.hutool.core.util.StrUtil;
-import io.github.jiangood.as.framework.perm.HasPermission;
+import io.github.jiangood.openadmin.framework.perm.HasPermission;
 import io.github.jiangood.docker.admin.dto.ContainerVo;
 import io.github.jiangood.docker.admin.entity.App;
 import io.github.jiangood.docker.admin.service.AppService;
 import io.github.jiangood.docker.config.Config;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
-import io.github.jiangood.as.common.dto.AjaxResult;
-import io.github.jiangood.as.common.dto.antd.Option;
-import io.github.jiangood.as.framework.config.argument.RequestBodyKeys;
-import io.github.jiangood.as.framework.data.specification.Spec;
-import io.github.jiangood.as.modules.common.LoginTool;
+import io.github.jiangood.openadmin.common.dto.AjaxResult;
+import io.github.jiangood.openadmin.common.dto.antd.Option;
+import io.github.jiangood.openadmin.framework.config.argument.RequestBodyKeys;
+import io.github.jiangood.openadmin.framework.data.specification.Spec;
+import io.github.jiangood.openadmin.modules.common.LoginTool;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.constraints.NotNull;

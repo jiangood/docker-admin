@@ -1,6 +1,6 @@
 import {LazyLog, ScrollFollow} from "@melloware/react-logviewer";
 import React from "react";
-import {DeviceUtils} from "@jiangood/admin-spring-boot-starter";
+import {DeviceUtils} from "@jiangood/open-admin";
 import {Alert} from "antd";
 
 /**

@@ -20,7 +20,7 @@ import React from 'react';
 import ConfigForm from "./ConfigForm";
 import {history} from "umi";
 
-import {FieldOrgTreeSelect, FieldRemoteSelect, HttpUtils, PageUtils} from "@jiangood/admin-spring-boot-starter";
+import {FieldOrgTreeSelect, FieldRemoteSelect, HttpUtils, PageUtils} from "@jiangood/open-admin";
 import PublishForm from "./PublishForm";
 import LogView from "../../components/LogView";
 

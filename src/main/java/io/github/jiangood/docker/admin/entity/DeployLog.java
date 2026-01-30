@@ -1,6 +1,6 @@
 package io.github.jiangood.docker.admin.entity;
 
-import io.github.jiangood.as.framework.data.domain.BaseEntity;
+import io.github.jiangood.openadmin.framework.data.domain.BaseEntity;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
 import lombok.Getter;

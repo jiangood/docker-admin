@@ -1,7 +1,7 @@
 package io.github.jiangood.docker.admin.dao;
 
 import io.github.jiangood.docker.admin.entity.DeployLog;
-import io.github.jiangood.as.framework.data.repository.BaseDao;
+import io.github.jiangood.openadmin.framework.data.repository.BaseDao;
 import org.springframework.stereotype.Repository;
 
 @Repository

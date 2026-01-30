@@ -1,7 +1,7 @@
 package io.github.jiangood.docker.admin.entity;
 
-import io.github.jiangood.as.common.tools.annotation.Remark;
-import io.github.jiangood.as.framework.data.domain.BaseEntity;
+import io.github.jiangood.openadmin.common.tools.annotation.Remark;
+import io.github.jiangood.openadmin.framework.data.domain.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.PrePersist;

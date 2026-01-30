@@ -1,5 +1,5 @@
 import React from "react";
-import {Layouts} from "@jiangood/admin-spring-boot-starter";
+import {Layouts} from "@jiangood/open-admin";
 
 export default class extends React.Component {
 

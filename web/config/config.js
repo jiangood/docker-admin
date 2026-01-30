@@ -1,5 +1,5 @@
 import {defineConfig} from 'umi';
-import config from "@jiangood/admin-spring-boot-starter/config/dist/config";
+import config from "@jiangood/open-admin/config/dist/config";
 
 
 export default defineConfig(config);

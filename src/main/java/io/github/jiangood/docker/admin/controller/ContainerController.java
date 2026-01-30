@@ -7,7 +7,7 @@ import com.github.dockerjava.api.model.Container;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.service.HostService;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
-import io.github.jiangood.as.common.dto.AjaxResult;
+import io.github.jiangood.openadmin.common.dto.AjaxResult;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.RequestMapping;

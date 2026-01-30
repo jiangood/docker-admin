@@ -8,7 +8,7 @@ import com.github.dockerjava.api.model.PruneType;
 import io.github.jiangood.docker.admin.dao.HostDao;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
-import io.github.jiangood.as.framework.data.service.BaseService;
+import io.github.jiangood.openadmin.framework.data.service.BaseService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;

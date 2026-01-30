@@ -6,7 +6,7 @@ import com.github.dockerjava.api.model.PruneType;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.service.HostService;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
-import io.github.jiangood.as.modules.job.BaseJob;
+import io.github.jiangood.openadmin.modules.job.BaseJob;
 import jakarta.annotation.Resource;
 import org.quartz.JobDataMap;
 import org.slf4j.Logger;
