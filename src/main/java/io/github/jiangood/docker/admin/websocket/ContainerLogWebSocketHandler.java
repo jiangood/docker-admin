@@ -38,7 +38,7 @@ public class ContainerLogWebSocketHandler extends TextWebSocketHandler {
         session.sendMessage(new TextMessage("连接成功"));
         String path = session.getUri().getPath();
         String id = StrUtil.subAfter(path, "/", true);
-        App app = appService.findOne(id);
+        App app = appService.findById(id).orElse(null);
         String dockerHost = app.getHost().getDockerHost();
         Container container = appService.getContainer(app);
         if (container == null || container.getStatus().equals("exited")) {

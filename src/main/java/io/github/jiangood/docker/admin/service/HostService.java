@@ -9,7 +9,7 @@ import io.github.jiangood.docker.admin.dao.HostRepository;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import io.github.jiangood.openadmin.framework.data.specification.Spec;
-import io.github.jiangood.openadmin.framework.data.service.BaseService;
+import io.github.jiangood.openadmin.framework.data.BaseService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Sort;
@@ -42,7 +42,7 @@ public class HostService extends BaseService<Host> {
     public Host getDefaultDockerRunner() {
         Spec<Host> q = Spec.of();
         q.eq(Host.Fields.isRunner, true);
-        return hostRepository.findOne(q, Sort.by(Sort.Direction.DESC, "updateTime")).orElse(null);
+        return hostRepository.findTop1(q, Sort.by(Sort.Direction.DESC, "updateTime"));
     }
 
     public Info getDockerInfo(Host host) {

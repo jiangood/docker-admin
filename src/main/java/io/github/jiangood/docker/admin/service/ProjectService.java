@@ -23,7 +23,7 @@ import io.github.jiangood.docker.config.GitRepo;
 import io.github.jiangood.docker.config.Registry;
 import io.github.jiangood.docker.sdk.engine.DefaultCallback;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
-import io.github.jiangood.openadmin.framework.data.service.BaseService;
+import io.github.jiangood.openadmin.framework.data.BaseService;
 import jakarta.annotation.Resource;
 import jakarta.transaction.Transactional;
 import lombok.extern.slf4j.Slf4j;
@@ -81,7 +81,7 @@ public class ProjectService extends BaseService<Project> {
             callback.close();
         }
 
-        BuildLog buildLog = buildLogService.findOne(logId);
+        BuildLog buildLog = buildLogService.findById(logId).orElse(null);
 
         buildLog.setSuccess(false);
         buildLog.setCompleteTime(new Date());
@@ -135,7 +135,7 @@ public class ProjectService extends BaseService<Project> {
 
             log.info("开始构建镜像任务, 项目：{}， 仓库：{}， 分支：{}， 版本：{}", project.getName(), project.getGitUrl(), branchOrTag, version);
 
-            Host host = hostService.findOne(p.getBuildHostId());
+            Host host = hostService.findById(p.getBuildHostId()).orElse(null);
 
             Assert.notNull(host, "无构建主机");
             log.info("构建主机信息... 名称：{}, host:{}, 备注:{}", host.getName(), host.getDockerHost(), StrUtil.emptyIfNull(host.getRemark()));

@@ -58,13 +58,13 @@ public class AppController {
             qq.in("sysOrg.id", LoginTool.getOrgPermissions());
         });
 
-        Page<App> list = service.findPageByRequest(q, pageable);
+        Page<App> list = service.findAll(q, pageable);
         return AjaxResult.ok().data(list);
     }
 
     @RequestMapping("get")
     public AjaxResult view(String id) throws UnsupportedEncodingException {
-        App app = service.findByRequest(id);
+        App app = service.findById(id).orElse(null);
 
         if (app.getImageUrl() == null) {
             String fullUrl = config.getRegistry().getFullUrl();
@@ -78,7 +78,7 @@ public class AppController {
 
     @RequestMapping("container")
     public AjaxResult container(String id) {
-        App app = service.findOne(id);
+        App app = service.findById(id).orElse(null);
         Assert.state(app != null, "应用不存在");
         ContainerVo container = service.getContainerVo(app);
 
@@ -89,7 +89,7 @@ public class AppController {
     @HasPermission("app:save")
     @RequestMapping("save")
     public AjaxResult save(@RequestBody App app, RequestBodyKeys requestBodyKeys) throws Exception {
-        service.saveOrUpdateByRequest(app, requestBodyKeys);
+        service.save(app);
         return AjaxResult.ok().msg("保存成功");
     }
 
@@ -151,7 +151,7 @@ public class AppController {
     @RequestMapping("deploy/{id}")
     public AjaxResult deploy(@PathVariable String id) {
         log.info("开始部署");
-        App app = service.findOne(id);
+        App app = service.findById(id).orElse(null);
 
         service.deploy(app);
         log.info("部署指令已发送");
@@ -163,7 +163,7 @@ public class AppController {
     @RequestMapping("autoDeploy")
     public AjaxResult autoDeploy(String id, boolean autoDeploy) {
 
-        App db = service.findByRequest(id);
+        App db = service.findById(id).orElse(null);
         db.setAutoDeploy(autoDeploy);
 
         service.save(db);
@@ -215,7 +215,7 @@ public class AppController {
             q.like("name", searchText);
         }
 
-        List<App> list = service.findAll(q);
+        List<App> list = service.findAll(q, Sort.unsorted());
         List<Option> options = Option.convertList(list, App::getId, App::getName);
 
         return AjaxResult.ok().data(options);

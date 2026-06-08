@@ -32,21 +32,21 @@ public class HostController  {
     public AjaxResult page(Host request, @PageableDefault(direction = Sort.Direction.DESC, sort = "updateTime") Pageable pageable) throws Exception {
         Spec<Host> q = Spec.of();
         q.addExample(request);
-        Page<Host> page = service.findPageByRequest(q, pageable);
+        Page<Host> page = service.findAll(q, pageable);
         return AjaxResult.ok().data(page);
     }
 
     @PreAuthorize("hasAuthority('host:save')")
     @PostMapping("save")
     public AjaxResult save(@RequestBody Host input, RequestBodyKeys updateFields) throws Exception {
-        service.saveOrUpdateByRequest(input, updateFields);
+        service.save(input);
         return AjaxResult.ok().msg("保存成功");
     }
 
     @PreAuthorize("hasAuthority('host:delete')")
     @RequestMapping("delete")
     public AjaxResult delete(String id) {
-        service.deleteByRequest(id);
+        service.deleteById(id);
         return AjaxResult.ok().msg("删除成功");
     }
 
@@ -63,7 +63,7 @@ public class HostController  {
             if (onlyRunner && !h.getIsRunner()) {
                 continue;
             }
-            options.add(Option.of(h.getId(), h.getName()));
+            options.add(new Option(h.getId(), h.getName()));
         }
         return AjaxResult.ok().data(options);
     }

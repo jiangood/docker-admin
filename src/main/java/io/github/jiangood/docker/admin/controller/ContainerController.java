@@ -34,7 +34,7 @@ public class ContainerController {
     public AjaxResult status(String hostId, String appName /*即将弃用*/, String containerId) {
         log.info("查询容器状态:{}", appName);
         try {
-            Host host = hostService.findOne(hostId);
+            Host host = hostService.findById(hostId).orElse(null);
 
 
             DockerClient cli = dockerClientManager.getClient(host);

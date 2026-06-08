@@ -20,7 +20,7 @@ import io.github.jiangood.docker.config.Config;
 import io.github.jiangood.docker.config.Registry;
 import io.github.jiangood.docker.sdk.engine.DefaultCallback;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
-import io.github.jiangood.openadmin.framework.data.service.BaseService;
+import io.github.jiangood.openadmin.framework.data.BaseService;
 import io.github.jiangood.openadmin.util.BusinessException;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;

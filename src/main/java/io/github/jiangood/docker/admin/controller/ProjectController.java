@@ -76,7 +76,7 @@ public class ProjectController {
         }
         param.setGitUrl(param.getGitUrl().trim());
         param.setName(param.getName().trim());
-        Project result = this.service.saveOrUpdateByRequest(param, updateFields);
+        Project result = this.service.save(param);
         return AjaxResult.ok().data(result.getId()).msg("保存成功");
     }
 
@@ -91,7 +91,7 @@ public class ProjectController {
     @PreAuthorize("hasAuthority('project:view')")
     @RequestMapping("get")
     public AjaxResult get(String id) {
-        Project project = service.findOne(id);
+        Project project = service.findById(id).orElse(null);
         return AjaxResult.ok().data(project);
     }
 
@@ -99,7 +99,7 @@ public class ProjectController {
     @PreAuthorize("hasAuthority('project:build')")
     @RequestMapping("build")
     public AjaxResult build(BuildRequest buildRequest, @RequestParam String projectId, String buildHostId) throws InterruptedException, IOException, GitAPIException {
-        Project project = service.findOne(projectId);
+        Project project = service.findById(projectId).orElse(null);
         service.checkBuildImage();
 
 
@@ -139,7 +139,7 @@ public class ProjectController {
 
         List<Option> options = new ArrayList<>();
         for (Project h : list) {
-            options.add(Option.of(h.getId(), h.getName()));
+            options.add(new Option(h.getId(), h.getName()));
         }
 
 
@@ -150,6 +150,6 @@ public class ProjectController {
     public List<Option> versions(String projectId) {
         List<String> versions = logService.versions(projectId);
 
-        return versions.stream().map(v -> Option.of(v, v)).toList();
+        return versions.stream().map(v -> new Option(v, v)).toList();
     }
 }

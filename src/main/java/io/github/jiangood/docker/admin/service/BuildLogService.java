@@ -2,7 +2,7 @@ package io.github.jiangood.docker.admin.service;
 
 import io.github.jiangood.docker.admin.dao.BuildLogRepository;
 import io.github.jiangood.docker.admin.entity.BuildLog;
-import io.github.jiangood.openadmin.framework.data.service.BaseService;
+import io.github.jiangood.openadmin.framework.data.BaseService;
 import io.github.jiangood.openadmin.framework.data.specification.Spec;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
@@ -63,6 +63,6 @@ public class BuildLogService extends BaseService<BuildLog> {
     public BuildLog findTop1ByProject(String projectId) {
         Spec<BuildLog> q = Spec.of();
         q.eq(BuildLog.Fields.projectId, projectId);
-        return buildLogRepository.findOne(q, Sort.by("createTime")).orElse(null);
+        return buildLogRepository.findTop1(q, Sort.by("createTime"));
     }
 }
