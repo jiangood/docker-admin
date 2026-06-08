@@ -2,7 +2,7 @@ package io.github.jiangood.docker.admin.entity;
 
 
 import io.github.jiangood.openadmin.framework.data.DBConstants;
-import io.github.jiangood.openadmin.framework.data.domain.BaseEntity;
+import io.github.jiangood.openadmin.framework.data.BaseEntity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;

@@ -1,7 +1,7 @@
 package io.github.jiangood.docker.admin.entity;
 
-import io.github.jiangood.openadmin.common.tools.annotation.Remark;
-import io.github.jiangood.openadmin.framework.data.domain.BaseEntity;
+import io.github.jiangood.openadmin.util.annotation.Remark;
+import io.github.jiangood.openadmin.framework.data.BaseEntity;
 import io.github.jiangood.openadmin.framework.validator.ValidateStartWithLetter;
 import io.github.jiangood.openadmin.modules.system.entity.SysOrg;
 import jakarta.persistence.Column;
