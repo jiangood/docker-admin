@@ -5,12 +5,14 @@ import com.github.dockerjava.api.model.Container;
 import com.github.dockerjava.api.model.Image;
 import com.github.dockerjava.api.model.Info;
 import com.github.dockerjava.api.model.PruneType;
-import io.github.jiangood.docker.admin.dao.HostDao;
+import io.github.jiangood.docker.admin.dao.HostRepository;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
+import io.github.jiangood.openadmin.framework.data.specification.Spec;
 import io.github.jiangood.openadmin.framework.data.service.BaseService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Sort;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -22,11 +24,15 @@ import java.util.List;
 public class HostService extends BaseService<Host> {
 
 
-    @Resource
-    DockerClientManager sdkManager;
+    private final HostRepository hostRepository;
+
+    public HostService(HostRepository hostRepository) {
+        super(hostRepository);
+        this.hostRepository = hostRepository;
+    }
 
     @Resource
-    HostDao hostDao;
+    DockerClientManager sdkManager;
 
     /**
      * 获得镜像构建主机
@@ -34,9 +40,9 @@ public class HostService extends BaseService<Host> {
      * @return
      */
     public Host getDefaultDockerRunner() {
-        Host host = hostDao.findTop1ByIsRunnerOrderByModifyTimeDesc(true);
-
-        return host;
+        Spec<Host> q = Spec.of();
+        q.eq(Host.Fields.isRunner, true);
+        return hostRepository.findOne(q, Sort.by(Sort.Direction.DESC, "updateTime")).orElse(null);
     }
 
     public Info getDockerInfo(Host host) {
@@ -49,7 +55,7 @@ public class HostService extends BaseService<Host> {
 
 
     public List<Container> getContainers(String id) {
-            Host db = hostDao.findOne(id);
+            Host db = hostRepository.findById(id).orElse(null);
             DockerClient client = sdkManager.getClient(db);
 
             List<Container> list = client.listContainersCmd().withShowAll(true).exec();
@@ -57,7 +63,7 @@ public class HostService extends BaseService<Host> {
 
     }
     public List<Image> getImages(String id) {
-        Host db = hostDao.findOne(id);
+        Host db = hostRepository.findById(id).orElse(null);
         DockerClient client = sdkManager.getClient(db);
 
         List<Image> list = client.listImagesCmd().withShowAll(true).exec();
@@ -65,7 +71,7 @@ public class HostService extends BaseService<Host> {
     }
 
     public void deleteImage(String hostId, String imageId) {
-        Host host = hostDao.findOne(hostId);
+        Host host = hostRepository.findById(hostId).orElse(null);
         DockerClient client = sdkManager.getClient(host);
 
         client.removeImageCmd(imageId).withForce(true).exec();
@@ -74,14 +80,14 @@ public class HostService extends BaseService<Host> {
 
     public long count() {
 
-        return hostDao.count();
+        return hostRepository.count();
     }
 
 
 
     @Async
     public void cleanImage(String hostId) throws IOException {
-        Host db = hostDao.findOne(hostId);
+        Host db = hostRepository.findById(hostId).orElse(null);
         log.info("开始清理主机镜像 {}", db.getName());
         DockerClient client = sdkManager.getClient(db);
         client.pruneCmd(PruneType.IMAGES)

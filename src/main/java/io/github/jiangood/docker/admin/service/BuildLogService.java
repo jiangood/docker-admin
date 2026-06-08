@@ -1,9 +1,10 @@
 package io.github.jiangood.docker.admin.service;
 
-import io.github.jiangood.docker.admin.dao.BuildLogDao;
+import io.github.jiangood.docker.admin.dao.BuildLogRepository;
 import io.github.jiangood.docker.admin.entity.BuildLog;
 import io.github.jiangood.openadmin.framework.data.service.BaseService;
-import jakarta.annotation.Resource;
+import io.github.jiangood.openadmin.framework.data.specification.Spec;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,12 +15,18 @@ import java.util.stream.Collectors;
 @Service
 public class BuildLogService extends BaseService<BuildLog> {
 
-    @Resource
-    BuildLogDao dao;
+    private final BuildLogRepository buildLogRepository;
+
+    public BuildLogService(BuildLogRepository buildLogRepository) {
+        super(buildLogRepository);
+        this.buildLogRepository = buildLogRepository;
+    }
 
     public List<String> versions(String projectId) {
-        List<BuildLog> list = dao.findByProjectIdAndSuccessIsTrue(projectId);
-
+        Spec<BuildLog> q = Spec.of();
+        q.eq(BuildLog.Fields.projectId, projectId);
+        q.eq(BuildLog.Fields.success, true);
+        List<BuildLog> list = buildLogRepository.findAll(q);
         List<String> versions = list.stream().map(BuildLog::getVersion).distinct().collect(Collectors.toList());
         Collections.sort(versions);
         Collections.reverse(versions);
@@ -28,25 +35,34 @@ public class BuildLogService extends BaseService<BuildLog> {
 
     @Transactional
     public BuildLog saveLog(BuildLog buildLog) {
-        return dao.saveAndFlush(buildLog);
+        return buildLogRepository.saveAndFlush(buildLog);
     }
 
     public List<BuildLog> findByProject(String projectId) {
-        return  dao.findByProjectId(projectId);
+        Spec<BuildLog> q = Spec.of();
+        q.eq(BuildLog.Fields.projectId, projectId);
+        return buildLogRepository.findAll(q);
     }
 
     @Transactional
     public void cleanErrorLog(String projectId) {
-        List<BuildLog> list = dao.findByProjectIdAndSuccessIsFalse(projectId);
-        dao.deleteAll(list);
+        Spec<BuildLog> q = Spec.of();
+        q.eq(BuildLog.Fields.projectId, projectId);
+        q.eq(BuildLog.Fields.success, false);
+        List<BuildLog> list = buildLogRepository.findAll(q);
+        buildLogRepository.deleteAll(list);
     }
 
     public List<BuildLog> findByProjectProcessing(String projectId) {
-        return dao.findByProjectIdAndSuccessIsNull(projectId);
+        Spec<BuildLog> q = Spec.of();
+        q.eq(BuildLog.Fields.projectId, projectId);
+        q.isNull(BuildLog.Fields.success);
+        return buildLogRepository.findAll(q);
     }
 
     public BuildLog findTop1ByProject(String projectId) {
-        BuildLog buildLog = dao.findTop1ByProjectIdOrderByCreateTimeDesc(projectId);
-        return buildLog;
+        Spec<BuildLog> q = Spec.of();
+        q.eq(BuildLog.Fields.projectId, projectId);
+        return buildLogRepository.findOne(q, Sort.by("createTime")).orElse(null);
     }
 }

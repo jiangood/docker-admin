@@ -8,9 +8,9 @@ import com.github.dockerjava.api.command.CreateContainerResponse;
 import com.github.dockerjava.api.model.*;
 import io.github.jiangood.base.tool.YamlTool;
 import io.github.jiangood.docker.admin.BuildSuccessEvent;
-import io.github.jiangood.docker.admin.dao.AppDao;
-import io.github.jiangood.docker.admin.dao.DeployLogDao;
-import io.github.jiangood.docker.admin.dao.HostDao;
+import io.github.jiangood.docker.admin.dao.AppRepository;
+import io.github.jiangood.docker.admin.dao.DeployLogRepository;
+import io.github.jiangood.docker.admin.dao.HostRepository;
 import io.github.jiangood.docker.admin.dto.ContainerVo;
 import io.github.jiangood.docker.admin.entity.App;
 import io.github.jiangood.docker.admin.entity.BuildLog;
@@ -20,8 +20,8 @@ import io.github.jiangood.docker.config.Config;
 import io.github.jiangood.docker.config.Registry;
 import io.github.jiangood.docker.sdk.engine.DefaultCallback;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
-import io.github.jiangood.openadmin.framework.CodeException;
 import io.github.jiangood.openadmin.framework.data.service.BaseService;
+import io.github.jiangood.openadmin.util.BusinessException;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
@@ -43,18 +43,19 @@ public class AppService extends BaseService<App> {
 
     Set<String> deployingList = new HashSet<>();
 
-    @Resource
-    DeployLogDao deployLogDao;
+    private final AppRepository appRepository;
+    private final HostRepository hostRepository;
+    private final DeployLogRepository deployLogRepository;
+
+    public AppService(AppRepository appRepository, HostRepository hostRepository, DeployLogRepository deployLogRepository) {
+        super(appRepository);
+        this.appRepository = appRepository;
+        this.hostRepository = hostRepository;
+        this.deployLogRepository = deployLogRepository;
+    }
 
     @Resource
     DockerClientManager dockerManager;
-
-    @Resource
-    private AppDao appDao;
-
-    @Resource
-    private HostDao hostDao;
-
 
     @Resource
     private Config config;
@@ -66,14 +67,14 @@ public class AppService extends BaseService<App> {
 
         // 修改更新时间
         app.setUpdateTime(new Date());
-        appDao.save(app);
-        app = appDao.findOne(app.getId()); // 确保关联对象都取出来
+        appRepository.save(app);
+        app = appRepository.findById(app.getId()).orElse(null); // 确保关联对象都取出来
 
         DeployLog deployLog = new DeployLog();
         deployLog.setAppId(app.getId());
         deployLog.setAppName(app.getName());
 
-        deployLog = deployLogDao.save(deployLog);
+        deployLog = deployLogRepository.save(deployLog);
 
         try {
             log.info("部署阶段开始");
@@ -248,7 +249,7 @@ public class AppService extends BaseService<App> {
     }
 
     public void stop(String id) {
-        App app = appDao.findOne(id);
+        App app = appRepository.findById(id).orElse(null);
 
 
         DockerClient client = dockerManager.getClient(app.getHost());
@@ -262,7 +263,7 @@ public class AppService extends BaseService<App> {
 
 
     public void start(String id) {
-        App app = appDao.findOne(id);
+        App app = appRepository.findById(id).orElse(null);
 
         DockerClient client = dockerManager.getClient(app.getHost());
 
@@ -274,7 +275,7 @@ public class AppService extends BaseService<App> {
     }
 
     public App rename(String appId, String newName) {
-        App app = appDao.findOne(appId);
+        App app = appRepository.findById(appId).orElse(null);
         Assert.notNull(app, "app不存在");
         //判断名字是否相同进行部署
         if (newName.equals(app.getName())) {
@@ -282,7 +283,7 @@ public class AppService extends BaseService<App> {
         }
         this.deleteContainer(app);
         app.setName(newName);
-        App saved = appDao.save(app);
+        App saved = appRepository.save(app);
 
         this.deploy(app);
 
@@ -325,7 +326,7 @@ public class AppService extends BaseService<App> {
                 return list.get(0);
             }
         } catch (Exception e) {
-            throw new CodeException("查询容器状态失败", e);
+            throw new BusinessException("查询容器状态失败", e);
         } finally {
             IOUtils.closeQuietly(client);
         }
@@ -335,19 +336,19 @@ public class AppService extends BaseService<App> {
     @Transactional
     public void deleteApp(String id) {
         // 远程删除应用
-        App app = appDao.findOne(id);
+        App app = appRepository.findById(id).orElse(null);
         deleteContainer(app);
 
-        appDao.deleteById(id);
+        appRepository.deleteById(id);
     }
 
 
     public void updateAppVersion(String id, String tag) {
         Assert.hasLength(tag, "tag不能为空");
         // 远程删除应用
-        App app = appDao.findOne(id);
+        App app = appRepository.findById(id).orElse(null);
         app.setImageTag(tag);
-        appDao.save(app);
+        appRepository.save(app);
 
         SpringUtil.getBean(getClass()).deploy(app);
     }
@@ -371,10 +372,10 @@ public class AppService extends BaseService<App> {
     }
 
     public App updateConfig(String id, App.AppConfig appConfig) {
-        App app = appDao.findOne(id);
+        App app = appRepository.findById(id).orElse(null);
         app.setConfig(appConfig);
 
-        app = appDao.save(app);
+        app = appRepository.save(app);
         return app;
     }
 
@@ -384,7 +385,7 @@ public class AppService extends BaseService<App> {
         BuildLog buildLog = event.getBuildLog();
 
         // 自动部署
-        List<App> list = appDao.findAll();
+        List<App> list = appRepository.findAll();
 
 
         // 让注解生效
@@ -420,17 +421,17 @@ public class AppService extends BaseService<App> {
             input.setSysOrg(null);
         }
 
-        App old = appDao.findOne(input.getId());
+        App old = appRepository.findById(input.getId()).orElse(null);
         old.setSysOrg(input.getSysOrg());
         old.setImageUrl(input.getImageUrl());
         old.setImageTag(input.getImageTag());
-        appDao.save(old);
+        appRepository.save(old);
     }
 
 
     public App copyApp(String appId, String hostId) {
-        App app = appDao.findOne(appId);
-        Host host = hostDao.findOne(hostId);
+        App app = appRepository.findById(appId).orElse(null);
+        Host host = hostRepository.findById(hostId).orElse(null);
 
         App newApp = new App();
         BeanUtils.copyProperties(app, newApp, "id","name","host");
@@ -439,7 +440,7 @@ public class AppService extends BaseService<App> {
 
 
 
-        appDao.save(newApp);
+        appRepository.save(newApp);
 
         return newApp;
     }

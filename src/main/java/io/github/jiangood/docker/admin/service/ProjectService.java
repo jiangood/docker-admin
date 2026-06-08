@@ -12,7 +12,8 @@ import com.github.dockerjava.api.command.PushImageCmd;
 import com.github.dockerjava.api.model.BuildResponseItem;
 import io.github.jiangood.base.tool.GitTool;
 import io.github.jiangood.docker.admin.BuildSuccessEvent;
-import io.github.jiangood.docker.admin.dao.ProjectDao;
+import io.github.jiangood.docker.admin.dao.ProjectRepository;
+import io.github.jiangood.openadmin.framework.data.specification.Spec;
 import io.github.jiangood.docker.admin.dto.BuildRequest;
 import io.github.jiangood.docker.admin.entity.BuildLog;
 import io.github.jiangood.docker.admin.entity.Host;
@@ -59,11 +60,14 @@ public class ProjectService extends BaseService<Project> {
     GitCredentialService gitCredentialService;
 
     @Resource
-    ProjectDao projectDao;
-
-    @Resource
     BuildLogService buildLogService;
 
+    private final ProjectRepository projectRepository;
+
+    public ProjectService(ProjectRepository projectRepository) {
+        super(projectRepository);
+        this.projectRepository = projectRepository;
+    }
 
     @Resource
     private ApplicationEventPublisher applicationEventPublisher;
@@ -115,7 +119,7 @@ public class ProjectService extends BaseService<Project> {
         String dockerfile = p.getDockerfile();
 
 
-        Project project = projectDao.findOne(projectId);
+        Project project = projectRepository.findById(projectId).orElse(null);
         BuildLog buildLog = new BuildLog();
         buildLog.setProjectId(project.getId());
         buildLog.setVersion(version);
@@ -283,7 +287,7 @@ public class ProjectService extends BaseService<Project> {
             buildLogService.deleteById(buildLog.getId());
         }
 
-        projectDao.deleteById(id);
+        projectRepository.deleteById(id);
     }
 
 
@@ -294,9 +298,11 @@ public class ProjectService extends BaseService<Project> {
 
     public Page<Project> findAll(String searchText, Pageable pageable) {
         if (StrUtil.isNotEmpty(searchText)) {
-            return projectDao.findByNameLike("%" + searchText.trim() + "%", pageable);
+            Spec<Project> q = Spec.of();
+            q.like("name", "%" + searchText.trim() + "%");
+            return projectRepository.findAll(q, pageable);
         }
-        return projectDao.findAll(pageable);
+        return projectRepository.findAll(pageable);
     }
 
 }
