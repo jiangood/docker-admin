@@ -2,7 +2,7 @@ package io.github.jiangood.base;
 
 
 import com.github.dockerjava.api.exception.NotFoundException;
-import io.github.jiangood.openadmin.common.dto.AjaxResult;
+import io.github.jiangood.openadmin.util.dto.AjaxResult;
 import org.springframework.stereotype.Component;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;

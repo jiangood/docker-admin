@@ -3,7 +3,7 @@ package io.github.jiangood.docker.admin.controller;
 import cn.hutool.core.date.DateUtil;
 import io.github.jiangood.docker.admin.entity.BuildLog;
 import io.github.jiangood.docker.admin.service.BuildLogService;
-import io.github.jiangood.openadmin.common.dto.AjaxResult;
+import io.github.jiangood.openadmin.util.dto.AjaxResult;
 import io.github.jiangood.openadmin.framework.data.specification.Spec;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
