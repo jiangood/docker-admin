@@ -9,7 +9,7 @@ RUN npm run build
 
 
 
-FROM maven:3-openjdk-17 AS java
+FROM maven:3-openjdk-21 AS java
 WORKDIR /build
 
 ADD pom.xml ./
@@ -20,7 +20,7 @@ RUN mvn clean package -DskipTests -q
 
 
 
-FROM amazoncorretto:17
+FROM amazoncorretto:21
 WORKDIR /home
 
 COPY --from=java /build/target/app.jar ./
