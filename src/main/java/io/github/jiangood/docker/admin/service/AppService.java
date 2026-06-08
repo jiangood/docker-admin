@@ -444,4 +444,5 @@ public class AppService extends BaseService<App> {
 
         return newApp;
     }
+
 }

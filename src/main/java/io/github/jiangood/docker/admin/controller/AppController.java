@@ -89,7 +89,7 @@ public class AppController {
     @HasPermission("app:save")
     @RequestMapping("save")
     public AjaxResult save(@RequestBody App app, RequestBodyKeys requestBodyKeys) throws Exception {
-        service.save(app);
+        service.update(app, requestBodyKeys);
         return AjaxResult.ok().msg("保存成功");
     }
 

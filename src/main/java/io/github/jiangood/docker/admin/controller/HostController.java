@@ -39,7 +39,7 @@ public class HostController  {
     @PreAuthorize("hasAuthority('host:save')")
     @PostMapping("save")
     public AjaxResult save(@RequestBody Host input, RequestBodyKeys updateFields) throws Exception {
-        service.save(input);
+        service.update(input, updateFields);
         return AjaxResult.ok().msg("保存成功");
     }
 
