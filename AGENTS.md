@@ -45,5 +45,5 @@ scripts/push_tag.bat                     # retags v2.0.5 (edit the file first)
 - **Static files** are served from the JAR; in dev, frontend proxies to backend.
 - **Menu config** in `src/main/resources/config/application-data-menu.yml`, overridable in `-override.yml`.
 - **Docker** daemon must be reachable at `tcp://localhost:2375` (or configured via `open-admin`).
-- **CI** pushes to `registry.cn-hangzhou.aliyuncs.com/jiangood/docker-admin:latest`. Secrets: `ALIYUN_PASSWORD`.
+- **CI** pushes Docker image to `ghcr.io/{owner}/docker-admin`. Authenticates via `GITHUB_TOKEN`.
 - **No codegen, no migrations** — schema is managed manually or via open-admin defaults.
