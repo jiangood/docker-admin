@@ -28,9 +28,6 @@ mvn package
 
 # Docker build (multi-stage)
 docker build -t docker-admin .
-
-# Release tag
-scripts/push_tag.bat                     # retags v2.0.5 (edit the file first)
 ```
 
 ## Key facts
