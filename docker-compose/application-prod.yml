@@ -1,10 +1,10 @@
 cfg:
   # 镜像注册中心
   registry:
-    url: registry.cn-hangzhou.aliyuncs.com
-    namespace: 命名空间
+    url: ghcr.io
+    namespace: jiangood
     username: 账号
-    password: 密码
+    password: ${{ secrets.GITHUB_TOKEN }}
   # git仓库
   git-repos:
     - url: https://gitee.com

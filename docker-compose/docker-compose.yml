@@ -1,6 +1,6 @@
 services:
   admin:
-    image: registry.cn-hangzhou.aliyuncs.com/jiangood/docker-admin
+    image: ghcr.io/jiangood/docker-admin
     ports:
       - "7001:7001"
     volumes:
