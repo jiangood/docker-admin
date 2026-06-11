@@ -26,6 +26,7 @@ import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import io.github.jiangood.openadmin.framework.data.BaseService;
 import jakarta.annotation.Resource;
 import jakarta.transaction.Transactional;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.slf4j.MDC;
@@ -41,6 +42,7 @@ import java.io.IOException;
 import java.util.*;
 
 
+@RequiredArgsConstructor
 @Service
 @Slf4j
 public class ProjectService extends BaseService<Project> {
@@ -63,11 +65,6 @@ public class ProjectService extends BaseService<Project> {
     BuildLogService buildLogService;
 
     private final ProjectRepository projectRepository;
-
-    public ProjectService(ProjectRepository projectRepository) {
-        super(projectRepository);
-        this.projectRepository = projectRepository;
-    }
 
     @Resource
     private ApplicationEventPublisher applicationEventPublisher;

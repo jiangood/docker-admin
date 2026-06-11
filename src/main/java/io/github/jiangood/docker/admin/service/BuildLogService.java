@@ -2,6 +2,7 @@ package io.github.jiangood.docker.admin.service;
 
 import io.github.jiangood.docker.admin.dao.BuildLogRepository;
 import io.github.jiangood.docker.admin.entity.BuildLog;
+import lombok.RequiredArgsConstructor;
 import io.github.jiangood.openadmin.framework.data.BaseService;
 import io.github.jiangood.openadmin.framework.data.specification.Spec;
 import org.springframework.data.domain.Sort;
@@ -12,15 +13,11 @@ import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
+@RequiredArgsConstructor
 @Service
 public class BuildLogService extends BaseService<BuildLog> {
 
     private final BuildLogRepository buildLogRepository;
-
-    public BuildLogService(BuildLogRepository buildLogRepository) {
-        super(buildLogRepository);
-        this.buildLogRepository = buildLogRepository;
-    }
 
     public List<String> versions(String projectId) {
         Spec<BuildLog> q = Spec.of();

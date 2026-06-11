@@ -23,6 +23,7 @@ import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import io.github.jiangood.openadmin.framework.data.BaseService;
 import io.github.jiangood.openadmin.util.BusinessException;
 import jakarta.annotation.Resource;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
 import org.slf4j.MDC;
@@ -37,6 +38,7 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.*;
 
+@RequiredArgsConstructor
 @Service
 @Slf4j
 public class AppService extends BaseService<App> {
@@ -46,13 +48,6 @@ public class AppService extends BaseService<App> {
     private final AppRepository appRepository;
     private final HostRepository hostRepository;
     private final DeployLogRepository deployLogRepository;
-
-    public AppService(AppRepository appRepository, HostRepository hostRepository, DeployLogRepository deployLogRepository) {
-        super(appRepository);
-        this.appRepository = appRepository;
-        this.hostRepository = hostRepository;
-        this.deployLogRepository = deployLogRepository;
-    }
 
     @Resource
     DockerClientManager dockerManager;
