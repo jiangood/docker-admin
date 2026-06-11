@@ -46,7 +46,7 @@ public class ProjectController {
 
 
         if (StrUtil.isNotEmpty(orgId)) {
-            List<String> orgIds = sysOrgService.findChildIdListById(orgId);
+            List<String> orgIds = new ArrayList<>(sysOrgService.findChildIdListById(orgId));
             orgIds.add(orgId);
 
             q.in(Project.Fields.sysOrg + ".id", orgIds);
