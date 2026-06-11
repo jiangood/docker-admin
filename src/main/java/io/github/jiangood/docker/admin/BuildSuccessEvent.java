@@ -1,6 +1,6 @@
 package io.github.jiangood.docker.admin;
 
-import io.github.jiangood.base.BaseEvent;
+import io.github.jiangood.docker.base.BaseEvent;
 import io.github.jiangood.docker.admin.entity.BuildLog;
 import lombok.Getter;
 import lombok.Setter;

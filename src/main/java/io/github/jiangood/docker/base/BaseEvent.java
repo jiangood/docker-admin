@@ -1,4 +1,4 @@
-package io.github.jiangood.base;
+package io.github.jiangood.docker.base;
 
 import lombok.Getter;
 import lombok.Setter;

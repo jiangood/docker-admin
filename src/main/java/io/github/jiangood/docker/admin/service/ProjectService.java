@@ -10,7 +10,7 @@ import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.command.BuildImageCmd;
 import com.github.dockerjava.api.command.PushImageCmd;
 import com.github.dockerjava.api.model.BuildResponseItem;
-import io.github.jiangood.base.tool.GitTool;
+import io.github.jiangood.docker.base.tool.GitTool;
 import io.github.jiangood.docker.admin.BuildSuccessEvent;
 import io.github.jiangood.docker.admin.dao.ProjectRepository;
 import io.github.jiangood.openadmin.framework.data.specification.Spec;
