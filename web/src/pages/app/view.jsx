@@ -20,7 +20,7 @@ import React from 'react';
 import ConfigForm from "./ConfigForm";
 import {history} from "umi";
 
-import {FieldOrgTreeSelect, FieldRemoteSelect, HttpUtils, PageUtils} from "@jiangood/open-admin";
+import {FieldOrgTreeSelect, FieldRemoteSelect, HttpUtils, Page, PageUtils} from "@jiangood/open-admin";
 import PublishForm from "./PublishForm";
 import LogView from "../../components/LogView";
 
@@ -166,8 +166,8 @@ export default class extends React.Component {
         const {state} = container;
 
 
-        return (<>
-
+        return (<Page padding>
+            
             <Card title={app.name} extra={<Space>
                 <Button disabled={state !== 'exited'} onClick={this.start} type="primary">启动</Button>
                 <Button disabled={state !== 'running'} onClick={this.stop} type="primary" danger>停止</Button>
@@ -235,7 +235,7 @@ export default class extends React.Component {
                 </Form>
             </Modal>
 
-        </>)
+        </Page>)
     }
 
     renderTabs = () => {

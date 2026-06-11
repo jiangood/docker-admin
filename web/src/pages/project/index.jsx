@@ -7,6 +7,7 @@ import {
     FieldOrgTreeSelect,
     HttpUtils,
     OrgTree,
+    Page,
     PageUtils,
     ProTable
 } from "@jiangood/open-admin"
@@ -113,7 +114,7 @@ export default class extends React.Component {
     }
 
     render() {
-        return <>
+        return <Page padding>
             <Splitter>
                 <Splitter.Panel size={250}>
                     <OrgTree onChange={(v) => {
@@ -190,11 +191,10 @@ export default class extends React.Component {
                     </Form.Item>
                 </Form>
             </Modal>
-        </>
+        </Page>
 
 
     }
 }
-
 
 

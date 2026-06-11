@@ -16,4 +16,4 @@
 
 
 ## 使用
-访问 http://127.0.0.1:7001 账号：superAdmin 密码打印在控制台
+访问 http://127.0.0.1:7001/docker-admin 账号：superAdmin 密码打印在控制台（注意 context-path 为 `/docker-admin`）

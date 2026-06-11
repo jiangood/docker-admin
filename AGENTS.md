@@ -43,4 +43,5 @@ docker build -t docker-admin .
 - **Menu config** in `src/main/resources/config/application-data-menu.yml`, overridable in `-override.yml`.
 - **Docker** daemon must be reachable at `tcp://localhost:2375` (or configured via `open-admin`).
 - **CI** pushes Docker image to `ghcr.io/{owner}/docker-admin`. Authenticates via `GITHUB_TOKEN`.
+- **Context path:** `server.servlet.context-path=/docker-admin` — so backend and dev proxy are served under `http://host:port/docker-admin/...`.
 - **No codegen, no migrations** — schema is managed manually or via open-admin defaults.
