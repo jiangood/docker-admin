@@ -56,6 +56,7 @@ public class AppService extends BaseService<App> {
     private Config config;
 
     @Async
+    @Transactional
     public void deploy(App app) {
         deployingList.add(app.getId());
         MDC.put("logFileId", app.getId());
@@ -379,8 +380,11 @@ public class AppService extends BaseService<App> {
         log.info("构建成功，开始检测关联应用");
         BuildLog buildLog = event.getBuildLog();
 
-        // 自动部署
-        List<App> list = appRepository.findAll();
+        List<App> list = new ArrayList<>();
+        list.addAll(appRepository.findAllByImageUrl(buildLog.getImageUrl()));
+        if (buildLog.getProjectId() != null) {
+            list.addAll(appRepository.findAllByProjectId(buildLog.getProjectId()));
+        }
 
 
         // 让注解生效
@@ -391,14 +395,12 @@ public class AppService extends BaseService<App> {
             if (!auto) {
                 continue;
             }
-            String imageUrl = app.getImageUrl();
-            boolean imageOk = buildLog.getImageUrl().equals(imageUrl);
-            boolean projectOk = false;
-            String projectId = buildLog.getProjectId();
-            if (projectId != null && app.getProject() != null && StrUtil.equals(projectId, app.getProject().getId())) {
-                projectOk = true;
+            if (app.getProject() != null && StrUtil.equals(buildLog.getProjectId(), app.getProject().getId())) {
+                app.setImageTag(event.getVersion());
+                $this.deploy(app);
+                continue;
             }
-            if (imageOk || projectOk) {
+            if (StrUtil.equals(buildLog.getImageUrl(), app.getImageUrl())) {
                 app.setImageTag(event.getVersion());
                 $this.deploy(app);
             }

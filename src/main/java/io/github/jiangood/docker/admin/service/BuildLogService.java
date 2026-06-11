@@ -43,11 +43,7 @@ public class BuildLogService extends BaseService<BuildLog> {
 
     @Transactional
     public void cleanErrorLog(String projectId) {
-        Spec<BuildLog> q = Spec.of();
-        q.eq(BuildLog.Fields.projectId, projectId);
-        q.eq(BuildLog.Fields.success, false);
-        List<BuildLog> list = buildLogRepository.findAll(q);
-        buildLogRepository.deleteAll(list);
+        buildLogRepository.deleteErrorLogsByProjectId(projectId);
     }
 
     public List<BuildLog> findByProjectProcessing(String projectId) {

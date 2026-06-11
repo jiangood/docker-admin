@@ -19,6 +19,11 @@ spring:
     url: jdbc:mysql://${db_ip}:${db_port}/${db_database}?allowPublicKeyRetrieval=true&autoReconnect=true&useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=CONVERT_TO_NULL&useSSL=false&nullCatalogMeansCurrent=true
     username: ${db_username}
     password: ${db_password}
+    hikari:
+      maximum-pool-size: 30
+      minimum-idle: 10
+      connection-timeout: 30000
+      leak-detection-threshold: 60000
 sys:
   title: 容器管理平台
   default-password: jz1@20241029
