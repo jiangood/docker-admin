@@ -4,6 +4,9 @@ db_database: docker-admin
 db_username: root
 db_password: 123456
 
+server:
+  servlet:
+    context-path: /docker-admin  # 业务项目按需修改
 spring:
   config:
     import: classpath:application-lib.yml
@@ -11,6 +14,11 @@ spring:
     active: default
   application:
     name: docker-admin
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${db_ip}:${db_port}/${db_database}?allowPublicKeyRetrieval=true&autoReconnect=true&useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=CONVERT_TO_NULL&useSSL=false&nullCatalogMeansCurrent=true
+    username: ${db_username}
+    password: ${db_password}
 sys:
   title: 容器管理平台
   default-password: jz1@20241029
