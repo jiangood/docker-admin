@@ -43,3 +43,4 @@ build/
 /web/pnpm-lock.yaml
 application-dev.yml
 /docs/superpowers/
+/.playwright-mcp/
