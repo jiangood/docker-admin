@@ -9,7 +9,7 @@ RUN npm run build
 
 
 
-FROM maven:3-openjdk-21 AS java
+FROM maven:3-amazoncorretto-21 AS java
 WORKDIR /build
 
 ADD pom.xml ./
