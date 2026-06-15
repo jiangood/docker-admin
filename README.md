@@ -14,7 +14,7 @@
 ## Docker 镜像
 
 ```sh
-docker pull ghcr.io/jiangood/docker-admin:v3.0.5
+docker pull ghcr.io/jiangood/docker-admin:latest
 ```
 
 ## 快速体验（最新版）
