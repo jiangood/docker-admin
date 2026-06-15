@@ -49,7 +49,9 @@ public class DockerLogService {
 
     public void stopAllLogsForSession(String sessionId) throws IOException {
         LogStreamCallback callback = sessionLogStreams.remove(sessionId);
-        callback.close();
+        if (callback != null) {
+            callback.close();
+        }
     }
 
     private static class LogStreamCallback extends ResultCallback.Adapter<Frame> {

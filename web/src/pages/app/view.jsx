@@ -55,8 +55,13 @@ export default class extends React.Component {
     componentDidMount() {
         let id = PageUtils.currentLocationQuery().id
         this.id = id;
+        this._mounted = true;
         this.loadApp();
         this.loadContainer();
+    }
+
+    componentWillUnmount() {
+        this._mounted = false;
     }
 
 
@@ -72,7 +77,7 @@ export default class extends React.Component {
         HttpUtils.get("admin/app/container", {id: this.id}).then(container => {
             this.setState({container})
 
-            if (container.state === 'deploying') {
+            if (container.state === 'deploying' && this._mounted) {
                 setTimeout(() => this.loadContainer(), 1000)
             }
 

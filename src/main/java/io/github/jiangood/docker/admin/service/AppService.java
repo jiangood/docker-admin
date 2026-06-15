@@ -59,20 +59,19 @@ public class AppService extends BaseService<App> {
     @Transactional
     public void deploy(App app) {
         deployingList.add(app.getId());
-        MDC.put("logFileId", app.getId());
-
-        // 修改更新时间
-        app.setUpdateTime(new Date());
-        appRepository.save(app);
-        app = appRepository.findById(app.getId()).orElse(null); // 确保关联对象都取出来
-
-        DeployLog deployLog = new DeployLog();
-        deployLog.setAppId(app.getId());
-        deployLog.setAppName(app.getName());
-
-        deployLog = deployLogRepository.save(deployLog);
-
         try {
+            MDC.put("logFileId", app.getId());
+
+            // 修改更新时间
+            app.setUpdateTime(new Date());
+            appRepository.save(app);
+            app = appRepository.findById(app.getId()).orElse(null); // 确保关联对象都取出来
+
+            DeployLog deployLog = new DeployLog();
+            deployLog.setAppId(app.getId());
+            deployLog.setAppName(app.getName());
+
+            deployLog = deployLogRepository.save(deployLog);
             log.info("部署阶段开始");
             String image = null;
             DockerClient client;
@@ -239,6 +238,8 @@ public class AppService extends BaseService<App> {
 
             e.printStackTrace();
             log.info("--------------------------------------------------");
+        } finally {
+            MDC.remove("logFileId");
         }
         deployingList.remove(app.getId());
 

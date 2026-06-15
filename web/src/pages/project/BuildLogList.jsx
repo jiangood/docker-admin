@@ -137,6 +137,7 @@ export default class extends React.Component {
 
 
     this.timer = setInterval(() => {
+      if (document.hidden) return;
       this.reload()
     }, 1000 * 30)
 
