@@ -1,3 +1,5 @@
+[![最新版](https://img.shields.io/github/v/release/jiangood/docker-admin?label=%E6%9C%80%E6%96%B0%E7%89%88&color=blue)](https://github.com/jiangood/docker-admin/pkgs/container/docker-admin)
+
 # 容器管理
 - 多主机容器管理
 - 持续集成
