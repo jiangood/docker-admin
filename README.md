@@ -1,4 +1,4 @@
-[![ghcr.io](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fghcr.io%2Fv2%2Fjiangood%2Fdocker-admin%2Ftags%2Flist&query=%24.tags%5B0%5D&label=ghcr.io&logo=docker&color=blue)](https://github.com/jiangood/docker-admin/pkgs/container/docker-admin)
+[![最新版](https://img.shields.io/github/v/tag/jiangood/docker-admin?label=%E6%9C%80%E6%96%B0%E7%89%88&color=blue)](https://github.com/jiangood/docker-admin/pkgs/container/docker-admin)
 
 # 容器管理
 - 多主机容器管理
