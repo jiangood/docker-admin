@@ -6,7 +6,7 @@ Multi-host container management platform with CI/CD. UI is Chinese.
 
 - **Backend:** Spring Boot 4.0.6 + Java 21, Maven → `target/app.jar`
 - **Frontend:** Umi 4 + React 19 + Ant Design 6 + TypeScript 5, dev on port 51105
-- **Base framework:** `io.github.jiangood:open-admin` 2.2.8 (handles CRUD, auth, menus)
+- **Base framework:** `io.github.jiangood:open-admin` 2.4.1 (handles CRUD, auth, menus)
 - **Docker SDK:** docker-java 3.5.3 via TCP (tcp://localhost:2375)
 - **Database:** MySQL (default port 3306, override via `db_port`)
 - **Entrypoint:** `io.github.jiangood.DockerAdminBootApplication` (`src/main/java/.../DockerAdminBootApplication.java`)
