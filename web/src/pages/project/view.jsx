@@ -180,6 +180,7 @@ export default class extends React.Component {
       <Card className='mb-2'>
         <Descriptions title={project.name}>
           <Descriptions.Item label='id'>{project.id}</Descriptions.Item>
+          <Descriptions.Item label='中文名称'>{project.cnName}</Descriptions.Item>
           <Descriptions.Item label='代码源'>{project.gitUrl}</Descriptions.Item>
           <Descriptions.Item label='dockerfile'>{project.dockerfile}</Descriptions.Item>
           <Descriptions.Item label='分支'>{project.branch}</Descriptions.Item>

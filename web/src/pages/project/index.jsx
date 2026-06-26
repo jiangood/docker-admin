@@ -38,6 +38,10 @@ export default class extends React.Component {
             },
 
         },
+        {
+            title: '中文名称',
+            dataIndex: 'cnName',
+        },
 
         {
             title: 'git仓库',
@@ -162,6 +166,10 @@ export default class extends React.Component {
                       onFinish={this.onFinish}>
                     <Form.Item name='id' noStyle></Form.Item>
                     <Form.Item label='名称' name='name' rules={[{required: true}]} help='不能包含中文，小写字母开头'>
+                        <Input/>
+                    </Form.Item>
+
+                    <Form.Item label='中文名称' name='cnName'>
                         <Input/>
                     </Form.Item>
 

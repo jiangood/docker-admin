@@ -31,6 +31,9 @@ public class App extends BaseEntity {
     @Column(unique = true)
     String name;
 
+    @Remark("中文名称")
+    String cnName;
+
     @ManyToOne
     SysOrg sysOrg;
 

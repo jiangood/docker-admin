@@ -23,6 +23,10 @@ export default class extends React.Component {
                 return <a onClick={() => PageUtils.open('/app/view?id=' + row.id, '应用-' + name)}>{name}</a>
             }
         },
+        {
+            title: '中文名称',
+            dataIndex: 'cnName',
+        },
 
 
         {
@@ -72,7 +76,7 @@ export default class extends React.Component {
 
     ];
     state = {
-
+        hostId: null,
         deployVisible: false,
         deployImageVisible: false,
         imageList: [],
@@ -106,12 +110,19 @@ export default class extends React.Component {
                     <ProTable
                         actionRef={this.tableRef}
                         toolBarRender={() => [
+                            <FieldRemoteSelect key="hostFilter" allowClear showSearch
+                                               url="admin/host/options" placeholder="过滤主机"
+                                               onChange={value => {
+                                                   this.setState({hostId: value}, () => this.reload())
+                                               }}
+                            />,
                             <Button type="primary"
                                     onClick={this.handleAdd}>
                                 新增
                             </Button>
                         ]}
                         request={(params) => {
+                            params.hostId = this.state.hostId
                             return HttpUtils.get('admin/app/list', params);
                         }}
                         columns={this.columns}
@@ -130,6 +141,10 @@ export default class extends React.Component {
                         onFinish={this.handleSave}
                     >
                         <Form.Item name='name' label='应用名称' required rules={[{required: true}]}>
+                            <Input/>
+                        </Form.Item>
+
+                        <Form.Item name='cnName' label='中文名称'>
                             <Input/>
                         </Form.Item>
 

@@ -49,9 +49,13 @@ public class AppController {
 
     @HasPermission("app:view")
     @RequestMapping("list")
-    public AjaxResult list(String searchText, @PageableDefault(sort = {"updateTime", "createTime"}, direction = Sort.Direction.DESC) Pageable pageable, HttpSession session) {
+    public AjaxResult list(String searchText, String hostId, @PageableDefault(sort = {"updateTime", "createTime"}, direction = Sort.Direction.DESC) Pageable pageable, HttpSession session) {
         Spec<App> q = Spec.of();
-        q.orLike(searchText,  "host.name",App.Fields.name,App.Fields.tag,App.Fields.remark);
+        q.orLike(searchText,  "host.name", App.Fields.name, App.Fields.cnName, App.Fields.tag, App.Fields.remark);
+
+        if (StrUtil.isNotBlank(hostId)) {
+            q.eq("host.id", hostId);
+        }
 
         q.or(qq -> {
             qq.isNull("sysOrg.id");
