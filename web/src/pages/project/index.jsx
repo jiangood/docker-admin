@@ -41,6 +41,7 @@ export default class extends React.Component {
         {
             title: '中文名称',
             dataIndex: 'cnName',
+            sorter: true,
         },
 
         {
