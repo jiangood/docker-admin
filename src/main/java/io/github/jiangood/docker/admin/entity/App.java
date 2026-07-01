@@ -1,7 +1,6 @@
 package io.github.jiangood.docker.admin.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonProperty;
 import io.github.jiangood.docker.admin.entity.converter.AppConfigConverter;
 import io.github.jiangood.openadmin.util.annotation.Remark;
 import io.github.jiangood.openadmin.framework.data.DBConstants;

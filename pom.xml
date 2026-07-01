@@ -5,11 +5,11 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>4.0.6</version>
+        <version>4.1.0</version>
     </parent>
     <groupId>io.github.jiangood</groupId>
     <artifactId>docker-admin</artifactId>
-    <version>3.0.7</version>
+    <version>3.0.13</version>
     <name>docker-admin</name>
 
     <properties>
@@ -20,7 +20,7 @@
         <dependency>
             <groupId>io.github.jiangood</groupId>
             <artifactId>open-admin</artifactId>
-            <version>2.4.2</version>
+            <version>2.4.5</version>
         </dependency>
 
         <dependency>
