@@ -42,7 +42,7 @@ public class ProjectController {
     @RequestMapping("page")
     public AjaxResult page(String orgId, String searchText, @PageableDefault(direction = Sort.Direction.DESC, sort = {"updateTime"}) Pageable pageable) {
         Spec<Project> q = buildQuery();
-        q.orLike(searchText, "name", "remark");
+        q.orLike(searchText, "name", "cnName", "remark");
 
 
         if (StrUtil.isNotEmpty(orgId)) {

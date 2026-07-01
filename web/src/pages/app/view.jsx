@@ -223,6 +223,10 @@ export default class extends React.Component {
                       onFinish={this.onFinish}>
                     <Form.Item name='id' noStyle></Form.Item>
 
+                    <Form.Item name='cnName' label='中文名称'>
+                        <Input/>
+                    </Form.Item>
+
                     <Form.Item name='imageUrl' label='镜像' required rules={[{required: true}]}>
                         <AutoComplete options={this.state.imageList} onSearch={this.loadImageList}></AutoComplete>
                     </Form.Item>

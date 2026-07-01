@@ -421,6 +421,7 @@ public class AppService extends BaseService<App> {
 
         App old = appRepository.findById(input.getId()).orElse(null);
         old.setSysOrg(input.getSysOrg());
+        old.setCnName(input.getCnName());
         old.setImageUrl(input.getImageUrl());
         old.setImageTag(input.getImageTag());
         appRepository.save(old);
