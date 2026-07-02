@@ -5,7 +5,6 @@ import io.github.jiangood.openadmin.framework.perm.HasPermission;
 import io.github.jiangood.docker.admin.dto.ContainerVo;
 import io.github.jiangood.docker.admin.entity.App;
 import io.github.jiangood.docker.admin.service.AppService;
-import io.github.jiangood.docker.config.Config;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import io.github.jiangood.openadmin.util.dto.AjaxResult;
 import io.github.jiangood.openadmin.util.dto.Option;
@@ -43,10 +42,6 @@ public class AppController {
     @Resource
     private AppService service;
 
-    @Resource
-    private Config config;
-
-
     @HasPermission("app:view")
     @RequestMapping("list")
     public AjaxResult list(String searchText, String hostId, @PageableDefault(sort = {"updateTime", "createTime"}, direction = Sort.Direction.DESC) Pageable pageable, HttpSession session) {
@@ -69,11 +64,6 @@ public class AppController {
     @RequestMapping("get")
     public AjaxResult view(String id) throws UnsupportedEncodingException {
         App app = service.findById(id).orElse(null);
-
-        if (app.getImageUrl() == null) {
-            String fullUrl = config.getRegistry().getFullUrl();
-            app.setImageUrl(fullUrl + "/" + app.getProject().getName());
-        }
 
         String url = LogUrlTool.getLogViewUrl(id);
         app.setLogUrl(url);

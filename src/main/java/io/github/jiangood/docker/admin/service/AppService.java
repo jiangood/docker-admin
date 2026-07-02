@@ -77,21 +77,14 @@ public class AppService extends BaseService<App> {
             DockerClient client;
             Host host = app.getHost();
 
-            if (app.getProject() != null) {
-                // 项目镜像
-                image = config.getRegistry().getFullUrl() + "/" + app.getProject().getName() + ":" + app.getImageTag();
-                client = dockerManager.getClient(host, config.getRegistry());
+            // 镜像
+            image = app.getImageUrl() + ":" + app.getImageTag();
+
+            Registry registry = config.getRegistry();
+            if (registry != null) { // 通过镜像地址倒推 注册中心
+                client = dockerManager.getClient(host, registry);
             } else {
-                // 镜像
-                image = app.getImageUrl() + ":" + app.getImageTag();
-
-                Registry registry = config.getRegistry();
-                if (registry != null) { // 通过镜像地址倒推 注册中心
-                    client = dockerManager.getClient(host, registry);
-                } else {
-                    client = dockerManager.getClient(host);
-                }
-
+                client = dockerManager.getClient(host);
             }
 
 
@@ -383,22 +376,12 @@ public class AppService extends BaseService<App> {
 
         List<App> list = new ArrayList<>();
         list.addAll(appRepository.findAllByImageUrl(buildLog.getImageUrl()));
-        if (buildLog.getProjectId() != null) {
-            list.addAll(appRepository.findAllByProjectId(buildLog.getProjectId()));
-        }
-
-
         // 让注解生效
         AppService $this = SpringUtil.getBean(getClass());
 
         for (App app : list) {
             boolean auto = app.getAutoDeploy() != null && app.getAutoDeploy();
             if (!auto) {
-                continue;
-            }
-            if (app.getProject() != null && StrUtil.equals(buildLog.getProjectId(), app.getProject().getId())) {
-                app.setImageTag(event.getVersion());
-                $this.deploy(app);
                 continue;
             }
             if (StrUtil.equals(buildLog.getImageUrl(), app.getImageUrl())) {

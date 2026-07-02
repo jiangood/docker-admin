@@ -35,11 +35,7 @@ export default class extends React.Component {
             dataIndex: 'imageUrl',
             sorter: true,
             render: (_, record) => {
-                if (record.imageUrl) {
-                    return record.imageUrl
-                }
-                return <a
-                    onClick={() => PageUtils.open('project/view?id=' + record.project.id, '镜像-' + record.project.name)}>{record.project.name}</a>
+                return record.imageUrl
             }
         },
         {

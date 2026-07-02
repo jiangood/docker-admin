@@ -12,6 +12,5 @@ public interface AppRepository extends BaseRepository<App, String> {
 
     List<App> findAllByImageUrl(String imageUrl);
 
-    @Query("select a from App a where a.project.id = :projectId")
-    List<App> findAllByProjectId(@Param("projectId") String projectId);
+
 }

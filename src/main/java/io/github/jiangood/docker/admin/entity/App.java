@@ -64,10 +64,6 @@ public class App extends BaseEntity {
     @Lob
     @Convert(converter = AppConfigConverter.class)
     AppConfig config;
-
-    @ManyToOne
-    Project project;
-
     String remark;
 
 
