@@ -10,7 +10,7 @@ import {
   Loading3QuartersOutlined,
   MinusCircleTwoTone
 } from "@ant-design/icons";
-import {DateUtils, HttpUtils, PageUtils, ProTable, ViewText} from "@jiangood/open-admin";
+import {DateUtils, HttpUtils, PageUtils, ProTable, ViewText,Page} from "@jiangood/open-admin";
 import dayjs from "dayjs";
 
 
@@ -175,7 +175,7 @@ export default class extends React.Component {
     const {project, showTrigger, hostOptions} = this.state;
     let todayVersion = 'v' + dayjs().format('YYYYMMDDHH');
 
-    return (<>
+    return (<Page>
 
       <Card className='mb-2'>
         <Descriptions title={project.name}>
@@ -248,7 +248,7 @@ export default class extends React.Component {
         </Form>
       </Modal>
 
-    </>)
+    </Page>)
   }
 
 }
