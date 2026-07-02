@@ -66,12 +66,6 @@ export default class extends React.Component {
 
 
         {
-            title: '注册中心',
-            dataIndex: ['registry', 'namespace'],
-        },
-
-
-        {
             title: '组织机构',
             dataIndex: ['sysOrg', 'name'],
 
