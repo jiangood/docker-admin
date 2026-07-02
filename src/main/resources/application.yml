@@ -23,7 +23,7 @@ spring:
       maximum-pool-size: 30
       minimum-idle: 10
       connection-timeout: 30000
-      leak-detection-threshold: 60000
+      leak-detection-threshold: 30000 # 30秒
 sys:
   title: 容器管理平台
   default-password: jz1@20241029
