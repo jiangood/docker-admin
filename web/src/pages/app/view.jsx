@@ -1,12 +1,10 @@
 import {
     Alert,
-    AutoComplete,
     Button,
     Card,
     Col,
     Descriptions,
     Divider,
-    Form,
     Input,
     message,
     Modal,
@@ -20,7 +18,7 @@ import React from 'react';
 import ConfigForm from "./ConfigForm";
 import {history} from "umi";
 
-import {FieldOrgTreeSelect, FieldRemoteSelect, HttpUtils, Page, PageUtils} from "@jiangood/open-admin";
+import {FieldRemoteSelect, HttpUtils, Page, PageUtils} from "@jiangood/open-admin";
 import PublishForm from "./PublishForm";
 import LogView from "../../components/LogView";
 
@@ -45,13 +43,7 @@ export default class extends React.Component {
         showEditName: false,
         newName: '',
 
-
-        formValues: {},
-        formOpen: false,
-
     }
-    formRef = React.createRef()
-
     componentDidMount() {
         let id = PageUtils.currentLocationQuery().id
         this.id = id;
@@ -113,18 +105,6 @@ export default class extends React.Component {
             this.loadContainer()
         })
     }
-    handleEdit = record => {
-        this.setState({formOpen: true, formValues: record})
-    }
-
-
-    onFinish = values => {
-        HttpUtils.post('admin/app/updateBaseInfo', values).then(rs => {
-            this.setState({formOpen: false})
-            this.reload()
-        })
-    }
-
 
     handleDelete = () => {
         const id = this.state.app.id
@@ -177,7 +157,6 @@ export default class extends React.Component {
                 <Button disabled={state !== 'exited'} onClick={this.start} type="primary">启动</Button>
                 <Button disabled={state !== 'running'} onClick={this.stop} type="primary" danger>停止</Button>
                 <Button onClick={this.deploy} loading={state === 'deploying'} type="primary">重新部署</Button>
-                <Button onClick={() => this.handleEdit(this.state.app)}>修改基本信息</Button>
             </Space>}>
 
 
@@ -206,44 +185,6 @@ export default class extends React.Component {
             <Card className='mt-2'>
                 {this.renderTabs()}
             </Card>
-
-
-            <Modal title='应用基本信息'
-                   open={this.state.formOpen}
-                   onOk={() => this.formRef.current.submit()}
-                   onCancel={() => this.setState({formOpen: false})}
-                   destroyOnHidden
-
-                   width={600}
-
-            >
-
-                <Form ref={this.formRef} labelCol={{flex: '100px'}}
-                      initialValues={this.state.formValues}
-                      onFinish={this.onFinish}>
-                    <Form.Item name='id' noStyle></Form.Item>
-
-                    <Form.Item name='cnName' label='中文名称'>
-                        <Input/>
-                    </Form.Item>
-
-                    <Form.Item name='imageUrl' label='镜像' required rules={[{required: true}]}>
-                        <AutoComplete options={this.state.imageList} onSearch={this.loadImageList}></AutoComplete>
-                    </Form.Item>
-
-
-                    <Form.Item name='imageTag' label='版本' required rules={[{required: true}]}>
-                        <AutoComplete options={this.state.imageTagList}
-                                      onSearch={this.loadImageTagList}></AutoComplete>
-                    </Form.Item>
-
-
-                    <Form.Item label='所属组织' name={['sysOrg', 'id']}>
-                        <FieldOrgTreeSelect/>
-                    </Form.Item>
-
-                </Form>
-            </Modal>
 
         </Page>)
     }

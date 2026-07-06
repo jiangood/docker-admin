@@ -2,9 +2,11 @@ import {AutoComplete, Button, Form, Input, Menu, Modal, Splitter} from 'antd';
 import React from 'react';
 import ContainerStatus from "../../components/ContainerStatus";
 import {
+    ButtonList,
     FieldOrgTreeSelect,
     FieldRemoteSelect,
     HttpUtils,
+    OrgTree,
     Page,
     PageUtils,
     ProTable
@@ -69,13 +71,26 @@ export default class extends React.Component {
             title: '最近更新',
             dataIndex: 'updateTime',
         },
+        {
+            title: '操作',
+            dataIndex: 'option',
+            valueType: 'option',
+            render: (_, record) => (
+                <ButtonList>
+                    <Button size='small' perm='app:save' onClick={() => this.handleEdit(record)}>修改</Button>
+                </ButtonList>
+            ),
+        },
 
 
     ];
     state = {
         hostId: null,
+        selectedOrgId: null,
         deployVisible: false,
         deployImageVisible: false,
+        editVisible: false,
+        editValues: {},
         imageList: [],
     }
 
@@ -94,9 +109,21 @@ export default class extends React.Component {
     }
 
     formRef = React.createRef()
+    editFormRef = React.createRef()
     tableRef = React.createRef()
     handleAdd = () => {
         this.setState({deployVisible: true})
+    }
+
+    handleEdit = record => {
+        this.setState({editVisible: true, editValues: record})
+    }
+
+    handleEditFinish = values => {
+        HttpUtils.post('admin/app/updateBaseInfo', values).then(() => {
+            this.setState({editVisible: false})
+            this.reload()
+        })
     }
 
 
@@ -104,28 +131,38 @@ export default class extends React.Component {
     render() {
         return (
             <Page padding>
-                    <ProTable
-                        actionRef={this.tableRef}
-                        toolBarRender={() => [
-                            <FieldRemoteSelect key="hostFilter" allowClear showSearch
-                                               url="admin/host/options" placeholder="过滤主机"
-                                               onChange={value => {
-                                                   this.setState({hostId: value}, () => this.reload())
-                                               }}
-                            />,
-                            <Button type="primary"
-                                    onClick={this.handleAdd}>
-                                新增
-                            </Button>
-                        ]}
-                        request={(params) => {
-                            params.hostId = this.state.hostId
-                            return HttpUtils.get('admin/app/list', params);
-                        }}
-                        columns={this.columns}
-                        showToolbarSearch
+                <Splitter>
+                    <Splitter.Panel size={250}>
+                        <OrgTree onChange={(v) => {
+                            this.setState({selectedOrgId: v}, () => this.reload())
+                        }}/>
+                    </Splitter.Panel>
+                    <Splitter.Panel style={{paddingLeft: 16}}>
+                        <ProTable
+                            actionRef={this.tableRef}
+                            toolBarRender={() => [
+                                <FieldRemoteSelect key="hostFilter" allowClear showSearch
+                                                   url="admin/host/options" placeholder="过滤主机"
+                                                   onChange={value => {
+                                                       this.setState({hostId: value}, () => this.reload())
+                                                   }}
+                                />,
+                                <Button type="primary"
+                                        onClick={this.handleAdd}>
+                                    新增
+                                </Button>
+                            ]}
+                            request={(params) => {
+                                params.hostId = this.state.hostId
+                                params.orgId = this.state.selectedOrgId
+                                return HttpUtils.get('admin/app/list', params);
+                            }}
+                            columns={this.columns}
+                            showToolbarSearch
 
-                    />
+                        />
+                    </Splitter.Panel>
+                </Splitter>
                 <Modal title='新增应用' open={this.state.deployVisible} destroyOnHidden={true}
                        onOk={() => this.formRef.current.submit()}
                        onCancel={() => this.setState({deployVisible: false})}
@@ -167,6 +204,35 @@ export default class extends React.Component {
                     </Form>
                 </Modal>
 
+                <Modal title='应用基本信息'
+                       open={this.state.editVisible}
+                       onOk={() => this.editFormRef.current.submit()}
+                       onCancel={() => this.setState({editVisible: false})}
+                       destroyOnHidden
+                       width={600}
+                >
+                    <Form ref={this.editFormRef} labelCol={{flex: '100px'}}
+                          initialValues={this.state.editValues}
+                          onFinish={this.handleEditFinish}>
+                        <Form.Item name='id' noStyle></Form.Item>
+
+                        <Form.Item name='cnName' label='中文名称'>
+                            <Input/>
+                        </Form.Item>
+
+                        <Form.Item name='imageUrl' label='镜像' required rules={[{required: true}]}>
+                            <Input/>
+                        </Form.Item>
+
+                        <Form.Item name='imageTag' label='版本' required rules={[{required: true}]}>
+                            <Input placeholder='请输入版本'/>
+                        </Form.Item>
+
+                        <Form.Item label='所属组织' name={['sysOrg', 'id']}>
+                            <FieldOrgTreeSelect/>
+                        </Form.Item>
+                    </Form>
+                </Modal>
 
             </Page>
 

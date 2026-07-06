@@ -11,6 +11,7 @@ import io.github.jiangood.openadmin.util.dto.Option;
 import io.github.jiangood.openadmin.framework.config.RequestBodyKeys;
 import io.github.jiangood.openadmin.framework.data.specification.Spec;
 import io.github.jiangood.openadmin.framework.auth.LoginTool;
+import io.github.jiangood.openadmin.modules.system.service.SysOrgService;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.constraints.NotNull;
@@ -29,6 +30,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.io.UnsupportedEncodingException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -42,14 +44,23 @@ public class AppController {
     @Resource
     private AppService service;
 
+    @Resource
+    private SysOrgService sysOrgService;
+
     @HasPermission("app:view")
     @RequestMapping("list")
-    public AjaxResult list(String searchText, String hostId, @PageableDefault(sort = {"updateTime", "createTime"}, direction = Sort.Direction.DESC) Pageable pageable, HttpSession session) {
+    public AjaxResult list(String searchText, String hostId, String orgId, @PageableDefault(sort = {"updateTime", "createTime"}, direction = Sort.Direction.DESC) Pageable pageable, HttpSession session) {
         Spec<App> q = Spec.of();
         q.orLike(searchText,  "host.name", App.Fields.name, App.Fields.cnName, App.Fields.tag, App.Fields.remark);
 
         if (StrUtil.isNotBlank(hostId)) {
             q.eq("host.id", hostId);
+        }
+
+        if (StrUtil.isNotEmpty(orgId)) {
+            List<String> orgIds = new ArrayList<>(sysOrgService.findChildIdListById(orgId));
+            orgIds.add(orgId);
+            q.in(App.Fields.sysOrg + ".id", orgIds);
         }
 
         q.or(qq -> {
