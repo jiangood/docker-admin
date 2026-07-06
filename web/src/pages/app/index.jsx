@@ -33,14 +33,6 @@ export default class extends React.Component {
 
 
         {
-            title: '镜像',
-            dataIndex: 'imageUrl',
-            sorter: true,
-            render: (_, record) => {
-                return record.imageUrl
-            }
-        },
-        {
             title: '版本',
             dataIndex: 'imageTag',
         },
