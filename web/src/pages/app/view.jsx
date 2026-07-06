@@ -108,7 +108,7 @@ export default class extends React.Component {
 
     handleDelete = () => {
         const id = this.state.app.id
-        const hide = message.loading('删除中...')
+        const hide = message.loading('删除中...',0)
         HttpUtils.get("admin/app/delete", {id}).then(rs => {
             hide();
 
