@@ -50,7 +50,7 @@
         <dependency>
             <groupId>com.github.docker-java</groupId>
             <artifactId>docker-java</artifactId>
-            <version>3.5.3</version>
+            <version>3.7.1</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/com.github.docker-java/docker-java-transport-httpclient5 -->
