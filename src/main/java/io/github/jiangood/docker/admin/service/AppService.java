@@ -345,20 +345,22 @@ public class AppService extends BaseService<App> {
 
     private void deleteContainer(App app) {
         DockerClient client = dockerManager.getClient(app.getHost());
+        try {
+            Map<String, String> labels = dockerManager.getAppLabelFilter(app.getName());
+            List<Container> list = client.listContainersCmd().withLabelFilter(labels).withShowAll(true).exec();
+            log.info("已有容器个数 {}", list.size());
 
-
-        Map<String, String> labels = dockerManager.getAppLabelFilter(app.getName());
-        List<Container> list = client.listContainersCmd().withLabelFilter(labels).withShowAll(true).exec();
-        log.info("已有容器个数 {}", list.size());
-
-        list.forEach(c -> {
-            if (c.getState().equals("running")) {
-                log.info("正在停止容器 {}", c);
-                client.stopContainerCmd(c.getId()).exec();
-            }
-            log.info("正在删除容器 {}", c);
-            client.removeContainerCmd(c.getId()).exec();
-        });
+            list.forEach(c -> {
+                if (c.getState().equals("running")) {
+                    log.info("正在停止容器 {}", c);
+                    client.stopContainerCmd(c.getId()).exec();
+                }
+                log.info("正在删除容器 {}", c);
+                client.removeContainerCmd(c.getId()).exec();
+            });
+        } finally {
+            IOUtils.closeQuietly(client);
+        }
     }
 
     public App updateConfig(String id, App.AppConfig appConfig) {

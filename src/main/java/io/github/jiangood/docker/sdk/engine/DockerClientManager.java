@@ -13,12 +13,16 @@ import io.github.jiangood.docker.config.Registry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 
 @Service
 @Slf4j
 public class DockerClientManager {
+
+    private static final Duration CONNECTION_TIMEOUT = Duration.ofSeconds(10);
+    private static final Duration RESPONSE_TIMEOUT = Duration.ofSeconds(30);
 
 
     public DockerClient getClient(Host host) {
@@ -45,7 +49,12 @@ public class DockerClientManager {
         DockerClientConfig config = builder.build();
 
         DockerHttpClient httpClient =
-                new ApacheDockerHttpClient.Builder().dockerHost(config.getDockerHost()).sslConfig(config.getSSLConfig()).build();
+                new ApacheDockerHttpClient.Builder()
+                        .dockerHost(config.getDockerHost())
+                        .sslConfig(config.getSSLConfig())
+                        .connectionTimeout(CONNECTION_TIMEOUT)
+                        .responseTimeout(RESPONSE_TIMEOUT)
+                        .build();
 
 
         return DockerClientImpl.getInstance(config, httpClient);
@@ -58,7 +67,12 @@ public class DockerClientManager {
         DockerClientConfig config = builder.build();
 
         DockerHttpClient httpClient =
-                new ApacheDockerHttpClient.Builder().dockerHost(config.getDockerHost()).sslConfig(config.getSSLConfig()).build();
+                new ApacheDockerHttpClient.Builder()
+                        .dockerHost(config.getDockerHost())
+                        .sslConfig(config.getSSLConfig())
+                        .connectionTimeout(CONNECTION_TIMEOUT)
+                        .responseTimeout(RESPONSE_TIMEOUT)
+                        .build();
 
 
         return DockerClientImpl.getInstance(config, httpClient);
