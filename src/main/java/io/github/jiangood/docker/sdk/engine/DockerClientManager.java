@@ -22,7 +22,7 @@ import java.util.Map;
 public class DockerClientManager {
 
     private static final Duration CONNECTION_TIMEOUT = Duration.ofSeconds(10);
-    private static final Duration RESPONSE_TIMEOUT = Duration.ofSeconds(30);
+    private static final Duration RESPONSE_TIMEOUT = Duration.ofSeconds(3600);
 
 
     public DockerClient getClient(Host host) {
