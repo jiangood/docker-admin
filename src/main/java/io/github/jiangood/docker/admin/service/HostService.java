@@ -39,7 +39,7 @@ public class HostService extends BaseService<Host> {
     public Host getDefaultDockerRunner() {
         Spec<Host> q = Spec.of();
         q.eq(Host.Fields.isRunner, true);
-        return hostRepository.findTop1(q, Sort.by(Sort.Direction.DESC, "updateTime"));
+        return hostRepository.findAll(q, Sort.by(Sort.Direction.DESC, "updateTime")).stream().findFirst().orElse(null);
     }
 
     public Info getDockerInfo(Host host) {

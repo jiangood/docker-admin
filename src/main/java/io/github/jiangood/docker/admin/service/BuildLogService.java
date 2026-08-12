@@ -56,6 +56,6 @@ public class BuildLogService extends BaseService<BuildLog> {
     public BuildLog findTop1ByProject(String projectId) {
         Spec<BuildLog> q = Spec.of();
         q.eq(BuildLog.Fields.projectId, projectId);
-        return buildLogRepository.findTop1(q, Sort.by("createTime"));
+        return buildLogRepository.findAll(q, Sort.by("createTime")).stream().findFirst().orElse(null);
     }
 }

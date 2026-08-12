@@ -2,7 +2,7 @@ import {AutoComplete, Button, Form, Input, Menu, Modal, Splitter} from 'antd';
 import React from 'react';
 import ContainerStatus from "../../components/ContainerStatus";
 import {
-    ButtonList,
+    PermActions,
     FieldOrgTreeSelect,
     FieldRemoteSelect,
     HttpUtils,
@@ -68,9 +68,9 @@ export default class extends React.Component {
             dataIndex: 'option',
             valueType: 'option',
             render: (_, record) => (
-                <ButtonList>
+                <PermActions>
                     <Button size='small' perm='app:save' onClick={() => this.handleEdit(record)}>修改</Button>
-                </ButtonList>
+                </PermActions>
             ),
         },
 

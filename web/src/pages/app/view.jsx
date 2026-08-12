@@ -16,7 +16,7 @@ import {
 } from 'antd';
 import React from 'react';
 import ConfigForm from "./ConfigForm";
-import {history} from "umi";
+import {history} from "@jiangood/open-admin";
 
 import {FieldRemoteSelect, HttpUtils, Page, PageUtils} from "@jiangood/open-admin";
 import PublishForm from "./PublishForm";
@@ -45,7 +45,7 @@ export default class extends React.Component {
 
     }
     componentDidMount() {
-        let id = PageUtils.currentLocationQuery().id
+        let id = PageUtils.currentParams().id
         this.id = id;
         this._mounted = true;
         this.loadApp();

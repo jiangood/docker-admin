@@ -26,6 +26,5 @@ spring:
       leak-detection-threshold: 30000 # 30秒
 sys:
   title: 容器管理平台
-  default-password: jz1@20241029
 
 

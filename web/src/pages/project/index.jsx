@@ -3,7 +3,7 @@ import {Button, Form, Input, Modal, Popconfirm, Splitter} from 'antd'
 import React from 'react'
 
 import {
-    ButtonList,
+    PermActions,
     FieldOrgTreeSelect,
     HttpUtils,
     OrgTree,
@@ -76,13 +76,13 @@ export default class extends React.Component {
             dataIndex: 'option',
             valueType: 'option',
             render: (_, record) => (
-                <ButtonList>
+                <PermActions>
                     <Button size='small' perm='project:save' onClick={() => this.handleEdit(record)}> 修改 </Button>
                     <Popconfirm perm='project:delete' title='是否确定删除项目'
                                 onConfirm={() => this.handleDelete(record)}>
                         <Button size='small'>删除</Button>
                     </Popconfirm>
-                </ButtonList>
+                </PermActions>
             ),
         },
     ]
@@ -128,11 +128,11 @@ export default class extends React.Component {
                     <ProTable
                         actionRef={this.tableRef}
                         toolBarRender={() => {
-                            return <ButtonList>
+                            return <PermActions>
                                 <Button perm='project:save' type='primary' onClick={this.handleAdd}>
                                     <PlusOutlined/> 新增
                                 </Button>
-                            </ButtonList>
+                            </PermActions>
                         }}
                         request={(params) => {
                             params.orgId = this.state.selectedOrgId

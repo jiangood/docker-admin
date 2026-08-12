@@ -1,0 +1,32 @@
+## docker-admin 业务菜单
+menus:
+  project:
+    name: 项目
+    path: /project
+    icon: OrderedListOutlined
+    seq: 100
+    perms:
+      - {name: 查看, code: project:view}
+      - {name: 保存, code: project:save}
+      - {name: 删除, code: project:delete}
+      - {name: 构建, code: project:build}
+  app:
+    name: 应用
+    path: /app
+    icon: AppstoreOutlined
+    seq: 200
+    perms:
+      - {name: 查看, code: app:view}
+      - {name: 保存, code: app:save}
+      - {name: 配置, code: app:config}
+      - {name: 删除, code: app:delete}
+      - {name: 部署, code: app:deploy}
+  host:
+    name: 主机
+    path: /host
+    icon: DesktopOutlined
+    seq: 300
+    perms:
+      - {name: 查看, code: host:list}
+      - {name: 保存, code: host:save}
+      - {name: 删除, code: host:delete}

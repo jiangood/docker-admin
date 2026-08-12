@@ -37,7 +37,7 @@ export default class extends React.Component {
   timer = null
 
   componentDidMount() {
-    this.id = PageUtils.currentLocationQuery().id
+    this.id = PageUtils.currentParams().id
 
     HttpUtils.get('admin/project/get', {id: this.id}).then(rs => this.setState({project: rs}))
 

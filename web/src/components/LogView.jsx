@@ -1,6 +1,6 @@
 import {LazyLog, ScrollFollow} from "@melloware/react-logviewer";
 import React from "react";
-import {DeviceUtils, SysUtils} from "@jiangood/open-admin";
+import {UrlUtils} from "@jiangood/open-admin";
 import {Alert} from "antd";
 
 /**
@@ -11,9 +11,9 @@ export default class extends React.Component {
     render() {
         let {url, websocket} = this.props;
         if (!url.startsWith("ws://") && !url.startsWith("wss://") && !url.startsWith("http://") && !url.startsWith("https://")) {
-            url = SysUtils.contextPath(url)
+            url = UrlUtils.contextPath(url)
             if (websocket) {
-                url = DeviceUtils.getWebsocketBaseUrl() + url
+                url = UrlUtils.getWebsocketBaseUrl() + url
             }
         }
 

@@ -2,8 +2,7 @@ import {PlusOutlined} from '@ant-design/icons'
 import {Button, Form, Input, Modal, Popconfirm} from 'antd'
 import React from 'react'
 
-import {ButtonList, FieldBoolean, HttpUtils, Page, PageUtils, ProTable} from "@jiangood/open-admin"
-import {history} from "umi";
+import {PermActions, FieldBoolean, HttpUtils, Page, PageUtils, ProTable} from "@jiangood/open-admin"
 
 
 export default class extends React.Component {
@@ -50,12 +49,12 @@ export default class extends React.Component {
             dataIndex: 'option',
             valueType: 'option',
             render: (_, record) => (
-                <ButtonList>
+                <PermActions>
                     <a perm='host:save' onClick={() => this.handleEdit(record)}> 修改 </a>
                     <Popconfirm perm='host:delete' title='是否确定删除主机' onConfirm={() => this.handleDelete(record)}>
                         <a>删除</a>
                     </Popconfirm>
-                </ButtonList>
+                </PermActions>
             ),
         },
     ]
@@ -88,11 +87,11 @@ export default class extends React.Component {
             <ProTable
                 actionRef={this.tableRef}
                 toolBarRender={() => {
-                    return <ButtonList>
+                    return <PermActions>
                         <Button perm='host:save' type='primary' onClick={this.handleAdd}>
                             <PlusOutlined/> 新增
                         </Button>
-                    </ButtonList>
+                    </PermActions>
                 }}
                 request={(params) => HttpUtils.get('admin/host/page', params)}
                 columns={this.columns}
