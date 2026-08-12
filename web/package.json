@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@ant-design/icons": "^6.0.0",
-    "@jiangood/open-admin": "3.0.10",
+    "@jiangood/open-admin": "3.0.11",
     "@melloware/react-logviewer": "^6.3.4",
     "@tinymce/tinymce-react": "^6.0.0",
     "antd": "^6.0.0",
