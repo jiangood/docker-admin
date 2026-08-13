@@ -84,7 +84,7 @@ web/
 
 ### 数据字典
 
-- **枚举驱动**：框架内置字典（`approveStatus`、`sex`、`yesNo`、`dataPermType`、`articlePosition`、`materialType`、`fileStatus`）由 Java 枚举自动同步生成——枚举类型标注 `@DictType(code, label)`、常量标注 `@DictItem(label, color?)`（`color` 为预设色名 DEFAULT/PROCESSING/SUCCESS/ERROR/WARNING/RED/BLUE/GREEN/GRAY 或十六进制 `#rgb`/`#rrggbb`，如 `#ff0000`，可省略），每次启动经 `DictSeedSync` 同步，枚举是唯一数据源，无需写 SQL 种子
+- **枚举驱动**：框架内置字典（`approveStatus`、`sex`、`yesNo`、`dataPermType`、`articlePosition`、`fileStatus`）由 Java 枚举自动同步生成——枚举类型标注 `@DictType(code, label)`、常量标注 `@DictItem(label, color?)`（`color` 为预设色名 DEFAULT/PROCESSING/SUCCESS/ERROR/WARNING/RED/BLUE/GREEN/GRAY 或十六进制 `#rgb`/`#rrggbb`，如 `#ff0000`，可省略），每次启动经 `DictSeedSync` 同步，枚举是唯一数据源，无需写 SQL 种子
 - **业务扩展**：业务模块自定义枚举加 `@DictType`/`@DictItem` 后，放在业务基础包下即可自动入字典（启动时自动扫描业务基础包与框架包）；基础包之外的枚举不在自动扫描范围
 - **前端使用**：`<FieldDictSelect typeCode="sex" />` 字典选择器；`DictUtils.dictList("sex")` / `DictUtils.dictLabel("sex", "MALE")` / `DictUtils.dictTag("approveStatus", "APPROVED")`
 - **管理界面**：仍可通过字典管理界面维护非枚举类型（业务自建）字典；枚举类型的 label/color 由代码维护
@@ -93,7 +93,7 @@ web/
 
 | 功能 | 说明 |
 |------|------|
-| 作业调度 | 基于 Quartz，动态创建/暂停/恢复，继承 `BaseJob` + `@JobDescription` |
+| 定时任务 | 基于 Quartz，动态创建/暂停/恢复，继承 `BaseJob` + `@JobDescription` |
 | 文件管理 | `sys.file.store-type` 配置（`local` / `s3` / `custom`），统一上传下载预览；临时文件自动清理（TTL 可配置） |
 | 操作日志 | `@Log` 注解 + AOP 切面，异步记录（独立线程池 `operationLogExecutor`） |
 | 运行日志查看 | 在线查看日志文件 |
@@ -135,4 +135,4 @@ src/main/resources/
 
 **前端依赖安装失败？** `npm install --registry=https://registry.npmmirror.com`
 
-**端口被占用？** 后端默认 8080，前端默认 8000，可通过环境变量 `SERVER_PORT` 修改后端端口。
+**端口被占用？** 后端默认 8080，前端默认 3000，可通过环境变量 `SERVER_PORT` 修改后端端口。
