@@ -33,7 +33,7 @@
 
 上传文件默认标记为未认领 (`joinTable=null`)，仅在业务数据保存后通过 `SysFileService.claim*()` 设置 `joinTable/joinId` 后方变为已认领。未认领的文件超过期限后由 Quartz 定时任务 `CleanTempFileJob` 自动删除。
 
-- **确认时机**：业务 Controller 的 create/update 方法中，save 后调用 `sysFileService.claimHtml(joinTable, joinId, oldHtml, newHtml)`（富文本）或 `sysFileService.claimList(joinTable, joinId, oldObjectNames, newObjectNames)`（objectName 列表）对比新旧数据，确认新增文件并清理移除的旧文件
+- **确认时机**：业务 Controller 的 create/update 方法中，update 时先 `sysFileService.release(...)` / `releaseHtml(...)` 释放旧引用，save 后再 `sysFileService.claim(...)` / `claimHtml(...)` 认领新引用（详见 development.md「文件认领」）
 - **清理配置**：`sys.file.clean-unclaimed-minutes=120`（默认 2 小时）
 - **清理频率**：每 10 分钟执行一次（cron `0 */10 * * * ?`）
 - **孤儿文件**：业务数据删除后残留的已认领文件，同一任务会检查对应业务表（主键列约定为 `id`）中记录是否已不存在，不存在则一并清理

@@ -20,7 +20,7 @@
         <dependency>
             <groupId>io.github.jiangood</groupId>
             <artifactId>open-admin</artifactId>
-            <version>3.0.12</version>
+            <version>3.0.13</version>
         </dependency>
 
         <dependency>
