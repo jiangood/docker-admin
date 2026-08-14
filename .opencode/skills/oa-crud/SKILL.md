@@ -313,35 +313,32 @@ public class CustomerController {
 
 ### 文件认领（必须）
 
-实体如果包含上传文件/图片字段（`FieldUploadFile`、`FieldUploadImage`、`FieldEditor` 富文本），业务保存后**必须调用 `SysFileService.claim()/claimHtml()` 认领文件**，否则文件一直处于"未认领(TEMP)"状态，默认 120 分钟后会被清理任务物理删除。
+实体如果包含上传文件/图片字段（`FieldUploadFile`、`FieldUploadImage`、`FieldEditor` 富文本），业务保存后**必须调用 `SysFileService.claim(entity)` 认领文件**，否则文件一直处于"未认领(TEMP)"状态，默认 120 分钟后会被清理任务物理删除。
 
 - 上传的文件初始状态为 `TEMP`（未认领），认领后变为 `IN_USE`（使用中）并记录关联表/关联 ID
-- `claim(joinTable, joinId, objectName)`：单值字段（如主图），认领单个文件
-- `claimHtml(joinTable, joinId, html)`：富文本字段，内部从 HTML 中提取框架文件 URL（支持 `public`/`private` 前缀与 `img/` 目录）后全部认领
-- `release(objectName)` / `releaseHtml(html)`：释放旧引用（置为 `PENDING_DELETE`）
-- `joinTable` 填业务表名（如 `biz_article`），`joinId` 填记录 id
-- 更新时**先释放旧引用再 save**（`old` 是 JPA 托管实体，save 后会变成新值，晚取无效），save 后再认领新引用
+- 实体字段打 `@FileField` 注解（单值文件/图片字段不加参数；富文本字段加 `html = true`，内部自动从 HTML 提取框架文件 URL）；实体无需继承 `BaseEntity`，实现 `Persistable<String>` 即可
+- `sysFileService.claim(entity)`：认领实体所有 `@FileField` 字段引用的文件，joinTable 自动取实体 `@Table(name)`、joinId 自动取 `entity.getId()`，无需指定表名与字段
+- `sysFileService.unclaim(entity)`：取消认领（置为 `PENDING_DELETE`）
+- 更新时**先 `unclaim(old)` 再 save**（`old` 是 JPA 托管实体，save 后会变成新值，晚取无效），save 后再 `claim(entity)` 认领新引用
+- 删除业务记录时建议在同一事务内先 `unclaim(entity)` 再删除（立即释放引用且随删除回滚）；未显式调用时 `CleanTempFileJob` 的孤儿扫描仍会兜底清理
 
 参照框架示例 `ArticleController.java`：
 
 ```java
 // 新增
 Article result = articleService.save(param, null);
-sysFileService.claimHtml("biz_article", result.getId(), param.getContent());
-sysFileService.claim("biz_article", result.getId(), param.getMainImage());
+sysFileService.claim(result);
 
-// 更新 —— 先释放旧引用，再保存并认领新引用
+// 更新 —— 先取消认领旧引用，再保存并认领新引用
 Article old = service.findById(param.getId()).orElse(null);
-sysFileService.release(old.getMainImage());
-sysFileService.releaseHtml(old.getContent());
+sysFileService.unclaim(old);
 
 Article result = articleService.save(param, updateFields);
 
-sysFileService.claimHtml("biz_article", result.getId(), param.getContent());
-sysFileService.claim("biz_article", result.getId(), param.getMainImage());
+sysFileService.claim(result);
 ```
 
-> 若实体无任何文件/图片/富文本字段，可跳过本小节。删除业务记录时如需同步清理文件引用，可参考 `SysFileService` 的 `claim`/`release` 或框架文件管理删除接口。
+> 若实体无任何文件/图片/富文本字段，可跳过本小节。
 
 ## 第三步：前端页面创建
 

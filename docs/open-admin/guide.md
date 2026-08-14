@@ -103,7 +103,7 @@ web/
 1. **Entity** — 继承 `BaseEntity`，JPA 自动建表
 2. **Repository** — 继承 `BaseRepository<T, String>`，通用 CRUD + 动态查询
 3. **Service** — 继承 `BaseService<T>`，通用业务逻辑
-4. **Controller** — RESTful，返回 `AjaxResult`，`@HasPermission` 控制权限；含文件上传字段的 save 后调用 `sysFileService.claim*()` 确认临时文件
+4. **Controller** — RESTful，返回 `AjaxResult`，`@HasPermission` 控制权限；含文件上传字段的实体打 `@FileField` 注解，save 后调用 `sysFileService.claim(entity)` 确认临时文件
 5. **菜单** — `src/main/resources/application-menu*.yml` 定义菜单树
 6. **前端** — 使用 `ProTable` + `Field*` 组件快速搭建 CRUD 页面
 

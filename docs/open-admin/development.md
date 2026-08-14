@@ -33,33 +33,47 @@
 
 上传文件/图片后，`SysFile` 记录默认处于 **未认领（TEMP）** 状态；只有业务数据保存时调用 `SysFileService` 的认领方法才会转为 **使用中（IN_USE）** 并记录关联表/关联 ID。未认领文件默认 120 分钟（`sys.file.clean-unclaimed-minutes`）后被 `CleanTempFileJob` 物理删除，因此**包含文件/图片/富文本字段的业务模块必须在保存后认领文件**，否则上传的图片会莫名其妙消失。
 
-| 方法 | 适用字段 | 说明 |
-|------|---------|------|
-| `claim(joinTable, joinId, objectName)` | 单值文件/图片字段（如主图） | 认领单个文件，置为使用中并绑定关联表/关联 ID |
-| `claimHtml(joinTable, joinId, html)` | 富文本 HTML | 自动从 HTML 提取框架文件 URL（支持 `public`/`private` 前缀、`img/` 目录、`?thumb=1` query 串）后全部认领 |
-| `release(objectName)` | 单值文件/图片字段 | 释放引用，置为待删除 |
-| `releaseHtml(html)` | 富文本 HTML | 释放 HTML 中引用的全部文件，置为待删除 |
+### 声明文件字段
+
+在实体字段上打 `@FileField` 注解即可让框架自动识别文件字段（实体无需继承 `BaseEntity`，实现 `Persistable<String>` 即可）：
+
+```java
+@FileField
+private String mainImage;      // 单值文件/图片字段（objectName）
+
+@FileField(html = true)
+private String content;        // 富文本 HTML，自动提取其中引用的全部文件
+```
+
+### 认领 / 取消认领
+
+调用 `SysFileService.claim(entity)` / `unclaim(entity)`，joinTable 自动取实体 `@Table(name)`，joinId 自动取 `entity.getId()`，单值/富文本由 `@FileField(html=true)` 自动区分，业务方无需指定表名与字段：
 
 ```java
 // 新增
 Article result = articleService.save(param, null);
-sysFileService.claimHtml("biz_article", result.getId(), param.getContent());
-sysFileService.claim("biz_article", result.getId(), param.getMainImage());
+sysFileService.claim(result);
 
-// 更新 —— 先释放旧引用，再保存并认领新引用
-Article old = service.findById(param.getId()).orElse(null);
-sysFileService.release(old.getMainImage());
-sysFileService.releaseHtml(old.getContent());
+// 更新 —— 先取消认领旧引用，再保存并认领新引用
+sysFileService.unclaim(old);
 
 Article result = articleService.save(param, updateFields);
-
-sysFileService.claimHtml("biz_article", result.getId(), param.getContent());
-sysFileService.claim("biz_article", result.getId(), param.getMainImage());
+sysFileService.claim(result);
 ```
 
-**注意**：`release` 必须放在 `save` **之前**。因为 `old` 是 JPA 托管实体，`save` 内部的 `updateField` 会直接改写它，保存后再取 `old.getMainImage()/getContent()` 得到的已是新值，导致释放/认领落空（文件停留在"未认领"）。更新流程统一采用"先释放旧值 → save → 认领新值"的顺序；内容中未变更的文件会先 release 再 claim，最终仍为使用中。
+**注意**：`unclaim` 必须放在 `save` **之前**。因为 `old` 是 JPA 托管实体，`save` 内部的 `updateField` 会直接改写它，保存后再取 `old` 的字段得到的已是新值，导致释放/认领落空（文件停留在"未认领"）。更新流程统一采用"先取消认领旧值 → save → 认领新值"的顺序；内容中未变更的文件会先 unclaim 再 claim，最终仍为使用中。
 
-认领/释放方法均为 `@Transactional`。完整示例见框架 `ArticleController`。
+认领/取消认领方法均为 `@Transactional`。完整示例见框架 `ArticleController`。
+
+### 删除业务记录
+
+删除业务记录前建议在**同一事务**内先 `sysFileService.unclaim(entity)` 再删除，立即释放文件引用且删除失败时一并回滚；若未显式取消认领，`CleanTempFileJob` 的孤儿扫描仍会在后续定时任务中清理已不存在的业务记录所引用的文件：
+
+```java
+// 删除 —— 先取消认领，再删除（同事务）
+sysFileService.unclaim(article);
+articleService.deleteById(id);
+```
 
 ## 前端要点
 
