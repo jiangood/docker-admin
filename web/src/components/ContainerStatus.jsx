@@ -1,6 +1,6 @@
 import {Tag} from "antd";
 import React from "react";
-import {HttpUtils, StringUtils} from "@jiangood/open-admin";
+import {HttpClient, StringUtils} from "@jiangood/open-admin";
 
 
 /**
@@ -14,8 +14,8 @@ export default class extends React.Component {
 
   componentDidMount() {
     const {hostId, appName,containerId} = this.props
-    HttpUtils.get("admin/container/status", {hostId, appName,containerId}).then(rs => {
-      this.setState({status: rs})
+    HttpClient.get("admin/container/status", {hostId, appName,containerId}).then(rs => {
+      this.setState({status: rs.data})
     }).catch(()=>{
       this.setState({status:'未知'})
     })

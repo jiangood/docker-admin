@@ -25,8 +25,8 @@ import io.github.jiangood.docker.sdk.engine.DefaultCallback;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import io.github.jiangood.openadmin.framework.data.BaseService;
 import jakarta.annotation.Resource;
+import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.slf4j.MDC;
@@ -39,13 +39,22 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 import java.io.File;
 import java.io.IOException;
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.*;
 
 
-@RequiredArgsConstructor
 @Service
 @Slf4j
 public class ProjectService extends BaseService<Project> {
+
+    private final ProjectRepository projectRepository;
+
+    public ProjectService(ProjectRepository projectRepository, EntityManager entityManager) {
+        super(projectRepository, entityManager);
+        this.projectRepository = projectRepository;
+    }
 
 
     @Resource
@@ -64,8 +73,6 @@ public class ProjectService extends BaseService<Project> {
     @Resource
     BuildLogService buildLogService;
 
-    private final ProjectRepository projectRepository;
-
     @Resource
     private ApplicationEventPublisher applicationEventPublisher;
 
@@ -81,8 +88,8 @@ public class ProjectService extends BaseService<Project> {
         BuildLog buildLog = buildLogService.findById(logId).orElse(null);
 
         buildLog.setSuccess(false);
-        buildLog.setCompleteTime(new Date());
-        buildLog.setTimeSpend(buildLog.getCompleteTime().getTime() - buildLog.getCreateTime().getTime());
+        buildLog.setCompleteTime(LocalDateTime.now());
+        buildLog.setTimeSpend(Duration.between(buildLog.getCreateTime(), buildLog.getCompleteTime()).toMillis());
         buildLogService.save(buildLog);
 
 
@@ -141,7 +148,7 @@ public class ProjectService extends BaseService<Project> {
             File workDir = cloneResult.getDir();
             log.info("代码下载完毕 " + workDir);
             log.info("代码提交信息: {}", cloneResult.getCodeMessage());
-            Date commitTime = cloneResult.getCommitTime();
+            Date commitTime = Date.from(cloneResult.getCommitTime().atZone(ZoneId.systemDefault()).toInstant());
             log.info("代码提交时间: {}, {}前", DateUtil.formatDateTime(commitTime), DateUtil.formatBetween(commitTime, new Date(), BetweenFormatter.Level.MINUTE));
             log.info("代码文件大小: {}", DataSizeUtil.format(FileUtil.size(workDir)));
 
@@ -225,8 +232,8 @@ public class ProjectService extends BaseService<Project> {
 
 
             buildLog.setSuccess(true);
-            buildLog.setCompleteTime(new Date());
-            buildLog.setTimeSpend(buildLog.getCompleteTime().getTime() - buildLog.getCreateTime().getTime());
+            buildLog.setCompleteTime(LocalDateTime.now());
+            buildLog.setTimeSpend(Duration.between(buildLog.getCreateTime(), buildLog.getCompleteTime()).toMillis());
             buildLog = buildLogService.save(buildLog);
             log.info("已更新构建日志{}", buildLog);
 
@@ -252,8 +259,8 @@ public class ProjectService extends BaseService<Project> {
             e.printStackTrace();
 
             buildLog.setSuccess(false);
-            buildLog.setCompleteTime(new Date());
-            buildLog.setTimeSpend(buildLog.getCompleteTime().getTime() - buildLog.getCreateTime().getTime());
+            buildLog.setCompleteTime(LocalDateTime.now());
+            buildLog.setTimeSpend(Duration.between(buildLog.getCreateTime(), buildLog.getCompleteTime()).toMillis());
             buildLogService.save(buildLog);
         }
 

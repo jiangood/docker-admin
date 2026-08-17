@@ -2,7 +2,7 @@ import {Button, Col, Divider, Form, Input, message, Radio, Row, Select, Spin} fr
 import React from "react";
 import EditTable from "../../components/EditTable";
 import CodeMirrorEditor from "../../components/CodeMirrorEditor";
-import {FieldTable, HttpUtils} from "@jiangood/open-admin";
+import {FieldTable, HttpClient} from "@jiangood/open-admin";
 
 
 export default class extends React.Component {
@@ -20,8 +20,8 @@ export default class extends React.Component {
     ]
     update = (form) => {
         const hide = message.loading("修改配置中...", 0)
-        HttpUtils.post('admin/app/updateConfig?id=' + this.props.app.id, form).then(app => {
-            this.props.onChange(app)
+        HttpClient.post('admin/app/updateConfig?id=' + this.props.app.id, form).then(rs => {
+            this.props.onChange(rs.data)
         }).finally(hide)
     }
 

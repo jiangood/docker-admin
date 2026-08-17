@@ -20,8 +20,8 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 
 @RestController
@@ -97,7 +97,7 @@ public class ProjectController {
 
 
         // 更新最近时间,方便排序
-        project.setUpdateTime(new Date());
+        project.setUpdateTime(LocalDateTime.now());
         project = service.save(project);
 
         buildRequest.setBranchOrTag(project.getBranch());

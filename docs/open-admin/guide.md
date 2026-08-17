@@ -58,7 +58,6 @@ web/
 | 接口 | 用途 | 注册方式 |
 |------|------|---------|
 | `OrgTypeProvider` | 自定义机构类型（如新增"门店"类型） | `@Component` |
-| `FileOperator` | 自定义文件存储后端（注册 `@Bean @Primary FileOperator` 覆盖默认） | `@ConditionalOnMissingBean` |
 | `StartupHook` | 系统启动钩子（JPA 建表前/种子数据前后） | `@Component` |
 
 实现类被 `@ComponentScan` 自动发现，无需手动注册。
@@ -94,7 +93,7 @@ web/
 | 功能 | 说明 |
 |------|------|
 | 定时任务 | 基于 Quartz，动态创建/暂停/恢复，继承 `BaseJob` + `@JobDescription` |
-| 文件管理 | `sys.file.store-type` 配置（`local` / `s3` / `custom`），统一上传下载预览；临时文件自动清理（TTL 可配置） |
+| 文件管理 | `sys.file.store-type` 配置（`LOCAL` / `MINIO`），统一上传下载预览；临时文件自动清理（TTL 可配置） |
 | 操作日志 | `@Log` 注解 + AOP 切面，异步记录（独立线程池 `operationLogExecutor`） |
 | 运行日志查看 | 在线查看日志文件 |
 

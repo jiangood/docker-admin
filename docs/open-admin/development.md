@@ -50,9 +50,13 @@ private String content;        // 富文本 HTML，自动提取其中引用的�
 调用 `SysFileService.claim(entity)` / `unclaim(entity)`，joinTable 自动取实体 `@Table(name)`，joinId 自动取 `entity.getId()`，单值/富文本由 `@FileField(html=true)` 自动区分，业务方无需指定表名与字段：
 
 ```java
-// 新增
-Article result = articleService.save(param, null);
-sysFileService.claim(result);
+// 新增 —— 认领与保存放同一事务（@Transactional 方法内），冲突时文章一并回滚
+@Transactional
+public Article save(Article input, List<String> requestKeys) {
+    Article result = articleRepository.save(input);
+    sysFileService.claim(result);
+    return result;
+}
 
 // 更新 —— 先取消认领旧引用，再保存并认领新引用
 sysFileService.unclaim(old);
@@ -64,6 +68,8 @@ sysFileService.claim(result);
 **注意**：`unclaim` 必须放在 `save` **之前**。因为 `old` 是 JPA 托管实体，`save` 内部的 `updateField` 会直接改写它，保存后再取 `old` 的字段得到的已是新值，导致释放/认领落空（文件停留在"未认领"）。更新流程统一采用"先取消认领旧值 → save → 认领新值"的顺序；内容中未变更的文件会先 unclaim 再 claim，最终仍为使用中。
 
 认领/取消认领方法均为 `@Transactional`。完整示例见框架 `ArticleController`。
+
+**单记录独占规则**：一个文件只能被一条业务记录认领。`claim` 时若目标文件已被其他业务记录认领（`joinTable/joinId` 指向不同记录），会抛出 `BusinessException`（"文件已被其他业务记录引用，不允许多个业务共享同一文件"），操作整体回滚；`unclaim` 仅释放未被认领或归本记录所有的文件，不会触碰其他记录的文件。因此同一图片/文件不应复制到多条业务记录（含富文本 HTML 引用），需在各自记录中重新上传。
 
 ### 删除业务记录
 

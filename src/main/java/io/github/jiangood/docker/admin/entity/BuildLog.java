@@ -9,7 +9,7 @@ import lombok.Setter;
 import lombok.ToString;
 import lombok.experimental.FieldNameConstants;
 
-import java.util.Date;
+import java.time.LocalDateTime;
 
 @Entity
 @Getter
@@ -31,7 +31,7 @@ public class BuildLog extends BaseEntity {
 
     String imageUrl;
 
-    Date completeTime;
+    LocalDateTime completeTime;
 
     Boolean success;
 

@@ -5,7 +5,7 @@ import {
     PermActions,
     FieldOrgTreeSelect,
     FieldRemoteSelect,
-    HttpUtils,
+    HttpClient,
     OrgTree,
     Page,
     PageUtils,
@@ -94,7 +94,7 @@ export default class extends React.Component {
 
 
     handleSave = value => {
-        HttpUtils.post('admin/app/save', value).then(() => {
+        HttpClient.post('admin/app/save', value).then(() => {
             this.reload()
             this.setState({deployVisible: false})
         })
@@ -112,7 +112,7 @@ export default class extends React.Component {
     }
 
     handleEditFinish = values => {
-        HttpUtils.post('admin/app/updateBaseInfo', values).then(() => {
+        HttpClient.post('admin/app/updateBaseInfo', values).then(() => {
             this.setState({editVisible: false})
             this.reload()
         })
@@ -147,7 +147,7 @@ export default class extends React.Component {
                             request={(params) => {
                                 params.hostId = this.state.hostId
                                 params.orgId = this.state.selectedOrgId
-                                return HttpUtils.get('admin/app/list', params);
+                                return HttpClient.get('admin/app/list', params);
                             }}
                             columns={this.columns}
                             showToolbarSearch

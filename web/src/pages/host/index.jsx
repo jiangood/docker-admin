@@ -2,7 +2,7 @@ import {PlusOutlined} from '@ant-design/icons'
 import {Button, Form, Input, Modal, Popconfirm} from 'antd'
 import React from 'react'
 
-import {PermActions, FieldBoolean, HttpUtils, Page, PageUtils, ProTable} from "@jiangood/open-admin"
+import {PermActions, FieldBoolean, HttpClient, Page, PageUtils, ProTable} from "@jiangood/open-admin"
 
 
 export default class extends React.Component {
@@ -69,7 +69,7 @@ export default class extends React.Component {
 
 
     onFinish = values => {
-        HttpUtils.post('admin/host/save', values).then(rs => {
+        HttpClient.post('admin/host/save', values).then(rs => {
             this.setState({formOpen: false})
             this.tableRef.current.reload()
         })
@@ -77,7 +77,7 @@ export default class extends React.Component {
 
 
     handleDelete = record => {
-        HttpUtils.postForm('admin/host/delete', {id: record.id}).then(rs => {
+        HttpClient.postForm('admin/host/delete', {id: record.id}).then(rs => {
             this.tableRef.current.reload()
         })
     }
@@ -93,7 +93,7 @@ export default class extends React.Component {
                         </Button>
                     </PermActions>
                 }}
-                request={(params) => HttpUtils.get('admin/host/page', params)}
+                request={(params) => HttpClient.get('admin/host/page', params)}
                 columns={this.columns}
             />
 

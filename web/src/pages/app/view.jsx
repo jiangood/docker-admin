@@ -18,7 +18,7 @@ import React from 'react';
 import ConfigForm from "./ConfigForm";
 import {history} from "@jiangood/open-admin";
 
-import {FieldRemoteSelect, HttpUtils, Page, PageUtils} from "@jiangood/open-admin";
+import {FieldRemoteSelect, HttpClient, Page, PageUtils} from "@jiangood/open-admin";
 import PublishForm from "./PublishForm";
 import LogView from "../../components/LogView";
 
@@ -58,15 +58,16 @@ export default class extends React.Component {
 
 
     loadApp() {
-        HttpUtils.get('admin/app/get', {id: this.id}).then(rs => {
-            this.setState({app: rs, loading: false});
+        HttpClient.get('admin/app/get', {id: this.id}).then(rs => {
+            this.setState({app: rs.data, loading: false});
         })
     }
 
     loadContainer = () => {
         console.log('loadContainer')
         this.setState({containerLoading: true})
-        HttpUtils.get("admin/app/container", {id: this.id}).then(container => {
+        HttpClient.get("admin/app/container", {id: this.id}).then(rs => {
+            const container = rs.data;
             this.setState({container})
 
             if (container.state === 'deploying' && this._mounted) {
@@ -89,19 +90,19 @@ export default class extends React.Component {
         const {container} = this.state
         container.state = 'deploying'
         this.setState({container})
-        HttpUtils.post('admin/app/deploy/' + this.state.app.id).then(rs => {
+        HttpClient.post('admin/app/deploy/' + this.state.app.id).then(rs => {
             message.success('部署指令已发送，异步执行中...')
 
             this.loadContainer()
         })
     }
     start = () => {
-        HttpUtils.post('admin/app/start/' + this.state.app.id).then(() => {
+        HttpClient.post('admin/app/start/' + this.state.app.id).then(() => {
             this.loadContainer()
         })
     }
     stop = () => {
-        HttpUtils.post('admin/app/stop/' + this.state.app.id).then(() => {
+        HttpClient.post('admin/app/stop/' + this.state.app.id).then(() => {
             this.loadContainer()
         })
     }
@@ -109,7 +110,7 @@ export default class extends React.Component {
     handleDelete = () => {
         const id = this.state.app.id
         const hide = message.loading('删除中...',0)
-        HttpUtils.get("admin/app/delete", {id}).then(rs => {
+        HttpClient.get("admin/app/delete", {id}).then(rs => {
             hide();
 
             history.push('/app')
@@ -122,7 +123,7 @@ export default class extends React.Component {
                 okText: '强制删除数据',
                 cancelText: '取消',
                 onOk: () => {
-                    HttpUtils.get("admin/app/delete", {id, force: true}).then(rs => {
+                    HttpClient.get("admin/app/delete", {id, force: true}).then(rs => {
                         history.push('/app')
                     })
                 }
@@ -135,10 +136,9 @@ export default class extends React.Component {
         let appId = this.state.app.id;
         let {newName} = this.state;
         const hide = message.loading('指令发送中...')
-        HttpUtils.post("admin/app/rename", {appId, newName}).then(rs => {
+        HttpClient.post("admin/app/rename", {appId, newName}).then(rs => {
 
-            message.success(rs.message)
-            this.setState({app: rs, showEditName: false})
+            this.setState({app: rs.data, showEditName: false})
         }).finally(hide)
     }
 

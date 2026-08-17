@@ -7,7 +7,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.FieldNameConstants;
 
-import java.util.Date;
+import java.time.LocalDateTime;
 
 @Entity
 @Getter
@@ -20,7 +20,7 @@ public class DeployLog extends BaseEntity {
     String appId;
     String appName;
 
-    Date completeTime;
+    LocalDateTime completeTime;
 
     Boolean success;
 

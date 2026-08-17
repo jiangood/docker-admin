@@ -15,7 +15,9 @@ import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
 
 import java.io.File;
-import java.util.Date;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 @Slf4j
 public class GitTool {
@@ -26,7 +28,7 @@ public class GitTool {
         File dir;
         String codeMessage;
 
-        Date commitTime;
+        LocalDateTime commitTime;
     }
 
     public static CloneResult clone(String url, String user, String password, String branch) throws GitAPIException {
@@ -78,7 +80,7 @@ public class GitTool {
         log.info("耗时：{} 秒", (System.currentTimeMillis() - start) / 1000);
 
 
-        return new CloneResult(workDir, submitMessage.trim(), new Date(next.getCommitTime() * 1000L));
+        return new CloneResult(workDir, submitMessage.trim(), LocalDateTime.ofInstant(Instant.ofEpochMilli(next.getCommitTime() * 1000L), ZoneId.systemDefault()));
     }
 
 }

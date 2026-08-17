@@ -5,7 +5,7 @@ import React from 'react'
 import {
     PermActions,
     FieldOrgTreeSelect,
-    HttpUtils,
+    HttpClient,
     OrgTree,
     Page,
     PageUtils,
@@ -99,7 +99,7 @@ export default class extends React.Component {
 
 
     onFinish = values => {
-        HttpUtils.post('admin/project/save', values).then(rs => {
+        HttpClient.post('admin/project/save', values).then(rs => {
             this.setState({formOpen: false})
             this.tableRef.current.reload()
         })
@@ -107,7 +107,7 @@ export default class extends React.Component {
 
 
     handleDelete = record => {
-        HttpUtils.postForm('admin/project/delete', {id: record.id}).then(rs => {
+        HttpClient.postForm('admin/project/delete', {id: record.id}).then(rs => {
             this.tableRef.current.reload()
         })
     }
@@ -136,7 +136,7 @@ export default class extends React.Component {
                         }}
                         request={(params) => {
                             params.orgId = this.state.selectedOrgId
-                            return HttpUtils.get('admin/project/page', params);
+                            return HttpClient.get('admin/project/page', params);
                         }}
                         columns={this.columns}
                         showToolbarSearch

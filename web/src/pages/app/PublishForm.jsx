@@ -1,6 +1,6 @@
 import React from "react";
 import {Button, Card, Col, Form, Input, message, Modal, Row, Skeleton, Switch} from "antd";
-import {FieldRemoteSelect, Gap, HttpUtils, PageUtils} from "@jiangood/open-admin";
+import {FieldRemoteSelect, Gap, HttpClient, PageUtils} from "@jiangood/open-admin";
 
 /**
  * 发布标签页
@@ -18,8 +18,8 @@ export default class extends React.Component {
         this.id = this.props.appId
 
         this.setState({appLoading: true})
-        HttpUtils.get('admin/app/get', {id: this.id}).then(rs => {
-            this.setState({app: rs})
+        HttpClient.get('admin/app/get', {id: this.id}).then(rs => {
+            this.setState({app: rs.data})
 
 
         }).finally(() => {
@@ -28,27 +28,27 @@ export default class extends React.Component {
     }
 
     setAutoDeploy = (autoDeploy) => {
-        HttpUtils.get("admin/app/autoDeploy", {id: this.id, autoDeploy}).then(rs => {
+        HttpClient.get("admin/app/autoDeploy", {id: this.id, autoDeploy}).then(rs => {
             this.props.onChange()
         })
     }
 
 
     updateVersion = (values) => {
-        HttpUtils.get("admin/app/updateVersion", {id: this.id, version: values.imageTag}).then(rs => {
+        HttpClient.get("admin/app/updateVersion", {id: this.id, version: values.imageTag}).then(rs => {
             this.props.onChange()
         })
     }
     copyApp = (values) => {
         const hide = message.loading('复制中..', 0)
-        HttpUtils.post("admin/app/copyApp", {appId: this.id, hostId: values.hostId}).then(rs => {
-            const newAppId = rs.id;
+        HttpClient.post("admin/app/copyApp", {appId: this.id, hostId: values.hostId}).then(rs => {
+            const newAppId = rs.data.id;
             Modal.confirm({
                 icon: null,
                 title: '复制完成',
                 content: '是否打开新的应用？',
                 onOk() {
-                    PageUtils.open('/app/view?id=' + newAppId, '应用-' + rs.name)
+                    PageUtils.open('/app/view?id=' + newAppId, '应用-' + rs.data.name)
                 }
             })
         }).finally(hide)

@@ -3,7 +3,7 @@ package io.github.jiangood.docker.sdk.registry;
 import lombok.Getter;
 import lombok.Setter;
 
-import java.util.Date;
+import java.time.LocalDateTime;
 
 @Getter
 @Setter
@@ -14,8 +14,8 @@ public class ImageVo {
 
     String url;
 
-    Date updateTime;
-    Date createTime;
+    LocalDateTime updateTime;
+    LocalDateTime createTime;
     String latestVersion;
 
     String description;

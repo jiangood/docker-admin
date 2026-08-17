@@ -76,18 +76,20 @@ public class DataSyncJob extends BaseJob {
 
 #### FormModal
 
-表单弹框，推荐替代静态 `Modal.confirm()` 表单场景。通过 ref 调用 `open(values)` 打开（传入值则回填表单，否则重置），`onFinish` 返回 `Promise` 时自动控制提交 loading，完成后关闭弹框：
+表单弹框，推荐替代静态 `Modal.confirm()` 表单场景。通过 ref 调用 `open(values)` 打开（传入值则回填表单，否则重置），`onFinish` 返回 `Promise` 时自动控制提交 loading；`onFinish` 的 Promise **resolve 后关闭弹框，reject 时保持打开**（如后端业务校验失败，错误提示由 `HttpClient` 弹出，表单数据保留以便修改重试）：
 
 ```jsx
-import { FormModal } from '@jiangood/open-admin';
+import { FormModal, HttpClient } from '@jiangood/open-admin';
 
 class CustomerPage extends React.Component {
   modalRef = React.createRef();
   handleAdd = () => this.modalRef.current.open({});
   handleEdit = record => this.modalRef.current.open({...record});
-  handleSubmit = values =>
-    HttpUtils.post(values.id ? 'admin/customer/update' : 'admin/customer/create', values)
-      .then(() => this.tableRef.current.reload());
+  handleSubmit = async values => {
+    // await 提交：失败时 HttpClient 自动弹错并 reject，弹框保持打开
+    await HttpClient.post(values.id ? 'admin/customer/update' : 'admin/customer/create', values);
+    this.tableRef.current.reload();
+  };
 
   render() {
     return <FormModal ref={this.modalRef} title="客户信息" onFinish={this.handleSubmit}>
@@ -140,13 +142,13 @@ import { PermActions } from '@jiangood/open-admin';
 
 #### ProTable
 
-`request` 接收 `{page, size, sort}` 及搜索表单值（params），返回 `{content, totalElements, extData}`（Spring Data Page 序列化结构）。`actionRef` 暴露 `reload()` / `clearSelection()`，`formRef` 暴露搜索表单实例：
+`request` 为 Promise 式：接收 `(params)`（params 含 `{page, size, sort}` 及搜索表单值），返回 `HttpClient` 的 Promise，ProTable 自动取 `AjaxResult` 的 `data`（Spring Data Page 序列化结构 `{content, totalElements, extData}`）。失败时 `HttpClient` 自动弹错，ProTable 静默复位 loading。`actionRef` 暴露 `reload()` / `clearSelection()`，`formRef` 暴露搜索表单实例：
 
 ```jsx
 <ProTable
   actionRef={this.tableRef}
   formRef={this.searchFormRef}
-  request={(params) => HttpUtils.get('admin/customer/page', params)}
+  request={(params) => HttpClient.get('admin/customer/page', params)}
   columns={columns}
   rowSelection={true}                    // true 为 checkbox，对象可覆盖 {type, onChange}
   treeMode                              // 树形数据模式（关闭分页，不传 page/size）
@@ -336,7 +338,7 @@ location /file/public/ {
 
 | 类 | 主要方法 |
 |----|---------|
-| `HttpUtils` | `get` / `post` / `postForm`（axios 封装，自动 context-path，返回 `data`） |
+| `HttpClient` | `get` / `post` / `postForm` / `download` / `ajax`（axios 封装，自动 context-path；所有请求方法返回 `Promise<AjaxBody>`：成功 resolve 整个 AjaxResult 响应体（`{success, code, data, message, traceId, ...}`，业务取数据用 `rs.data`、提示文案用 `rs.message`），失败 `reject({code, message})` 且默认自动弹错；成功时后端返回了 `message` 会自动 `message.success` 弹出（传 `{toastSuccess: false}` 关闭），失败弹错传 `{toastError: false}` 可静默仅 reject） |
 | `UrlUtils` | `contextPath(path)` 拼接 context-path / `getParams` / `setParam` / `getPathname` |
 | `DictUtils` | `dictList` / `dictLabel` / `dictOptions` / `dictTag` |
 | `TreeUtils` | `walk` / `findByKey` / `flattenTree` / `getKeyList` / `getChildRecursive` |

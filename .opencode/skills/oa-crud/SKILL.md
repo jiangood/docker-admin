@@ -322,12 +322,16 @@ public class CustomerController {
 - 更新时**先 `unclaim(old)` 再 save**（`old` 是 JPA 托管实体，save 后会变成新值，晚取无效），save 后再 `claim(entity)` 认领新引用
 - 删除业务记录时建议在同一事务内先 `unclaim(entity)` 再删除（立即释放引用且随删除回滚）；未显式调用时 `CleanTempFileJob` 的孤儿扫描仍会兜底清理
 
-参照框架示例 `ArticleController.java`：
+参照框架示例 `ArticleController.java`（创建时认领与保存放**同一事务**，共享冲突会整体回滚）：
 
 ```java
-// 新增
-Article result = articleService.save(param, null);
-sysFileService.claim(result);
+// 新增 —— 在 @Transactional 的 save 方法内保存后认领
+@Transactional
+public Article save(Article input, List<String> requestKeys) {
+    Article result = articleRepository.save(input);
+    sysFileService.claim(result);
+    return result;
+}
 
 // 更新 —— 先取消认领旧引用，再保存并认领新引用
 Article old = service.findById(param.getId()).orElse(null);
@@ -356,7 +360,7 @@ sysFileService.claim(result);
 import {PlusOutlined} from '@ant-design/icons'
 import {Button, Form, Input, Popconfirm} from 'antd'
 import React from 'react'
-import {FormModal, HttpUtils, Page, PermActions, ProTable} from "@jiangood/open-admin";
+import {FormModal, HttpClient, Page, PermActions, ProTable} from "@jiangood/open-admin";
 
 export default class extends React.Component {
 
@@ -383,12 +387,13 @@ export default class extends React.Component {
 
     handleAdd = () => this.modalRef.current.open({})
     handleEdit = record => this.modalRef.current.open({...record})
-    handleSubmit = values => {
+    handleSubmit = async values => {
         const url = values.id ? 'admin/customer/update' : 'admin/customer/create'
-        return HttpUtils.post(url, values).then(() => this.tableRef.current.reload())
+        await HttpClient.post(url, values)
+        this.tableRef.current.reload()
     }
     handleDelete = record => {
-        HttpUtils.post('admin/customer/delete', {id: record.id}).then(() => this.tableRef.current.reload())
+        HttpClient.post('admin/customer/delete', {id: record.id}, null).then(() => this.tableRef.current.reload())
     }
 
     render() {
@@ -400,7 +405,7 @@ export default class extends React.Component {
                         <Button perm='customer:create' type='primary' icon={<PlusOutlined/>} onClick={this.handleAdd}>新增</Button>
                     </PermActions>
                 )}
-                request={(params) => HttpUtils.get('admin/customer/page', params)}
+                request={(params) => HttpClient.get('admin/customer/page', params)}
                 columns={this.columns}
                 searchFormRender={() => (
                     <Form.Item label='名称' name='name'>

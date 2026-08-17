@@ -10,7 +10,7 @@ import {
   Loading3QuartersOutlined,
   MinusCircleTwoTone
 } from "@ant-design/icons";
-import {DateUtils, HttpUtils, PageUtils, ProTable, ViewText} from "@jiangood/open-admin";
+import {DateUtils, HttpClient, PageUtils, ProTable, ViewText} from "@jiangood/open-admin";
 import dayjs from "dayjs";
 
 
@@ -39,15 +39,15 @@ export default class extends React.Component {
   componentDidMount() {
     this.id = PageUtils.currentParams().id
 
-    HttpUtils.get('admin/project/get', {id: this.id}).then(rs => this.setState({project: rs}))
+    HttpClient.get('admin/project/get', {id: this.id}).then(rs => this.setState({project: rs.data}))
 
     this.timer = setInterval(() => {
       if (document.hidden) return;
       this.reload()
     }, 1000 * 30)
 
-    HttpUtils.get('admin/host/options?onlyRunner=true').then(rs => {
-      this.setState({hostOptions: rs})
+    HttpClient.get('admin/host/options?onlyRunner=true').then(rs => {
+      this.setState({hostOptions: rs.data})
     })
   }
 
@@ -62,13 +62,13 @@ export default class extends React.Component {
   }
 
   retry = row => {
-    HttpUtils.get("admin/project/build", row).then(rs => {
+    HttpClient.get("admin/project/build", row).then(rs => {
       this.reload()
     })
   }
 
   stop = row => {
-    HttpUtils.get("admin/project/stopBuild", row).then(rs => {
+    HttpClient.get("admin/project/stopBuild", row).then(rs => {
       this.reload()
     })
   }
@@ -78,14 +78,14 @@ export default class extends React.Component {
   }
 
   submitTrigger = (values) => {
-    HttpUtils.get("admin/project/build", values).then(rs => {
+    HttpClient.get("admin/project/build", values).then(rs => {
       this.setState({showTrigger: false})
       this.actionRef.current.reload()
     })
   }
 
   cleanError = () => {
-    HttpUtils.get("admin/project/cleanErrorLog", {id: this.state.project.id}).then(rs => {
+    HttpClient.get("admin/project/cleanErrorLog", {id: this.state.project.id}).then(rs => {
       this.actionRef.current.reload()
     })
   }
@@ -199,7 +199,7 @@ export default class extends React.Component {
         actionRef={this.actionRef}
         request={(params) => {
           params.projectId = project.id
-          return HttpUtils.get("admin/buildLog/list", params);
+          return HttpClient.get("admin/buildLog/list", params);
         }}
         columns={this.columns}
         showSearch={false}

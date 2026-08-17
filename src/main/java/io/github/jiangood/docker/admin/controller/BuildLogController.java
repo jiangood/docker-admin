@@ -1,6 +1,5 @@
 package io.github.jiangood.docker.admin.controller;
 
-import cn.hutool.core.date.DateUtil;
 import io.github.jiangood.docker.admin.entity.BuildLog;
 import io.github.jiangood.docker.admin.service.BuildLogService;
 import io.github.jiangood.openadmin.util.dto.AjaxResult;
@@ -15,6 +14,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.io.UnsupportedEncodingException;
+import java.time.Duration;
+import java.time.LocalDateTime;
 
 @RestController
 @Slf4j
@@ -34,7 +35,7 @@ public class BuildLogController {
         for (BuildLog log : page) {
             log.setLogUrl(LogUrlTool.getLogViewUrl(log.getId()));
             if (log.getTimeSpend() == null) {
-                log.setTimeSpend(DateUtil.date().getTime() - log.getCreateTime().getTime());
+                log.setTimeSpend(Duration.between(log.getCreateTime(), LocalDateTime.now()).toMillis());
             }
         }
 

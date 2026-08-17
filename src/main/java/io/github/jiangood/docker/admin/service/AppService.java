@@ -23,7 +23,7 @@ import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import io.github.jiangood.openadmin.framework.data.BaseService;
 import io.github.jiangood.openadmin.util.BusinessException;
 import jakarta.annotation.Resource;
-import lombok.RequiredArgsConstructor;
+import jakarta.persistence.EntityManager;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
 import org.slf4j.MDC;
@@ -36,9 +36,9 @@ import org.springframework.util.Assert;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.time.LocalDateTime;
 import java.util.*;
 
-@RequiredArgsConstructor
 @Service
 @Slf4j
 public class AppService extends BaseService<App> {
@@ -48,6 +48,14 @@ public class AppService extends BaseService<App> {
     private final AppRepository appRepository;
     private final HostRepository hostRepository;
     private final DeployLogRepository deployLogRepository;
+
+    public AppService(AppRepository appRepository, HostRepository hostRepository,
+                      DeployLogRepository deployLogRepository, EntityManager entityManager) {
+        super(appRepository, entityManager);
+        this.appRepository = appRepository;
+        this.hostRepository = hostRepository;
+        this.deployLogRepository = deployLogRepository;
+    }
 
     @Resource
     DockerClientManager dockerManager;
@@ -63,7 +71,7 @@ public class AppService extends BaseService<App> {
             MDC.put("logFileId", app.getId());
 
             // 修改更新时间
-            app.setUpdateTime(new Date());
+            app.setUpdateTime(LocalDateTime.now());
             appRepository.save(app);
             app = appRepository.findById(app.getId()).orElse(null); // 确保关联对象都取出来
 

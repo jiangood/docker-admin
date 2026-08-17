@@ -11,7 +11,7 @@ import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import io.github.jiangood.openadmin.framework.data.specification.Spec;
 import io.github.jiangood.openadmin.framework.data.BaseService;
 import jakarta.annotation.Resource;
-import lombok.RequiredArgsConstructor;
+import jakarta.persistence.EntityManager;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Sort;
 import org.springframework.scheduling.annotation.Async;
@@ -20,13 +20,16 @@ import org.springframework.stereotype.Service;
 import java.io.IOException;
 import java.util.List;
 
-@RequiredArgsConstructor
 @Slf4j
 @Service
 public class HostService extends BaseService<Host> {
 
-
     private final HostRepository hostRepository;
+
+    public HostService(HostRepository hostRepository, EntityManager entityManager) {
+        super(hostRepository, entityManager);
+        this.hostRepository = hostRepository;
+    }
 
     @Resource
     DockerClientManager sdkManager;
