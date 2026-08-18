@@ -165,7 +165,7 @@ public interface CustomerRepository extends BaseRepository<Customer, String> {
 
 - 包：`{base}.modules.{module}.service.{Entity}Service`
 - 继承 `io.github.jiangood.openadmin.framework.data.BaseService<Entity>`
-- 使用 `@RequiredArgsConstructor` 注入 Repository
+- Repository 已由 BaseService 自动注入（`repository` 字段），一般无需重复声明；仅当需要调用 Repository 自定义方法时，才用 `@RequiredArgsConstructor` 声明 `private final {Entity}Repository {entity}Repository;`（避免与继承的 `repository` 字段同名）
 - 通用方法由 BaseService 提供：`findAll()`、`findById()`、`save()`、`create()`、`update()`、`updateField()`、`deleteById()`、`findByField()`、`isFieldExist()`、`isUnique()` 等
 - 自定义业务逻辑在此层添加
 
@@ -175,16 +175,11 @@ public interface CustomerRepository extends BaseRepository<Customer, String> {
 package com.mycompany.myproject.modules.customer.service;
 
 import com.mycompany.myproject.modules.customer.entity.Customer;
-import com.mycompany.myproject.modules.customer.repository.CustomerRepository;
 import io.github.jiangood.openadmin.framework.data.BaseService;
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
-@RequiredArgsConstructor
 @Service
 public class CustomerService extends BaseService<Customer> {
-
-    private final CustomerRepository repository;
 }
 ```
 
@@ -195,18 +190,18 @@ public class CustomerService extends BaseService<Customer> {
 @Service
 public class CustomerService extends BaseService<Customer> {
 
-    private final CustomerRepository repository;
+    private final CustomerRepository customerRepository;
 
     @Transactional
     public Customer save(Customer input, List<String> requestKeys) throws Exception {
         if (input.isNew()) {
-            if (repository.existsByCode(input.getCode())) {
+            if (customerRepository.existsByCode(input.getCode())) {
                 throw new RuntimeException("编码已存在");
             }
-            return repository.save(input);
+            return customerRepository.save(input);
         }
         this.updateField(input, requestKeys);
-        return repository.findById(input.getId()).orElse(null);
+        return customerRepository.findById(input.getId()).orElse(null);
     }
 }
 ```
@@ -577,7 +572,7 @@ menus:
 
 ## 代码规范约束
 
-- 业务 Service 使用构造器注入（`@RequiredArgsConstructor` + `private final`），禁止 `@Resource` / `@Autowired` 字段注入
+- 业务 Service 推荐构造器注入（`@RequiredArgsConstructor` + `private final`）；框架基类（如 `BaseService`）允许 `@Autowired` 字段注入
 - 有 `BaseService<T>` 时继承，使用 `@RequiredArgsConstructor` 注入 repository
 - Controller 统一返回 `AjaxResult`
 - 需要操作日志的端点加 `@Log("业务-操作描述")`

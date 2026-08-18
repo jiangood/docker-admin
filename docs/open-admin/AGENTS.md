@@ -29,12 +29,13 @@
 |-------|------|
 | `oa-crud` | 创建 CRUD 业务模块（Entity→Repository→Service→Controller→前端页面→菜单配置） |
 | `oa-upgrade` | 升级框架版本（依赖版本 + 代码迁移 + 验证） |
+| `oa-sonar-scan` | SonarQube 扫描与问题修复 |
 
 使用 opencode 进行开发时，优先调用上述 skill。
 
 ## 开发规范
 
-- Java 使用构造器注入（`@RequiredArgsConstructor` + `private final`），禁止 `@Autowired` 字段注入
+- Java 推荐构造器注入（`@RequiredArgsConstructor` + `private final`）；框架基类（如 `BaseService`）允许 `@Autowired` 字段注入
 - 业务实体继承 `BaseEntity`；Repository 继承 `BaseRepository<T, String>`；Service 继承 `BaseService<T>`
 - Controller 统一返回 `AjaxResult`，权限用 `@HasPermission("resource:action")`
 - 前端优先使用框架组件：`ProTable`、`Page`、`Field*`、`PermActions`

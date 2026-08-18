@@ -134,7 +134,7 @@ npm run build
 
 - Java import 使用框架的全限定名
 - 前端 import 使用 `@jiangood/open-admin` 包名
-- 构造器注入，禁止 `@Autowired` 字段注入
+- 推荐构造器注入（`@RequiredArgsConstructor` + `private final`）；框架基类允许 `@Autowired` 字段注入
 - 使用 Release Notes 中推荐的新 API 替代废弃 API
 
 ## 参考

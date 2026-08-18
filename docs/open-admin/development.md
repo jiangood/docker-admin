@@ -8,8 +8,8 @@
 |----|------|
 | Entity | 大驼峰单数，继承 `BaseEntity`，`@Table(name = "t_xxx")` |
 | Repository | 继承 `BaseRepository<T, String>`，简单条件用派生查询，复杂用 `Spec` |
-| Service | 继承 `BaseService<T>`，构造器注入，`@Transactional(readOnly = true)`，VO 不暴露 Entity |
-| Controller | `admin/` 前缀 + kebab-case 复数，`@HasPermission` 控制权限，统一返回 `AjaxResult` |
+| Service | 继承 `BaseService<T>`，业务依赖用 `@RequiredArgsConstructor` 构造器注入，VO 不暴露 Entity |
+| Controller | `admin/` 前缀 + kebab-case（资源名单数），`@HasPermission` 控制权限，统一返回 `AjaxResult` |
 | DTO | `XxxCreateReq` / `XxxUpdateReq` / `XxxPageQuery` / `XxxVO` |
 
 ## REST API 规范
@@ -17,14 +17,14 @@
 | 操作 | HTTP | URL | 方法 |
 |------|------|-----|------|
 | 分页查询 | GET | `admin/xxx/page` | `page(Pageable)` |
-| 详情 | GET | `admin/xxx/{id}` | `getById(@PathVariable id)` |
+| 详情 | GET | `admin/xxx/info/{id}` | `info(@PathVariable id)` |
 | 创建 | POST | `admin/xxx/create` | `create(@RequestBody dto)` |
 | 更新 | POST | `admin/xxx/update` | `update(@RequestBody dto, RequestBodyKeys keys)` |
 | 删除 | POST | `admin/xxx/delete` | `delete(@Valid @RequestBody IdReq req)` |
 
 ## 后端要点
 
-- 强制构造器注入，禁止 `@Autowired` 字段注入
+- 推荐构造器注入（`@RequiredArgsConstructor` + `private final`）；框架基类（如 `BaseService`）允许 `@Autowired` 字段注入
 - 业务异常抛 `ServiceException`，Controller 不做 try-catch
 - 使用 Java 21 Record / Pattern Matching / Switch 表达式 / Text Block
 - 方法参数校验用 `@Valid` / `@Validated`

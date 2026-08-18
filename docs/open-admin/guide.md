@@ -58,6 +58,7 @@ web/
 | 接口 | 用途 | 注册方式 |
 |------|------|---------|
 | `OrgTypeProvider` | 自定义机构类型（如新增"门店"类型） | `@Component` |
+| `FileOperator` | 自定义文件存储后端（默认提供 `LOCAL` / `MINIO` 两种实现） | `@Component` |
 | `StartupHook` | 系统启动钩子（JPA 建表前/种子数据前后） | `@Component` |
 
 实现类被 `@ComponentScan` 自动发现，无需手动注册。
@@ -77,7 +78,7 @@ web/
 
 - **用户管理**：列表/创建/编辑/重置密码/授权数据
 - **角色管理**：列表/创建/编辑/分配权限（菜单 + 按钮）
-- **权限控制**：后端 `@HasPermission("resource:action")` 注解 + AOP 切面，支持 SpEL；前端 `<Button perm="xxx:yyy" />`（配合 `PermActions`）和 `<Perm code="xxx">` 组件
+- **权限控制**：后端 `@HasPermission("resource:action")` 注解 + AOP 切面，支持 SpEL；前端推荐 `<PermActions actions={[{label, perm, onClick}]} />` 数据驱动模式（旧式 `<Button perm="xxx:yyy" />` 子元素写法已不推荐）和 `<Perm code="xxx">` 组件
 - **权限码格式**：全小写两段式 `{资源}:{操作}`，资源 kebab-case（如 `sys-user:read`、`sys-role:grant-permission`）
 - **YAML 定义**：`application-menu*.yml` 中用 `perms` 对象列表定义
 
@@ -118,17 +119,17 @@ web/
 
 ## FAQ
 
-**种子数据如何管理？** 框架使用 Flyway 管理种子数据的版本化迁移。框架内置的种子数据位于 `classpath:db/migration/open-admin/V1__seed__init_data.sql`，首次启动时自动执行。
+**种子数据如何管理？** 框架使用 Flyway 管理种子数据的版本化迁移。框架内置的种子数据位于 `classpath:db/migration/V10000__framework__seed_data.sql`，首次启动时自动执行。
 
 **业务项目如何添加自己的种子数据？** 在 `src/main/resources/db/migration/` 目录下放置 Flyway 迁移脚本即可：
 
 ```
 src/main/resources/
 └── db/migration/
-    └── V1__seed__init_biz_data.sql
+    └── V10001__seed__init_biz_data.sql
 ```
 
-脚本使用 `INSERT IGNORE` 确保幂等性。框架的 seed 脚本与业务项目的脚本互不干扰（不同目录）。
+脚本编号需大于框架内置的 `V10000__framework__seed_data.sql`，Flyway 对每个脚本只执行一次（记录 checksum），幂等性由版本化迁移保证。框架的 seed 脚本与业务项目的脚本互不干扰（不同命名）。
 
 **MySQL 5.7 兼容？** 添加 `hibernate-community-dialects` 依赖，配置 `spring.jpa.properties.hibernate.dialect=org.hibernate.community.dialect.MySQLLegacyDialect`。
 

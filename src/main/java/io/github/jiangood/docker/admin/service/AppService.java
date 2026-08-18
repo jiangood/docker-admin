@@ -23,7 +23,7 @@ import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import io.github.jiangood.openadmin.framework.data.BaseService;
 import io.github.jiangood.openadmin.util.BusinessException;
 import jakarta.annotation.Resource;
-import jakarta.persistence.EntityManager;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
 import org.slf4j.MDC;
@@ -41,6 +41,7 @@ import java.util.*;
 
 @Service
 @Slf4j
+@RequiredArgsConstructor
 public class AppService extends BaseService<App> {
 
     Set<String> deployingList = new HashSet<>();
@@ -48,14 +49,6 @@ public class AppService extends BaseService<App> {
     private final AppRepository appRepository;
     private final HostRepository hostRepository;
     private final DeployLogRepository deployLogRepository;
-
-    public AppService(AppRepository appRepository, HostRepository hostRepository,
-                      DeployLogRepository deployLogRepository, EntityManager entityManager) {
-        super(appRepository, entityManager);
-        this.appRepository = appRepository;
-        this.hostRepository = hostRepository;
-        this.deployLogRepository = deployLogRepository;
-    }
 
     @Resource
     DockerClientManager dockerManager;

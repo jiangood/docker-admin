@@ -7,9 +7,6 @@
 | 配置 | 说明 | 默认值 |
 |------|------|--------|
 | `sys.title` | 系统标题（必填） | 管理系统 |
-| `sys.captcha-enable` | 登录验证码 | true |
-| `sys.default-password` | 默认密码 | Open@1234 |
-| `sys.show-logo` | 是否显示 Logo | true |
 | `sys.file.store-type` | 文件存储 (`LOCAL`/`MINIO`) | LOCAL |
 | `sys.file.upload-path` | 本地上传路径 | /home/files |
 | `sys.file.clean-unclaimed-minutes` | 未认领文件自动清理时间（分钟） | 120 |

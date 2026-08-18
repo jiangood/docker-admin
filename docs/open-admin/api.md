@@ -23,7 +23,7 @@ repository.findAll(spec, pageable);
 | `@Log` | 操作日志 |
 | `@RateLimit(count=10, duration=60)` | IP 限流 |
 | `@JobDescription` | 定时任务定义 |
-| `@ValidateMobile` / `@ValidateIdCard` / ... | 字段格式校验 |
+| `@ValidateMobile` / `@ValidateIdNum` / ... | 字段格式校验 |
 
 ### 工具类
 
@@ -271,13 +271,13 @@ class ReportPage extends React.Component {
 
 文件按可见性分为公共/私有，objectName 前缀即目录（`public/` / `private/`），URL 与磁盘路径保持一致：
 
-- `/file/{objectName}` 预览，如 `/file/public/202607/xxx.jpg`（公共，免登录）、`/file/private/202607/xxx.pdf`（私有，需登录）
-- `/file/{objectName}?thumb=1` 优先返回缩略图（`xxx.thumb.jpg`），缩略图不存在时回退原图
+- `/file/{*objectName}` 预览，如 `/file/public/202607/xxx.jpg`（公共，免登录）、`/file/private/202607/xxx.pdf`（私有，需登录）
+- `/file/{*objectName}?thumb=1` 优先返回缩略图（`xxx.thumb.jpg`），缩略图不存在时回退原图
 
 上传/下载接口（需登录）：
 - `POST /admin/sysFile/upload` — 通用文件上传，表单参数 `file`、`isPublic`（`true` 公开免登录 / `false` 私有需登录，默认 `true`）
 - `POST /admin/sysFile/uploadImage` — 图片上传，表单参数 `file`、`thumb`（缩略图）、`isPublic`
-- `GET /admin/sysFile/download/{objectName}` — 下载
+- `GET /admin/sysFile/download/{*objectName}` — 下载
 
 上传文件默认标记为临时，保存业务数据后后端自动确认（详见[临时文件自动清理](config.md#未认领文件自动清理)）。
 
