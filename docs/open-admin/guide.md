@@ -63,6 +63,18 @@ web/
 
 实现类被 `@ComponentScan` 自动发现，无需手动注册。
 
+### 核心架构模式
+
+- **BaseEntity** — 所有实体继承 BaseEntity（UUIDv7 id 由 `@PrePersist` 自动生成，含 createTime/createUser、updateTime/updateUser）
+- **Spec 动态查询** — `Spec<T>` 链式构建 JPA Specification（eq/like/in/between/or 等），通过 `SpecImpl` + `ExpressionTool` 执行
+- **PageExt** — 扩展 PageImpl，支持返回额外数据（如汇总行）
+- **菜单加载** — `classpath*:application-menu*.yml` YAML 定义菜单（Map 格式，key 为菜单 id），也支持数据库存储
+- **权限控制** — `@HasPermission` 注解 + AOP 切面，支持 SpEL 表达式
+- **ID 生成** — 默认 UUIDv7（时间排序，MySQL 友好）
+- **文件存储** — 支持 `local` / `minio`，通过 `FileOperator` 接口抽象
+- **操作日志** — `@Log` 注解 + AOP 切面，异步记录
+- **页面生命周期** — 多 Tab 下页面保持 mounted，通过 `PageFrame` 的 `show` prop + ref 机制自动调用组件 `onShow()` 方法（首次打开 / Tab 切回时触发）
+
 ## 技术栈
 
 | 层级 | 技术 |
@@ -107,7 +119,7 @@ web/
 5. **菜单** — `src/main/resources/application-menu*.yml` 定义菜单树
 6. **前端** — 使用 `ProTable` + `Field*` 组件快速搭建 CRUD 页面
 
-> 在业务项目中创建完整 CRUD 模块可借助 opencode skill `oa-crud`（框架启动时自动同步到 `.opencode/skills/`）。
+> 在业务项目中创建完整 CRUD 模块可借助 opencode skill `oa-crud`（由 `oa-sync-docs` skill 从框架 Release 同步到 `.opencode/skills/`）。
 
 ## 内置模块
 

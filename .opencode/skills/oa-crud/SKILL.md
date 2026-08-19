@@ -225,6 +225,8 @@ public class CustomerService extends BaseService<Customer> {
 | 删除 | `@PostMapping("delete")` | `admin/{module}/delete` | `{module}:delete` | @RequestBody IdReq + @Log |
 | 选项列表 | `@GetMapping("options")` | `admin/{module}/options` | `{module}:read` | 下拉框数据源（非必选） |
 
+> **搜索参数契约（易踩坑）**：`ProTable` 会把搜索表单各 `Form.Item` 的 `name` 值**原样**作为 query 参数发送给 `page`/`options`，不会自动映射。因此后端方法参数名必须与前端搜索字段名**完全一致**。本模板后端 `page`/`options` 参数名统一为 `searchText`，前端搜索框也必须用 `name='searchText'`（见「第三步」模板）；若改成其他名字（如 `name`），必须同步修改后端参数名，否则搜索输入不生效。
+
 ```java
 package com.mycompany.myproject.modules.customer.controller;
 
@@ -328,13 +330,19 @@ public Article save(Article input, List<String> requestKeys) {
     return result;
 }
 
-// 更新 —— 先取消认领旧引用，再保存并认领新引用
-Article old = service.findById(param.getId()).orElse(null);
-sysFileService.unclaim(old);
+// 更新 —— unclaim 必须在 save 之前（old 是 JPA 托管实体，save 后会变成新值），
+// 且 unclaim + save + claim 必须整体放在同一个 @Transactional Service 方法内，
+// 不要拆到 Controller 或非事务方法，否则 save 失败时旧引用已独立提交，图片会被清理任务误删
+@Transactional
+public Article update(Article input, List<String> requestKeys) {
+    Article old = articleRepository.findById(input.getId()).orElse(null);
+    Assert.notNull(old, "文章不存在");
 
-Article result = articleService.save(param, updateFields);
-
-sysFileService.claim(result);
+    sysFileService.unclaim(old);   // 取消旧引用认领（同一事务）
+    Article result = articleRepository.save(input);
+    sysFileService.claim(result);  // 认领新引用（同一事务）
+    return result;
+}
 ```
 
 > 若实体无任何文件/图片/富文本字段，可跳过本小节。
@@ -403,7 +411,7 @@ export default class extends React.Component {
                 request={(params) => HttpClient.get('admin/customer/page', params)}
                 columns={this.columns}
                 searchFormRender={() => (
-                    <Form.Item label='名称' name='name'>
+                    <Form.Item label='名称' name='searchText'>
                         <Input/>
                     </Form.Item>
                 )}

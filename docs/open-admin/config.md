@@ -14,7 +14,7 @@
 | `sys.session-idle-time` | Session 超时（分钟） | 180 |
 | `sys.job-enable` | 定时任务开关 | true |
 
-> 框架启动时会自动同步 `.opencode/skills/` 与 `docs/open-admin/` 到业务项目根目录（内容比对，无变更不写入），并在根目录生成 `AGENTS.md`（仅当不存在时）。无需配置；生产 jar 部署（向上查找无 `pom.xml`）时跳过同步，不写入任何文件。
+> 框架的 `.opencode/skills/` 与 `docs/open-admin/` 由 `oa-sync-docs` skill 从框架 GitHub Release 下载 `framework-files.zip` 同步到业务项目根目录（内容比对，无变更不写入），并在根目录生成 `AGENTS.md`（不存在时生成，已存在且不同时询问确认后更新）。无需配置。
 
 ## 文件存储
 
@@ -29,7 +29,7 @@
 
 上传文件默认标记为未认领 (`joinTable=null`)，仅在业务数据保存后通过 `SysFileService.claim(entity)`（实体文件字段打 `@FileField` 注解）设置 `joinTable/joinId` 后方变为已认领。未认领的文件超过期限后由 Quartz 定时任务 `CleanTempFileJob` 自动删除。
 
-- **确认时机**：业务实体对文件字段打 `@FileField` 注解，Controller 的 create/update 中，update 时先 `sysFileService.unclaim(old)` 取消认领旧引用，save 后再 `sysFileService.claim(entity)` 认领新引用（详见 development.md「文件认领」）
+- **确认时机**：业务实体对文件字段打 `@FileField` 注解，在 Service 的 `@Transactional` 方法中调用认领/取消认领（update 时先 `sysFileService.unclaim(old)` 取消认领旧引用，save 后再 `sysFileService.claim(entity)` 认领新引用）。unclaim + save + claim 必须放在**同一个事务方法**内，不要在 Controller 层调用（详见 development.md「文件认领」）
 - **清理配置**：`sys.file.clean-unclaimed-minutes=120`（默认 2 小时）
 - **清理频率**：每 10 分钟执行一次（cron `0 */10 * * * ?`）
 - **孤儿文件**：业务数据删除后残留的已认领文件，同一任务会检查对应业务表（主键列约定为 `id`）中记录是否已不存在，不存在则一并清理

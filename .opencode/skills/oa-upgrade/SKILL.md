@@ -105,15 +105,17 @@ npm run build
 
 如有编译或测试失败，根据错误信息修复后重新从失败步骤开始验证。
 
-### 7. 框架文件自动同步（skills + docs + AGENTS.md）
+### 7. 框架文件同步（skills + docs + AGENTS.md）
 
-框架 JAR 内置业务侧 skills 与文档（`META-INF/open-admin/framework-files/`），业务项目**启动后端时按内容比对自动同步**到项目根目录：
+升级后需将新版本的框架文件（`.opencode/skills/`、`docs/open-admin/`、`AGENTS.md`）同步到业务项目根目录，供 opencode 使用新版本 skill 与文档。
 
-- `<项目根>/.opencode/skills/oa-crud/`、`oa-upgrade/` — 覆盖写入（不删除业务本地 skill）
+**调用 `oa-sync-docs` skill**：以目标版本号为参数执行该 skill，它会从 GitHub Release 下载 `framework-files.zip` 并按规则同步：
+
+- `<项目根>/.opencode/skills/oa-crud/`、`oa-upgrade/`、`oa-sync-docs/`、`oa-sonar-scan/` — 覆盖写入（不删除业务本地 skill）
 - `<项目根>/docs/open-admin/*.md` — 全量镜像（删除孤儿文件）
 - `<项目根>/AGENTS.md` — 仅在不存在时生成（不覆盖业务自定义）；新版本随 `docs/open-admin/AGENTS.md` 提供
 
-无需手动复制。**升级完成后必须启动一次后端**，`FrameworkFileSyncer` 会按内容比对把新版 `.opencode/skills/`、`docs/open-admin/`、`AGENTS.md` 重新同步到项目根目录；未启动后端则这些文件不会更新。请在最后显式提醒开发者：启动后端后确认框架相关文件已重新生成。
+> 若 `oa-sync-docs` skill 不可用（首次接入 / 文件缺失），需先手动从 `https://github.com/jiangood/open-admin/releases/download/v{版本}/framework-files.zip` 下载 ZIP 并解压到项目根目录，或告知开发者该 release 资产缺失。
 
 ### 8. 其他检查（可选）
 
@@ -127,7 +129,7 @@ npm run build
 - [ ] `npm run build` 正常
 - [ ] Release Notes 中的 Breaking Changes 已逐项处理
 - [ ] Git 提交日志中涉及业务代码的变更已适配
-- [ ] 升级后启动后端，`.opencode/skills/` 与 `docs/open-admin/` 已同步为新版本内容
+- [ ] 升级后已调用 `oa-sync-docs` skill 同步 `.opencode/skills/` 与 `docs/open-admin/` 为新版本内容
 - [ ] 升级后功能正常（登录、菜单、CRUD 操作）
 
 ## 代码规范

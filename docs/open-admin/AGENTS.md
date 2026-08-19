@@ -2,7 +2,7 @@
 
 本文件为 AI 编程助手（opencode / Claude Code 等）提供本业务项目的开发指引。
 
-> 本文件由 open-admin 框架在业务项目启动后端时自动生成（仅当不存在时生成，不覆盖本地自定义内容）；升级框架后新版本会在 `docs/open-admin/AGENTS.md` 提供更新版本文档。
+> 本文件由 open-admin 框架通过 `oa-sync-docs` skill 同步到业务项目根目录：不存在时生成，已存在且与框架新版不同时展示 diff 并询问开发者确认后再更新；升级框架后新版本会在 `docs/open-admin/AGENTS.md` 提供更新版本文档。
 
 ## 项目概览
 
@@ -23,19 +23,20 @@
 
 ## opencode Skills
 
-本项目自带 opencode skills（由框架自动同步到 `.opencode/skills/`，升级后启动后端自动更新）：
+本项目自带 opencode skills（由 `oa-sync-docs` skill 从框架 GitHub Release 同步到 `.opencode/skills/`，升级后重新同步即可更新）：
 
 | Skill | 用途 |
 |-------|------|
 | `oa-crud` | 创建 CRUD 业务模块（Entity→Repository→Service→Controller→前端页面→菜单配置） |
 | `oa-upgrade` | 升级框架版本（依赖版本 + 代码迁移 + 验证） |
+| `oa-sync-docs` | 从 GitHub Release 同步框架文件（skills + docs + AGENTS.md） |
 | `oa-sonar-scan` | SonarQube 扫描与问题修复 |
 
 使用 opencode 进行开发时，优先调用上述 skill。
 
 ## 开发规范
 
-- Java 推荐构造器注入（`@RequiredArgsConstructor` + `private final`）；框架基类（如 `BaseService`）允许 `@Autowired` 字段注入
+- Java 推荐构造器注入（`@RequiredArgsConstructor` + `private final`）；框架基类（如 `BaseService`）允许 `@Autowired` 字段注入；Quartz 任务（extends `BaseJob`）按框架约定用 `@Resource` 字段注入（单构造器时构造器注入也可用，见 development.md「定时任务（Quartz）」）
 - 业务实体继承 `BaseEntity`；Repository 继承 `BaseRepository<T, String>`；Service 继承 `BaseService<T>`
 - Controller 统一返回 `AjaxResult`，权限用 `@HasPermission("resource:action")`
 - 前端优先使用框架组件：`ProTable`、`Page`、`Field*`、`PermActions`
