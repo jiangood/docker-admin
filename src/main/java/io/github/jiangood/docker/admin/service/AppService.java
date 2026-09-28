@@ -16,8 +16,7 @@ import io.github.jiangood.docker.admin.entity.App;
 import io.github.jiangood.docker.admin.entity.BuildLog;
 import io.github.jiangood.docker.admin.entity.DeployLog;
 import io.github.jiangood.docker.admin.entity.Host;
-import io.github.jiangood.docker.config.Config;
-import io.github.jiangood.docker.config.Registry;
+import io.github.jiangood.docker.admin.entity.Registry;
 import io.github.jiangood.docker.sdk.engine.DefaultCallback;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import io.github.jiangood.openadmin.framework.data.BaseService;
@@ -54,7 +53,7 @@ public class AppService extends BaseService<App> {
     DockerClientManager dockerManager;
 
     @Resource
-    private Config config;
+    private RegistryService registryService;
 
     @Async
     @Transactional
@@ -81,7 +80,7 @@ public class AppService extends BaseService<App> {
             // 镜像
             image = app.getImageUrl() + ":" + app.getImageTag();
 
-            Registry registry = config.getRegistry();
+            Registry registry = registryService.getEffective();
             if (registry != null) { // 通过镜像地址倒推 注册中心
                 client = dockerManager.getClient(host, registry);
             } else {

@@ -16,11 +16,10 @@ import io.github.jiangood.docker.admin.dao.ProjectRepository;
 import io.github.jiangood.openadmin.framework.data.specification.Spec;
 import io.github.jiangood.docker.admin.dto.BuildRequest;
 import io.github.jiangood.docker.admin.entity.BuildLog;
+import io.github.jiangood.docker.admin.entity.GitCredential;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.entity.Project;
-import io.github.jiangood.docker.config.Config;
-import io.github.jiangood.docker.config.GitRepo;
-import io.github.jiangood.docker.config.Registry;
+import io.github.jiangood.docker.admin.entity.Registry;
 import io.github.jiangood.docker.sdk.engine.DefaultCallback;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import io.github.jiangood.openadmin.framework.data.BaseService;
@@ -53,7 +52,7 @@ public class ProjectService extends BaseService<Project> {
     private final ProjectRepository projectRepository;
 
     @Resource
-    Config config;
+    RegistryService registryService;
 
 
     @Resource
@@ -156,7 +155,8 @@ public class ProjectService extends BaseService<Project> {
             buildLog.setCodeMessage(cloneResult.getCodeMessage());
             buildLog = buildLogService.saveLog(buildLog);
 
-            Registry registry = config.getRegistry();
+            Registry registry = registryService.getEffective();
+            Assert.notNull(registry, "未配置镜像注册中心，请先在【设置-镜像注册中心】中配置");
             log.info("注册中心：{}", registry.getFullUrl());
             DockerClient client = dockerService.getClient(host, registry);
 
@@ -266,7 +266,7 @@ public class ProjectService extends BaseService<Project> {
         String username = null;
         String password = null;
         String branch = project.getBranch();
-        GitRepo credential = gitCredentialService.findBestByUrl(project.getGitUrl());
+        GitCredential credential = gitCredentialService.findBestByUrl(project.getGitUrl());
         if (credential != null) {
             username = credential.getUsername();
             password = credential.getPassword();

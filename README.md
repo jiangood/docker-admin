@@ -20,7 +20,7 @@ docker run -d --name docker-admin \
 
 ```sh
 curl -O https://raw.githubusercontent.com/jiangood/docker-admin/main/docker-compose/docker-compose.yml
-curl -O https://raw.githubusercontent.com/jiangood/docker-admin/main/docker-compose/application-prod.yml  # 可选：端口 / 镜像仓库 / git 凭据
+curl -O https://raw.githubusercontent.com/jiangood/docker-admin/main/docker-compose/application-prod.yml  # 可选：端口等基础配置（镜像仓库 / git 凭据建议在后台【设置】维护）
 docker compose up -d
 ```
 
@@ -33,6 +33,8 @@ docker compose up -d
 - **构建**：项目详情 →【立即构建】，【日志】查看构建日志
 - **部署**：【应用】→【创建应用】，选择镜像与主机，日志显示“部署结束”即完成
 - **配置**：支持开放端口、环境变量（yml 格式）、文件映射（持久化重要文件）
+- **设置**：镜像注册中心、git 凭据在【设置】中维护，改完即时生效，无需改配置文件重启
+  （`application-prod.yml` 里的 `cfg.*` 仅在首次启动时导入数据库作为兜底）
 
 > 测试环境默认构建成功即自动部署。
 

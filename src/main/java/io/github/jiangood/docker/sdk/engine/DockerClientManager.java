@@ -9,7 +9,7 @@ import com.github.dockerjava.core.DockerClientImpl;
 import com.github.dockerjava.httpclient5.ApacheDockerHttpClient;
 import com.github.dockerjava.transport.DockerHttpClient;
 import io.github.jiangood.docker.admin.entity.Host;
-import io.github.jiangood.docker.config.Registry;
+import io.github.jiangood.docker.admin.entity.Registry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 

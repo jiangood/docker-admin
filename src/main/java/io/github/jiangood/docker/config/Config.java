@@ -12,8 +12,8 @@ import java.util.List;
 @ConfigurationProperties(prefix = "cfg")
 public class Config {
 
-    private Registry registry;
+    private CfgRegistry registry;
 
-    private List<GitRepo> gitRepos;
+    private List<CfgGitRepo> gitRepos;
 
 }

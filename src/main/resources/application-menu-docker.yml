@@ -30,3 +30,24 @@ menus:
       - {name: 查看, code: host:list}
       - {name: 保存, code: host:save}
       - {name: 删除, code: host:delete}
+  setting:
+    name: 设置
+    icon: SettingOutlined
+    seq: 400
+  setting-registry:
+    pid: setting
+    name: 镜像注册中心
+    path: /registry
+    icon: CloudServerOutlined
+    perms:
+      - {name: 查看, code: registry:view}
+      - {name: 保存, code: registry:save}
+  setting-git:
+    pid: setting
+    name: Git凭据
+    path: /git-credential
+    icon: KeyOutlined
+    perms:
+      - {name: 查看, code: git-credential:view}
+      - {name: 保存, code: git-credential:save}
+      - {name: 删除, code: git-credential:delete}
