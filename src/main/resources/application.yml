@@ -1,8 +1,7 @@
-db_port: 3306
-db_ip: 127.0.0.1
-db_database: docker-admin
-db_username: root
-db_password: 123456
+# H2 数据库文件根路径（不含扩展名）。
+# 默认写入容器内 /data 目录（docker-compose 已把 ./data 挂载到 /data，数据持久化）。
+# 本地开发可通过 -Ddb_path=./data/db/docker-admin 覆盖。
+db_path: /data/db/docker-admin
 
 server:
   servlet:
@@ -15,16 +14,18 @@ spring:
   application:
     name: docker-admin
   datasource:
-    driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://${db_ip}:${db_port}/${db_database}?allowPublicKeyRetrieval=true&autoReconnect=true&useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=CONVERT_TO_NULL&useSSL=false&nullCatalogMeansCurrent=true
-    username: ${db_username}
-    password: ${db_password}
-    hikari:
-      maximum-pool-size: 30
-      minimum-idle: 10
-      connection-timeout: 30000
-      leak-detection-threshold: 30000 # 30秒
+    # 内置 H2，MySQL 兼容模式，首次启动自动建表并写入种子数据，无需外部数据库。
+    # NON_KEYWORDS=VALUE：VALUE 在 H2 中是保留字，而 t_build_log.value 业务列名需要保留。
+    driver-class-name: org.h2.Driver
+    url: "jdbc:h2:file:${db_path};MODE=MySQL;NON_KEYWORDS=VALUE;DB_CLOSE_DELAY=-1"
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
 sys:
   title: 容器管理平台
-
 

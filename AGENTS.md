@@ -6,9 +6,9 @@ Multi-host container management platform with CI/CD. UI is Chinese.
 
 - **Backend:** Spring Boot 4.1.0 + Java 21, Maven → `target/app.jar`
 - **Frontend:** Umi 4 + React 19 + Ant Design 6 + TypeScript 5, dev on port 51105
-- **Base framework:** `io.github.jiangood:open-admin` 2.4.6 (handles CRUD, auth, menus)
-- **Docker SDK:** docker-java 3.5.3 via TCP (tcp://localhost:2375)
-- **Database:** MySQL (default port 3306, override via `db_port`)
+- **Base framework:** `io.github.jiangood:open-admin` 3.1.2 (handles CRUD, auth, menus)
+- **Docker SDK:** docker-java 3.7.1 via TCP (tcp://localhost:2375)
+- **Database:** H2 内置数据库（文件模式，MySQL 兼容模式），数据文件默认 `/data/db/docker-admin`，通过 `db_path` 覆盖
 - **Entrypoint:** `io.github.jiangood.DockerAdminBootApplication` (`src/main/java/.../DockerAdminBootApplication.java`)
 
 ## Commands
@@ -32,9 +32,9 @@ docker build -t docker-admin .
 
 ## Key facts
 
-- **Active profiles:** `default,prod` at runtime. Config in `src/main/resources/application.yml` (default) + `docker-compose/application-prod.yml` (prod overrides).
-- **Database config** is via custom props (`db_ip`, `db_port`, `db_database`, `db_username`, `db_password`), **not** standard Spring datasource.
-- **Default admin:** `superAdmin` / printed at startup (default: `jz1@20241029`).
+- **Active profile:** `default` at runtime. Base config in `src/main/resources/application.yml`; the optional `docker-compose/application-prod.yml` is mounted to `/home/application.yml` (higher precedence) for port/registry/git settings.
+- **Database:** embedded H2 in MySQL compatibility mode (`jdbc:h2:file:${db_path};MODE=MySQL`). Tables are auto-created by Hibernate (`ddl-auto: update`) and seeded by open-admin's Flyway migrations; no external database required.
+- **Default admin:** `admin` / `Open@1234` (seeded by open-admin Flyway migration `V10000__framework__seed_data.sql`; change it after first login).
 - **Tests** are JUnit-free `main()` methods, not runnable via `mvn test`. Run them individually in IDE.
 - **Logs** use Logback SiftingAppender: per-task build logs go to `${LOG_PATH}/{logFileId}.log`.
 - **Permissions** via `@HasPermission("app:view")` annotation from open-admin, not standard Spring Security annotations.

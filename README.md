@@ -22,16 +22,29 @@ docker pull ghcr.io/jiangood/docker-admin:latest
 
 ## 准备工作
 
-需要提前准备好一个数据库，例如 mysql
+无需准备外部数据库：内置 H2 数据库（文件模式），数据持久化在数据目录中。
+只需保证宿主机可访问 Docker 守护进程（`/var/run/docker.sock`）。
 
 ## 快速体验（最新版）
+
+```sh
+# 一键启动（数据持久化到当前目录 ./data）
+docker run -d --name docker-admin \
+  -p 7001:7001 \
+  -e SERVER_PORT=7001 \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v ./data:/data \
+  ghcr.io/jiangood/docker-admin:latest
+```
+
+或使用 docker compose：
 
 ```sh
 # 下载 docker-compose 文件
 curl -O https://raw.githubusercontent.com/jiangood/docker-admin/main/docker-compose/docker-compose.yml
 curl -O https://raw.githubusercontent.com/jiangood/docker-admin/main/docker-compose/application-prod.yml
 
-# 按需修改 application-prod.yml 中的数据库配置后启动
+# application-prod.yml 为可选配置（端口 / 镜像仓库 / git 凭据），数据库无需配置
 docker compose up -d
 ```
 
@@ -45,7 +58,7 @@ docker compose up -d
 ## 登录
 
 地址：http://127.0.0.1:7001/docker-admin
-账号：superAdmin，密码打印在控制台（注意 context-path 为 `/docker-admin`）
+账号：admin，密码：Open@1234（框架内置种子数据，首次登录后请及时修改；注意 context-path 为 `/docker-admin`）
 
 ## 新建项目（负责打包）
 

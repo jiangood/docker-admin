@@ -9,7 +9,7 @@
     </parent>
     <groupId>io.github.jiangood</groupId>
     <artifactId>docker-admin</artifactId>
-    <version>3.1.4</version>
+    <version>4.0.0</version>
     <name>docker-admin</name>
 
     <properties>
@@ -22,6 +22,14 @@
             <artifactId>open-admin</artifactId>
             <version>3.1.2</version>
         </dependency>
+
+        <!-- 内置数据库：默认使用 H2（文件模式），开箱即用，无需外部 MySQL -->
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
 
         <dependency>
             <groupId>cn.hutool</groupId>

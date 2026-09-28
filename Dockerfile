@@ -27,4 +27,4 @@ COPY --from=java /build/target/app.jar ./
 COPY --from=web /build/dist/ ./static/
 
 EXPOSE 80
-ENTRYPOINT ["java","-Djava.security.egd=file:/dev/./urandom","-Duser.timezone=Asia/Shanghai","-jar","/home/app.jar","--spring.profiles.active=default,prod"]
+ENTRYPOINT ["java","-Djava.security.egd=file:/dev/./urandom","-Duser.timezone=Asia/Shanghai","-jar","/home/app.jar","--spring.profiles.active=default"]

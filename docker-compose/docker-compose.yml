@@ -3,8 +3,13 @@ services:
     image: ghcr.io/jiangood/docker-admin:latest
     ports:
       - "7001:7001"
+    environment:
+      # 应用监听端口（对外映射到宿主机 7001）
+      - SERVER_PORT=7001
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock"
+      # 数据目录：内置 H2 数据库、上传文件、日志均持久化在此
       - "./data/:/data"
+      # 可选配置（端口 / 镜像仓库 / git 凭据），数据库无需配置
       - "./application-prod.yml:/home/application.yml"
-
+    restart: unless-stopped
