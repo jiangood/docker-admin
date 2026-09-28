@@ -6,7 +6,7 @@ db_path: /data/db/docker-admin
 server:
   port: 7001
   servlet:
-    context-path: /docker-admin  # 业务项目按需修改
+    context-path: /docker-admin  # 本地开发上下文；容器部署由 prod profile 覆盖为 /
 spring:
   config:
     import: classpath:application-lib.yml

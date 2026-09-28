@@ -84,7 +84,7 @@ jobs:
 
           ### 访问
 
-          http://127.0.0.1:7001/docker-admin
+          http://127.0.0.1:7001
 
           默认账号：`admin`，密码：`Open@1234`（首次登录后请及时修改）。
         token: ${{ secrets.GITHUB_TOKEN }}

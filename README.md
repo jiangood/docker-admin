@@ -25,7 +25,7 @@ docker compose up -d
 
 
 
-访问 http://127.0.0.1:7001/docker-admin
+访问 http://127.0.0.1:7001
 账号 `admin`，密码 `Open@1234`（首次登录后请修改）
 
 
