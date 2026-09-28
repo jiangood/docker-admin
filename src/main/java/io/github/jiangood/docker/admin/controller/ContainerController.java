@@ -7,6 +7,7 @@ import com.github.dockerjava.api.model.Container;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.service.HostService;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
+import io.github.jiangood.openadmin.framework.perm.HasPermission;
 import io.github.jiangood.openadmin.util.dto.AjaxResult;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -31,6 +32,7 @@ public class ContainerController {
 
 
 
+    @HasPermission("app:view")
     @RequestMapping("status")
     public AjaxResult status(String hostId, String appName, String containerId) {
         log.debug("查询容器状态:{}", appName);

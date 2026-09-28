@@ -4,10 +4,7 @@ import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
 import io.github.jiangood.docker.admin.dao.GitCredentialRepository;
 import io.github.jiangood.docker.admin.entity.GitCredential;
-import io.github.jiangood.docker.config.CfgGitRepo;
-import io.github.jiangood.docker.config.Config;
 import io.github.jiangood.openadmin.framework.data.BaseService;
-import jakarta.annotation.Resource;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -25,11 +22,8 @@ public class GitCredentialService extends BaseService<GitCredential> {
 
     private final GitCredentialRepository gitCredentialRepository;
 
-    @Resource
-    Config config;
-
     /**
-     * 按 url 前缀匹配最合适的凭据：数据库优先，数据库为空时回落到 yml 的 cfg.git-repos。
+     * 按 url 前缀匹配最合适的凭据，仅使用后台维护的配置。
      */
     public GitCredential findBestByUrl(String gitUrl) {
         if (StrUtil.isBlank(gitUrl)) {
@@ -37,23 +31,10 @@ public class GitCredentialService extends BaseService<GitCredential> {
         }
 
         List<GitCredential> list = gitCredentialRepository.findAll();
-        if (CollUtil.isNotEmpty(list)) {
-            return match(list, gitUrl);
-        }
-
-        List<CfgGitRepo> cfgList = config.getGitRepos();
-        if (CollUtil.isEmpty(cfgList)) {
+        if (CollUtil.isEmpty(list)) {
             return null;
         }
-        List<GitCredential> fallback = new ArrayList<>();
-        for (CfgGitRepo cfg : cfgList) {
-            GitCredential c = new GitCredential();
-            c.setUrl(cfg.getUrl());
-            c.setUsername(cfg.getUsername());
-            c.setPassword(cfg.getPassword());
-            fallback.add(c);
-        }
-        return match(fallback, gitUrl);
+        return match(list, gitUrl);
     }
 
     /**

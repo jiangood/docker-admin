@@ -63,8 +63,6 @@ jobs:
 
           ```sh
           curl -O https://raw.githubusercontent.com/${{ github.repository_owner }}/docker-admin/main/docker-compose/docker-compose.yml
-          curl -O https://raw.githubusercontent.com/${{ github.repository_owner }}/docker-admin/main/docker-compose/application-prod.yml
-          # application-prod.yml 为可选配置（端口 / 镜像仓库 / git 凭据），数据库无需配置
           docker compose up -d
           ```
 
@@ -81,7 +79,6 @@ jobs:
               volumes:
                 - "/var/run/docker.sock:/var/run/docker.sock"
                 - "./data/:/data"
-                - "./application-prod.yml:/home/application.yml"
               restart: unless-stopped
           ```
 

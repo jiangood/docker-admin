@@ -1,6 +1,7 @@
 package io.github.jiangood.docker.admin.controller;
 
 import cn.hutool.core.util.StrUtil;
+import io.github.jiangood.docker.base.OrgAccessTool;
 import io.github.jiangood.openadmin.framework.perm.HasPermission;
 import io.github.jiangood.docker.admin.dto.ContainerVo;
 import io.github.jiangood.docker.admin.entity.App;
@@ -20,7 +21,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.util.Assert;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -64,40 +64,53 @@ public class AppController {
         return AjaxResult.ok().data(list);
     }
 
+    @HasPermission("app:view")
     @RequestMapping("get")
     public AjaxResult view(String id) {
-        App app = service.findById(id).orElse(null);
-        Assert.notNull(app, "应用不存在");
+        App app = assertAppAccess(id);
 
         String url = LogUrlTool.getLogViewUrl(id);
         app.setLogUrl(url);
         return AjaxResult.ok().data(app);
     }
 
+    @HasPermission("app:view")
     @RequestMapping("container")
     public AjaxResult container(String id) {
-        App app = service.findById(id).orElse(null);
-        Assert.state(app != null, "应用不存在");
+        App app = assertAppAccess(id);
         ContainerVo container = service.getContainerVo(app);
 
         return AjaxResult.ok().data(container);
     }
 
     /**
-     * 容器配置元数据：镜像表声明的端口/卷 + 已保存的主机侧映射。
+     * 容器配置元数据：镜像声明的端口/卷 + 已保存的主机侧映射。
      */
     @HasPermission("app:view")
     @RequestMapping("configMeta")
     public AjaxResult configMeta(String id) {
+        App app = assertAppAccess(id);
+        return AjaxResult.ok().data(service.getConfigMeta(app));
+    }
+
+    /**
+     * 按 id 读取应用并校验组织数据权限，无权限时抛业务异常。
+     */
+    private App assertAppAccess(String id) {
         App app = service.findById(id).orElse(null);
         Assert.notNull(app, "应用不存在");
-        return AjaxResult.ok().data(service.getConfigMeta(app));
+        OrgAccessTool.assertAccess(app.getSysOrg());
+        return app;
     }
 
 
     @HasPermission("app:save")
     @RequestMapping("save")
     public AjaxResult save(@RequestBody App app, RequestBodyKeys requestBodyKeys) throws Exception {
+        // 修改已有应用时校验数据权限（新增不受限）
+        if (StrUtil.isNotBlank(app.getId())) {
+            assertAppAccess(app.getId());
+        }
         service.update(app, requestBodyKeys);
         return AjaxResult.ok().msg("保存成功");
     }
@@ -105,6 +118,7 @@ public class AppController {
     @HasPermission("app:save")
     @RequestMapping("updateBaseInfo")
     public AjaxResult updateBaseInfo(@RequestBody App app) {
+        assertAppAccess(app.getId());
         service.updateBaseInfo(app);
         return AjaxResult.ok().msg("修改成功");
     }
@@ -112,6 +126,7 @@ public class AppController {
     @HasPermission("app:config")
     @RequestMapping("updateConfig")
     public AjaxResult updateConfig(String id, @RequestBody App.AppConfig appConfig) {
+        assertAppAccess(id);
         App app = service.updateConfig(id, appConfig);
         service.deploy(app);
 
@@ -122,6 +137,7 @@ public class AppController {
     @HasPermission("app:save")
     @RequestMapping("updateVersion")
     public AjaxResult updateVersion(String id, String version) {
+        assertAppAccess(id);
         service.updateAppVersion(id, version);
 
         return AjaxResult.ok().msg("更新指定已发布");
@@ -134,8 +150,7 @@ public class AppController {
     @HasPermission("app:view")
     @RequestMapping("versions")
     public AjaxResult versions(String id) {
-        App app = service.findById(id).orElse(null);
-        Assert.notNull(app, "应用不存在");
+        App app = assertAppAccess(id);
         List<Option> options = service.getImageVersions(app.getImageUrl()).stream()
                 .map(v -> new Option(v, v))
                 .toList();
@@ -143,9 +158,10 @@ public class AppController {
     }
 
 
-    @PreAuthorize("hasAuthority('app:delete')")
+    @HasPermission("app:delete")
     @RequestMapping("delete")
     public AjaxResult delete(String id, Boolean force) {
+        assertAppAccess(id);
         if (force != null && force) {
             service.deleteById(id);
             return AjaxResult.ok().msg("强制删除数据成功");
@@ -163,11 +179,11 @@ public class AppController {
     }
 
 
-    @PreAuthorize("hasAuthority('app:deploy')")
+    @HasPermission("app:deploy")
     @RequestMapping("deploy/{id}")
     public AjaxResult deploy(@PathVariable String id) {
         log.info("开始部署");
-        App app = service.findById(id).orElse(null);
+        App app = assertAppAccess(id);
 
         service.deploy(app);
         log.info("部署指令已发送");
@@ -175,11 +191,11 @@ public class AppController {
     }
 
 
-    @PreAuthorize("hasAuthority('app:deploy')")
+    @HasPermission("app:deploy")
     @RequestMapping("autoDeploy")
     public AjaxResult autoDeploy(String id, boolean autoDeploy) {
 
-        App db = service.findById(id).orElse(null);
+        App db = assertAppAccess(id);
         db.setAutoDeploy(autoDeploy);
 
         service.save(db);
@@ -189,41 +205,46 @@ public class AppController {
     }
 
 
-    @PreAuthorize("hasAuthority('app:save')")
+    @HasPermission("app:save")
     @RequestMapping("start/{appId}")
     public AjaxResult start(@PathVariable String appId) {
+        assertAppAccess(appId);
         service.start(appId);
         return AjaxResult.ok().msg("启动指令已发送");
     }
 
-    @PreAuthorize("hasAuthority('app:save')")
+    @HasPermission("app:save")
     @RequestMapping("stop/{appId}")
     public AjaxResult stop(@PathVariable String appId) {
+        assertAppAccess(appId);
         service.stop(appId);
         return AjaxResult.ok().msg("停止指令已发送");
     }
 
-    @PreAuthorize("hasAuthority('app:save')")
+    @HasPermission("app:save")
     @RequestMapping("rename")
     public AjaxResult rename(@RequestBody Map<String, String> map) {
         String appId = map.get("appId");
         String newName = map.get("newName");
         Assert.hasText(appId, "appId不能为空");
         Assert.hasText(newName, "新名称不能为空");
+        assertAppAccess(appId);
         App app = service.rename(appId, newName);
 
         return AjaxResult.ok().msg("部署指令已发送").data(app);
     }
 
-    @PreAuthorize("hasAuthority('app:save')")
+    @HasPermission("app:save")
     @RequestMapping("copyApp")
     public AjaxResult copyApp(@RequestBody @Validated MoveParam param) {
+        assertAppAccess(param.getAppId());
         App app = service.copyApp(param.getAppId(), param.getHostId());
 
         return AjaxResult.ok().msg("复制成功").data(app);
     }
 
 
+    @HasPermission("app:view")
     @RequestMapping("options")
     public AjaxResult options(String searchText) {
         Spec<App> q = Spec.of();
