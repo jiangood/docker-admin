@@ -8,6 +8,7 @@ Multi-host container management platform with CI/CD. UI is Chinese.
 - **Frontend:** Umi 4 + React 19 + Ant Design 6 + TypeScript 5, dev on port 51105
 - **Base framework:** `io.github.jiangood:open-admin` 3.1.2 (handles CRUD, auth, menus)
 - **Docker SDK:** docker-java 3.7.1 via TCP (tcp://localhost:2375)
+- **Remote hosts:** 主机的 `connectionType` 支持 `tcp` / `unix` / `ssh`。SSH 模式用 `docker-java-transport-jsch` 登录远端执行 `docker system dial-stdio`，无需暴露 2375（远端需 docker CLI 18.09+，密码认证，不校验 host key）。
 - **Database:** H2 内置数据库（文件模式，MySQL 兼容模式），数据文件默认 `/data/db/docker-admin`，通过 `db_path` 覆盖
 - **Entrypoint:** `io.github.jiangood.DockerAdminBootApplication` (`src/main/java/.../DockerAdminBootApplication.java`)
 

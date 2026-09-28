@@ -68,6 +68,13 @@
             <version>3.7.1</version>
         </dependency>
 
+        <!-- 通过 SSH 连接远程 docker（docker system dial-stdio），无需暴露 2375 -->
+        <dependency>
+            <groupId>com.github.mwiede.dockerjava</groupId>
+            <artifactId>docker-java-transport-jsch</artifactId>
+            <version>1.4</version>
+        </dependency>
+
 
         <!-- https://mvnrepository.com/artifact/org.eclipse.jgit/org.eclipse.jgit -->
         <dependency>

@@ -16,7 +16,12 @@ export default defineConfig(({mode, command}) => {
             dedupe: ['react', 'react-dom'],
         },
         optimizeDeps: {
-            exclude: ['@jiangood/open-admin'],
+            // 让 Vite 预扫描 open-admin 源码，自动发现并预构建其内部依赖（qs/lodash/prop-types 等 CJS 包）。
+            // 缺少此项时，浏览器会拿到原始 CJS 模块，报 "does not provide an export named 'default'" 导致白屏。
+            entries: [
+                'index.html',
+                './node_modules/@jiangood/open-admin/src/**/*.{ts,tsx,js,jsx}',
+            ],
         },
         server: {
             port: port,

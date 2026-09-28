@@ -3,9 +3,11 @@ package io.github.jiangood.docker.admin.websocket;// DockerLogService.java
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.model.Frame;
+import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.io.IOUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
@@ -24,11 +26,11 @@ public class DockerLogService {
     private DockerClientManager dockerClientManager;
 
 
-    public void streamContainerLogs(String sessionId, String dockerHost, String containerId, WebSocketSession session) {
+    public void streamContainerLogs(String sessionId, Host host, String containerId, WebSocketSession session) {
         try {
-            DockerClient dockerClient = dockerClientManager.getClient(dockerHost);
+            DockerClient dockerClient = dockerClientManager.getClient(host);
 
-            LogStreamCallback callback = new LogStreamCallback(session);
+            LogStreamCallback callback = new LogStreamCallback(session, dockerClient);
 
             dockerClient.logContainerCmd(containerId)
                     .withStdOut(true)
@@ -56,9 +58,11 @@ public class DockerLogService {
 
     private static class LogStreamCallback extends ResultCallback.Adapter<Frame> {
         private final WebSocketSession session;
+        private final DockerClient dockerClient;
 
-        public LogStreamCallback(WebSocketSession session) {
+        public LogStreamCallback(WebSocketSession session, DockerClient dockerClient) {
             this.session = session;
+            this.dockerClient = dockerClient;
         }
 
         @Override
@@ -69,10 +73,18 @@ public class DockerLogService {
             try {
                 session.sendMessage(new TextMessage(message));
             } catch (Exception e) {
-                e.printStackTrace();
+                log.error("通过 WebSocket 发送容器日志失败", e);
             }
         }
 
-
+        @Override
+        public void close() throws IOException {
+            try {
+                super.close();
+            } finally {
+                // 关闭底层 docker 客户端，避免 SSH 会话泄漏
+                IOUtils.closeQuietly(dockerClient);
+            }
+        }
     }
 }
