@@ -180,6 +180,21 @@ public class AppService extends BaseService<App> {
             hostConfig.withPrivileged(true);
 
 
+            // 设备请求（GPU 等）：直接透传 HostConfig.DeviceRequests
+            if (cfg.getDeviceRequests() != null && !cfg.getDeviceRequests().isEmpty()) {
+                List<DeviceRequest> deviceRequests = cfg.getDeviceRequests().stream()
+                        .filter(Objects::nonNull)
+                        .map(r -> new DeviceRequest()
+                                .withDriver(r.getDriver())
+                                .withCount(r.getCount())
+                                .withCapabilities(r.getCapabilities() != null && !r.getCapabilities().isEmpty()
+                                        ? r.getCapabilities() : List.of(List.of("gpu"))))
+                        .toList();
+                hostConfig.withDeviceRequests(deviceRequests);
+                log.info("设备请求 {}", deviceRequests);
+            }
+
+
             // hosts，ip域名映射, 支持两种格式， 1. ip 域名 2.域名:ip
             String hosts = cfg.getExtraHosts();
             if (StrUtil.isNotBlank(hosts)) {

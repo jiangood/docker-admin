@@ -114,6 +114,20 @@ public class App extends BaseEntity {
             }
             return networkMode;
         }
+
+        /**
+         * 设备请求（GPU 等），对应 Docker API 的 HostConfig.DeviceRequests。
+         * 与 docker run --gpus / compose 的 devices 一致，为空表示不请求设备。
+         */
+        List<DeviceRequest> deviceRequests = new ArrayList<>();
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    @Data
+    public static class DeviceRequest {
+        String driver;                    // Driver，如 nvidia
+        Integer count;                    // Count，-1 表示全部
+        List<List<String>> capabilities;  // Capabilities，默认 [["gpu"]]
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)

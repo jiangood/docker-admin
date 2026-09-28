@@ -50,6 +50,29 @@ export default class extends React.Component {
         {title: '主机路径', dataIndex: 'publicVolume', dataType: 'Input'},
     ]
 
+    deviceColumns = [
+        {
+            title: 'driver', dataIndex: 'driver', dataType: 'Select',
+            valueEnum: {nvidia: 'nvidia', amd: 'amd'},
+        },
+        {
+            title: 'count', dataIndex: 'count', dataType: 'Select',
+            options: [
+                {label: '全部(all)', value: -1},
+                {label: '1', value: 1},
+                {label: '2', value: 2},
+                {label: '3', value: 3},
+                {label: '4', value: 4},
+            ],
+        },
+        {
+            title: 'capabilities', dataIndex: 'capabilities', dataType: 'Select', mode: 'multiple',
+            valueEnum: {gpu: 'gpu', compute: 'compute', utility: 'utility', graphics: 'graphics', video: 'video'},
+            format: v => Array.isArray(v) ? v.flat() : v,
+            parse: v => (v && v.length) ? [v] : [],
+        },
+    ]
+
     render() {
         const {app} = this.props
         const {loading, meta} = this.state
@@ -120,6 +143,13 @@ export default class extends React.Component {
 
                 <Form.Item label='extraHosts' name='extraHosts' tooltip='域名IP映射,类似dns,hosts文件'>
                     <Input placeholder='域名:IP 域名2:IP2'/>
+                </Form.Item>
+
+                <Form.Item label='设备请求' name='deviceRequests'
+                           tooltip='GPU 等设备透传，对应 docker run --gpus；需目标主机已安装 nvidia-container-toolkit'>
+                    <EditTable columns={this.deviceColumns}
+                               defaultRow={{driver: 'nvidia', count: -1, capabilities: [['gpu']]}}
+                               extra='未配置设备请求'/>
                 </Form.Item>
 
 

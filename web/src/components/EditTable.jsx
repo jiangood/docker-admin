@@ -15,7 +15,9 @@ export default class extends React.Component {
 
   add = () => {
     let {dataSource} = this.state;
-    dataSource.push({})
+    // 深拷贝默认行，避免多行共享同一引用
+    const defaultRow = this.props.defaultRow ? JSON.parse(JSON.stringify(this.props.defaultRow)) : {};
+    dataSource.push(defaultRow)
     this.setState({dataSource})
     this.props.onChange(dataSource)
   }
@@ -47,10 +49,16 @@ export default class extends React.Component {
       return <InputNumber value={p[c.dataIndex]} onChange={v => this.edit(c.dataIndex, v, i)}/>
     }
     if (c.dataType === 'Select') {
-      return <Select value={p[c.dataIndex]}
-                     onChange={v => this.edit(c.dataIndex, v, i)}
+      const options = c.options
+          ? c.options.map(o => <Select.Option key={o.value} value={o.value}>{o.label}</Select.Option>)
+          : Object.keys(c.valueEnum || {}).map(k => <Select.Option key={k} value={k}>{c.valueEnum[k]}</Select.Option>);
+      const raw = p[c.dataIndex];
+      const value = c.format ? c.format(raw) : raw;
+      return <Select value={value}
+                     mode={c.mode}
+                     onChange={v => this.edit(c.dataIndex, c.parse ? c.parse(v) : v, i)}
                      style={{minWidth: 100}}>
-        {Object.keys(c.valueEnum).map(k => <Select.Option key={k} value={k}>{c.valueEnum[k]}</Select.Option>)}
+        {options}
       </Select>
     }
     return null;
