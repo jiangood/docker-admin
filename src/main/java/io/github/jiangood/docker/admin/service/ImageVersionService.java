@@ -30,18 +30,18 @@ public class ImageVersionService extends BaseService<ImageVersion> {
 
     private final ImageVersionRepository imageVersionRepository;
 
-    public Optional<ImageVersion> find(String imageUrl, String tag) {
-        if (StrUtil.isBlank(imageUrl) || StrUtil.isBlank(tag)) {
+    public Optional<ImageVersion> find(String imageId, String tag) {
+        if (StrUtil.isBlank(imageId) || StrUtil.isBlank(tag)) {
             return Optional.empty();
         }
-        return imageVersionRepository.findByImageUrlAndTag(imageUrl, tag);
+        return imageVersionRepository.findByImageIdAndTag(imageId, tag);
     }
 
-    public List<ImageVersion> findByImageUrl(String imageUrl) {
-        if (StrUtil.isBlank(imageUrl)) {
+    public List<ImageVersion> findByImageId(String imageId) {
+        if (StrUtil.isBlank(imageId)) {
             return Collections.emptyList();
         }
-        return imageVersionRepository.findAllByImageUrl(imageUrl);
+        return imageVersionRepository.findAllByImageId(imageId);
     }
 
     public List<ImageVersion> findAllVersion() {
@@ -51,8 +51,8 @@ public class ImageVersionService extends BaseService<ImageVersion> {
     /**
      * 某个镜像的所有版本号（tag），倒序。
      */
-    public List<String> tags(String imageUrl) {
-        return findByImageUrl(imageUrl).stream()
+    public List<String> tags(String imageId) {
+        return findByImageId(imageId).stream()
                 .map(ImageVersion::getTag)
                 .filter(StrUtil::isNotBlank)
                 .distinct()
@@ -60,20 +60,21 @@ public class ImageVersionService extends BaseService<ImageVersion> {
                 .toList();
     }
 
-    public void removeByImageUrl(String imageUrl) {
-        if (StrUtil.isNotBlank(imageUrl)) {
-            imageVersionRepository.deleteByImageUrl(imageUrl);
+    public void removeByImageId(String imageId) {
+        if (StrUtil.isNotBlank(imageId)) {
+            imageVersionRepository.deleteByImageId(imageId);
         }
     }
 
     /**
      * 读取镜像声明的端口与卷并保存。本地不存在该镜像时返回 null（不抛异常）。
+     *
+     * @param fullName 镜像完整地址（registry/namespace/name:tag），用于 inspect
      */
-    public ImageVersion inspect(DockerClient client, String imageUrl, String tag) {
-        if (StrUtil.isBlank(imageUrl) || StrUtil.isBlank(tag)) {
+    public ImageVersion inspect(DockerClient client, String fullName, String imageId, String tag) {
+        if (StrUtil.isBlank(imageId) || StrUtil.isBlank(tag) || StrUtil.isBlank(fullName)) {
             return null;
         }
-        String fullName = imageUrl + ":" + tag;
         InspectImageResponse response;
         try {
             response = client.inspectImageCmd(fullName).exec();
@@ -88,12 +89,12 @@ public class ImageVersionService extends BaseService<ImageVersion> {
         List<String> ports = parsePorts(response.getConfig());
         List<String> volumes = parseVolumes(response.getConfig());
         log.info("镜像 {} 声明端口 {}，卷 {}", fullName, ports, volumes);
-        return saveDeclaration(imageUrl, tag, ports, volumes);
+        return saveDeclaration(imageId, tag, ports, volumes);
     }
 
-    public ImageVersion saveDeclaration(String imageUrl, String tag, List<String> ports, List<String> volumes) {
-        ImageVersion iv = find(imageUrl, tag).orElseGet(ImageVersion::new);
-        iv.setImageUrl(imageUrl);
+    public ImageVersion saveDeclaration(String imageId, String tag, List<String> ports, List<String> volumes) {
+        ImageVersion iv = find(imageId, tag).orElseGet(ImageVersion::new);
+        iv.setImageId(imageId);
         iv.setTag(tag);
         iv.setExposedPorts(ports == null ? new ArrayList<>() : ports);
         iv.setVolumes(volumes == null ? new ArrayList<>() : volumes);

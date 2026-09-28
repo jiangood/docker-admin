@@ -16,20 +16,25 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.FieldNameConstants;
 
-@Remark("项目")
+/**
+ * 镜像：一个从代码仓库构建、带版本（tag）的镜像仓库。
+ * <p>
+ * 每个镜像对应一个镜像地址（registry.url/namespace + name），构建产生的 tag 即为其版本。
+ */
+@Remark("镜像")
 @Getter
 @Setter
 @Entity
 @FieldNameConstants
-@Table(name = "t_project")
-public class Project extends BaseEntity {
+@Table(name = "t_image")
+public class Image extends BaseEntity {
 
     @Remark("组织")
     @ManyToOne
     SysOrg sysOrg;
 
 
-    @Remark("名称")
+    @Remark("镜像名")
     @ValidateStartWithLetter
     @NotNull
     @Column(unique = true)
@@ -38,9 +43,9 @@ public class Project extends BaseEntity {
     @Remark("中文名称")
     String cnName;
 
+    @Remark("代码仓库")
     @NotNull
     String gitUrl;
-
 
 
     //默认的dockerfile

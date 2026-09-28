@@ -47,7 +47,9 @@ public class App extends BaseEntity {
     Host host;
 
 
-    String imageUrl;
+    @Remark("镜像")
+    @ManyToOne
+    Image image;
 
     @Column(length = 20)
     String imageTag;
@@ -59,6 +61,12 @@ public class App extends BaseEntity {
 
     @Transient
     String logUrl;
+
+    /**
+     * 镜像完整地址（registry/namespace/name），仅在返回给前端时填充，不持久化。
+     */
+    @Transient
+    String imageUrl;
 
 
     @Lob

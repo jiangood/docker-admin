@@ -22,7 +22,7 @@
 
 
 
-    <logger name="io.github.jiangood.docker.admin.service.ProjectService">
+    <logger name="io.github.jiangood.docker.admin.service.ImageService">
         <appender-ref ref="docker-log-appender" />
     </logger>
     <logger name="io.github.jiangood.docker.admin.service.AppService">

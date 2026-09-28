@@ -1,4 +1,4 @@
-import {AutoComplete, Button, Form, Input, Menu, Modal, Splitter} from 'antd';
+import {Button, Form, Input, Menu, Modal, Select, Splitter} from 'antd';
 import React from 'react';
 import ContainerStatus from "../../components/ContainerStatus";
 import {
@@ -92,6 +92,10 @@ export default class extends React.Component {
         this.tableRef.current.reload()
     }
 
+    componentDidMount() {
+        this.loadImageList()
+    }
+
 
     handleSave = value => {
         HttpClient.post('admin/app/save', value).then(() => {
@@ -124,8 +128,8 @@ export default class extends React.Component {
         })
     }
 
-    onImageSelect = imageUrl => {
-        HttpClient.get('admin/image/tags', {imageUrl}).then(rs => {
+    onImageSelect = imageId => {
+        HttpClient.get('admin/image/versions', {imageId}).then(rs => {
             this.setState({tagOptions: rs.data || []})
         })
     }
@@ -186,19 +190,20 @@ export default class extends React.Component {
                             <Input/>
                         </Form.Item>
 
-                        <Form.Item name='imageUrl' label='镜像' required rules={[{required: true}]}
+                        <Form.Item name={['image', 'id']} label='镜像' required rules={[{required: true}]}
                                    tooltip='从构建过的镜像中选择'>
-                            <AutoComplete options={this.state.imageList}
-                                          onSearch={this.loadImageList}
-                                          onSelect={this.onImageSelect}
-                                          placeholder='选择镜像'></AutoComplete>
+                            <Select options={this.state.imageList}
+                                    showSearch
+                                    onSelect={this.onImageSelect}
+                                    placeholder='选择镜像'></Select>
                         </Form.Item>
 
 
                         <Form.Item name='imageTag' label='版本' required rules={[{required: true}]}
                                    tooltip='选择该镜像已构建的 tag'>
-                            <AutoComplete options={this.state.tagOptions}
-                                          placeholder='选择版本'></AutoComplete>
+                            <Select options={this.state.tagOptions}
+                                    showSearch
+                                    placeholder='选择版本'></Select>
                         </Form.Item>
 
 
@@ -230,8 +235,8 @@ export default class extends React.Component {
                             <Input/>
                         </Form.Item>
 
-                        <Form.Item name='imageUrl' label='镜像' required rules={[{required: true}]}>
-                            <Input/>
+                        <Form.Item name={['image', 'id']} label='镜像' required rules={[{required: true}]}>
+                            <Select options={this.state.imageList} showSearch placeholder='选择镜像'/>
                         </Form.Item>
 
                         <Form.Item name='imageTag' label='版本' required rules={[{required: true}]}>

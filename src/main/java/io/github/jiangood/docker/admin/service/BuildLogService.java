@@ -9,7 +9,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -20,22 +19,12 @@ public class BuildLogService extends BaseService<BuildLog> {
 
     private final BuildLogRepository buildLogRepository;
 
-    public List<String> versions(String projectId) {
-        Spec<BuildLog> q = Spec.of();
-        q.eq(BuildLog.Fields.projectId, projectId);
-        q.eq(BuildLog.Fields.success, true);
-        return distinctTagsDesc(buildLogRepository.findAll(q));
-    }
-
     /**
-     * 某个镜像地址下所有构建成功的版本（tag），倒序。
+     * 某个镜像下所有构建成功的版本（tag），倒序。
      */
-    public List<String> versionsByImageUrl(String imageUrl) {
-        if (StrUtil.isBlank(imageUrl)) {
-            return Collections.emptyList();
-        }
+    public List<String> versions(String imageId) {
         Spec<BuildLog> q = Spec.of();
-        q.eq(BuildLog.Fields.imageUrl, imageUrl);
+        q.eq(BuildLog.Fields.imageId, imageId);
         q.eq(BuildLog.Fields.success, true);
         return distinctTagsDesc(buildLogRepository.findAll(q));
     }
@@ -54,20 +43,20 @@ public class BuildLogService extends BaseService<BuildLog> {
         return buildLogRepository.saveAndFlush(buildLog);
     }
 
-    public List<BuildLog> findByProject(String projectId) {
+    public List<BuildLog> findByImage(String imageId) {
         Spec<BuildLog> q = Spec.of();
-        q.eq(BuildLog.Fields.projectId, projectId);
+        q.eq(BuildLog.Fields.imageId, imageId);
         return buildLogRepository.findAll(q);
     }
 
     @Transactional
-    public void cleanErrorLog(String projectId) {
-        buildLogRepository.deleteErrorLogsByProjectId(projectId);
+    public void cleanErrorLog(String imageId) {
+        buildLogRepository.deleteErrorLogsByImageId(imageId);
     }
 
-    public List<BuildLog> findByProjectProcessing(String projectId) {
+    public List<BuildLog> findByImageProcessing(String imageId) {
         Spec<BuildLog> q = Spec.of();
-        q.eq(BuildLog.Fields.projectId, projectId);
+        q.eq(BuildLog.Fields.imageId, imageId);
         q.isNull(BuildLog.Fields.success);
         return buildLogRepository.findAll(q);
     }

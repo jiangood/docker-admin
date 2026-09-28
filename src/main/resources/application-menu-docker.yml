@@ -1,24 +1,23 @@
 ## docker-admin 业务菜单
 menus:
-  project:
-    name: 项目
-    path: /project
-    icon: OrderedListOutlined
-    seq: 100
-    perms:
-      - {name: 查看, code: project:view}
-      - {name: 保存, code: project:save}
-      - {name: 删除, code: project:delete}
-      - {name: 构建, code: project:build}
-      - {name: Webhook, code: project:webhook}
+  biz:
+    name: 容器平台
+    icon: AppstoreOutlined
+    seq: 10
   image:
+    pid: biz
     name: 镜像
     path: /image
     icon: ContainerOutlined
-    seq: 150
+    seq: 100
     perms:
       - {name: 查看, code: image:view}
+      - {name: 保存, code: image:save}
+      - {name: 删除, code: image:delete}
+      - {name: 构建, code: image:build}
+      - {name: Webhook, code: image:webhook}
   app:
+    pid: biz
     name: 应用
     path: /app
     icon: AppstoreOutlined
@@ -29,24 +28,27 @@ menus:
       - {name: 配置, code: app:config}
       - {name: 删除, code: app:delete}
       - {name: 部署, code: app:deploy}
+  setting:
+    pid: biz
+    name: 设置
+    icon: SettingOutlined
+    seq: 400
   host:
+    pid: setting
     name: 主机
     path: /host
     icon: DesktopOutlined
-    seq: 300
+    seq: 450
     perms:
       - {name: 查看, code: host:list}
       - {name: 保存, code: host:save}
       - {name: 删除, code: host:delete}
-  setting:
-    name: 设置
-    icon: SettingOutlined
-    seq: 400
   setting-registry:
     pid: setting
     name: 镜像注册中心
     path: /registry
     icon: CloudServerOutlined
+    seq: 500
     perms:
       - {name: 查看, code: registry:view}
       - {name: 保存, code: registry:save}
@@ -55,6 +57,7 @@ menus:
     name: Git凭据
     path: /git-credential
     icon: KeyOutlined
+    seq: 600
     perms:
       - {name: 查看, code: git-credential:view}
       - {name: 保存, code: git-credential:save}

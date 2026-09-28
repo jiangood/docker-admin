@@ -7,7 +7,7 @@ import java.util.List;
 
 public interface AppRepository extends BaseRepository<App, String> {
 
-    List<App> findAllByImageUrl(String imageUrl);
+    List<App> findAllByImage_Id(String imageId);
 
     boolean existsByName(String name);
 

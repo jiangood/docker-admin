@@ -5,7 +5,7 @@ import lombok.Data;
 @Data
 public class BuildRequest {
 
-    String projectId;
+    String imageId;
 
     /**
      * 构建用的 git tag，同时作为镜像版本号（如 v1.0.1）。

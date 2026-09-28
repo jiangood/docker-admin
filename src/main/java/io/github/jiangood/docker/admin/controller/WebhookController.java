@@ -2,7 +2,7 @@ package io.github.jiangood.docker.admin.controller;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.github.jiangood.docker.admin.service.ProjectService;
+import io.github.jiangood.docker.admin.service.ImageService;
 import io.github.jiangood.openadmin.util.dto.AjaxResult;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 通用 Git Webhook：推送 tag 时按 token 找到项目并触发构建。
+ * 通用 Git Webhook：推送 tag 时按 token 找到镜像并触发构建。
  * 路径 /admin/public/** 框架已放行，免登录；鉴权依赖 URL 中的随机 token。
  */
 @RestController
@@ -27,7 +27,7 @@ public class WebhookController {
     private static final String[] TAG_FIELDS = {"tag_name", "tag", "ref_name"};
 
     @Resource
-    private ProjectService projectService;
+    private ImageService imageService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -38,7 +38,7 @@ public class WebhookController {
             log.info("Webhook 未识别到 tag 推送，忽略。body={}", body);
             return AjaxResult.ok().msg("ignored");
         }
-        projectService.triggerByToken(token, tag);
+        imageService.triggerByToken(token, tag);
         return AjaxResult.ok().msg("构建已触发：" + tag);
     }
 

@@ -8,10 +8,10 @@ import java.util.Optional;
 
 public interface ImageVersionRepository extends BaseRepository<ImageVersion, String> {
 
-    List<ImageVersion> findAllByImageUrl(String imageUrl);
+    List<ImageVersion> findAllByImageId(String imageId);
 
-    Optional<ImageVersion> findByImageUrlAndTag(String imageUrl, String tag);
+    Optional<ImageVersion> findByImageIdAndTag(String imageId, String tag);
 
-    void deleteByImageUrl(String imageUrl);
+    void deleteByImageId(String imageId);
 
 }

@@ -1,101 +1,192 @@
-import {Button, Drawer, Form, Input, Space, Table, Tag} from 'antd'
+import {PlusOutlined} from '@ant-design/icons'
+import {Button, Form, Input, Modal, Popconfirm, Splitter} from 'antd'
 import React from 'react'
-import {HttpClient, Page, ProTable} from "@jiangood/open-admin"
 
-/**
- * 镜像视图：基于镜像版本表，可查看每个镜像的版本与关联应用。
- */
+import {
+    PermActions,
+    FieldOrgTreeSelect,
+    HttpClient,
+    OrgTree,
+    Page,
+    PageUtils,
+    ProTable
+} from "@jiangood/open-admin"
+
+
 export default class extends React.Component {
 
     state = {
-        detailVisible: false,
-        current: {},
-        tags: [],
-        apps: []
+        formValues: {},
+        formOpen: false,
+
+
+        selectedOrgId: null
+
     }
 
+    formRef = React.createRef()
     tableRef = React.createRef()
 
     columns = [
+
+
         {
             title: '镜像',
-            dataIndex: 'imageUrl',
-            render: (value, row) => <a onClick={() => this.openDetail(row)}>{value}</a>
+            dataIndex: 'name',
+            render: (name, row) => {
+                return <a onClick={() => PageUtils.open('/image/view?id=' + row.id, "镜像-" + name)}>{name}</a>
+            },
+
         },
         {
-            title: '最新版本',
-            dataIndex: 'latestTag',
-            width: 120,
-            render: (value) => value ? <Tag color='blue'>{value}</Tag> : '-'
+            title: '中文名称',
+            dataIndex: 'cnName',
+            sorter: true,
+        },
+
+        {
+            title: '代码仓库',
+            dataIndex: 'gitUrl',
         },
         {
-            title: '版本数',
-            dataIndex: 'tagCount',
-            width: 90
+            title: '备注',
+            dataIndex: 'remark',
         },
+
+
         {
-            title: '关联应用',
-            dataIndex: 'appCount',
-            width: 100,
-            render: (value, row) => <a onClick={() => this.openDetail(row)}>{value}</a>
+            title: 'dockerfile',
+            dataIndex: 'dockerfile',
         },
+
+
         {
-            title: '最近构建',
-            dataIndex: 'lastBuildTime',
-            width: 180
+            title: '组织机构',
+            dataIndex: ['sysOrg', 'name'],
+
         },
+
         {
             title: '操作',
+            dataIndex: 'option',
             valueType: 'option',
-            render: (_, row) => <Button size='small' onClick={() => this.openDetail(row)}>查看</Button>
-        }
+            render: (_, record) => (
+                <PermActions>
+                    <Button size='small' perm='image:save' onClick={() => this.handleEdit(record)}> 修改 </Button>
+                    <Popconfirm perm='image:delete' title='是否确定删除镜像'
+                                onConfirm={() => this.handleDelete(record)}>
+                        <Button size='small'>删除</Button>
+                    </Popconfirm>
+                </PermActions>
+            ),
+        },
     ]
 
-    openDetail = row => {
-        this.setState({detailVisible: true, current: row, tags: [], apps: []})
-        HttpClient.get('admin/image/tags', {imageUrl: row.imageUrl})
-            .then(rs => this.setState({tags: rs.data || []}))
-        HttpClient.get('admin/image/apps', {imageUrl: row.imageUrl})
-            .then(rs => this.setState({apps: rs.data || []}))
+
+
+    handleAdd = () => {
+        this.setState({formOpen: true, formValues: {}})
+    }
+
+    handleEdit = record => {
+        this.setState({formOpen: true, formValues: record})
+    }
+
+
+    onFinish = values => {
+        HttpClient.post('admin/image/save', values).then(rs => {
+            this.setState({formOpen: false})
+            this.tableRef.current.reload()
+        })
+    }
+
+
+    handleDelete = record => {
+        HttpClient.postForm('admin/image/delete', {id: record.id}).then(rs => {
+            this.tableRef.current.reload()
+        })
     }
 
     render() {
-        const {detailVisible, current, tags, apps} = this.state
         return <Page padding>
-            <ProTable
-                rowKey='imageUrl'
-                actionRef={this.tableRef}
-                request={(params) => HttpClient.get('admin/image/page', params)}
-                columns={this.columns}
-                searchFormRender={() => (
-                    <Form.Item name='searchText' label='镜像'>
-                        <Input allowClear placeholder='搜索镜像地址'/>
+            <Splitter>
+                <Splitter.Panel size={250}>
+                    <OrgTree onChange={(v) => {
+                        this.setState({selectedOrgId: v}, () => {
+                            this.tableRef.current.reload()
+                        })
+
+                    }}/>
+
+                </Splitter.Panel>
+                <Splitter.Panel style={{paddingLeft: 16}}>
+                    <ProTable
+                        actionRef={this.tableRef}
+                        toolBarRender={() => {
+                            return <PermActions>
+                                <Button perm='image:save' type='primary' onClick={this.handleAdd}>
+                                    <PlusOutlined/> 新增
+                                </Button>
+                            </PermActions>
+                        }}
+                        request={(params) => {
+                            params.orgId = this.state.selectedOrgId
+                            return HttpClient.get('admin/image/page', params);
+                        }}
+                        columns={this.columns}
+                        showToolbarSearch
+                    >
+                    </ProTable>
+                </Splitter.Panel>
+            </Splitter>
+
+
+            <Modal title='镜像信息'
+                   open={this.state.formOpen}
+                   onOk={() => this.formRef.current.submit()}
+                   onCancel={() => this.setState({formOpen: false})}
+                   destroyOnHidden
+
+                   width={600}
+
+            >
+
+                <Form ref={this.formRef} labelCol={{flex: '120px'}}
+                      initialValues={this.state.formValues}
+                      onFinish={this.onFinish}>
+                    <Form.Item name='id' noStyle></Form.Item>
+                    <Form.Item label='镜像名' name='name' rules={[{required: true}]} help='不能包含中文，小写字母开头'>
+                        <Input/>
                     </Form.Item>
-                )}
-            />
 
-            <Drawer title={current.imageUrl} width={620}
-                    open={detailVisible}
-                    onClose={() => this.setState({detailVisible: false})}>
-                <h4>版本</h4>
-                <Space wrap>
-                    {tags.length === 0 ? <span>-</span> : tags.map(t => <Tag key={t}>{t}</Tag>)}
-                </Space>
+                    <Form.Item label='中文名称' name='cnName'>
+                        <Input/>
+                    </Form.Item>
 
-                <h4 style={{marginTop: 16}}>关联应用</h4>
-                <Table
-                    size='small'
-                    rowKey='id'
-                    pagination={false}
-                    dataSource={apps}
-                    columns={[
-                        {title: '应用', dataIndex: 'name'},
-                        {title: '中文名称', dataIndex: 'cnName'},
-                        {title: '主机', dataIndex: ['host', 'name']},
-                        {title: '版本', dataIndex: 'imageTag'}
-                    ]}
-                />
-            </Drawer>
+                    <Form.Item label='代码仓库' name='gitUrl' rules={[{required: true}]}>
+                        <Input/>
+                    </Form.Item>
+
+                    <Form.Item label='dockerfile' name='dockerfile' rules={[{required: true}]}
+                               initialValue='Dockerfile'>
+                        <Input/>
+                    </Form.Item>
+                    <Form.Item label='构建参数' name='buildArg' help='格式: key=value&key2=value2'>
+                        <Input/>
+                    </Form.Item>
+
+
+                    <Form.Item label='所属组织' name={['sysOrg', 'id']}>
+                        <FieldOrgTreeSelect/>
+                    </Form.Item>
+
+                    <Form.Item label='备注' name='remark'>
+                        <Input/>
+                    </Form.Item>
+                </Form>
+            </Modal>
         </Page>
+
+
     }
 }

@@ -1,6 +1,6 @@
 import {
   Button, Card, Checkbox, Descriptions, Form,
-  Modal, Select, Space, Spin, Tooltip, Typography
+  Modal, Select, Space, Spin, Table, Tag, Tooltip, Typography
 } from 'antd';
 import React from 'react';
 import {
@@ -28,10 +28,12 @@ function getIcon(key, index) {
 export default class extends React.Component {
 
   state = {
-    project: null,
+    image: null,
     showTrigger: false,
     hostOptions: [],
-    tagOptions: []
+    tagOptions: [],
+    versions: [],
+    apps: []
   }
   actionRef = React.createRef();
   timer = null
@@ -39,7 +41,9 @@ export default class extends React.Component {
   componentDidMount() {
     this.id = PageUtils.currentParams().id
 
-    this.loadProject()
+    this.loadImage()
+    this.loadVersions()
+    this.loadApps()
 
     this.timer = setInterval(() => {
       if (document.hidden) return;
@@ -57,8 +61,16 @@ export default class extends React.Component {
     }
   }
 
-  loadProject = () => {
-    HttpClient.get('admin/project/get', {id: this.id}).then(rs => this.setState({project: rs.data}))
+  loadImage = () => {
+    HttpClient.get('admin/image/get', {id: this.id}).then(rs => this.setState({image: rs.data}))
+  }
+
+  loadVersions = () => {
+    HttpClient.get('admin/image/versions', {imageId: this.id}).then(rs => this.setState({versions: rs.data || []}))
+  }
+
+  loadApps = () => {
+    HttpClient.get('admin/image/apps', {imageId: this.id}).then(rs => this.setState({apps: rs.data || []}))
   }
 
   reload = () => {
@@ -66,8 +78,8 @@ export default class extends React.Component {
   }
 
   retry = row => {
-    HttpClient.get("admin/project/build", {
-      projectId: row.projectId,
+    HttpClient.get("admin/image/build", {
+      imageId: row.imageId,
       tag: row.tag,
       buildHostId: row.buildHostId
     }).then(rs => {
@@ -76,47 +88,47 @@ export default class extends React.Component {
   }
 
   stop = row => {
-    HttpClient.get("admin/project/stopBuild", row).then(rs => {
+    HttpClient.get("admin/image/stopBuild", row).then(rs => {
       this.reload()
     })
   }
 
   triggerPipeline = () => {
-    HttpClient.get('admin/project/tags', {projectId: this.id}).then(rs => {
+    HttpClient.get('admin/image/tags', {imageId: this.id}).then(rs => {
       this.setState({tagOptions: rs.data || []})
     })
     this.setState({showTrigger: true})
   }
 
   submitTrigger = (values) => {
-    HttpClient.get("admin/project/build", values).then(rs => {
+    HttpClient.get("admin/image/build", values).then(rs => {
       this.setState({showTrigger: false})
       this.actionRef.current.reload()
     })
   }
 
   cleanError = () => {
-    HttpClient.get("admin/project/cleanErrorLog", {id: this.state.project.id}).then(rs => {
+    HttpClient.get("admin/image/cleanErrorLog", {id: this.state.image.id}).then(rs => {
       this.actionRef.current.reload()
     })
   }
 
   resetWebhook = () => {
-    HttpClient.get("admin/project/resetWebhook", {id: this.state.project.id}).then(() => {
-      this.loadProject()
+    HttpClient.get("admin/image/resetWebhook", {id: this.state.image.id}).then(() => {
+      this.loadImage()
     })
   }
 
   webhookUrl = () => {
-    const token = this.state.project?.webhookToken
+    const token = this.state.image?.webhookToken
     if (!token) return ''
     return window.location.origin + UrlUtils.contextPath('/admin/public/webhook/' + token)
   }
 
   columns = [
     {
-      title: '项目',
-      dataIndex: 'projectName',
+      title: '镜像',
+      dataIndex: 'imageName',
     },
     {
       title: '开始时间',
@@ -187,21 +199,21 @@ export default class extends React.Component {
   ]
 
   render() {
-    if (this.state.project == null) {
+    if (this.state.image == null) {
       return <Spin/>
     }
 
-    const {project, showTrigger, hostOptions, tagOptions} = this.state;
+    const {image, showTrigger, hostOptions, tagOptions, versions, apps} = this.state;
 
     return (<>
 
       <Card className='mb-2'>
-        <Descriptions title={project.name}>
-          <Descriptions.Item label='id'>{project.id}</Descriptions.Item>
-          <Descriptions.Item label='中文名称'>{project.cnName}</Descriptions.Item>
-          <Descriptions.Item label='代码源'>{project.gitUrl}</Descriptions.Item>
-          <Descriptions.Item label='dockerfile'>{project.dockerfile}</Descriptions.Item>
-          <Descriptions.Item label='创建时间'>{project.createTime}</Descriptions.Item>
+        <Descriptions title={image.name}>
+          <Descriptions.Item label='id'>{image.id}</Descriptions.Item>
+          <Descriptions.Item label='中文名称'>{image.cnName}</Descriptions.Item>
+          <Descriptions.Item label='代码源'>{image.gitUrl}</Descriptions.Item>
+          <Descriptions.Item label='dockerfile'>{image.dockerfile}</Descriptions.Item>
+          <Descriptions.Item label='创建时间'>{image.createTime}</Descriptions.Item>
         </Descriptions>
 
         <Descriptions size='small' column={1} style={{marginTop: 8}}>
@@ -217,6 +229,27 @@ export default class extends React.Component {
         </Descriptions>
       </Card>
 
+      <Card className='mb-2' title='版本' size='small'>
+        <Space wrap>
+          {versions.length === 0 ? <span>-</span> : versions.map(t => <Tag key={t} color='blue'>{t}</Tag>)}
+        </Space>
+      </Card>
+
+      <Card className='mb-2' title='关联应用' size='small'>
+        <Table
+          size='small'
+          rowKey='id'
+          pagination={false}
+          dataSource={apps}
+          columns={[
+            {title: '应用', dataIndex: 'name'},
+            {title: '中文名称', dataIndex: 'cnName'},
+            {title: '主机', dataIndex: ['host', 'name']},
+            {title: '版本', dataIndex: 'imageTag'}
+          ]}
+        />
+      </Card>
+
       <ProTable
         headerTitle='构建记录'
         toolBarRender={() => {
@@ -227,7 +260,7 @@ export default class extends React.Component {
         }}
         actionRef={this.actionRef}
         request={(params) => {
-          params.projectId = project.id
+          params.imageId = image.id
           return HttpClient.get("admin/buildLog/list", params);
         }}
         columns={this.columns}
@@ -243,11 +276,11 @@ export default class extends React.Component {
           onFinish={this.submitTrigger}
           labelCol={{flex: '100px'}}
           initialValues={{
-            projectId: project.id,
+            imageId: image.id,
             buildHostId: hostOptions[0]?.value
           }}
           preserve={false}>
-          <Form.Item name="projectId" hidden>
+          <Form.Item name="imageId" hidden>
           </Form.Item>
           <Form.Item name="tag" label="构建 tag" rules={[{required: true, message: '请选择 tag'}]}
                      help="只支持 vX.Y.Z 形式的版本 tag">

@@ -71,6 +71,7 @@ public class AppController {
 
         String url = LogUrlTool.getLogViewUrl(id);
         app.setLogUrl(url);
+        service.fillImageUrl(app);
         return AjaxResult.ok().data(app);
     }
 
@@ -151,7 +152,8 @@ public class AppController {
     @RequestMapping("versions")
     public AjaxResult versions(String id) {
         App app = assertAppAccess(id);
-        List<Option> options = service.getImageVersions(app.getImageUrl()).stream()
+        String imageId = app.getImage() == null ? null : app.getImage().getId();
+        List<Option> options = service.getImageVersions(imageId).stream()
                 .map(v -> new Option(v, v))
                 .toList();
         return AjaxResult.ok().data(options);

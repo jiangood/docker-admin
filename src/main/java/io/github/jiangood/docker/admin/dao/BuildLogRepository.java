@@ -9,6 +9,6 @@ import org.springframework.data.repository.query.Param;
 public interface BuildLogRepository extends BaseRepository<BuildLog, String> {
 
     @Modifying
-    @Query("delete from BuildLog b where b.projectId = :projectId and b.success = false")
-    int deleteErrorLogsByProjectId(@Param("projectId") String projectId);
+    @Query("delete from BuildLog b where b.imageId = :imageId and b.success = false")
+    int deleteErrorLogsByImageId(@Param("imageId") String imageId);
 }

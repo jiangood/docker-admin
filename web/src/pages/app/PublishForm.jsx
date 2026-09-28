@@ -82,7 +82,7 @@ export default class extends React.Component {
                             <Switch/>
                         </Form.Item>
                     </Form>
-                    项目构建成功后，自动更新
+                    镜像构建成功后，自动更新
                 </Card>
                 </Col>
                 <Col span={12}>

@@ -58,6 +58,9 @@ public class AppService extends BaseService<App> {
     ImageVersionService imageVersionService;
 
     @Resource
+    ImageService imageService;
+
+    @Resource
     private RegistryService registryService;
 
     @Async
@@ -84,7 +87,7 @@ public class AppService extends BaseService<App> {
             Host host = app.getHost();
 
             // 镜像
-            String image = app.getImageUrl() + ":" + app.getImageTag();
+            String image = imageService.getFullImageUrl(app.getImage()) + ":" + app.getImageTag();
 
             client = getClient(host);
 
@@ -97,7 +100,7 @@ public class AppService extends BaseService<App> {
             App.AppConfig cfg = app.getConfig();
 
             // 仅当镜像来自镜像表（平台构建/已知）且声明非空时，对应维度才严格限制
-            ImageVersion imageVersion = imageVersionService.find(app.getImageUrl(), app.getImageTag()).orElse(null);
+            ImageVersion imageVersion = imageVersionService.find(imageIdOf(app), app.getImageTag()).orElse(null);
             boolean strictPorts = strictPorts(imageVersion);
             boolean strictVolumes = strictVolumes(imageVersion);
             if (strictPorts || strictVolumes) {
@@ -356,8 +359,17 @@ public class AppService extends BaseService<App> {
     /**
      * 该应用镜像可用的版本（来自镜像版本表），倒序。
      */
-    public List<String> getImageVersions(String imageUrl) {
-        return imageVersionService.tags(imageUrl);
+    public List<String> getImageVersions(String imageId) {
+        return imageVersionService.tags(imageId);
+    }
+
+    /**
+     * 填充镜像完整地址（不持久化），供前端展示。
+     */
+    public void fillImageUrl(App app) {
+        if (app != null) {
+            app.setImageUrl(imageService.getFullImageUrl(app.getImage()));
+        }
     }
 
     public void updateAppVersion(String id, String tag) {
@@ -394,7 +406,7 @@ public class AppService extends BaseService<App> {
         App app = appRepository.findById(id).orElse(null);
         Assert.notNull(app, "应用不存在");
         normalizeConfig(appConfig);
-        ImageVersion iv = imageVersionService.find(app.getImageUrl(), app.getImageTag()).orElse(null);
+        ImageVersion iv = imageVersionService.find(imageIdOf(app), app.getImageTag()).orElse(null);
         if (iv != null) {
             validateConfig(appConfig, iv);
         }
@@ -410,11 +422,11 @@ public class AppService extends BaseService<App> {
      */
     public ImageConfigMetaVo getConfigMeta(App app) {
         ImageConfigMetaVo vo = new ImageConfigMetaVo();
-        vo.setImageUrl(app.getImageUrl());
+        vo.setImageUrl(imageService.getFullImageUrl(app.getImage()));
         vo.setImageTag(app.getImageTag());
 
         App.AppConfig cfg = app.getConfig();
-        ImageVersion iv = imageVersionService.find(app.getImageUrl(), app.getImageTag()).orElse(null);
+        ImageVersion iv = imageVersionService.find(imageIdOf(app), app.getImageTag()).orElse(null);
         boolean strictPorts = strictPorts(iv);
         boolean strictVolumes = strictVolumes(iv);
         vo.setStrictPorts(strictPorts);
@@ -625,7 +637,7 @@ public class AppService extends BaseService<App> {
         BuildLog buildLog = event.getBuildLog();
 
         List<App> list = new ArrayList<>();
-        list.addAll(appRepository.findAllByImageUrl(buildLog.getImageUrl()));
+        list.addAll(appRepository.findAllByImage_Id(buildLog.getImageId()));
         // 让注解生效
         AppService $this = SpringUtil.getBean(getClass());
 
@@ -634,11 +646,15 @@ public class AppService extends BaseService<App> {
             if (!auto) {
                 continue;
             }
-            if (StrUtil.equals(buildLog.getImageUrl(), app.getImageUrl())) {
+            if (StrUtil.equals(buildLog.getImageId(), imageIdOf(app))) {
                 app.setImageTag(event.getTag());
                 $this.deploy(app);
             }
         }
+    }
+
+    private static String imageIdOf(App app) {
+        return app == null || app.getImage() == null ? null : app.getImage().getId();
     }
 
     /**
@@ -656,7 +672,7 @@ public class AppService extends BaseService<App> {
         Assert.notNull(old, "应用不存在");
         old.setSysOrg(input.getSysOrg());
         old.setCnName(input.getCnName());
-        old.setImageUrl(input.getImageUrl());
+        old.setImage(input.getImage());
         old.setImageTag(input.getImageTag());
         appRepository.save(old);
     }
@@ -670,7 +686,7 @@ public class AppService extends BaseService<App> {
 
         App newApp = new App();
         // 不复制 id/name/host 及审计字段
-        BeanUtils.copyProperties(app, newApp, "id", "name", "host", "createUser", "createTime", "updateUser", "updateTime", "logUrl", "config");
+        BeanUtils.copyProperties(app, newApp, "id", "name", "host", "imageUrl", "createUser", "createTime", "updateUser", "updateTime", "logUrl", "config");
         newApp.setName(buildCopyName(app.getName()));
         newApp.setHost(host);
         if (app.getConfig() != null) {

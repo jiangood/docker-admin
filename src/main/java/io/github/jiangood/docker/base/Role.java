@@ -12,8 +12,8 @@ public enum Role {
 
     admin("管理员",new String[]{"*"}),
 
-    simple("普通用户",new String[]{"project:*", "app:*"}),
-    deploy("部署用户",new String[]{"project:list","project:build","app:list", "app:deploy"});
+    simple("普通用户",new String[]{"image:*", "app:*"}),
+    deploy("部署用户",new String[]{"image:list","image:build","app:list", "app:deploy"});
 
 
     private final String label;

@@ -8,7 +8,6 @@ import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
-import jakarta.persistence.Transient;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
@@ -31,9 +30,9 @@ import java.util.List;
 @Table(name = "t_image_version")
 public class ImageVersion extends BaseEntity {
 
-    @Remark("镜像地址")
+    @Remark("镜像")
     @Column(nullable = false)
-    String imageUrl;
+    String imageId;
 
     @Remark("版本")
     @Column(nullable = false)
@@ -58,11 +57,4 @@ public class ImageVersion extends BaseEntity {
 
     LocalDateTime inspectTime;
 
-    /**
-     * 镜像地址:版本。
-     */
-    @Transient
-    public String getFullName() {
-        return imageUrl + ":" + tag;
-    }
 }

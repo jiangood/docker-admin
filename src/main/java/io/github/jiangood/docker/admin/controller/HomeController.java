@@ -1,9 +1,9 @@
 package io.github.jiangood.docker.admin.controller;
 
 import io.github.jiangood.docker.admin.entity.BuildLog;
-import io.github.jiangood.docker.admin.entity.Project;
+import io.github.jiangood.docker.admin.entity.Image;
 import io.github.jiangood.docker.admin.service.BuildLogService;
-import io.github.jiangood.docker.admin.service.ProjectService;
+import io.github.jiangood.docker.admin.service.ImageService;
 import io.github.jiangood.openadmin.framework.auth.LoginTool;
 import io.github.jiangood.openadmin.framework.data.specification.Spec;
 import io.github.jiangood.openadmin.framework.perm.HasPermission;
@@ -28,7 +28,7 @@ public class HomeController {
     BuildLogService buildLogService;
 
     @Resource
-    ProjectService projectService;
+    ImageService imageService;
 
     @HasPermission("app:view")
     @RequestMapping("buildingPage")
@@ -36,19 +36,19 @@ public class HomeController {
         Spec<BuildLog> q = Spec.of();
         q.isNull(BuildLog.Fields.success);
 
-        // 非管理员只能看到自己可访问项目的构建记录
+        // 非管理员只能看到自己可访问镜像的构建记录
         if (!LoginTool.isAdmin()) {
-            Spec<Project> pq = Spec.of();
+            Spec<Image> pq = Spec.of();
             pq.or(qq -> {
                 qq.isNull("sysOrg.id");
                 qq.in("sysOrg.id", LoginTool.getOrgPermissions());
             });
-            List<String> projectIds = projectService.findAll(pq, Sort.unsorted()).stream().map(Project::getId).toList();
-            if (projectIds.isEmpty()) {
-                // 无可访问项目时构造一个永假条件，避免空 IN 查询
-                q.eq("projectId", "__no_access__");
+            List<String> imageIds = imageService.findAll(pq, Sort.unsorted()).stream().map(Image::getId).toList();
+            if (imageIds.isEmpty()) {
+                // 无可访问镜像时构造一个永假条件，避免空 IN 查询
+                q.eq("imageId", "__no_access__");
             } else {
-                q.in("projectId", projectIds);
+                q.in("imageId", imageIds);
             }
         }
 
