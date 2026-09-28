@@ -20,7 +20,7 @@ RUN mvn clean package -DskipTests -q
 
 
 
-FROM amazoncorretto:21
+FROM eclipse-temurin:21-jre-alpine
 WORKDIR /home
 
 COPY --from=java /build/target/app.jar ./
