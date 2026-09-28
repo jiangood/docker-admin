@@ -49,7 +49,7 @@ export default class extends React.Component {
                 <Form ref={this.formRef} labelCol={{flex: '120px'}}
                       initialValues={values} onFinish={this.onFinish} preserve={false}>
 
-                    <Form.Item name='id' noStyle><Input/></Form.Item>
+                    <Form.Item name='id' noStyle></Form.Item>
 
                     <Form.Item label='地址' name='url' rules={[{required: true, message: '请输入注册中心地址'}]}
                                tooltip='不含协议，如 ghcr.io / registry.cn-hangzhou.aliyuncs.com'>

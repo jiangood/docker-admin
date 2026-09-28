@@ -101,7 +101,7 @@ export default class extends React.Component {
             >
                 <Form ref={this.formRef} labelCol={{flex: '120px'}}
                       initialValues={this.state.formValues} onFinish={this.onFinish}>
-                    <Form.Item name='id' noStyle><Input/></Form.Item>
+                    <Form.Item name='id' noStyle></Form.Item>
 
                     <Form.Item label='名称' name='name'>
                         <Input placeholder='如 Gitee'/>
