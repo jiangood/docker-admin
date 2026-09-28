@@ -14,8 +14,8 @@ import java.time.LocalDateTime;
 @Entity
 @Getter
 @Setter
-@FieldNameConstants
 @ToString
+@FieldNameConstants
 @Table(name = "t_build_log")
 public class BuildLog extends BaseEntity {
 
@@ -31,17 +31,17 @@ public class BuildLog extends BaseEntity {
 
     String imageUrl;
 
+    /**
+     * 构建用的 git tag，同时作为镜像版本号（如 v1.0.1）。
+     */
+    String tag;
+
     LocalDateTime completeTime;
 
     Boolean success;
 
-    String value;
-
-    String version;
-
-
     String context = "/";
-    String dockerfile ;
+    String dockerfile;
 
 
     @Transient

@@ -65,7 +65,7 @@ public class ProjectController {
     @PreAuthorize("hasAuthority('project:save')")
     @PostMapping({"save"})
     public AjaxResult save(@RequestBody Project param, RequestBodyKeys updateFields) throws Exception {
-        if (param.getSysOrg().getId() == null) {
+        if (param.getSysOrg() == null || param.getSysOrg().getId() == null) {
             param.setSysOrg(null);
         }
         param.setGitUrl(param.getGitUrl().trim());

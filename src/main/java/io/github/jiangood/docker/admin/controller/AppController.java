@@ -28,7 +28,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.io.UnsupportedEncodingException;
 import java.util.List;
 import java.util.Map;
 
@@ -66,8 +65,9 @@ public class AppController {
     }
 
     @RequestMapping("get")
-    public AjaxResult view(String id) throws UnsupportedEncodingException {
+    public AjaxResult view(String id) {
         App app = service.findById(id).orElse(null);
+        Assert.notNull(app, "应用不存在");
 
         String url = LogUrlTool.getLogViewUrl(id);
         app.setLogUrl(url);
@@ -90,14 +90,6 @@ public class AppController {
         service.update(app, requestBodyKeys);
         return AjaxResult.ok().msg("保存成功");
     }
-
-    @HasPermission("app:save")
-    @RequestMapping("update")
-    public AjaxResult update(@RequestBody App app) {
-        service.save(app);
-        return AjaxResult.ok().msg("修改成功");
-    }
-
 
     @HasPermission("app:save")
     @RequestMapping("updateBaseInfo")

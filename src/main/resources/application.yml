@@ -15,9 +15,8 @@ spring:
     name: docker-admin
   datasource:
     # 内置 H2，MySQL 兼容模式，首次启动自动建表并写入种子数据，无需外部数据库。
-    # NON_KEYWORDS=VALUE：VALUE 在 H2 中是保留字，而 t_build_log.value 业务列名需要保留。
     driver-class-name: org.h2.Driver
-    url: "jdbc:h2:file:${db_path};MODE=MySQL;NON_KEYWORDS=VALUE;DB_CLOSE_DELAY=-1"
+    url: "jdbc:h2:file:${db_path};MODE=MySQL;DB_CLOSE_DELAY=-1"
     username: sa
     password:
   jpa:

@@ -85,10 +85,6 @@ public class App extends BaseEntity {
     public static class AppConfig {
 
 
-        String image;
-        boolean privileged;
-
-
         String cmd; //启动命令
 
         String extraHosts; // ip映射

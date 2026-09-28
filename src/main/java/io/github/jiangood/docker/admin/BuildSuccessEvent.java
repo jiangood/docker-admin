@@ -13,7 +13,7 @@ public class BuildSuccessEvent extends BaseEvent {
 
 
     BuildLog buildLog;
-    String version;
+    String tag;
 
     public BuildSuccessEvent(Object source) {
         super(source);

@@ -43,7 +43,7 @@ public class ImageService {
                     .toList();
 
             List<String> tags = success.stream()
-                    .map(BuildLog::getVersion)
+                    .map(BuildLog::getTag)
                     .filter(StrUtil::isNotBlank)
                     .distinct()
                     .sorted(Comparator.reverseOrder())
@@ -77,7 +77,7 @@ public class ImageService {
         return buildLogRepository.findAll().stream()
                 .filter(l -> imageUrl.equals(l.getImageUrl()))
                 .filter(l -> Boolean.TRUE.equals(l.getSuccess()))
-                .map(BuildLog::getVersion)
+                .map(BuildLog::getTag)
                 .filter(StrUtil::isNotBlank)
                 .distinct()
                 .sorted(Comparator.reverseOrder())

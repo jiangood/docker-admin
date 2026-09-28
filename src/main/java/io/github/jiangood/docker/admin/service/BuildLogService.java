@@ -6,7 +6,6 @@ import io.github.jiangood.docker.admin.entity.BuildLog;
 import io.github.jiangood.openadmin.framework.data.BaseService;
 import io.github.jiangood.openadmin.framework.data.specification.Spec;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,11 +24,7 @@ public class BuildLogService extends BaseService<BuildLog> {
         Spec<BuildLog> q = Spec.of();
         q.eq(BuildLog.Fields.projectId, projectId);
         q.eq(BuildLog.Fields.success, true);
-        List<BuildLog> list = buildLogRepository.findAll(q);
-        List<String> versions = list.stream().map(BuildLog::getVersion).distinct().collect(Collectors.toList());
-        Collections.sort(versions);
-        Collections.reverse(versions);
-        return versions;
+        return distinctTagsDesc(buildLogRepository.findAll(q));
     }
 
     /**
@@ -42,9 +37,12 @@ public class BuildLogService extends BaseService<BuildLog> {
         Spec<BuildLog> q = Spec.of();
         q.eq(BuildLog.Fields.imageUrl, imageUrl);
         q.eq(BuildLog.Fields.success, true);
-        List<BuildLog> list = buildLogRepository.findAll(q);
+        return distinctTagsDesc(buildLogRepository.findAll(q));
+    }
+
+    private List<String> distinctTagsDesc(List<BuildLog> list) {
         return list.stream()
-                .map(BuildLog::getVersion)
+                .map(BuildLog::getTag)
                 .filter(StrUtil::isNotBlank)
                 .distinct()
                 .sorted(Comparator.reverseOrder())
@@ -72,11 +70,5 @@ public class BuildLogService extends BaseService<BuildLog> {
         q.eq(BuildLog.Fields.projectId, projectId);
         q.isNull(BuildLog.Fields.success);
         return buildLogRepository.findAll(q);
-    }
-
-    public BuildLog findTop1ByProject(String projectId) {
-        Spec<BuildLog> q = Spec.of();
-        q.eq(BuildLog.Fields.projectId, projectId);
-        return buildLogRepository.findAll(q, Sort.by("createTime")).stream().findFirst().orElse(null);
     }
 }

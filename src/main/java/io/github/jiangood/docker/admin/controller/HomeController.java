@@ -12,7 +12,6 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.io.UnsupportedEncodingException;
 import java.time.Duration;
 import java.time.LocalDateTime;
 
@@ -24,7 +23,7 @@ public class HomeController {
     BuildLogService buildLogService;
 
     @RequestMapping("buildingPage")
-    public AjaxResult buildingPage(@PageableDefault(direction = Sort.Direction.DESC,sort = "createTime") Pageable pageable) throws UnsupportedEncodingException {
+    public AjaxResult buildingPage(@PageableDefault(direction = Sort.Direction.DESC,sort = "createTime") Pageable pageable) {
         Spec<BuildLog> q = Spec.of();
         q.isNull(BuildLog.Fields.success);
 

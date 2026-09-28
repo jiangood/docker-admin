@@ -13,7 +13,6 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.io.UnsupportedEncodingException;
 import java.time.Duration;
 import java.time.LocalDateTime;
 
@@ -26,7 +25,7 @@ public class BuildLogController {
     private BuildLogService service;
 
     @RequestMapping("list")
-    public AjaxResult list(String projectId, @PageableDefault(sort = "createTime", direction = Sort.Direction.DESC) Pageable pageable) throws UnsupportedEncodingException {
+    public AjaxResult list(String projectId, @PageableDefault(sort = "createTime", direction = Sort.Direction.DESC) Pageable pageable) {
         Spec<BuildLog> q = Spec.of();
         q.eq("projectId", projectId);
         Page<BuildLog> page = service.findAll(q, pageable);

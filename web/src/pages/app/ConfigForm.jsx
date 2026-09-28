@@ -33,7 +33,7 @@ export default class extends React.Component {
         }
         return <>
 
-            <Form ref={this.formRef} colon={false} labelCol={{flex: '100px'}} onFinish={this.update} onValuesChange={console.log} initialValues={this.props.app.config}>
+            <Form ref={this.formRef} colon={false} labelCol={{flex: '100px'}} onFinish={this.update} initialValues={this.props.app.config}>
                 <Form.Item label='网络模式' name='networkMode'>
                     <Select style={{width:200}}
                         options={[
@@ -68,7 +68,7 @@ export default class extends React.Component {
                     <Input/>
                 </Form.Item>
 
-                <Form.Item label='extraHosts' name='ExtraHosts' tooltip='域名IP映射,类似dns,hosts文件'>
+                <Form.Item label='extraHosts' name='extraHosts' tooltip='域名IP映射,类似dns,hosts文件'>
                     <Input placeholder='域名:IP 域名2:IP2'/>
                 </Form.Item>
 

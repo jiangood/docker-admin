@@ -68,7 +68,7 @@ export default class extends React.Component {
   retry = row => {
     HttpClient.get("admin/project/build", {
       projectId: row.projectId,
-      tag: row.version,
+      tag: row.tag,
       buildHostId: row.buildHostId
     }).then(rs => {
       this.reload()
@@ -127,7 +127,7 @@ export default class extends React.Component {
     },
     {
       title: 'tag',
-      dataIndex: 'value',
+      dataIndex: 'tag',
     },
     {
       title: '目录',
@@ -136,10 +136,6 @@ export default class extends React.Component {
     {
       title: 'Dockerfile',
       dataIndex: 'dockerfile',
-    },
-    {
-      title: '版本',
-      dataIndex: 'version',
     },
     {
       title: '代码日志',

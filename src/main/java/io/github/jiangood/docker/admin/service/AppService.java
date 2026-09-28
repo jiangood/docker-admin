@@ -21,6 +21,7 @@ import io.github.jiangood.docker.sdk.engine.DefaultCallback;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import io.github.jiangood.openadmin.framework.data.BaseService;
 import io.github.jiangood.openadmin.util.BusinessException;
+import io.github.jiangood.openadmin.util.JsonTool;
 import jakarta.annotation.Resource;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,17 +34,16 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.Assert;
 
-import java.io.PrintWriter;
-import java.io.StringWriter;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 @Slf4j
 @RequiredArgsConstructor
 public class AppService extends BaseService<App> {
 
-    Set<String> deployingList = new HashSet<>();
+    Set<String> deployingList = ConcurrentHashMap.newKeySet();
 
     private final AppRepository appRepository;
     private final HostRepository hostRepository;
@@ -59,9 +59,12 @@ public class AppService extends BaseService<App> {
     private BuildLogService buildLogService;
 
     @Async
-    @Transactional
     public void deploy(App app) {
+        Assert.notNull(app, "应用不存在");
         deployingList.add(app.getId());
+        DockerClient client = null;
+        DeployLog deployLog = null;
+        boolean success = false;
         try {
             MDC.put("logFileId", app.getId());
 
@@ -70,18 +73,16 @@ public class AppService extends BaseService<App> {
             appRepository.save(app);
             app = appRepository.findById(app.getId()).orElse(null); // 确保关联对象都取出来
 
-            DeployLog deployLog = new DeployLog();
+            deployLog = new DeployLog();
             deployLog.setAppId(app.getId());
             deployLog.setAppName(app.getName());
 
             deployLog = deployLogRepository.save(deployLog);
             log.info("部署阶段开始");
-            String image = null;
-            DockerClient client;
             Host host = app.getHost();
 
             // 镜像
-            image = app.getImageUrl() + ":" + app.getImageTag();
+            String image = app.getImageUrl() + ":" + app.getImageTag();
 
             Registry registry = registryService.getEffective();
             if (registry != null) { // 通过镜像地址倒推 注册中心
@@ -220,24 +221,21 @@ public class AppService extends BaseService<App> {
 
             log.info("启动容器");
             log.info("部署阶段结束");
+            success = true;
         } catch (Exception e) {
             log.info("--------------------------------------------------");
             log.info("部署失败:" + e.getClass().getName() + "=>" + e.getMessage());
-
-
-            StringWriter writer = new StringWriter();
-            e.printStackTrace(new PrintWriter(writer));
-
-            String exStr = writer.toString();
-            log.info(exStr);
-
-
-            e.printStackTrace();
-            log.info("--------------------------------------------------");
+            log.info("--------------------------------------------------", e);
         } finally {
+            if (deployLog != null) {
+                deployLog.setSuccess(success);
+                deployLog.setCompleteTime(LocalDateTime.now());
+                deployLogRepository.save(deployLog);
+            }
+            IOUtils.closeQuietly(client);
+            deployingList.remove(app.getId());
             MDC.remove("logFileId");
         }
-        deployingList.remove(app.getId());
 
     }
 
@@ -397,7 +395,7 @@ public class AppService extends BaseService<App> {
                 continue;
             }
             if (StrUtil.equals(buildLog.getImageUrl(), app.getImageUrl())) {
-                app.setImageTag(event.getVersion());
+                app.setImageTag(event.getTag());
                 $this.deploy(app);
             }
         }
@@ -410,11 +408,12 @@ public class AppService extends BaseService<App> {
      */
     @Transactional
     public void updateBaseInfo(App input) {
-        if (input.getSysOrg().getId() == null) {
+        if (input.getSysOrg() == null || input.getSysOrg().getId() == null) {
             input.setSysOrg(null);
         }
 
         App old = appRepository.findById(input.getId()).orElse(null);
+        Assert.notNull(old, "应用不存在");
         old.setSysOrg(input.getSysOrg());
         old.setCnName(input.getCnName());
         old.setImageUrl(input.getImageUrl());
@@ -425,18 +424,30 @@ public class AppService extends BaseService<App> {
 
     public App copyApp(String appId, String hostId) {
         App app = appRepository.findById(appId).orElse(null);
+        Assert.notNull(app, "应用不存在");
         Host host = hostRepository.findById(hostId).orElse(null);
+        Assert.notNull(host, "主机不存在");
 
         App newApp = new App();
-        BeanUtils.copyProperties(app, newApp, "id","name","host");
-        newApp.setName(app.getName() + "_copy");
+        // 不复制 id/name/host 及审计字段
+        BeanUtils.copyProperties(app, newApp, "id", "name", "host", "createUser", "createTime", "updateUser", "updateTime", "logUrl", "config");
+        newApp.setName(buildCopyName(app.getName()));
         newApp.setHost(host);
+        if (app.getConfig() != null) {
+            newApp.setConfig(JsonTool.jsonToBean(JsonTool.toJsonQuietly(app.getConfig()), App.AppConfig.class));
+        }
 
+        return appRepository.save(newApp);
+    }
 
-
-        appRepository.save(newApp);
-
-        return newApp;
+    private String buildCopyName(String name) {
+        String candidate = name + "_copy";
+        int index = 1;
+        while (appRepository.existsByName(candidate)) {
+            index++;
+            candidate = name + "_copy" + index;
+        }
+        return candidate;
     }
 
 }

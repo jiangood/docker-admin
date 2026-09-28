@@ -93,12 +93,4 @@ public class YamlTool {
         }
         return result;
     }
-
-
-
-    public static void main(String[] args) {
-
-
-
-    }
 }

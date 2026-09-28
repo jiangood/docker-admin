@@ -1,11 +1,11 @@
 package io.github.jiangood.docker.admin.service;
 
-import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.date.BetweenFormatter;
 import cn.hutool.core.date.DateUtil;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.io.unit.DataSizeUtil;
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.extra.spring.SpringUtil;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.command.BuildImageCmd;
 import com.github.dockerjava.api.command.PushImageCmd;
@@ -28,11 +28,13 @@ import jakarta.annotation.Resource;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.io.IOUtils;
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.slf4j.MDC;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.util.Assert;
 import org.springframework.web.util.UriComponentsBuilder;
@@ -43,6 +45,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
 
@@ -72,7 +75,7 @@ public class ProjectService extends BaseService<Project> {
     @Resource
     private ApplicationEventPublisher applicationEventPublisher;
 
-    private final Map<String, DefaultCallback> buildThreadMap = new HashMap<>();
+    private final Map<String, DefaultCallback> buildThreadMap = new ConcurrentHashMap<>();
 
 
     public void stopBuild(String logId) throws IOException {
@@ -82,6 +85,9 @@ public class ProjectService extends BaseService<Project> {
         }
 
         BuildLog buildLog = buildLogService.findById(logId).orElse(null);
+        if (buildLog == null) {
+            return;
+        }
 
         buildLog.setSuccess(false);
         buildLog.setCompleteTime(LocalDateTime.now());
@@ -161,13 +167,14 @@ public class ProjectService extends BaseService<Project> {
             stopBuild(buildLog.getId());
         }
 
-        new Thread(() -> buildImageJob(p)).start();
+        // 通过代理调用 @Async 方法，避免自调用失效
+        SpringUtil.getBean(ProjectService.class).buildImageJob(p);
     }
 
 
+    @Async
     public void buildImageJob(BuildRequest p) {
         String tag = p.getTag();
-        String version = tag;
         String projectId = p.getProjectId();
         String context = p.getContext();
         String dockerfile = p.getDockerfile();
@@ -176,18 +183,18 @@ public class ProjectService extends BaseService<Project> {
         Project project = projectRepository.findById(projectId).orElse(null);
         BuildLog buildLog = new BuildLog();
         buildLog.setProjectId(project.getId());
-        buildLog.setVersion(version);
         buildLog.setProjectName(project.getName());
         buildLog.setDockerfile(project.getDockerfile());
-        buildLog.setValue(tag);
+        buildLog.setTag(tag);
         buildLog = buildLogService.saveLog(buildLog);
         String logId = buildLog.getId();
 
 
+        DockerClient client = null;
         MDC.put("logFileId", logId);
         try {
 
-            log.info("开始构建镜像任务, 项目：{}， 仓库：{}， tag：{}， 版本：{}", project.getName(), project.getGitUrl(), tag, version);
+            log.info("开始构建镜像任务, 项目：{}， 仓库：{}， tag：{}", project.getName(), project.getGitUrl(), tag);
 
             Host host = hostService.findById(p.getBuildHostId()).orElse(null);
 
@@ -214,12 +221,12 @@ public class ProjectService extends BaseService<Project> {
             Registry registry = registryService.getEffective();
             Assert.notNull(registry, "未配置镜像注册中心，请先在【设置-镜像注册中心】中配置");
             log.info("注册中心：{}", registry.getFullUrl());
-            DockerClient client = dockerService.getClient(host, registry);
+            client = dockerService.getClient(host, registry);
 
 
             String imageUrl = registry.getUrl() + "/" + registry.getNamespace() + "/" + project.getName();
 
-            String imageTag = imageUrl + ":" + version;
+            String imageTag = imageUrl + ":" + tag;
 
             log.info("目标镜像： {}", imageTag);
             Assert.state(!StrUtil.containsBlank(imageUrl), "镜像路径不能包含空格");
@@ -279,9 +286,6 @@ public class ProjectService extends BaseService<Project> {
             log.info("推送镜像结束 {}", imageTag);
 
 
-            client.close();
-
-
             buildLog.setSuccess(true);
             buildLog.setCompleteTime(LocalDateTime.now());
             buildLog.setTimeSpend(Duration.between(buildLog.getCreateTime(), buildLog.getCompleteTime()).toMillis());
@@ -289,12 +293,9 @@ public class ProjectService extends BaseService<Project> {
             log.info("已更新构建日志{}", buildLog);
 
 
-            Map<String, Object> data = BeanUtil.beanToMap(project, "id", "name", "value");
-
             BuildSuccessEvent event = new BuildSuccessEvent(this);
-            event.setData(data);
             event.setBuildLog(buildLog);
-            event.setVersion(version);
+            event.setTag(tag);
 
             applicationEventPublisher.publishEvent(event);
             log.info("抛出构建事件 {}", event.getBuildLog().getProjectName());
@@ -307,15 +308,16 @@ public class ProjectService extends BaseService<Project> {
             if (e instanceof IllegalArgumentException && e.getMessage() != null && e.getMessage().contains("Dockerfile does not exist")) {
                 log.info("请确保项目下至少有一个Dockerfile文件，不论是否指定其他Dockerfile");
             }
-            e.printStackTrace();
+            log.error("构建失败", e);
 
             buildLog.setSuccess(false);
             buildLog.setCompleteTime(LocalDateTime.now());
             buildLog.setTimeSpend(Duration.between(buildLog.getCreateTime(), buildLog.getCompleteTime()).toMillis());
             buildLogService.save(buildLog);
+        } finally {
+            IOUtils.closeQuietly(client);
+            MDC.remove("logFileId");
         }
-
-        MDC.remove("logFileId");
     }
 
     private GitTool.CloneResult gitClone(Project project, String tag) throws GitAPIException {

@@ -38,9 +38,6 @@ export default class extends React.Component {
         tagOptions: [],
 
 
-        publishApp: {
-            targetVersion: null
-        },
         showEditName: false,
         newName: '',
 

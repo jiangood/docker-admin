@@ -80,7 +80,6 @@ export default class extends React.Component {
         hostId: null,
         selectedOrgId: null,
         deployVisible: false,
-        deployImageVisible: false,
         editVisible: false,
         editValues: {},
         imageList: [],
