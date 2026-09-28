@@ -73,6 +73,9 @@ public class ProjectService extends BaseService<Project> {
     BuildLogService buildLogService;
 
     @Resource
+    ImageVersionService imageVersionService;
+
+    @Resource
     private ApplicationEventPublisher applicationEventPublisher;
 
     private final Map<String, DefaultCallback> buildThreadMap = new ConcurrentHashMap<>();
@@ -284,6 +287,13 @@ public class ProjectService extends BaseService<Project> {
             PushImageCmd pushImageCmd = client.pushImageCmd(imageTag);
             pushImageCmd.exec(new DefaultCallback<>(logId)).awaitCompletion();
             log.info("推送镜像结束 {}", imageTag);
+
+            // 记录镜像声明的端口与卷，容器配置只允许使用这些声明项
+            try {
+                imageVersionService.inspect(client, imageUrl, tag);
+            } catch (Exception e) {
+                log.warn("读取镜像声明失败: {}", e.getMessage());
+            }
 
 
             buildLog.setSuccess(true);

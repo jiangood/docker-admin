@@ -5,7 +5,7 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 /**
- * 镜像概览（按构建记录聚合）。
+ * 镜像概览（按镜像版本表聚合）。
  */
 @Data
 public class ImageSummary {

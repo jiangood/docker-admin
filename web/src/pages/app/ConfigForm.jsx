@@ -1,23 +1,28 @@
-import {Button, Col, Divider, Form, Input, message, Radio, Row, Select, Spin} from "antd";
+import {Alert, Button, Form, Input, message, Select, Spin} from "antd";
 import React from "react";
 import EditTable from "../../components/EditTable";
 import CodeMirrorEditor from "../../components/CodeMirrorEditor";
-import {FieldTable, HttpClient} from "@jiangood/open-admin";
+import {HttpClient} from "@jiangood/open-admin";
 
-
+/**
+ * 容器配置：镜像来自镜像表（平台构建/已知）且声明了端口/卷时，对应部分按声明只读；
+ * 否则（如公共镜像、未声明）可自由配置端口与卷。
+ */
 export default class extends React.Component {
 
+    state = {
+        loading: true,
+        meta: null,
+    }
 
-    portsColumns = [
-        {title: '主机端口', dataIndex: 'publicPort', dataType: 'InputNumber'},
-        {title: '容器端口', dataIndex: 'privatePort', dataType: 'InputNumber'},
-        {title: '协议', dataIndex: 'protocol', dataType: 'Select', valueEnum: {TCP: 'TCP', UDP: 'UDP'}},
-    ]
+    componentDidMount() {
+        HttpClient.get('admin/app/configMeta', {id: this.props.app.id}).then(rs => {
+            this.setState({meta: rs.data, loading: false})
+        }).catch(() => {
+            this.setState({loading: false})
+        })
+    }
 
-    bindsColumns = [
-        {title: '主机路径', dataIndex: 'publicVolume', dataType: 'Input'},
-        {title: '容器路径', dataIndex: 'privateVolume', dataType: 'Input'},
-    ]
     update = (form) => {
         const hide = message.loading("修改配置中...", 0)
         HttpClient.post('admin/app/updateConfig?id=' + this.props.app.id, form).then(rs => {
@@ -27,15 +32,54 @@ export default class extends React.Component {
 
     formRef = React.createRef()
 
+    portsColumns = (strict) => strict ? [
+        {title: '容器端口', dataIndex: 'privatePort', readonly: true},
+        {title: '协议', dataIndex: 'protocol', readonly: true},
+        {title: '主机端口', dataIndex: 'publicPort', dataType: 'InputNumber'},
+    ] : [
+        {title: '容器端口', dataIndex: 'privatePort', dataType: 'InputNumber'},
+        {title: '协议', dataIndex: 'protocol', dataType: 'Select', valueEnum: {TCP: 'TCP', UDP: 'UDP'}},
+        {title: '主机端口', dataIndex: 'publicPort', dataType: 'InputNumber'},
+    ]
+
+    bindsColumns = (strict) => strict ? [
+        {title: '容器路径', dataIndex: 'privateVolume', readonly: true},
+        {title: '主机路径', dataIndex: 'publicVolume', dataType: 'Input'},
+    ] : [
+        {title: '容器路径', dataIndex: 'privateVolume', dataType: 'Input'},
+        {title: '主机路径', dataIndex: 'publicVolume', dataType: 'Input'},
+    ]
+
     render() {
-        if (!this.props.app.config) {
+        const {app} = this.props
+        const {loading, meta} = this.state
+        if (loading) {
             return <Spin/>
         }
+        if (!app.config) {
+            return <Spin/>
+        }
+
+        const strictPorts = !!(meta && meta.strictPorts)
+        const strictVolumes = !!(meta && meta.strictVolumes)
+
+        const initialValues = {
+            ...app.config,
+            ports: meta ? meta.ports : (app.config.ports || []),
+            binds: meta ? meta.volumes : (app.config.binds || []),
+        }
+
         return <>
 
-            <Form ref={this.formRef} colon={false} labelCol={{flex: '100px'}} onFinish={this.update} initialValues={this.props.app.config}>
+            <Form ref={this.formRef} colon={false} labelCol={{flex: '100px'}} onFinish={this.update}
+                  initialValues={initialValues}>
+
+                {(!strictPorts || !strictVolumes) &&
+                    <Alert type='info' showIcon style={{marginBottom: 16}}
+                           message='该镜像不在镜像表中或其未声明端口/卷，端口与卷可自由配置'/>}
+
                 <Form.Item label='网络模式' name='networkMode'>
-                    <Select style={{width:200}}
+                    <Select style={{width: 200}}
                         options={[
                             {label: '桥接模式', value: 'bridge',},
                             {label: '主机模式', value: 'host',},
@@ -49,15 +93,21 @@ export default class extends React.Component {
                     {(fm) => {
                         const networkMode = fm.getFieldValue('networkMode')
                         if (networkMode === 'bridge') {
-                            return <Form.Item label='端口映射' name='ports'>
-                                <EditTable columns={this.portsColumns} />
+                            return <Form.Item label='端口映射' name='ports'
+                                              tooltip={strictPorts ? '端口来自镜像声明，仅可修改主机端口' : '镜像未声明端口，可自由配置'}>
+                                <EditTable columns={this.portsColumns(strictPorts)}
+                                           canAdd={!strictPorts} canRemove={!strictPorts}
+                                           extra='暂无端口'/>
                             </Form.Item>
                         }
                     }}
                 </Form.Item>
 
-                <Form.Item label='文件映射' name='binds'  >
-                    <FieldTable columns={this.bindsColumns} style={{width:600}}/>
+                <Form.Item label='文件映射' name='binds'
+                           tooltip={strictVolumes ? '卷来自镜像声明，仅可修改主机路径' : '镜像未声明卷，可自由配置'}>
+                    <EditTable columns={this.bindsColumns(strictVolumes)}
+                               canAdd={!strictVolumes} canRemove={!strictVolumes}
+                               extra='暂无卷'/>
                 </Form.Item>
 
                 <Form.Item label='环境变量' tooltip='yml格式' name='environmentYAML'>

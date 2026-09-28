@@ -3,7 +3,7 @@ import React from 'react'
 import {HttpClient, Page, ProTable} from "@jiangood/open-admin"
 
 /**
- * 镜像视图：基于构建记录聚合，可查看每个镜像的版本与关联应用。
+ * 镜像视图：基于镜像版本表，可查看每个镜像的版本与关联应用。
  */
 export default class extends React.Component {
 

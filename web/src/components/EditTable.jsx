@@ -1,6 +1,6 @@
-import {Empty, Input, InputNumber, Select} from "antd";
+import {Input, InputNumber, Select} from "antd";
 import React from "react";
-import {DeleteOutlined, ExclamationCircleOutlined, ExclamationOutlined, PlusCircleFilled} from '@ant-design/icons';
+import {DeleteOutlined, ExclamationCircleOutlined, PlusCircleFilled} from '@ant-design/icons';
 
 export default class extends React.Component {
 
@@ -10,12 +10,8 @@ export default class extends React.Component {
 
   constructor(props) {
     super(props);
-    this.state.dataSource = props.value;
+    this.state.dataSource = props.value || [];
   }
-
-
-  columns = []
-
 
   add = () => {
     let {dataSource} = this.state;
@@ -39,59 +35,65 @@ export default class extends React.Component {
     this.props.onChange(dataSource)
   }
 
+  renderCell = (c, p, i) => {
+    if (c.readonly) {
+      const v = p[c.dataIndex];
+      return v === null || v === undefined || v === '' ? '-' : v;
+    }
+    if (c.dataType === 'Input') {
+      return <Input value={p[c.dataIndex]} onChange={e => this.edit(c.dataIndex, e.target.value, i)}/>
+    }
+    if (c.dataType === 'InputNumber') {
+      return <InputNumber value={p[c.dataIndex]} onChange={v => this.edit(c.dataIndex, v, i)}/>
+    }
+    if (c.dataType === 'Select') {
+      return <Select value={p[c.dataIndex]}
+                     onChange={v => this.edit(c.dataIndex, v, i)}
+                     style={{minWidth: 100}}>
+        {Object.keys(c.valueEnum).map(k => <Select.Option key={k} value={k}>{c.valueEnum[k]}</Select.Option>)}
+      </Select>
+    }
+    return null;
+  }
 
   render() {
-    const {columns} = this.props;
+    const {columns, extra} = this.props;
     const {dataSource} = this.state
+    const canAdd = this.props.canAdd !== false;
+    const canRemove = this.props.canRemove !== false;
+    const colSpan = columns.length + (canRemove ? 1 : 0);
     return <div>
       <table>
         <thead>
         <tr>
-          {columns.map(c => <th key={c.dataIndex} >{c.title}</th>)}
-          <th></th>
+          {columns.map(c => <th key={c.dataIndex}>{c.title}</th>)}
+          {canRemove && <th></th>}
         </tr>
         </thead>
         <tbody>
         {dataSource.length === 0 && <tr>
-          <td height={50} colSpan={columns.length + 1}><ExclamationCircleOutlined /> 暂无数据</td>
+          <td height={50} colSpan={colSpan}>
+            <ExclamationCircleOutlined/> {extra || '暂无数据'}
+          </td>
         </tr>}
 
 
         {dataSource.map((p, i) => <tr key={i}>
-          {columns.map(c => <td key={c.dataIndex}  align='center'>
-            {c.dataType === 'Input' && <Input
-                value={p[c.dataIndex]}
-                onChange={e => {
-                  this.edit(c.dataIndex, e.target.value, i)
-                }}/>}
-
-            {c.dataType === 'InputNumber' && <InputNumber
-                value={p[c.dataIndex]}
-                onChange={v => {
-                  this.edit(c.dataIndex, v, i)
-                }}/>}
-
-
-            {c.dataType === 'Select' && <Select value={p[c.dataIndex]}
-                                                onChange={v => this.edit(c.dataIndex, v, i)}
-                                                style={{minWidth: 100}}
-            >
-
-              {Object.keys(c.valueEnum).map(k => <Select.Option key={k} value={k}>{c.valueEnum[k]}</Select.Option>)}
-            </Select>}
+          {columns.map(c => <td key={c.dataIndex} align='center'>
+            {this.renderCell(c, p, i)}
           </td>)}
-          <td>
+          {canRemove && <td>
             <DeleteOutlined onClick={() => this.remove(i)}></DeleteOutlined>
-          </td>
+          </td>}
         </tr>)}
 
 
         </tbody>
       </table>
 
-      <div style={{marginTop: 16, marginBottom: 16}}>
+      {canAdd && <div style={{marginTop: 16, marginBottom: 16}}>
         <PlusCircleFilled style={{color: '#1890ff'}}/><a onClick={this.add}>添加</a>
-      </div>
+      </div>}
     </div>
 
   }

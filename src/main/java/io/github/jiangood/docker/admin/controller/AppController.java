@@ -83,6 +83,17 @@ public class AppController {
         return AjaxResult.ok().data(container);
     }
 
+    /**
+     * 容器配置元数据：镜像表声明的端口/卷 + 已保存的主机侧映射。
+     */
+    @HasPermission("app:view")
+    @RequestMapping("configMeta")
+    public AjaxResult configMeta(String id) {
+        App app = service.findById(id).orElse(null);
+        Assert.notNull(app, "应用不存在");
+        return AjaxResult.ok().data(service.getConfigMeta(app));
+    }
+
 
     @HasPermission("app:save")
     @RequestMapping("save")
