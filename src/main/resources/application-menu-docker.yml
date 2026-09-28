@@ -62,3 +62,12 @@ menus:
       - {name: 查看, code: git-credential:view}
       - {name: 保存, code: git-credential:save}
       - {name: 删除, code: git-credential:delete}
+  setting-sync:
+    pid: setting
+    name: 镜像同步
+    path: /image-sync
+    icon: CloudSyncOutlined
+    seq: 650
+    perms:
+      - {name: 查看, code: image-sync:view}
+      - {name: 同步, code: image-sync:sync}

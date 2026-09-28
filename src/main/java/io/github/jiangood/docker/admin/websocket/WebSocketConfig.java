@@ -6,7 +6,6 @@ import jakarta.annotation.Resource;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.socket.config.annotation.EnableWebSocket;
 import org.springframework.web.socket.config.annotation.WebSocketConfigurer;
-import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistration;
 import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry;
 
 @Configuration
@@ -29,19 +28,29 @@ public class WebSocketConfig implements WebSocketConfigurer {
     private ContainerLogHandshakeInterceptor handshakeInterceptor;
 
     @Resource
+    private SyncLogWebSocketHandler syncLogHandler;
+
+    @Resource
+    private SyncLogHandshakeInterceptor syncLogHandshakeInterceptor;
+
+    @Resource
     private Config config;
 
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
-        WebSocketHandlerRegistration registration = registry
-                .addHandler(handler, "/admin/ws/log/{id}")
-                .addInterceptors(handshakeInterceptor);
+        String[] origins = CollUtil.isNotEmpty(config.getWsOrigins())
+                ? config.getWsOrigins().toArray(new String[0])
+                : DEFAULT_ALLOWED_ORIGIN_PATTERNS;
 
-        if (CollUtil.isNotEmpty(config.getWsOrigins())) {
-            registration.setAllowedOriginPatterns(config.getWsOrigins().toArray(new String[0]));
-        } else {
-            registration.setAllowedOriginPatterns(DEFAULT_ALLOWED_ORIGIN_PATTERNS);
-        }
+        // 容器实时日志
+        registry.addHandler(handler, "/admin/ws/log/{id}")
+                .addInterceptors(handshakeInterceptor)
+                .setAllowedOriginPatterns(origins);
+
+        // 镜像同步实时日志
+        registry.addHandler(syncLogHandler, "/admin/ws/sync-log/{logId}")
+                .addInterceptors(syncLogHandshakeInterceptor)
+                .setAllowedOriginPatterns(origins);
     }
 
 

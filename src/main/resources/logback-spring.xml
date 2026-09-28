@@ -28,6 +28,9 @@
     <logger name="io.github.jiangood.docker.admin.service.AppService">
         <appender-ref ref="docker-log-appender" />
     </logger>
+    <logger name="io.github.jiangood.docker.admin.service.ImageSyncService">
+        <appender-ref ref="docker-log-appender" />
+    </logger>
     <logger name="io.github.jiangood.docker.sdk">
         <appender-ref ref="docker-log-appender" />
     </logger>
