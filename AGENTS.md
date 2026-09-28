@@ -5,7 +5,7 @@ Multi-host container management platform with CI/CD. UI is Chinese.
 ## Stack
 
 - **Backend:** Spring Boot 4.1.0 + Java 21, Maven → `target/app.jar`
-- **Frontend:** Umi 4 + React 19 + Ant Design 6 + TypeScript 5, dev on port 51105
+- **Frontend:** React 19 + Ant Design 6 + TypeScript 5 + Vite, dev on port 7000 (backend 7001)
 - **Base framework:** `io.github.jiangood:open-admin` 3.1.2 (handles CRUD, auth, menus)
 - **Docker SDK:** docker-java 3.7.1 via TCP (tcp://localhost:2375)
 - **Remote hosts:** 主机的 `connectionType` 支持 `tcp` / `unix` / `ssh`。SSH 模式用 `docker-java-transport-jsch` 登录远端执行 `docker system dial-stdio`，无需暴露 2375（远端需 docker CLI 18.09+，密码认证，不校验 host key）。
@@ -20,7 +20,7 @@ mvn clean package -DskipTests           # backend only, output target/app.jar
 cd web && npm install && npm run build   # frontend only, output web/dist/
 
 # Dev
-cd web && npm run dev                    # frontend dev server on :51105
+cd web && npm run dev                    # frontend dev server on :7000 (proxies to backend :7001)
 
 # CI (GitHub Actions, triggers on v* tags)
 cd web && npm install && npm run build

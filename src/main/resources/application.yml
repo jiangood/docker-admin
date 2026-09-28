@@ -4,6 +4,7 @@
 db_path: /data/db/docker-admin
 
 server:
+  port: 7001
   servlet:
     context-path: /docker-admin  # 业务项目按需修改
 spring:
