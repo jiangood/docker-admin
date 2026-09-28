@@ -9,7 +9,9 @@ import org.apache.commons.io.FileUtils;
 import org.eclipse.jgit.api.CloneCommand;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.LogCommand;
+import org.eclipse.jgit.api.LsRemoteCommand;
 import org.eclipse.jgit.api.errors.GitAPIException;
+import org.eclipse.jgit.lib.Ref;
 import org.eclipse.jgit.lib.TextProgressMonitor;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
@@ -18,6 +20,10 @@ import java.io.File;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
 
 @Slf4j
 public class GitTool {
@@ -31,7 +37,32 @@ public class GitTool {
         LocalDateTime commitTime;
     }
 
-    public static CloneResult clone(String url, String user, String password, String branch) throws GitAPIException {
+    /**
+     * 列出远程仓库的所有 tag（不含分支）。
+     */
+    public static List<String> listRemoteTags(String url, String user, String password) throws GitAPIException {
+        LsRemoteCommand cmd = Git.lsRemoteRepository()
+                .setRemote(url)
+                .setHeads(false)
+                .setTags(true);
+
+        if (user != null && password != null) {
+            cmd.setCredentialsProvider(new UsernamePasswordCredentialsProvider(user, password));
+        }
+
+        Collection<Ref> refs = cmd.call();
+        List<String> tags = new ArrayList<>();
+        for (Ref ref : refs) {
+            String name = ref.getName();
+            if (name.startsWith("refs/tags/")) {
+                tags.add(name.substring("refs/tags/".length()));
+            }
+        }
+        Collections.sort(tags);
+        return tags;
+    }
+
+    public static CloneResult clone(String url, String user, String password, String branchOrTag) throws GitAPIException {
 
         String dirName = url.substring(url.lastIndexOf("/") + 1);
         dirName = dirName.replace(".git", "");
@@ -51,7 +82,7 @@ public class GitTool {
                 .setCloneSubmodules(true)
                 .setURI(url)
                 .setDirectory(workDir)
-                .setBranch(branch)
+                .setBranch(branchOrTag)
                 .setProgressMonitor(new TextProgressMonitor())
                 ;
 

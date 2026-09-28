@@ -49,11 +49,6 @@ export default class extends React.Component {
             dataIndex: 'gitUrl',
         },
         {
-            title: '分支',
-            dataIndex: 'branch',
-            hideInSearch: true
-        },
-        {
             title: '备注',
             dataIndex: 'remark',
         },
@@ -169,10 +164,6 @@ export default class extends React.Component {
                     </Form.Item>
 
                     <Form.Item label='git仓库' name='gitUrl' rules={[{required: true}]}>
-                        <Input/>
-                    </Form.Item>
-
-                    <Form.Item label='分支' name='branch' rules={[{required: true}]} initialValue='master'>
                         <Input/>
                     </Form.Item>
 

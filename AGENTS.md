@@ -40,7 +40,10 @@ docker build -t docker-admin .
 - **Permissions** via `@HasPermission("app:view")` annotation from open-admin, not standard Spring Security annotations.
 - **Frontend** is a thin layer over `@jiangood/open-admin`. Pages live in `web/src/pages/`, config in `web/config/config.js`.
 - **Static files** are served from the JAR; in dev, frontend proxies to backend.
-- **Menu config** in `src/main/resources/config/application-data-menu.yml`, overridable in `-override.yml`.
+- **Menu config** in `src/main/resources/application-menu-docker.yml`.
+- **Builds are tag-only:** 构建只接受 `vX.Y.Z` tag，镜像版本 = tag（不再自动生成版本号）。`admin/project/tags` 拉远程 tag。
+- **Webhook:** `POST /admin/public/webhook/{token}`（`/admin/public/**` 免登录；token 在项目详情可重置）。推送 tag 触发构建，构建节点取系统第一个 runner；成功后 `autoDeploy` 应用自动部署。
+- **镜像页:** 数据由 `BuildLog` 聚合而来（`admin/image/page|tags|apps`），展示镜像、版本与关联应用。
 - **Docker** daemon must be reachable at `tcp://localhost:2375` (or configured via `open-admin`).
 - **CI** pushes Docker image to `ghcr.io/{owner}/docker-admin`. Authenticates via `GITHUB_TOKEN`.
 - **Context path:** `server.servlet.context-path=/docker-admin` — so backend and dev proxy are served under `http://host:port/docker-admin/...`.

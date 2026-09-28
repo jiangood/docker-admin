@@ -9,6 +9,7 @@ import {
     message,
     Modal,
     Row,
+    Select,
     Space,
     Spin,
     Tabs,
@@ -43,6 +44,9 @@ export default class extends React.Component {
         showEditName: false,
         newName: '',
 
+        deployVisible: false,
+        versionOptions: [],
+        targetVersion: '',
     }
     componentDidMount() {
         let id = PageUtils.currentParams().id
@@ -86,15 +90,33 @@ export default class extends React.Component {
     };
 
 
-    deploy = () => {
+    openDeploy = () => {
+        HttpClient.get('admin/app/versions', {id: this.state.app.id}).then(rs => {
+            this.setState({
+                versionOptions: rs.data || [],
+                targetVersion: this.state.app.imageTag,
+                deployVisible: true
+            })
+        })
+    }
+
+    submitDeploy = () => {
+        const {targetVersion} = this.state
+        if (!targetVersion) {
+            message.warning('请选择版本')
+            return
+        }
         const {container} = this.state
         container.state = 'deploying'
         this.setState({container})
-        HttpClient.post('admin/app/deploy/' + this.state.app.id).then(rs => {
-            message.success('部署指令已发送，异步执行中...')
 
+        const hide = message.loading('部署中...', 0)
+        HttpClient.get('admin/app/updateVersion', {id: this.state.app.id, version: targetVersion}).then(() => {
+            this.setState({deployVisible: false})
+            message.success('部署指令已发送，异步执行中...')
+            this.loadApp()
             this.loadContainer()
-        })
+        }).finally(hide)
     }
     start = () => {
         HttpClient.post('admin/app/start/' + this.state.app.id).then(() => {
@@ -156,7 +178,7 @@ export default class extends React.Component {
             <Card title={app.name} extra={<Space>
                 <Button disabled={state !== 'exited'} onClick={this.start} type="primary">启动</Button>
                 <Button disabled={state !== 'running'} onClick={this.stop} type="primary" danger>停止</Button>
-                <Button onClick={this.deploy} loading={state === 'deploying'} type="primary">重新部署</Button>
+                <Button onClick={this.openDeploy} loading={state === 'deploying'} type="primary">重新部署</Button>
             </Space>}>
 
 
@@ -185,6 +207,23 @@ export default class extends React.Component {
             <Card className='mt-2'>
                 {this.renderTabs()}
             </Card>
+
+            <Modal title='重新部署'
+                   open={this.state.deployVisible}
+                   onOk={this.submitDeploy}
+                   onCancel={() => this.setState({deployVisible: false})}
+                   destroyOnHidden>
+                <div style={{marginBottom: 8}}>镜像：{app.imageUrl}</div>
+                <Select style={{width: '100%'}}
+                        value={this.state.targetVersion}
+                        onChange={v => this.setState({targetVersion: v})}
+                        options={this.state.versionOptions}
+                        showSearch
+                        placeholder='选择要部署的版本'/>
+                <div style={{marginTop: 8, color: '#999'}}>
+                    版本来自该镜像的构建记录。
+                </div>
+            </Modal>
 
         </Page>)
     }

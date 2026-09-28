@@ -10,8 +10,11 @@ public class BuildRequest {
 
     String projectId;
 
-    String branchOrTag = "master";
-    String version;
+    /**
+     * 构建用的 git tag，同时作为镜像版本号（如 v1.0.1）。
+     */
+    String tag;
+
     String context = "/";
     String dockerfile = "Dockerfile";
     boolean useCache = true;

@@ -125,6 +125,21 @@ public class AppController {
     }
 
 
+    /**
+     * 该应用镜像可选的版本（来自成功构建记录）。
+     */
+    @HasPermission("app:view")
+    @RequestMapping("versions")
+    public AjaxResult versions(String id) {
+        App app = service.findById(id).orElse(null);
+        Assert.notNull(app, "应用不存在");
+        List<Option> options = service.getImageVersions(app.getImageUrl()).stream()
+                .map(v -> new Option(v, v))
+                .toList();
+        return AjaxResult.ok().data(options);
+    }
+
+
     @PreAuthorize("hasAuthority('app:delete')")
     @RequestMapping("delete")
     public AjaxResult delete(String id, Boolean force) {

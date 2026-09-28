@@ -55,6 +55,9 @@ public class AppService extends BaseService<App> {
     @Resource
     private RegistryService registryService;
 
+    @Resource
+    private BuildLogService buildLogService;
+
     @Async
     @Transactional
     public void deploy(App app) {
@@ -332,6 +335,13 @@ public class AppService extends BaseService<App> {
         appRepository.deleteById(id);
     }
 
+
+    /**
+     * 该应用镜像可用的版本（来自成功构建记录的 tag），倒序。
+     */
+    public List<String> getImageVersions(String imageUrl) {
+        return buildLogService.versionsByImageUrl(imageUrl);
+    }
 
     public void updateAppVersion(String id, String tag) {
         Assert.hasLength(tag, "tag不能为空");

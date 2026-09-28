@@ -84,6 +84,7 @@ export default class extends React.Component {
         editVisible: false,
         editValues: {},
         imageList: [],
+        tagOptions: [],
     }
 
 
@@ -115,6 +116,18 @@ export default class extends React.Component {
         HttpClient.post('admin/app/updateBaseInfo', values).then(() => {
             this.setState({editVisible: false})
             this.reload()
+        })
+    }
+
+    loadImageList = searchText => {
+        HttpClient.get('admin/image/options', {searchText}).then(rs => {
+            this.setState({imageList: rs.data || []})
+        })
+    }
+
+    onImageSelect = imageUrl => {
+        HttpClient.get('admin/image/tags', {imageUrl}).then(rs => {
+            this.setState({tagOptions: rs.data || []})
         })
     }
 
@@ -174,13 +187,19 @@ export default class extends React.Component {
                             <Input/>
                         </Form.Item>
 
-                        <Form.Item name='imageUrl' label='镜像' required rules={[{required: true}]}>
-                            <AutoComplete options={this.state.imageList} onSearch={this.loadImageList}></AutoComplete>
+                        <Form.Item name='imageUrl' label='镜像' required rules={[{required: true}]}
+                                   tooltip='从构建过的镜像中选择'>
+                            <AutoComplete options={this.state.imageList}
+                                          onSearch={this.loadImageList}
+                                          onSelect={this.onImageSelect}
+                                          placeholder='选择镜像'></AutoComplete>
                         </Form.Item>
 
 
-                        <Form.Item name='imageTag' label='版本' required rules={[{required: true}]}>
-                            <Input placeholder='请输入版本'></Input>
+                        <Form.Item name='imageTag' label='版本' required rules={[{required: true}]}
+                                   tooltip='选择该镜像已构建的 tag'>
+                            <AutoComplete options={this.state.tagOptions}
+                                          placeholder='选择版本'></AutoComplete>
                         </Form.Item>
 
 

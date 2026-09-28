@@ -23,6 +23,7 @@ import io.github.jiangood.docker.admin.entity.Registry;
 import io.github.jiangood.docker.sdk.engine.DefaultCallback;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import io.github.jiangood.openadmin.framework.data.BaseService;
+import io.github.jiangood.openadmin.util.BusinessException;
 import jakarta.annotation.Resource;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -42,6 +43,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.*;
+import java.util.regex.Pattern;
 
 
 @Service
@@ -98,6 +100,60 @@ public class ProjectService extends BaseService<Project> {
 
     }
 
+    /**
+     * 构建版本（tag）格式：v1.0.1 / 1.0.1
+     */
+    public static final Pattern TAG_PATTERN = Pattern.compile("^v?\\d+\\.\\d+\\.\\d+$");
+
+    public static boolean isValidTag(String tag) {
+        return StrUtil.isNotBlank(tag) && TAG_PATTERN.matcher(tag.trim()).matches();
+    }
+
+    /**
+     * 拉取项目远程仓库的 tag 列表。
+     */
+    public List<String> listRemoteTags(Project project) {
+        GitCredential credential = gitCredentialService.findBestByUrl(project.getGitUrl());
+        String username = credential == null ? null : credential.getUsername();
+        String password = credential == null ? null : credential.getPassword();
+        try {
+            return GitTool.listRemoteTags(project.getGitUrl(), username, password);
+        } catch (GitAPIException e) {
+            throw new BusinessException("获取远程 tag 失败：" + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 用指定 tag 触发构建（Webhook 使用，构建节点取系统默认 runner）。
+     */
+    public void buildByTag(Project project, String tag) {
+        Assert.isTrue(isValidTag(tag), "tag 格式不正确，需形如 v1.0.1");
+        Host runner = hostService.getDefaultDockerRunner();
+        Assert.notNull(runner, "未配置构建节点（runner），请先在【主机】中设置");
+
+        BuildRequest req = new BuildRequest();
+        req.setProjectId(project.getId());
+        req.setTag(tag);
+        req.setDockerfile(project.getDockerfile());
+        req.setBuildHostId(runner.getId());
+        try {
+            buildImage(req);
+        } catch (IOException e) {
+            throw new BusinessException("触发构建失败：" + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Webhook 入口：按 token 找到项目并用推送的 tag 触发构建。
+     */
+    public void triggerByToken(String token, String tag) {
+        Assert.hasText(tag, "未从 Webhook 请求中解析到 tag");
+        Assert.isTrue(isValidTag(tag), "tag 格式不正确，需形如 v1.0.1：" + tag);
+        Project project = projectRepository.findByWebhookToken(token);
+        Assert.notNull(project, "无效的 webhook token");
+        buildByTag(project, tag);
+    }
+
     public void buildImage(BuildRequest p) throws IOException {
         List<BuildLog> processing = buildLogService.findByProjectProcessing(p.getProjectId());
 
@@ -110,10 +166,10 @@ public class ProjectService extends BaseService<Project> {
 
 
     public void buildImageJob(BuildRequest p) {
-        String version = p.getVersion();
+        String tag = p.getTag();
+        String version = tag;
         String projectId = p.getProjectId();
         String context = p.getContext();
-        String branchOrTag = p.getBranchOrTag();
         String dockerfile = p.getDockerfile();
 
 
@@ -123,7 +179,7 @@ public class ProjectService extends BaseService<Project> {
         buildLog.setVersion(version);
         buildLog.setProjectName(project.getName());
         buildLog.setDockerfile(project.getDockerfile());
-        buildLog.setValue(project.getBranch());
+        buildLog.setValue(tag);
         buildLog = buildLogService.saveLog(buildLog);
         String logId = buildLog.getId();
 
@@ -131,14 +187,14 @@ public class ProjectService extends BaseService<Project> {
         MDC.put("logFileId", logId);
         try {
 
-            log.info("开始构建镜像任务, 项目：{}， 仓库：{}， 分支：{}， 版本：{}", project.getName(), project.getGitUrl(), branchOrTag, version);
+            log.info("开始构建镜像任务, 项目：{}， 仓库：{}， tag：{}， 版本：{}", project.getName(), project.getGitUrl(), tag, version);
 
             Host host = hostService.findById(p.getBuildHostId()).orElse(null);
 
             Assert.notNull(host, "无构建主机");
             log.info("构建主机信息... 名称：{}, host:{}, 备注:{}", host.getName(), host.getDockerHost(), StrUtil.emptyIfNull(host.getRemark()));
 
-            GitTool.CloneResult cloneResult = gitClone(project);
+            GitTool.CloneResult cloneResult = gitClone(project, tag);
             File workDir = cloneResult.getDir();
             log.info("代码下载完毕 " + workDir);
             log.info("代码提交信息: {}", cloneResult.getCodeMessage());
@@ -262,10 +318,9 @@ public class ProjectService extends BaseService<Project> {
         MDC.remove("logFileId");
     }
 
-    private GitTool.CloneResult gitClone(Project project) throws GitAPIException {
+    private GitTool.CloneResult gitClone(Project project, String tag) throws GitAPIException {
         String username = null;
         String password = null;
-        String branch = project.getBranch();
         GitCredential credential = gitCredentialService.findBestByUrl(project.getGitUrl());
         if (credential != null) {
             username = credential.getUsername();
@@ -273,8 +328,7 @@ public class ProjectService extends BaseService<Project> {
         }
 
         log.info("代码下载中...");
-        GitTool.CloneResult cloneResult = GitTool.clone(project.getGitUrl(), username, password, branch);
-        return cloneResult;
+        return GitTool.clone(project.getGitUrl(), username, password, tag);
     }
 
 

@@ -1,5 +1,7 @@
 package io.github.jiangood.docker.admin.entity;
 
+import cn.hutool.core.util.RandomUtil;
+import cn.hutool.core.util.StrUtil;
 import io.github.jiangood.openadmin.util.annotation.Remark;
 import io.github.jiangood.openadmin.framework.data.BaseEntity;
 import io.github.jiangood.openadmin.framework.validator.ValidateStartWithLetter;
@@ -7,6 +9,7 @@ import io.github.jiangood.openadmin.modules.system.entity.SysOrg;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
@@ -47,13 +50,21 @@ public class Project extends BaseEntity {
     @Remark("构建参数")
     String buildArg;
 
-    // 默认分支
-    @Remark("分支")
-    @NotNull
-    String branch;
+
+    @Remark("Webhook 令牌")
+    @Column(unique = true)
+    String webhookToken;
 
 
     String remark;
+
+
+    @PrePersist
+    public void prePersist() {
+        if (StrUtil.isBlank(webhookToken)) {
+            webhookToken = RandomUtil.randomString(32);
+        }
+    }
 
 
 }

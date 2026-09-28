@@ -1,5 +1,6 @@
 package io.github.jiangood.docker.admin.service;
 
+import cn.hutool.core.util.StrUtil;
 import io.github.jiangood.docker.admin.dao.BuildLogRepository;
 import io.github.jiangood.docker.admin.entity.BuildLog;
 import io.github.jiangood.openadmin.framework.data.BaseService;
@@ -10,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -28,6 +30,25 @@ public class BuildLogService extends BaseService<BuildLog> {
         Collections.sort(versions);
         Collections.reverse(versions);
         return versions;
+    }
+
+    /**
+     * 某个镜像地址下所有构建成功的版本（tag），倒序。
+     */
+    public List<String> versionsByImageUrl(String imageUrl) {
+        if (StrUtil.isBlank(imageUrl)) {
+            return Collections.emptyList();
+        }
+        Spec<BuildLog> q = Spec.of();
+        q.eq(BuildLog.Fields.imageUrl, imageUrl);
+        q.eq(BuildLog.Fields.success, true);
+        List<BuildLog> list = buildLogRepository.findAll(q);
+        return list.stream()
+                .map(BuildLog::getVersion)
+                .filter(StrUtil::isNotBlank)
+                .distinct()
+                .sorted(Comparator.reverseOrder())
+                .collect(Collectors.toList());
     }
 
     @Transactional

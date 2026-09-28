@@ -1,6 +1,6 @@
 import {
-  AutoComplete, Button, Card, Checkbox, Descriptions, Form,
-  Modal, Select, Space, Spin, Tooltip
+  Button, Card, Checkbox, Descriptions, Form,
+  Modal, Select, Space, Spin, Tooltip, Typography
 } from 'antd';
 import React from 'react';
 import {
@@ -10,8 +10,7 @@ import {
   Loading3QuartersOutlined,
   MinusCircleTwoTone
 } from "@ant-design/icons";
-import {DateUtils, HttpClient, PageUtils, ProTable, ViewText} from "@jiangood/open-admin";
-import dayjs from "dayjs";
+import {DateUtils, HttpClient, PageUtils, ProTable, UrlUtils, ViewText} from "@jiangood/open-admin";
 
 
 function getIcon(key, index) {
@@ -31,7 +30,8 @@ export default class extends React.Component {
   state = {
     project: null,
     showTrigger: false,
-    hostOptions: []
+    hostOptions: [],
+    tagOptions: []
   }
   actionRef = React.createRef();
   timer = null
@@ -39,7 +39,7 @@ export default class extends React.Component {
   componentDidMount() {
     this.id = PageUtils.currentParams().id
 
-    HttpClient.get('admin/project/get', {id: this.id}).then(rs => this.setState({project: rs.data}))
+    this.loadProject()
 
     this.timer = setInterval(() => {
       if (document.hidden) return;
@@ -57,12 +57,20 @@ export default class extends React.Component {
     }
   }
 
+  loadProject = () => {
+    HttpClient.get('admin/project/get', {id: this.id}).then(rs => this.setState({project: rs.data}))
+  }
+
   reload = () => {
     this.actionRef.current?.reload()
   }
 
   retry = row => {
-    HttpClient.get("admin/project/build", row).then(rs => {
+    HttpClient.get("admin/project/build", {
+      projectId: row.projectId,
+      tag: row.version,
+      buildHostId: row.buildHostId
+    }).then(rs => {
       this.reload()
     })
   }
@@ -74,6 +82,9 @@ export default class extends React.Component {
   }
 
   triggerPipeline = () => {
+    HttpClient.get('admin/project/tags', {projectId: this.id}).then(rs => {
+      this.setState({tagOptions: rs.data || []})
+    })
     this.setState({showTrigger: true})
   }
 
@@ -90,6 +101,18 @@ export default class extends React.Component {
     })
   }
 
+  resetWebhook = () => {
+    HttpClient.get("admin/project/resetWebhook", {id: this.state.project.id}).then(() => {
+      this.loadProject()
+    })
+  }
+
+  webhookUrl = () => {
+    const token = this.state.project?.webhookToken
+    if (!token) return ''
+    return window.location.origin + UrlUtils.contextPath('/admin/public/webhook/' + token)
+  }
+
   columns = [
     {
       title: '项目',
@@ -103,7 +126,7 @@ export default class extends React.Component {
       }
     },
     {
-      title: '分支/标签',
+      title: 'tag',
       dataIndex: 'value',
     },
     {
@@ -172,8 +195,7 @@ export default class extends React.Component {
       return <Spin/>
     }
 
-    const {project, showTrigger, hostOptions} = this.state;
-    let todayVersion = 'v' + dayjs().format('YYYYMMDDHH');
+    const {project, showTrigger, hostOptions, tagOptions} = this.state;
 
     return (<>
 
@@ -183,8 +205,19 @@ export default class extends React.Component {
           <Descriptions.Item label='中文名称'>{project.cnName}</Descriptions.Item>
           <Descriptions.Item label='代码源'>{project.gitUrl}</Descriptions.Item>
           <Descriptions.Item label='dockerfile'>{project.dockerfile}</Descriptions.Item>
-          <Descriptions.Item label='分支'>{project.branch}</Descriptions.Item>
           <Descriptions.Item label='创建时间'>{project.createTime}</Descriptions.Item>
+        </Descriptions>
+
+        <Descriptions size='small' column={1} style={{marginTop: 8}}>
+          <Descriptions.Item label='Webhook'>
+            <Space wrap>
+              <Typography.Text copyable={{text: this.webhookUrl()}} code>
+                {this.webhookUrl()}
+              </Typography.Text>
+              <Button size='small' onClick={this.resetWebhook}>重置</Button>
+              <span style={{color: '#999'}}>推送 tag（vX.Y.Z）到该地址即可自动构建</span>
+            </Space>
+          </Descriptions.Item>
         </Descriptions>
       </Card>
 
@@ -214,18 +247,15 @@ export default class extends React.Component {
           onFinish={this.submitTrigger}
           labelCol={{flex: '100px'}}
           initialValues={{
-            value: project.branch || 'master',
-            version: todayVersion,
-            projectId: project.id
+            projectId: project.id,
+            buildHostId: hostOptions[0]?.value
           }}
           preserve={false}>
           <Form.Item name="projectId" hidden>
           </Form.Item>
-          <Form.Item name="version" label="构建版本" rules={[{required: true}]}>
-            <AutoComplete options={[
-              {label: 'latest', value: 'latest'},
-              {label: todayVersion, value: todayVersion}
-            ]}></AutoComplete>
+          <Form.Item name="tag" label="构建 tag" rules={[{required: true, message: '请选择 tag'}]}
+                     help="只支持 vX.Y.Z 形式的版本 tag">
+            <Select options={tagOptions} showSearch placeholder='请选择远程 tag'/>
           </Form.Item>
 
           <Form.Item name="buildHostId" label="构建节点" rules={[{required: true, message: "请选择构建节点"}]}

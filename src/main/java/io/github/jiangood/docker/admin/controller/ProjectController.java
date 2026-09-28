@@ -1,5 +1,6 @@
 package io.github.jiangood.docker.admin.controller;
 
+import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
 import io.github.jiangood.docker.admin.dto.BuildRequest;
 import io.github.jiangood.docker.admin.entity.Project;
@@ -11,12 +12,12 @@ import io.github.jiangood.openadmin.framework.config.RequestBodyKeys;
 import io.github.jiangood.openadmin.framework.data.specification.Spec;
 import io.github.jiangood.openadmin.framework.auth.LoginTool;
 import jakarta.annotation.Resource;
-import org.eclipse.jgit.api.errors.GitAPIException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.util.Assert;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
@@ -91,23 +92,50 @@ public class ProjectController {
 
     @PreAuthorize("hasAuthority('project:build')")
     @RequestMapping("build")
-    public AjaxResult build(BuildRequest buildRequest, @RequestParam String projectId, String buildHostId) throws InterruptedException, IOException, GitAPIException {
+    public AjaxResult build(BuildRequest buildRequest, @RequestParam String projectId, String buildHostId) throws IOException {
         Project project = service.findById(projectId).orElse(null);
+        Assert.notNull(project, "项目不存在");
         service.checkBuildImage();
-
+        Assert.isTrue(ProjectService.isValidTag(buildRequest.getTag()), "tag 格式不正确，需形如 v1.0.1");
 
         // 更新最近时间,方便排序
         project.setUpdateTime(LocalDateTime.now());
         project = service.save(project);
 
-        buildRequest.setBranchOrTag(project.getBranch());
         buildRequest.setProjectId(project.getId());
         buildRequest.setDockerfile(project.getDockerfile());
         buildRequest.setBuildHostId(buildHostId);
         service.buildImage(buildRequest);
 
-
         return AjaxResult.ok().msg("构建已触发");
+    }
+
+    /**
+     * 远程 tag 列表（只保留 vX.Y.Z 形式的版本 tag）。
+     */
+    @PreAuthorize("hasAuthority('project:view')")
+    @RequestMapping("tags")
+    public AjaxResult tags(String projectId) {
+        Project project = service.findById(projectId).orElse(null);
+        Assert.notNull(project, "项目不存在");
+        List<Option> options = service.listRemoteTags(project).stream()
+                .filter(ProjectService::isValidTag)
+                .map(t -> new Option(t, t))
+                .toList();
+        return AjaxResult.ok().data(options);
+    }
+
+    /**
+     * 重置项目的 webhook token。
+     */
+    @PreAuthorize("hasAuthority('project:webhook')")
+    @RequestMapping("resetWebhook")
+    public AjaxResult resetWebhook(String id) {
+        Project project = service.findById(id).orElse(null);
+        Assert.notNull(project, "项目不存在");
+        project.setWebhookToken(RandomUtil.randomString(32));
+        service.save(project);
+        return AjaxResult.ok().msg("已重置").data(project.getWebhookToken());
     }
 
     @RequestMapping("stopBuild")
@@ -125,7 +153,7 @@ public class ProjectController {
 
 
     @RequestMapping("options")
-    public AjaxResult options() throws InterruptedException, IOException, GitAPIException {
+    public AjaxResult options() {
         Spec<Project> q = buildQuery();
 
         List<Project> list = service.findAll(q, Sort.by(Sort.Direction.DESC, "updateTime"));
