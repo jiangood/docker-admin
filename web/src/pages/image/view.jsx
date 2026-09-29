@@ -1,6 +1,6 @@
 import {
   Button, Card, Checkbox, Descriptions, Form,
-  Modal, Select, Space, Spin, Table, Tag, Tooltip, Typography
+  Modal, Select, Space, Spin, Table, Tabs, Tag, Tooltip, Typography
 } from 'antd';
 import React from 'react';
 import {
@@ -203,11 +203,16 @@ export default class extends React.Component {
       return <Spin/>
     }
 
-    const {image, showTrigger, hostOptions, tagOptions, versions, apps} = this.state;
+    const {image, showTrigger, hostOptions, tagOptions} = this.state;
 
     return (<>
 
-      <Card className='mb-2'>
+      <Card className='mb-2' extra={
+        <Space>
+          <Button onClick={this.triggerPipeline} type="primary">立即构建</Button>
+          <Button onClick={this.cleanError} title='清理失败的记录'>清理</Button>
+        </Space>
+      }>
         <Descriptions title={image.name}>
           <Descriptions.Item label='id'>{image.id}</Descriptions.Item>
           <Descriptions.Item label='中文名称'>{image.cnName}</Descriptions.Item>
@@ -229,43 +234,9 @@ export default class extends React.Component {
         </Descriptions>
       </Card>
 
-      <Card className='mb-2' title='版本' size='small'>
-        <Space wrap>
-          {versions.length === 0 ? <span>-</span> : versions.map(t => <Tag key={t} color='blue'>{t}</Tag>)}
-        </Space>
+      <Card className='mb-2'>
+        {this.renderTabs()}
       </Card>
-
-      <Card className='mb-2' title='关联应用' size='small'>
-        <Table
-          size='small'
-          rowKey='id'
-          pagination={false}
-          dataSource={apps}
-          columns={[
-            {title: '应用', dataIndex: 'name'},
-            {title: '中文名称', dataIndex: 'cnName'},
-            {title: '主机', dataIndex: ['host', 'name']},
-            {title: '版本', dataIndex: 'imageTag'}
-          ]}
-        />
-      </Card>
-
-      <ProTable
-        headerTitle='构建记录'
-        toolBarRender={() => {
-          return <Space>
-            <Button onClick={this.triggerPipeline} type="primary">立即构建</Button>
-            <Button onClick={this.cleanError} title='清理失败的记录'>清理</Button>
-          </Space>;
-        }}
-        actionRef={this.actionRef}
-        request={(params) => {
-          params.imageId = image.id
-          return HttpClient.get("admin/buildLog/list", params);
-        }}
-        columns={this.columns}
-        showSearch={false}
-      />
 
       <Modal open={showTrigger} title="手动触发流水线"
              destroyOnHidden={true}
@@ -308,6 +279,51 @@ export default class extends React.Component {
       </Modal>
 
     </>)
+  }
+
+  renderTabs = () => {
+    const {image, versions, apps} = this.state;
+
+    const items = [
+      {
+        key: 'build',
+        label: '构建历史',
+        children: <ProTable
+          actionRef={this.actionRef}
+          request={(params) => {
+            params.imageId = image.id
+            return HttpClient.get("admin/buildLog/list", params);
+          }}
+          columns={this.columns}
+          showSearch={false}
+        />
+      },
+      {
+        key: 'apps',
+        label: '关联应用',
+        children: <Table
+          size='small'
+          rowKey='id'
+          pagination={false}
+          dataSource={apps}
+          columns={[
+            {title: '应用', dataIndex: 'name'},
+            {title: '中文名称', dataIndex: 'cnName'},
+            {title: '主机', dataIndex: ['host', 'name']},
+            {title: '版本', dataIndex: 'imageTag'}
+          ]}
+        />
+      },
+      {
+        key: 'version',
+        label: '版本',
+        children: <Space wrap>
+          {versions.length === 0 ? <span>-</span> : versions.map(t => <Tag key={t} color='blue'>{t}</Tag>)}
+        </Space>
+      }
+    ]
+
+    return <Tabs items={items}/>
   }
 
 }
