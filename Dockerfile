@@ -13,7 +13,8 @@ FROM maven:3-amazoncorretto-21 AS java
 WORKDIR /build
 
 ADD pom.xml ./
-RUN mvn package -DskipTests -q  --fail-never
+# 只按 pom.xml 预拉依赖，pom 不变时该层命中缓存
+RUN mvn -B dependency:go-offline
 
 ADD src src
 RUN mvn clean package -DskipTests -q
