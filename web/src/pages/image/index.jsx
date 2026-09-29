@@ -1,5 +1,5 @@
 import {PlusOutlined} from '@ant-design/icons'
-import {Button, Form, Input, Modal, Popconfirm, Splitter} from 'antd'
+import {Button, Form, Input, Modal, Popconfirm, Space, Splitter} from 'antd'
 import React from 'react'
 
 import {
@@ -12,12 +12,15 @@ import {
     ProTable
 } from "@jiangood/open-admin"
 
+import CodeSourceProjectPicker from './CodeSourceProjectPicker'
+
 
 export default class extends React.Component {
 
     state = {
         formValues: {},
         formOpen: false,
+        pickerOpen: false,
 
 
         selectedOrgId: null
@@ -163,8 +166,13 @@ export default class extends React.Component {
                         <Input/>
                     </Form.Item>
 
-                    <Form.Item label='代码仓库' name='gitUrl' rules={[{required: true}]}>
-                        <Input/>
+                    <Form.Item label='代码仓库' required>
+                        <Space.Compact style={{width: '100%'}}>
+                            <Form.Item name='gitUrl' noStyle rules={[{required: true, message: '请输入代码仓库'}]}>
+                                <Input/>
+                            </Form.Item>
+                            <Button onClick={() => this.setState({pickerOpen: true})}>从代码源选择</Button>
+                        </Space.Compact>
                     </Form.Item>
 
                     <Form.Item label='dockerfile' name='dockerfile' rules={[{required: true}]}
@@ -185,6 +193,15 @@ export default class extends React.Component {
                     </Form.Item>
                 </Form>
             </Modal>
+
+            <CodeSourceProjectPicker
+                open={this.state.pickerOpen}
+                onCancel={() => this.setState({pickerOpen: false})}
+                onSelect={url => {
+                    this.formRef.current.setFieldsValue({gitUrl: url})
+                    this.setState({pickerOpen: false})
+                }}
+            />
         </Page>
 
 

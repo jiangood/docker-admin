@@ -5,6 +5,8 @@ import io.github.jiangood.openadmin.framework.data.BaseEntity;
 import io.github.jiangood.openadmin.util.annotation.Remark;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Getter;
@@ -12,21 +14,26 @@ import lombok.Setter;
 import lombok.experimental.FieldNameConstants;
 
 /**
- * git 仓库凭据，按 url 前缀匹配。
+ * 代码源：托管平台（GitLab/Gitee/GitHub/Gitea）或自定义 git 仓库的访问配置，按地址主机匹配。
  */
-@Remark("Git凭据")
+@Remark("代码源")
 @Entity
 @Getter
 @Setter
 @FieldNameConstants
-@Table(name = "t_git_credential")
-public class GitCredential extends BaseEntity {
+@Table(name = "t_code_source")
+public class CodeSource extends BaseEntity {
 
     @Remark("名称")
     @Column(length = 100)
     String name;
 
-    @Remark("仓库地址前缀")
+    @Remark("类型")
+    @Enumerated(EnumType.STRING)
+    @Column(length = 30)
+    CodeSourceType type = CodeSourceType.CUSTOM;
+
+    @Remark("地址")
     @NotBlank
     @Column(length = 500)
     String url;
@@ -35,7 +42,7 @@ public class GitCredential extends BaseEntity {
     @Column(length = 200)
     String username;
 
-    @Remark("密码/令牌")
+    @Remark("访问令牌/密码")
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     @Column(length = 500)
     String password;

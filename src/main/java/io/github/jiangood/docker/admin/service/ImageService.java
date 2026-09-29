@@ -18,7 +18,7 @@ import io.github.jiangood.docker.admin.dao.ImageRepository;
 import io.github.jiangood.docker.admin.dto.BuildRequest;
 import io.github.jiangood.docker.admin.entity.App;
 import io.github.jiangood.docker.admin.entity.BuildLog;
-import io.github.jiangood.docker.admin.entity.GitCredential;
+import io.github.jiangood.docker.admin.entity.CodeSource;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.entity.Image;
 import io.github.jiangood.docker.admin.entity.Registry;
@@ -70,7 +70,7 @@ public class ImageService extends BaseService<Image> {
     DockerClientManager dockerService;
 
     @Resource
-    GitCredentialService gitCredentialService;
+    CodeSourceService codeSourceService;
 
     @Resource
     BuildLogService buildLogService;
@@ -154,9 +154,9 @@ public class ImageService extends BaseService<Image> {
      * 拉取镜像对应远程仓库的 tag 列表。
      */
     public List<String> listRemoteTags(Image image) {
-        GitCredential credential = gitCredentialService.findBestByUrl(image.getGitUrl());
-        String username = credential == null ? null : credential.getUsername();
-        String password = credential == null ? null : credential.getPassword();
+        CodeSource source = codeSourceService.findByGitUrl(image.getGitUrl());
+        String username = source == null ? null : source.getUsername();
+        String password = source == null ? null : source.getPassword();
         try {
             return GitTool.listRemoteTags(image.getGitUrl(), username, password);
         } catch (GitAPIException e) {
@@ -365,10 +365,10 @@ public class ImageService extends BaseService<Image> {
     private GitTool.CloneResult gitClone(Image image, String tag) throws GitAPIException {
         String username = null;
         String password = null;
-        GitCredential credential = gitCredentialService.findBestByUrl(image.getGitUrl());
-        if (credential != null) {
-            username = credential.getUsername();
-            password = credential.getPassword();
+        CodeSource source = codeSourceService.findByGitUrl(image.getGitUrl());
+        if (source != null) {
+            username = source.getUsername();
+            password = source.getPassword();
         }
 
         log.info("代码下载中...");

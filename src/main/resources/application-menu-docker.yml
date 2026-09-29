@@ -52,16 +52,16 @@ menus:
     perms:
       - {name: 查看, code: registry:view}
       - {name: 保存, code: registry:save}
-  setting-git:
+  setting-code-source:
     pid: setting
-    name: Git凭据
-    path: /git-credential
+    name: 代码源
+    path: /code-source
     icon: KeyOutlined
     seq: 600
     perms:
-      - {name: 查看, code: git-credential:view}
-      - {name: 保存, code: git-credential:save}
-      - {name: 删除, code: git-credential:delete}
+      - {name: 查看, code: code-source:view}
+      - {name: 保存, code: code-source:save}
+      - {name: 删除, code: code-source:delete}
   setting-sync:
     pid: setting
     name: 镜像同步
