@@ -16,10 +16,10 @@ docker run -d --name docker-admin \
   ghcr.io/jiangood/docker-admin:latest
 ```
 
-或使用 docker compose（配置见 [docker-compose.yml](docker-compose/docker-compose.yml)）：
+或使用 docker compose（配置见 [docker-compose.yml](docker-compose.yml)）：
 
 ```sh
-curl -O https://raw.githubusercontent.com/jiangood/docker-admin/main/docker-compose/docker-compose.yml
+curl -O https://raw.githubusercontent.com/jiangood/docker-admin/main/docker-compose.yml
 docker compose up -d
 ```
 
