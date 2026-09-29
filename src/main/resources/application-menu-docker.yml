@@ -45,7 +45,7 @@ menus:
       - {name: 删除, code: host:delete}
   setting-registry:
     pid: setting
-    name: 镜像注册中心
+    name: 注册中心
     path: /registry
     icon: CloudServerOutlined
     seq: 500
