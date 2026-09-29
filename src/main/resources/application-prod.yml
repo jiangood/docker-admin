@@ -1,5 +1,0 @@
-# 生产 / 容器部署：使用根路径访问，去掉 /docker-admin 前缀。
-# Dockerfile 通过 --spring.profiles.active=prod 激活本配置。
-server:
-  servlet:
-    context-path: /

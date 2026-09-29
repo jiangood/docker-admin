@@ -27,4 +27,8 @@ COPY --from=java /build/target/app.jar ./
 COPY --from=web /build/dist/ ./static/
 
 EXPOSE 7001
-ENTRYPOINT ["java","-Djava.security.egd=file:/dev/./urandom","-Duser.timezone=Asia/Shanghai","-jar","/home/app.jar","--spring.profiles.active=prod"]
+# 容器内以根路径访问，不再使用 prod profile（application-prod.yml 已移除）。
+# 通过环境变量而非 profile：docker run 与 docker compose 行为一致，
+# 且仍可用 -e SERVER_SERVLET_CONTEXT_PATH=/docker-admin 覆盖回带前缀的路径。
+ENV SERVER_SERVLET_CONTEXT_PATH=/
+ENTRYPOINT ["java","-Djava.security.egd=file:/dev/./urandom","-Duser.timezone=Asia/Shanghai","-jar","/home/app.jar"]
