@@ -5,7 +5,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>4.1.0</version>
+        <version>4.1.1</version>
     </parent>
     <groupId>io.github.jiangood</groupId>
     <artifactId>docker-admin</artifactId>
@@ -46,7 +46,7 @@
         -->
         <docker-java-jsch.version>1.4</docker-java-jsch.version>
 
-        <jgit.version>7.7.0.202606012155-r</jgit.version>
+        <jgit.version>7.8.0.202609011348-r</jgit.version>
     </properties>
 
     <dependencyManagement>
