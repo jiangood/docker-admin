@@ -13,6 +13,10 @@ const URL_PLACEHOLDER = {
     CUSTOM: 'https://your-git-host.com',
 }
 
+/** 使用访问令牌认证的平台：用户名可填任意非空值，统一用 oauth2 */
+const TOKEN_PLATFORMS = ['GITLAB', 'GITEE', 'GITHUB', 'GITEA']
+const TOKEN_USERNAME = 'oauth2'
+
 /**
  * 代码源：托管平台（GitLab/Gitee/GitHub/Gitea）或自定义 git 仓库，按地址主机匹配
  */
@@ -72,7 +76,11 @@ export default class extends React.Component {
     }
 
     handleEdit = record => {
-        this.setState({formOpen: true, formValues: {...record, password: ''}, type: record.type || 'CUSTOM'})
+        const type = record.type || 'CUSTOM'
+        const username = TOKEN_PLATFORMS.includes(type)
+            ? (record.username || TOKEN_USERNAME)
+            : record.username
+        this.setState({formOpen: true, formValues: {...record, username, password: ''}, type})
     }
 
     onFinish = values => {
@@ -119,6 +127,10 @@ export default class extends React.Component {
                       onValuesChange={(changed) => {
                           if ('type' in changed) {
                               this.setState({type: changed.type})
+                              const current = this.formRef.current?.getFieldValue('username')
+                              if (TOKEN_PLATFORMS.includes(changed.type) && !current) {
+                                  this.formRef.current?.setFieldsValue({username: TOKEN_USERNAME})
+                              }
                           }
                       }}
                       onFinish={this.onFinish}>
@@ -137,8 +149,9 @@ export default class extends React.Component {
                         <Input placeholder={URL_PLACEHOLDER[this.state.type] || URL_PLACEHOLDER.CUSTOM}/>
                     </Form.Item>
 
-                    <Form.Item label='用户名' name='username'>
-                        <Input/>
+                    <Form.Item label='用户名' name='username'
+                               tooltip='GitLab/Gitee/GitHub 等平台使用访问令牌时，用户名可填任意非空值，如 oauth2'>
+                        <Input placeholder={TOKEN_PLATFORMS.includes(this.state.type) ? TOKEN_USERNAME : ''}/>
                     </Form.Item>
 
                     <Form.Item label='访问令牌/密码' name='password'

@@ -2,6 +2,7 @@ package io.github.jiangood.docker.base.tool;
 
 import cn.hutool.core.date.DateUtil;
 import cn.hutool.core.io.FileUtil;
+import cn.hutool.core.util.StrUtil;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -37,6 +38,21 @@ public class GitTool {
         LocalDateTime commitTime;
     }
 
+    /** GitLab 等平台使用访问令牌时，用户名可填任意非空值，统一使用 oauth2。 */
+    private static final String TOKEN_USERNAME = "oauth2";
+
+    /**
+     * 生成 git 凭据：只要有令牌就使用，用户名为空时回退到 oauth2。
+     * 令牌为空时返回 null，表示匿名访问（公开仓库）。
+     */
+    private static UsernamePasswordCredentialsProvider credentialsProvider(String user, String password) {
+        if (StrUtil.isBlank(password)) {
+            return null;
+        }
+        String username = StrUtil.isBlank(user) ? TOKEN_USERNAME : user.trim();
+        return new UsernamePasswordCredentialsProvider(username, password);
+    }
+
     /**
      * 列出远程仓库的所有 tag（不含分支）。
      */
@@ -46,8 +62,9 @@ public class GitTool {
                 .setHeads(false)
                 .setTags(true);
 
-        if (user != null && password != null) {
-            cmd.setCredentialsProvider(new UsernamePasswordCredentialsProvider(user, password));
+        UsernamePasswordCredentialsProvider provider = credentialsProvider(user, password);
+        if (provider != null) {
+            cmd.setCredentialsProvider(provider);
         }
 
         Collection<Ref> refs = cmd.call();
@@ -87,8 +104,8 @@ public class GitTool {
                 ;
 
         // support public project by anon
-        if (user != null && password != null) {
-            UsernamePasswordCredentialsProvider provider = new UsernamePasswordCredentialsProvider(user, password);
+        UsernamePasswordCredentialsProvider provider = credentialsProvider(user, password);
+        if (provider != null) {
             cloneCommand.setCredentialsProvider(provider);
         }
 

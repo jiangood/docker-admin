@@ -160,6 +160,11 @@ public class ImageService extends BaseService<Image> {
         try {
             return GitTool.listRemoteTags(image.getGitUrl(), username, password);
         } catch (GitAPIException e) {
+            if (source == null) {
+                String host = CodeSourceService.hostKey(image.getGitUrl());
+                throw new BusinessException("获取远程 tag 失败：未找到与主机 " + host
+                        + " 匹配的代码源，请在【设置-代码源】配置用户名（可填 oauth2）和访问令牌", e);
+            }
             throw new BusinessException("获取远程 tag 失败：" + e.getMessage(), e);
         }
     }
