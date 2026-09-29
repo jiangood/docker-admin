@@ -101,6 +101,18 @@ public class ImageService extends BaseService<Image> {
         return registry.getUrl() + "/" + registry.getNamespace() + "/" + image.getName();
     }
 
+    /**
+     * 保存镜像：新建走 create，编辑走 update。
+     */
+    @Transactional
+    public Image saveImage(Image input, List<String> updateFields) {
+        if (StrUtil.isBlank(input.getId())) {
+            return create(input);
+        }
+        return update(input, updateFields);
+    }
+
+
     public void stopBuild(String logId) throws IOException {
         DefaultCallback callback = buildThreadMap.remove(logId);
         if (callback != null) {

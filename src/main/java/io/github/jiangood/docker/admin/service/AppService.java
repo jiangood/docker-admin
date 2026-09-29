@@ -63,6 +63,17 @@ public class AppService extends BaseService<App> {
     @Resource
     private RegistryService registryService;
 
+    /**
+     * 保存应用：新建走 create，编辑走 update。
+     */
+    @Transactional
+    public App saveApp(App input, List<String> updateFields) {
+        if (StrUtil.isBlank(input.getId())) {
+            return create(input);
+        }
+        return update(input, updateFields);
+    }
+
     @Async
     public void deploy(App app) {
         Assert.notNull(app, "应用不存在");

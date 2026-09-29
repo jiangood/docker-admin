@@ -80,7 +80,7 @@ public class ImageController {
         }
         param.setGitUrl(param.getGitUrl().trim());
         param.setName(param.getName().trim());
-        Image result = this.service.update(param, updateFields);
+        Image result = this.service.saveImage(param, updateFields);
         return AjaxResult.ok().data(result.getId()).msg("保存成功");
     }
 

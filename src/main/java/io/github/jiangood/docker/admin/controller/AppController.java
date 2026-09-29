@@ -112,7 +112,7 @@ public class AppController {
         if (StrUtil.isNotBlank(app.getId())) {
             assertAppAccess(app.getId());
         }
-        service.update(app, requestBodyKeys);
+        service.saveApp(app, requestBodyKeys);
         return AjaxResult.ok().msg("保存成功");
     }
 
