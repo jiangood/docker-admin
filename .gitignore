@@ -35,7 +35,6 @@ build/
 /docker-admin-logs/
 *.temp
 /web/node_modules/
-/web/package-lock.json
 /web/src/.umi/
 /web/dist/
 /web/src/.umi-production/

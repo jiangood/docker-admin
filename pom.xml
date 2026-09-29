@@ -14,13 +14,80 @@
 
     <properties>
         <java.version>21</java.version>
+
+        <!--
+          依赖版本集中管理。
+          历史上版本号直接硬编码在 <dependencies> 中，导致：
+            1. 每个依赖各自产生一个独立的 dependabot PR，无法批量升级；
+            2. 需要保持同版本的依赖（如 docker-java 核心与传输层、hutool 各模块）
+               容易各自漂移，产生类路径混用。
+          统一改用属性后，dependabot 的 groups 配置可将同类升级合并为一个 PR。
+        -->
+        <open-admin.version>3.1.2</open-admin.version>
+
+        <!--
+          hutool 各模块必须同版本：hutool-core / hutool-extra / hutool-http
+          由 open-admin 传递引入，本项目仅显式声明 hutool-system。
+          改此值前请用 `mvn dependency:tree -Dincludes=cn.hutool` 核对，
+          避免与 open-admin 传递进来的版本错配。
+        -->
+        <hutool.version>5.8.47</hutool.version>
+
+        <!-- docker-java 核心与 HTTP 传输层必须同版本 -->
+        <docker-java.version>3.7.1</docker-java.version>
+
+        <!--
+          SSH 传输层（docker system dial-stdio）。
+
+          注意版本错配：1.4 是当前最新发布版，构建目标是 docker-java-core 3.4.0，
+          而本项目使用 docker-java ${docker-java.version}。上游 main 分支已跟进
+          docker-java 3.7.1，但 1.5 仍为 1.5-SNAPSHOT 尚未发布，因此 dependabot
+          不会为此依赖提交 PR。升级后必须实测远程主机的 SSH 连接。
+        -->
+        <docker-java-jsch.version>1.4</docker-java-jsch.version>
+
+        <jgit.version>7.7.0.202606012155-r</jgit.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>io.github.jiangood</groupId>
+                <artifactId>open-admin</artifactId>
+                <version>${open-admin.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>cn.hutool</groupId>
+                <artifactId>hutool-system</artifactId>
+                <version>${hutool.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.docker-java</groupId>
+                <artifactId>docker-java</artifactId>
+                <version>${docker-java.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.docker-java</groupId>
+                <artifactId>docker-java-transport-httpclient5</artifactId>
+                <version>${docker-java.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.mwiede.dockerjava</groupId>
+                <artifactId>docker-java-transport-jsch</artifactId>
+                <version>${docker-java-jsch.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.jgit</groupId>
+                <artifactId>org.eclipse.jgit</artifactId>
+                <version>${jgit.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <dependency>
             <groupId>io.github.jiangood</groupId>
             <artifactId>open-admin</artifactId>
-            <version>3.1.2</version>
         </dependency>
 
         <!-- 内置数据库：默认使用 H2（文件模式），开箱即用，无需外部 MySQL -->
@@ -34,7 +101,6 @@
         <dependency>
             <groupId>cn.hutool</groupId>
             <artifactId>hutool-system</artifactId>
-            <version>5.8.47</version>
         </dependency>
 
 
@@ -49,8 +115,8 @@
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
-            <version>1.18.46</version>
             <scope>provided</scope>
+            <!-- 版本由 spring-boot-starter-parent 管理，此处不覆盖以免与其产生版本倒挂 -->
         </dependency>
 
 
@@ -58,21 +124,18 @@
         <dependency>
             <groupId>com.github.docker-java</groupId>
             <artifactId>docker-java</artifactId>
-            <version>3.7.1</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/com.github.docker-java/docker-java-transport-httpclient5 -->
         <dependency>
             <groupId>com.github.docker-java</groupId>
             <artifactId>docker-java-transport-httpclient5</artifactId>
-            <version>3.7.1</version>
         </dependency>
 
         <!-- 通过 SSH 连接远程 docker（docker system dial-stdio），无需暴露 2375 -->
         <dependency>
             <groupId>com.github.mwiede.dockerjava</groupId>
             <artifactId>docker-java-transport-jsch</artifactId>
-            <version>1.4</version>
         </dependency>
 
 
@@ -80,7 +143,6 @@
         <dependency>
             <groupId>org.eclipse.jgit</groupId>
             <artifactId>org.eclipse.jgit</artifactId>
-            <version>7.7.0.202606012155-r</version>
         </dependency>
 
 
