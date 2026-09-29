@@ -10,6 +10,7 @@ import com.github.dockerjava.api.model.PushResponseItem;
 import io.github.jiangood.docker.admin.dto.ImageSyncRequest;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.entity.Registry;
+import io.github.jiangood.docker.admin.websocket.TaskLogRegistry;
 import io.github.jiangood.docker.sdk.engine.DefaultCallback;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import jakarta.annotation.Resource;
@@ -21,9 +22,6 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.util.Assert;
 
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-
 /**
  * 镜像同步：借助一台网络通畅的主机拉取公共镜像，重打标签后推送到平台注册中心。
  * <p>
@@ -34,10 +32,8 @@ import java.util.concurrent.ConcurrentHashMap;
 @RequiredArgsConstructor
 public class ImageSyncService {
 
-    /**
-     * 正在执行的同步任务 logId，供 WebSocket 判断任务是否结束。
-     */
-    private final Set<String> running = ConcurrentHashMap.newKeySet();
+    @Resource
+    TaskLogRegistry taskLogRegistry;
 
     @Resource
     HostService hostService;
@@ -49,12 +45,12 @@ public class ImageSyncService {
     DockerClientManager dockerService;
 
     public boolean isRunning(String logId) {
-        return logId != null && running.contains(logId);
+        return taskLogRegistry.isRunning(logId);
     }
 
     @Async
     public void sync(String logId, ImageSyncRequest p) {
-        running.add(logId);
+        taskLogRegistry.start(logId);
         MDC.put("logFileId", logId);
         DockerClient client = null;
         try {
@@ -120,7 +116,7 @@ public class ImageSyncService {
         } finally {
             IOUtils.closeQuietly(client);
             MDC.remove("logFileId");
-            running.remove(logId);
+            taskLogRegistry.finish(logId);
         }
     }
 

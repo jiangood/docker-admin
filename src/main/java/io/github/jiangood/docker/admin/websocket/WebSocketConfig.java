@@ -34,6 +34,9 @@ public class WebSocketConfig implements WebSocketConfigurer {
     private SyncLogHandshakeInterceptor syncLogHandshakeInterceptor;
 
     @Resource
+    private BuildTestLogHandshakeInterceptor buildTestLogHandshakeInterceptor;
+
+    @Resource
     private Config config;
 
     @Override
@@ -50,6 +53,11 @@ public class WebSocketConfig implements WebSocketConfigurer {
         // 镜像同步实时日志
         registry.addHandler(syncLogHandler, "/admin/ws/sync-log/{logId}")
                 .addInterceptors(syncLogHandshakeInterceptor)
+                .setAllowedOriginPatterns(origins);
+
+        // 构建测试实时日志（复用同一日志 tail 处理器）
+        registry.addHandler(syncLogHandler, "/admin/ws/build-test-log/{logId}")
+                .addInterceptors(buildTestLogHandshakeInterceptor)
                 .setAllowedOriginPatterns(origins);
     }
 

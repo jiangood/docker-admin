@@ -2,7 +2,6 @@ package io.github.jiangood.docker.admin.websocket;
 
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.StrUtil;
-import io.github.jiangood.docker.admin.service.ImageSyncService;
 import io.github.jiangood.openadmin.util.SpringTool;
 import jakarta.annotation.PreDestroy;
 import jakarta.annotation.Resource;
@@ -18,7 +17,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * 镜像同步实时日志 WebSocket。
+ * 后台任务实时日志 WebSocket（镜像同步、构建测试等）。
  * <p>
  * 连接后先把日志文件已有内容补齐（避免错过 WS 建立前的日志），再增量 tail，
  * 任务结束并写完最后内容后关闭连接。数据来源即 {@code /data/logs/{logId}.log}。
@@ -38,7 +37,7 @@ public class SyncLogWebSocketHandler extends TextWebSocketHandler {
     private static final int END_GRACE_TIMES = 3;
 
     @Resource
-    private ImageSyncService imageSyncService;
+    private TaskLogRegistry taskLogRegistry;
 
     private final ExecutorService executorService = Executors.newFixedThreadPool(10);
 
@@ -62,7 +61,7 @@ public class SyncLogWebSocketHandler extends TextWebSocketHandler {
                     sent = upto;
                 }
 
-                if (imageSyncService.isRunning(logId)) {
+                if (taskLogRegistry.isRunning(logId)) {
                     grace = 0;
                 } else {
                     grace++;
@@ -70,7 +69,7 @@ public class SyncLogWebSocketHandler extends TextWebSocketHandler {
                         if (content.length() > sent) {
                             session.sendMessage(new TextMessage(content.substring(sent)));
                         }
-                        session.sendMessage(new TextMessage("\n[同步任务已结束]"));
+                        session.sendMessage(new TextMessage("\n[任务已结束]"));
                         break;
                     }
                 }
