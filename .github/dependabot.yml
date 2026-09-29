@@ -9,9 +9,41 @@ updates:
     directory: "/web"
     schedule:
       interval: "weekly"
-
+    # 避免同一周堆出大量互相冲突的 PR
+    open-pull-requests-limit: 5
+    rebase-strategy: "auto"
+    groups:
+      web-dependencies:
+        patterns:
+          - "*"
+    ignore:
+      # CodeMirror 5 -> 6 是破坏性重写，不是版本升级。
+      #
+      # codemirror@6.x 解包后仅含 dist/index.js 与 dist/index.cjs，且 package.json
+      # 的 exports 字段只暴露 "."，所有子路径导入均被阻断。而
+      # web/src/components/CodeMirrorEditor.jsx 依赖以下 CM5 专有路径与 API：
+      #   codemirror/lib/codemirror.css
+      #   codemirror/theme/darcula.css
+      #   codemirror/mode/{css,yaml,shell,dockerfile}
+      #   codemirror/addon/lint/{lint.css,yaml-lint.js}
+      #   CodeMirror.fromTextArea() / setSize() / on('change') / toTextArea()
+      # 升级后 `npm run build` 直接失败：
+      #   "./lib/codemirror.css" is not exported under the conditions [...] from package .../codemirror
+      #
+      # npm 上 codemirror 的 dist-tag 为 latest=6.0.2 与 version5=5.65.21，5.x 线仍在维护，
+      # 本条 ignore 用于避免 dependabot 反复提交必然失败的升级。
+      # 迁移 CM6 属于独立需求（建议 @uiw/react-codemirror 或手写 EditorView），
+      # 完成迁移并删除本条 ignore 后即可解除锁定。参见 PR #17。
+      - dependency-name: "codemirror"
+        versions: [">=6.0.0"]
 
   - package-ecosystem: "maven"
     directory: "/"
     schedule:
       interval: "weekly"
+    open-pull-requests-limit: 5
+    rebase-strategy: "auto"
+    groups:
+      maven-dependencies:
+        patterns:
+          - "*"
