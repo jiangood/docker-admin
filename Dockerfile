@@ -34,10 +34,10 @@ COPY --from=java /build/extracted/dependencies/lib ./lib
 COPY --from=java /build/extracted/application/app.jar ./
 COPY --from=web /build/dist/ ./static/
 
-EXPOSE 7701
-# 镜像自身即监听 7701，与 EXPOSE、application.yml、docker-compose 及 README 完全一致，
+EXPOSE 8601
+# 镜像自身即监听 8601，与 EXPOSE、application.yml、docker-compose 及 README 完全一致，
 # 因此直接 docker run 无需再传 -e SERVER_PORT。
-ENV SERVER_PORT=7701
+ENV SERVER_PORT=8601
 # 容器内以根路径访问，不再使用 prod profile（application-prod.yml 已移除）。
 # 通过环境变量而非 profile：docker run 与 docker compose 行为一致，
 # 且仍可用 -e SERVER_SERVLET_CONTEXT_PATH=/docker-admin 覆盖回带前缀的路径。

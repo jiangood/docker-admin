@@ -25,6 +25,8 @@ export default defineConfig(({mode, command}) => {
         },
         server: {
             port: port,
+            // 端口被占用时直接报错，避免 Vite 自动顺延到下一个端口（如 8601）而抢占后端端口。
+            strictPort: true,
             proxy: {
                 [servletContext]: {
                     target: `http://127.0.0.1:${serverPort}`,

@@ -4,7 +4,7 @@
 db_path: /data/db/docker-admin
 
 server:
-  port: 7701
+  port: 8601
   servlet:
     context-path: /docker-admin  # 本地开发上下文；容器部署由镜像内置的 SERVER_SERVLET_CONTEXT_PATH=/ 覆盖为根路径
 spring:

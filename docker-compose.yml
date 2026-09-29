@@ -2,7 +2,7 @@ services:
   admin:
     image: ghcr.io/jiangood/docker-admin:latest
     ports:
-      - "7701:7701"
+      - "8601:8601"
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock"
       - "./data/:/data"

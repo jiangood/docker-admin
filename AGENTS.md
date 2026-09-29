@@ -20,13 +20,13 @@ mvn clean package -DskipTests           # backend only, output target/app.jar
 cd web && npm install && npm run build   # frontend only, output web/dist/
 
 # Dev
-cd web && npm run dev                    # frontend dev server on :7700, proxies to :7701
+cd web && npm run dev                    # frontend dev server on :8600, proxies to :8601
 ```
 
 ## Key facts
 
-- **端口：** 后端 `7701`（`application.yml`；`Dockerfile` 内置 `ENV SERVER_PORT=7701`，本地开发与容器同一端口），
-  前端 dev `7700`（`web/.env`）。`docker run` 无需再传 `-e SERVER_PORT`。
+- **端口：** 后端 `8601`（`application.yml`；`Dockerfile` 内置 `ENV SERVER_PORT=8601`，本地开发与容器同一端口），
+  前端 dev `8600`（`web/.env`）。`docker run` 无需再传 `-e SERVER_PORT`。
 - **Context path:** 默认 `/docker-admin`（`application.yml`，仅本地开发用）；
   容器部署由 `Dockerfile` 内置的 `ENV SERVER_SERVLET_CONTEXT_PATH=/` 覆盖为根路径。
   环境变量优先级高于 `application.yml`，因此 `docker run` 与 `docker compose` 行为一致，
