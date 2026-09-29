@@ -190,7 +190,6 @@ export default class extends React.Component {
                     </Item>
 
                     <Item label='主机'>  {app.host?.name} </Item>
-                    <Item label='主机备注'> {app.host?.remark} </Item>
 
 
                     <Item label='组织机构'>  {app.sysOrg?.name} </Item>

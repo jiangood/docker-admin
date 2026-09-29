@@ -83,7 +83,7 @@ public class HostController  {
         if (onlyRunner) {
             q.eq(Host.Fields.isRunner, true);
         }
-        q.orLike(searchText, Host.Fields.name, Host.Fields.remark, Host.Fields.dockerHost, Host.Fields.sshHost);
+        q.orLike(searchText, Host.Fields.name, Host.Fields.dockerHost, Host.Fields.sshHost);
         List<Host> list = service.findAll(q, Sort.by(Host.Fields.name));
         List<Option> options = new ArrayList<>();
         for (Host h : list) {

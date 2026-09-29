@@ -35,7 +35,7 @@ menus:
     seq: 400
   host:
     pid: setting
-    name: 主机
+    name: 主机管理
     path: /host
     icon: DesktopOutlined
     seq: 450
@@ -62,12 +62,17 @@ menus:
       - {name: 查看, code: code-source:view}
       - {name: 保存, code: code-source:save}
       - {name: 删除, code: code-source:delete}
+  tool:
+    pid: biz
+    name: 辅助工具
+    icon: ToolOutlined
+    seq: 700
   setting-sync:
-    pid: setting
+    pid: tool
     name: 镜像同步
     path: /image-sync
     icon: CloudSyncOutlined
-    seq: 650
+    seq: 100
     perms:
       - {name: 查看, code: image-sync:view}
       - {name: 同步, code: image-sync:sync}

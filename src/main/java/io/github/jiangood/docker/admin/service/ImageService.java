@@ -234,7 +234,7 @@ public class ImageService extends BaseService<Image> {
             Host host = hostService.findById(p.getBuildHostId()).orElse(null);
 
             Assert.notNull(host, "无构建主机");
-            log.info("构建主机信息... 名称：{}, host:{}, 备注:{}", host.getName(), host.getDockerHost(), StrUtil.emptyIfNull(host.getRemark()));
+            log.info("构建主机信息... 名称：{}, host:{}", host.getName(), host.getDockerHost());
 
             GitTool.CloneResult cloneResult = gitClone(image, tag);
             File workDir = cloneResult.getDir();

@@ -44,7 +44,8 @@ export default class extends React.Component {
     state = {
         formValues: {},
         formOpen: false,
-        testing: false
+        testing: false,
+        testingId: null
     }
 
     formRef = React.createRef()
@@ -82,15 +83,14 @@ export default class extends React.Component {
 
 
         {
-            title: '备注',
-            dataIndex: 'remark',
-        },
-        {
             title: '操作',
             dataIndex: 'option',
             valueType: 'option',
             render: (_, record) => (
                 <PermActions>
+                    <a perm='host:save' onClick={() => this.handleTestRow(record)}>
+                        {this.state.testingId === record.id ? '测试中...' : '测试连接'}
+                    </a>
                     <a perm='host:save' onClick={() => this.handleEdit(record)}> 修改 </a>
                     <Popconfirm perm='host:delete' title='是否确定删除主机' onConfirm={() => this.handleDelete(record)}>
                         <a>删除</a>
@@ -140,6 +140,16 @@ export default class extends React.Component {
                 .finally(() => this.setState({testing: false}))
         }).catch(() => {
         })
+    }
+
+
+    // 列表内测试：直接提交该行配置，SSH 密码由后端按 id 补全
+    handleTestRow = record => {
+        this.setState({testingId: record.id})
+        HttpClient.post('admin/host/test', record)
+            .catch(() => {
+            })
+            .finally(() => this.setState({testingId: null}))
     }
 
 
@@ -223,10 +233,6 @@ export default class extends React.Component {
                                 <Input allowClear placeholder='留空使用默认（unix:///var/run/docker.sock）'/>
                             </Form.Item>
                         }}
-                    </Form.Item>
-
-                    <Form.Item label='备注' name='remark' rules={[{required: true}]}>
-                        <Input/>
                     </Form.Item>
 
                 </Form>

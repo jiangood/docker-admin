@@ -73,9 +73,6 @@ public class Host extends BaseEntity {
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     String sshPassword;
 
-    @Remark("备注")
-    String remark;
-
     @PrePersist
     public void prePersist() {
         if (isRunner == null) {
