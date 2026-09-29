@@ -10,7 +10,7 @@
 
 ```sh
 docker run -d --name docker-admin \
-  -p 7001:7001 -e SERVER_PORT=7001 \
+  -p 7701:7701 \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v ./data:/data \
   ghcr.io/jiangood/docker-admin:latest
@@ -25,7 +25,7 @@ docker compose up -d
 
 
 
-访问 http://127.0.0.1:7001
+访问 http://127.0.0.1:7701
 账号 `admin`，密码 `Open@1234`（首次登录后请修改）
 
 国内用户可使用阿里云镜像：`registry.cn-hangzhou.aliyuncs.com/jiangood/docker-admin:latest`（与 ghcr.io 同步发布）。

@@ -2,12 +2,11 @@ services:
   admin:
     image: ghcr.io/jiangood/docker-admin:latest
     ports:
-      - "7001:7001"
-    environment:
-      # 应用监听端口（对外映射到宿主机 7001）
-      - SERVER_PORT=7001
-      # 可选：数据库文件路径，默认 /data/db/docker-admin（已随 /data 持久化）
-      # - DB_PATH=/data/db/docker-admin
+      # 宿主机:容器；容器内端口由镜像内置的 SERVER_PORT=7701 决定
+      - "7701:7701"
+    # 需要覆盖端口、数据库路径等时再加 environment，例如：
+    #   - SERVER_PORT=7701
+    #   - DB_PATH=/data/db/docker-admin
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock"
       # 数据目录：内置 H2 数据库、上传文件、日志均持久化在此
