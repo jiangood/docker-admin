@@ -1,0 +1,29 @@
+# 构建产物与依赖（镜像内会重新安装/编译）
+target/
+web/node_modules/
+web/dist/
+
+# 运行期数据与日志
+data/
+logs/
+docker-admin-logs/
+*.log
+
+# 版本控制与编辑器
+.git
+.gitignore
+.github/
+.idea/
+.vscode/
+*.iml
+
+# 文档与本地工具配置
+docs/
+.opencode/
+.playwright-mcp/
+AGENTS.md
+README.md
+
+# 本地配置
+application-dev.yml
+*.temp
