@@ -47,59 +47,7 @@ jobs:
       uses: softprops/action-gh-release@v3
       with:
         name: ${{ github.ref_name }}
-        body: |
-          ## ${{ github.ref_name }}
-
-          ### Docker 镜像
-
-          ```sh
-          # GitHub Container Registry
-          docker pull ghcr.io/${{ github.repository_owner }}/docker-admin:${{ github.ref_name }}
-
-          # 阿里云容器镜像服务
-          docker pull registry.cn-hangzhou.aliyuncs.com/jiangood/docker-admin:${{ github.ref_name }}
-          ```
-
-          ### 快速体验（无需外部数据库）
-
-          内置 H2 数据库，数据持久化到 `./data`，开箱即用：
-
-          ```sh
-          docker run -d --name docker-admin \
-            -p 7001:7001 \
-            -e SERVER_PORT=7001 \
-            -v /var/run/docker.sock:/var/run/docker.sock \
-            -v ./data:/data \
-            ghcr.io/${{ github.repository_owner }}/docker-admin:${{ github.ref_name }}
-          ```
-
-          或使用 docker compose：
-
-          ```sh
-          curl -O https://raw.githubusercontent.com/${{ github.repository_owner }}/docker-admin/main/docker-compose.yml
-          docker compose up -d
-          ```
-
-          ### docker-compose.yml
-
-          ```yaml
-          services:
-            admin:
-              image: ghcr.io/${{ github.repository_owner }}/docker-admin:${{ github.ref_name }}
-              ports:
-                - "7001:7001"
-              environment:
-                - SERVER_PORT=7001
-              volumes:
-                - "/var/run/docker.sock:/var/run/docker.sock"
-                - "./data/:/data"
-              restart: unless-stopped
-          ```
-
-          ### 访问
-
-          http://127.0.0.1:7001
-
-          默认账号：`admin`，密码：`Open@1234`（首次登录后请及时修改）。
+        # 正文由上一次 release 到本次 tag 之间的 commit / PR 自动生成
+        generate_release_notes: true
         token: ${{ secrets.GITHUB_TOKEN }}
 
