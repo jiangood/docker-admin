@@ -31,6 +31,9 @@
     <logger name="io.github.jiangood.docker.admin.service.ImageSyncService">
         <appender-ref ref="docker-log-appender" />
     </logger>
+    <logger name="io.github.jiangood.docker.admin.service.BuildTestService">
+        <appender-ref ref="docker-log-appender" />
+    </logger>
     <logger name="io.github.jiangood.docker.admin.service.TunnelService">
         <appender-ref ref="docker-log-appender" />
     </logger>
