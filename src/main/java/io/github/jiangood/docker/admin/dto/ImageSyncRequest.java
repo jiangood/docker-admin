@@ -2,8 +2,12 @@ package io.github.jiangood.docker.admin.dto;
 
 import lombok.Data;
 
+import java.util.List;
+
 /**
- * 镜像同步请求：把公共镜像经指定主机拉取后推送到平台注册中心。
+ * 镜像同步请求：把公共镜像经指定主机拉取后推送到平台注册中心，和/或传输到其他目标主机。
+ * <p>
+ * 「目标注册中心」与「目标主机」至少选择一项，可同时选择。
  */
 @Data
 public class ImageSyncRequest {
@@ -17,6 +21,16 @@ public class ImageSyncRequest {
      * 源镜像，如 nginx:1.25-alpine、docker.io/library/redis:7。
      */
     String sourceImage;
+
+    /**
+     * 是否推送到平台注册中心。
+     */
+    Boolean toRegistry;
+
+    /**
+     * 目标主机 id 列表，镜像会 save 后 load 到这些主机。
+     */
+    List<String> targetHostIds;
 
     /**
      * 目标镜像名，留空则取源镜像的最后一段。

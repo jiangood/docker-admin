@@ -1,5 +1,5 @@
 import {PlusOutlined} from '@ant-design/icons'
-import {Button, Form, Input, Modal, Popconfirm, Space, Splitter} from 'antd'
+import {Button, Form, Input, Modal, Popconfirm, Splitter} from 'antd'
 import React from 'react'
 
 import {
@@ -12,7 +12,7 @@ import {
     ProTable
 } from "@jiangood/open-admin"
 
-import CodeSourceProjectPicker from './CodeSourceProjectPicker'
+import FieldGitRepository from '../../components/FieldGitRepository'
 
 
 export default class extends React.Component {
@@ -20,7 +20,6 @@ export default class extends React.Component {
     state = {
         formValues: {},
         formOpen: false,
-        pickerOpen: false,
 
 
         selectedOrgId: null
@@ -30,6 +29,9 @@ export default class extends React.Component {
     formRef = React.createRef()
     tableRef = React.createRef()
 
+    // 用户是否手动改过镜像名；改过之后不再随代码仓库自动覆盖
+    nameTouched = false
+
     columns = [
 
 
@@ -37,16 +39,11 @@ export default class extends React.Component {
             title: '镜像',
             dataIndex: 'name',
             render: (name, row) => {
-                return <a onClick={() => PageUtils.open('/image/view?id=' + row.id, "镜像-" + name)}>{name}</a>
+                return <Button type='link' style={{padding: 0}}
+                               onClick={() => PageUtils.open('/image/view?id=' + row.id, "镜像-" + name)}>{name}</Button>
             },
 
         },
-        {
-            title: '中文名称',
-            dataIndex: 'cnName',
-            sorter: true,
-        },
-
         {
             title: '代码仓库',
             dataIndex: 'gitUrl',
@@ -88,11 +85,39 @@ export default class extends React.Component {
 
 
     handleAdd = () => {
+        this.nameTouched = false
         this.setState({formOpen: true, formValues: {}})
     }
 
     handleEdit = record => {
+        // 已有镜像的镜像名视为用户设定，不随代码仓库自动覆盖
+        this.nameTouched = true
         this.setState({formOpen: true, formValues: record})
+    }
+
+    /**
+     * 由代码仓库地址推导镜像名：取仓库路径最后一段，去掉 .git 后缀，
+     * 转小写并将非法字符替换为短横线（镜像名需以小写字母开头）。
+     */
+    deriveImageName = gitUrl => {
+        if (!gitUrl) {
+            return ''
+        }
+        const path = String(gitUrl).trim().replace(/\/+$/, '').replace(/\.git$/i, '')
+        const segment = path.split(/[\\/:]+/).filter(Boolean).pop() || ''
+        return segment.toLowerCase()
+            .replace(/[^a-z0-9._-]+/g, '-')
+            .replace(/^[^a-z]+/, '')
+    }
+
+    onValuesChange = changedValues => {
+        if ('name' in changedValues) {
+            this.nameTouched = true
+            return
+        }
+        if ('gitUrl' in changedValues && !this.nameTouched) {
+            this.formRef.current?.setFieldsValue({name: this.deriveImageName(changedValues.gitUrl)})
+        }
     }
 
 
@@ -156,23 +181,18 @@ export default class extends React.Component {
 
                 <Form ref={this.formRef} labelCol={{flex: '120px'}}
                       initialValues={this.state.formValues}
+                      onValuesChange={this.onValuesChange}
                       onFinish={this.onFinish}>
                     <Form.Item name='id' noStyle></Form.Item>
-                    <Form.Item label='镜像名' name='name' rules={[{required: true}]} help='不能包含中文，小写字母开头'>
-                        <Input/>
+                    <Form.Item label='代码仓库' name='gitUrl'
+                               rules={[{required: true, message: '请输入代码仓库'}]}
+                               tooltip='可直接输入地址，也可从「设置-代码源」的仓库列表中选择；选择后自动填入镜像名'>
+                        <FieldGitRepository/>
                     </Form.Item>
 
-                    <Form.Item label='中文名称' name='cnName'>
+                    <Form.Item label='镜像名' name='name' rules={[{required: true}]}
+                               help='不能包含中文，小写字母开头；默认取代码仓库名'>
                         <Input/>
-                    </Form.Item>
-
-                    <Form.Item label='代码仓库' required>
-                        <Space.Compact style={{width: '100%'}}>
-                            <Form.Item name='gitUrl' noStyle rules={[{required: true, message: '请输入代码仓库'}]}>
-                                <Input/>
-                            </Form.Item>
-                            <Button onClick={() => this.setState({pickerOpen: true})}>从代码源选择</Button>
-                        </Space.Compact>
                     </Form.Item>
 
                     <Form.Item label='dockerfile' name='dockerfile' rules={[{required: true}]}
@@ -193,15 +213,6 @@ export default class extends React.Component {
                     </Form.Item>
                 </Form>
             </Modal>
-
-            <CodeSourceProjectPicker
-                open={this.state.pickerOpen}
-                onCancel={() => this.setState({pickerOpen: false})}
-                onSelect={url => {
-                    this.formRef.current.setFieldsValue({gitUrl: url})
-                    this.setState({pickerOpen: false})
-                }}
-            />
         </Page>
 
 

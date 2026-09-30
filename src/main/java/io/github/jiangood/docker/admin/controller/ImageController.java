@@ -1,6 +1,5 @@
 package io.github.jiangood.docker.admin.controller;
 
-import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
 import io.github.jiangood.docker.admin.dto.BuildRequest;
 import io.github.jiangood.docker.admin.entity.App;
@@ -45,7 +44,7 @@ public class ImageController {
     @RequestMapping("page")
     public AjaxResult page(String orgId, String searchText, @PageableDefault(direction = Sort.Direction.DESC, sort = {"updateTime"}) Pageable pageable) {
         Spec<Image> q = buildQuery();
-        q.orLike(searchText, "name", "cnName", "remark");
+        q.orLike(searchText, "name", "remark");
 
 
         if (StrUtil.isNotEmpty(orgId)) {
@@ -124,7 +123,7 @@ public class ImageController {
 
         buildRequest.setImageId(image.getId());
         buildRequest.setDockerfile(image.getDockerfile());
-        buildRequest.setBuildHostId(buildHostId);
+        buildRequest.setBuildHostId(service.resolveBuildHostId(buildHostId));
         service.buildImage(buildRequest);
 
         return AjaxResult.ok().msg("构建已触发");
@@ -151,9 +150,30 @@ public class ImageController {
     @RequestMapping("resetWebhook")
     public AjaxResult resetWebhook(String id) {
         Image image = assertImageAccess(id);
-        image.setWebhookToken(RandomUtil.randomString(32));
-        service.save(image);
+        image = service.resetWebhookToken(image);
         return AjaxResult.ok().msg("已重置").data(image.getWebhookToken());
+    }
+
+    /**
+     * 开启自动 Webhook：在代码仓库（GitLab）上创建指向 hookUrl 的 Webhook。
+     */
+    @HasPermission("image:webhook")
+    @RequestMapping("enableWebhook")
+    public AjaxResult enableWebhook(String id, String hookUrl) {
+        Image image = assertImageAccess(id);
+        service.enableWebhook(image, hookUrl);
+        return AjaxResult.ok().msg("已开启自动 Webhook");
+    }
+
+    /**
+     * 关闭自动 Webhook：删除代码仓库上由本系统创建的 Webhook。
+     */
+    @HasPermission("image:webhook")
+    @RequestMapping("disableWebhook")
+    public AjaxResult disableWebhook(String id) {
+        Image image = assertImageAccess(id);
+        service.disableWebhook(image);
+        return AjaxResult.ok().msg("已关闭自动 Webhook");
     }
 
     @HasPermission("image:build")

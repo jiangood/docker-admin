@@ -1,6 +1,6 @@
 import {
-  Button, Card, Checkbox, Descriptions, Form,
-  Modal, Select, Space, Spin, Table, Tabs, Tag, Tooltip, Typography
+  Alert, Button, Card, Descriptions, Form,
+  Modal, Select, Space, Spin, Switch, Table, Tabs, Tag, Tooltip, Typography
 } from 'antd';
 import React from 'react';
 import {
@@ -11,6 +11,7 @@ import {
   MinusCircleTwoTone
 } from "@ant-design/icons";
 import {DateUtils, HttpClient, PageUtils, ProTable, UrlUtils, ViewText} from "@jiangood/open-admin";
+import LogView from "../../components/LogView";
 
 
 function getIcon(key, index) {
@@ -30,10 +31,11 @@ export default class extends React.Component {
   state = {
     image: null,
     showTrigger: false,
-    hostOptions: [],
+    logRow: null,
     tagOptions: [],
     versions: [],
-    apps: []
+    apps: [],
+    webhookLoading: false
   }
   actionRef = React.createRef();
   timer = null
@@ -49,10 +51,6 @@ export default class extends React.Component {
       if (document.hidden) return;
       this.reload()
     }, 1000 * 30)
-
-    HttpClient.get('admin/host/options?onlyRunner=true').then(rs => {
-      this.setState({hostOptions: rs.data})
-    })
   }
 
   componentWillUnmount() {
@@ -93,6 +91,14 @@ export default class extends React.Component {
     })
   }
 
+  openLog = row => {
+    this.setState({logRow: row})
+  }
+
+  closeLog = () => {
+    this.setState({logRow: null})
+  }
+
   triggerPipeline = () => {
     HttpClient.get('admin/image/tags', {imageId: this.id}).then(rs => {
       this.setState({tagOptions: rs.data || []})
@@ -117,6 +123,19 @@ export default class extends React.Component {
     HttpClient.get("admin/image/resetWebhook", {id: this.state.image.id}).then(() => {
       this.loadImage()
     })
+  }
+
+  toggleWebhook = (checked) => {
+    const id = this.state.image.id
+    if (checked && !this.webhookUrl()) {
+      return
+    }
+    this.setState({webhookLoading: true})
+    const request = checked
+      ? HttpClient.get('admin/image/enableWebhook', {id, hookUrl: this.webhookUrl()})
+      : HttpClient.get('admin/image/disableWebhook', {id})
+    request.then(() => this.loadImage())
+      .finally(() => this.setState({webhookLoading: false}))
   }
 
   webhookUrl = () => {
@@ -186,11 +205,10 @@ export default class extends React.Component {
       valueType: 'option',
       fixed: 'right',
       render: (_, row) => {
-        const logUrl = "admin/sys/log/" + row.id;
         const isProcessing = row.success == null;
         const isError = row.success == false;
         return <Space>
-          <Button size='small' href={logUrl} target='_blank'>日志</Button>
+          <Button size='small' onClick={() => this.openLog(row)}>日志</Button>
           {isProcessing && <Button size='small' onClick={() => this.stop(row)}>停止</Button>}
           {isError && <Button size='small' onClick={() => this.retry(row)}>重试</Button>}
         </Space>
@@ -203,35 +221,25 @@ export default class extends React.Component {
       return <Spin/>
     }
 
-    const {image, showTrigger, hostOptions, tagOptions} = this.state;
+    const {image, showTrigger, logRow, tagOptions} = this.state;
 
     return (<>
 
-      <Card className='mb-2' extra={
-        <Space>
-          <Button onClick={this.triggerPipeline} type="primary">立即构建</Button>
-          <Button onClick={this.cleanError} title='清理失败的记录'>清理</Button>
-        </Space>
-      }>
+      <Card className='mb-2'>
         <Descriptions title={image.name}>
           <Descriptions.Item label='id'>{image.id}</Descriptions.Item>
-          <Descriptions.Item label='中文名称'>{image.cnName}</Descriptions.Item>
           <Descriptions.Item label='代码源'>{image.gitUrl}</Descriptions.Item>
           <Descriptions.Item label='dockerfile'>{image.dockerfile}</Descriptions.Item>
           <Descriptions.Item label='创建时间'>{image.createTime}</Descriptions.Item>
         </Descriptions>
 
-        <Descriptions size='small' column={1} style={{marginTop: 8}}>
-          <Descriptions.Item label='Webhook'>
-            <Space wrap>
-              <Typography.Text copyable={{text: this.webhookUrl()}} code>
-                {this.webhookUrl()}
-              </Typography.Text>
-              <Button size='small' onClick={this.resetWebhook}>重置</Button>
-              <span style={{color: '#999'}}>推送 tag（vX.Y.Z）到该地址即可自动构建</span>
-            </Space>
-          </Descriptions.Item>
-        </Descriptions>
+        <div style={{display: 'flex', justifyContent: 'end'}}>
+          <Space>
+            <Button onClick={this.triggerPipeline} type="primary">立即构建</Button>
+            <Button onClick={this.cleanError} title='清理失败的记录'>清理</Button>
+          </Space>
+        </div>
+
       </Card>
 
       <Card className='mb-2'>
@@ -247,8 +255,7 @@ export default class extends React.Component {
           onFinish={this.submitTrigger}
           labelCol={{flex: '100px'}}
           initialValues={{
-            imageId: image.id,
-            buildHostId: hostOptions[0]?.value
+            imageId: image.id
           }}
           preserve={false}>
           <Form.Item name="imageId" hidden>
@@ -258,31 +265,27 @@ export default class extends React.Component {
             <Select options={tagOptions} showSearch placeholder='请选择远程 tag'/>
           </Form.Item>
 
-          <Form.Item name="buildHostId" label="构建节点" rules={[{required: true, message: "请选择构建节点"}]}
-                     initialValue={hostOptions[0]?.value}>
-            <Select options={hostOptions}></Select>
-          </Form.Item>
-
-          <div style={{display: 'flex', gap: 24}}>
-            <Form.Item name="useCache" label="使用缓存" initialValue={true} valuePropName='checked'>
-              <Checkbox/>
-            </Form.Item>
-            <Form.Item name="pull" label="拉基础镜像" initialValue={false} valuePropName='checked'>
-              <Checkbox/>
-            </Form.Item>
-          </div>
-
           <div style={{display: 'flex', justifyContent: 'end'}}>
             <Button type='primary' htmlType="submit">确定</Button>
           </div>
         </Form>
       </Modal>
 
+      <Modal open={!!logRow} title={'构建日志 - ' + (logRow?.tag || '')}
+             width={900}
+             destroyOnHidden={true}
+             footer={null}
+             onCancel={this.closeLog}>
+        {logRow
+          ? <LogView url={'/admin/ws/image-build-log/' + logRow.id} websocket={true}/>
+          : null}
+      </Modal>
+
     </>)
   }
 
   renderTabs = () => {
-    const {image, versions, apps} = this.state;
+    const {image, versions, apps, webhookLoading} = this.state;
 
     const items = [
       {
@@ -299,6 +302,13 @@ export default class extends React.Component {
         />
       },
       {
+        key: 'version',
+        label: '镜像版本',
+        children: <Space wrap>
+          {versions.length === 0 ? <span>-</span> : versions.map(t => <Tag key={t} color='blue'>{t}</Tag>)}
+        </Space>
+      },
+      {
         key: 'apps',
         label: '关联应用',
         children: <Table
@@ -308,18 +318,53 @@ export default class extends React.Component {
           dataSource={apps}
           columns={[
             {title: '应用', dataIndex: 'name'},
-            {title: '中文名称', dataIndex: 'cnName'},
             {title: '主机', dataIndex: ['host', 'name']},
             {title: '版本', dataIndex: 'imageTag'}
           ]}
         />
       },
       {
-        key: 'version',
-        label: '版本',
-        children: <Space wrap>
-          {versions.length === 0 ? <span>-</span> : versions.map(t => <Tag key={t} color='blue'>{t}</Tag>)}
-        </Space>
+        key: 'webhook',
+        label: 'Webhook',
+        children: <div style={{maxWidth: 900}}>
+          <Alert
+            type='info'
+            showIcon
+            message='推送 tag 自动构建'
+            description='向下面的地址推送形如 vX.Y.Z 的 tag，即可使用系统默认构建节点自动构建对应版本。'
+            style={{marginBottom: 16}}
+          />
+          <Descriptions column={1} size='small' bordered>
+            <Descriptions.Item label='自动配置'>
+              <Space wrap>
+                <Switch
+                  checked={!!image.webhookAuto}
+                  loading={webhookLoading}
+                  onChange={this.toggleWebhook}
+                />
+                <span style={{color: '#999'}}>
+                  开启后在当前代码仓库（GitLab）自动创建上面的 Webhook 地址；关闭时自动删除。
+                  需在【设置-代码源】中配置 GitLab 类型与访问令牌（api 权限）。
+                </span>
+              </Space>
+            </Descriptions.Item>
+            <Descriptions.Item label='Webhook 地址'>
+              <Space wrap>
+                <Typography.Text copyable={{text: this.webhookUrl()}} code
+                                 style={{wordBreak: 'break-all'}}>
+                  {this.webhookUrl()}
+                </Typography.Text>
+                <Button size='small' onClick={this.resetWebhook}>重置令牌</Button>
+              </Space>
+            </Descriptions.Item>
+            <Descriptions.Item label='说明'>
+              <span style={{color: '#999'}}>
+                重置令牌后旧地址立即失效，需要同步更新代码仓库中的 Webhook 配置；
+                若已开启自动配置，重置令牌会自动删除仓库上的旧 Webhook，需要重新开启。
+              </span>
+            </Descriptions.Item>
+          </Descriptions>
+        </div>
       }
     ]
 

@@ -4,6 +4,7 @@ import cn.hutool.core.util.StrUtil;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.jiangood.docker.admin.entity.CodeSource;
+import io.github.jiangood.docker.admin.entity.CodeSourceAuthType;
 import io.github.jiangood.docker.admin.entity.CodeSourceType;
 import io.github.jiangood.openadmin.util.BusinessException;
 import lombok.RequiredArgsConstructor;
@@ -15,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.Assert;
 
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -22,6 +24,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -64,9 +67,7 @@ public class CodeSourceApiService {
                 .timeout(Duration.ofSeconds(30))
                 .header("Accept", "application/json")
                 .GET();
-        if (StrUtil.isNotBlank(source.getPassword())) {
-            builder.header("PRIVATE-TOKEN", source.getPassword());
-        }
+        applyAuth(builder, source);
 
         HttpResponse<String> response;
         try {
@@ -85,6 +86,158 @@ public class CodeSourceApiService {
         long total = response.headers().firstValue("X-Total").map(CodeSourceApiService::parseLong).orElse(0L);
         List<Map<String, Object>> content = parseProjects(response.body(), base);
         return new PageImpl<>(content, pageable, total);
+    }
+
+    /**
+     * 在 GitLab 项目上创建指向 hookUrl 的 Webhook；若已存在相同地址的 Webhook 则直接复用。
+     *
+     * @return GitLab 侧的 Webhook id
+     */
+    public String enableProjectHook(CodeSource source, String projectPath, String hookUrl) {
+        String base = requireGitLabBase(source);
+        String hooksUrl = base + "/api/v4/projects/" + encode(projectPath) + "/hooks";
+
+        JsonNode existing = request(source, "GET", hooksUrl, null, false);
+        if (existing != null && existing.isArray()) {
+            for (JsonNode hook : existing) {
+                if (hookUrl.equals(text(hook, "url"))) {
+                    String id = text(hook, "id");
+                    log.info("GitLab 项目 {} 已存在 Webhook {}，复用 id={}", projectPath, hookUrl, id);
+                    return id;
+                }
+            }
+        }
+
+        Map<String, String> form = new LinkedHashMap<>();
+        form.put("url", hookUrl);
+        form.put("push_events", "true");
+        form.put("tag_push_events", "true");
+        JsonNode created = request(source, "POST", hooksUrl, form, false);
+        String id = created == null ? null : text(created, "id");
+        Assert.hasText(id, "创建 Webhook 失败：代码源未返回 Webhook id");
+        log.info("已在 GitLab 项目 {} 创建 Webhook {}，id={}", projectPath, hookUrl, id);
+        return id;
+    }
+
+    /**
+     * 删除 GitLab 项目上的 Webhook。hookId 为空时静默忽略，接口返回 404 视为已删除。
+     */
+    public void disableProjectHook(CodeSource source, String projectPath, String hookId) {
+        if (StrUtil.isBlank(hookId)) {
+            return;
+        }
+        String base = requireGitLabBase(source);
+        String url = base + "/api/v4/projects/" + encode(projectPath) + "/hooks/" + encode(hookId);
+        request(source, "DELETE", url, null, true);
+        log.info("已删除 GitLab 项目 {} 的 Webhook id={}", projectPath, hookId);
+    }
+
+    private String requireGitLabBase(CodeSource source) {
+        CodeSourceType type = source.getType() == null ? CodeSourceType.CUSTOM : source.getType();
+        Assert.isTrue(type == CodeSourceType.GITLAB, "仅支持 GitLab 类型代码源自动配置 Webhook");
+        String base = StrUtil.removeSuffix(StrUtil.trimToEmpty(source.getUrl()), "/");
+        Assert.hasText(base, "代码源地址不能为空");
+        return base;
+    }
+
+    /**
+     * 从 git 地址解析 GitLab 项目路径（形如 group/project），用于拼接 API 路径。
+     */
+    public static String projectPath(CodeSource source, String gitUrl) {
+        String url = StrUtil.trimToEmpty(gitUrl);
+        Assert.hasText(url, "代码仓库地址不能为空");
+        String base = StrUtil.removeSuffix(StrUtil.trimToEmpty(source.getUrl()), "/");
+        String path = StrUtil.isNotBlank(base) && url.startsWith(base) ? url.substring(base.length()) : stripHost(url);
+        path = StrUtil.removePrefix(path, "/");
+        path = StrUtil.removeSuffix(path, ".git");
+        Assert.hasText(path, "无法从代码仓库地址解析项目路径：" + gitUrl);
+        return path;
+    }
+
+    private static String stripHost(String url) {
+        if (url.contains("://")) {
+            try {
+                String path = new URI(url).getPath();
+                return path == null ? "" : path;
+            } catch (URISyntaxException e) {
+                return "";
+            }
+        }
+        // scp 形式 user@host:path
+        int colon = url.lastIndexOf(':');
+        return colon >= 0 ? url.substring(colon + 1) : url;
+    }
+
+    /**
+     * 按访问方式设置平台 API 认证头：访问令牌用 PRIVATE-TOKEN，账号密码用 Basic。
+     */
+    private static void applyAuth(HttpRequest.Builder builder, CodeSource source) {
+        CodeSourceAuthType authType = source.effectiveAuthType();
+        Assert.isTrue(authType != CodeSourceAuthType.SSH_KEY,
+                "SSH 私钥方式无法调用平台 API，请把代码源的访问方式改为访问令牌或账号密码");
+
+        if (authType == CodeSourceAuthType.PASSWORD) {
+            Assert.hasText(source.getUsername(), "账号密码方式请填写用户名");
+            String raw = source.getUsername() + ":" + StrUtil.nullToEmpty(source.getPassword());
+            String basic = Base64.getEncoder().encodeToString(raw.getBytes(StandardCharsets.UTF_8));
+            builder.header("Authorization", "Basic " + basic);
+            return;
+        }
+
+        String token = source.apiToken();
+        if (StrUtil.isNotBlank(token)) {
+            builder.header("PRIVATE-TOKEN", token);
+        }
+    }
+
+    private JsonNode request(CodeSource source, String method, String url, Map<String, String> form, boolean ignoreNotFound) {
+        HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(url))
+                .timeout(Duration.ofSeconds(30))
+                .header("Accept", "application/json");
+        applyAuth(builder, source);
+        if (form == null) {
+            builder.method(method, HttpRequest.BodyPublishers.noBody());
+        } else {
+            builder.header("Content-Type", "application/x-www-form-urlencoded");
+            builder.method(method, HttpRequest.BodyPublishers.ofString(encodeForm(form), StandardCharsets.UTF_8));
+        }
+
+        HttpResponse<String> response;
+        try {
+            response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new BusinessException("请求代码源失败：" + e.getMessage(), e);
+        } catch (Exception e) {
+            throw new BusinessException("请求代码源失败：" + e.getMessage(), e);
+        }
+
+        int status = response.statusCode();
+        if (ignoreNotFound && status == 404) {
+            return null;
+        }
+        if (status < 200 || status >= 300) {
+            throw new BusinessException("代码源接口返回 " + status + "：" + StrUtil.maxLength(response.body(), 200));
+        }
+        if (StrUtil.isBlank(response.body())) {
+            return null;
+        }
+        try {
+            return objectMapper.readTree(response.body());
+        } catch (Exception e) {
+            throw new BusinessException("解析代码源返回失败：" + e.getMessage(), e);
+        }
+    }
+
+    private static String encodeForm(Map<String, String> form) {
+        StringBuilder sb = new StringBuilder();
+        for (Map.Entry<String, String> e : form.entrySet()) {
+            if (sb.length() > 0) {
+                sb.append('&');
+            }
+            sb.append(encode(e.getKey())).append('=').append(encode(e.getValue()));
+        }
+        return sb.toString();
     }
 
     private List<Map<String, Object>> parseProjects(String body, String base) {

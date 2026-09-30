@@ -43,18 +43,16 @@ public class CodeSourceController {
     }
 
     /**
-     * 供选择器使用的代码源下拉项（不含密码）。选择器在「新建镜像」中使用，故按镜像权限放行。
+     * 供选择器使用的代码源下拉项（不含密码）。不校验权限，仅要求登录。
      */
-    @HasPermission("image:view")
     @RequestMapping("options")
     public AjaxResult options() {
         return AjaxResult.ok().data(service.options());
     }
 
     /**
-     * 列出代码源上的仓库（目前支持 GitLab），供「新建镜像」时选择。
+     * 列出代码源上的仓库（目前支持 GitLab），供「新建镜像」「构建测试」时选择。不校验权限，仅要求登录。
      */
-    @HasPermission("image:view")
     @RequestMapping("projects")
     public AjaxResult projects(String codeSourceId, String search,
             @PageableDefault(size = 20) Pageable pageable) {

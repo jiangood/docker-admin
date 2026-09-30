@@ -262,10 +262,10 @@ export default class extends React.Component {
                         <Col flex="auto">
 
                             {!this.state.showEditName ? <div>
-                                {this.state.app.name} <a onClick={() => this.setState({
+                                {this.state.app.name} <Button type='link' style={{padding: 0}} onClick={() => this.setState({
                                 newName: this.state.app.name,
                                 showEditName: true
-                            })}>修改名称</a>
+                            })}>修改名称</Button>
                             </div> : <div>
 
                                 <Input value={this.state.newName} style={{width: 200}}

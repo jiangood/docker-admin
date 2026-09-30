@@ -6,16 +6,18 @@ import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.command.BuildImageCmd;
 import com.github.dockerjava.api.model.BuildResponseItem;
 import io.github.jiangood.docker.admin.dto.BuildTestRequest;
-import io.github.jiangood.docker.admin.entity.CodeSource;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.entity.Registry;
 import io.github.jiangood.docker.admin.websocket.TaskLogRegistry;
+import io.github.jiangood.docker.base.tool.GitCredential;
 import io.github.jiangood.docker.base.tool.GitTool;
 import io.github.jiangood.docker.sdk.engine.DefaultCallback;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
+import io.github.jiangood.openadmin.util.BusinessException;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
+import org.eclipse.jgit.api.errors.GitAPIException;
 import org.slf4j.MDC;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
@@ -59,6 +61,25 @@ public class BuildTestService {
         return taskLogRegistry.isRunning(logId);
     }
 
+    /**
+     * 读取 Git 仓库根目录下的 Dockerfile 内容，供构建测试页面回填编辑。
+     */
+    public String readDockerfile(String gitUrl) {
+        String url = StrUtil.trim(gitUrl);
+        Assert.hasText(url, "请先填写 Git 仓库地址");
+
+        try {
+            GitCredential credential = codeSourceService.credentialByGitUrl(url);
+            String content = GitTool.readTextFile(url, credential, DOCKERFILE);
+            if (content == null) {
+                throw new BusinessException("仓库根目录未找到 " + DOCKERFILE + " 文件，请确认仓库地址或手动粘贴内容");
+            }
+            return content;
+        } catch (GitAPIException e) {
+            throw new BusinessException("读取仓库 Dockerfile 失败：" + e.getMessage(), e);
+        }
+    }
+
     @Async
     public void build(String logId, BuildTestRequest p) {
         taskLogRegistry.start(logId);
@@ -82,12 +103,10 @@ public class BuildTestService {
             log.info("构建节点: {} ({})", host.getName(), StrUtil.blankToDefault(host.getDockerHost(), "本机"));
             log.info("目标镜像: {}:{}", targetName, targetTag);
 
-            // 凭据按地址主机自动匹配代码源
-            CodeSource source = codeSourceService.findByGitUrl(gitUrl);
-            String username = source == null ? null : source.getUsername();
-            String password = source == null ? null : source.getPassword();
+            // 凭据按地址主机自动匹配代码源，按其访问方式解析
+            GitCredential credential = codeSourceService.credentialByGitUrl(gitUrl);
 
-            GitTool.CloneResult cloneResult = GitTool.clone(gitUrl, username, password, null);
+            GitTool.CloneResult cloneResult = GitTool.clone(gitUrl, credential, null);
             workDir = cloneResult.getDir();
             log.info("代码下载完毕 {}", workDir);
             log.info("代码提交信息: {}", cloneResult.getCodeMessage());

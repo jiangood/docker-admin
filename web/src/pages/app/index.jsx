@@ -22,7 +22,8 @@ export default class extends React.Component {
             dataIndex: 'name',
             sorter: true,
             render: (name, row) => {
-                return <a onClick={() => PageUtils.open('/app/view?id=' + row.id, '应用-' + name)}>{name}</a>
+                return <Button type='link' style={{padding: 0}}
+                               onClick={() => PageUtils.open('/app/view?id=' + row.id, '应用-' + name)}>{name}</Button>
             }
         },
         {

@@ -5,12 +5,14 @@ import cn.hutool.core.date.BetweenFormatter;
 import cn.hutool.core.date.DateUtil;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.io.unit.DataSizeUtil;
+import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.extra.spring.SpringUtil;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.command.BuildImageCmd;
 import com.github.dockerjava.api.command.PushImageCmd;
 import com.github.dockerjava.api.model.BuildResponseItem;
+import io.github.jiangood.docker.base.tool.GitCredential;
 import io.github.jiangood.docker.base.tool.GitTool;
 import io.github.jiangood.docker.admin.BuildSuccessEvent;
 import io.github.jiangood.docker.admin.dao.AppRepository;
@@ -22,6 +24,7 @@ import io.github.jiangood.docker.admin.entity.CodeSource;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.entity.Image;
 import io.github.jiangood.docker.admin.entity.Registry;
+import io.github.jiangood.docker.admin.websocket.TaskLogRegistry;
 import io.github.jiangood.docker.sdk.engine.DefaultCallback;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import io.github.jiangood.openadmin.framework.data.BaseService;
@@ -73,6 +76,9 @@ public class ImageService extends BaseService<Image> {
     CodeSourceService codeSourceService;
 
     @Resource
+    CodeSourceApiService codeSourceApiService;
+
+    @Resource
     BuildLogService buildLogService;
 
     @Resource
@@ -83,6 +89,9 @@ public class ImageService extends BaseService<Image> {
 
     @Resource
     private ApplicationEventPublisher applicationEventPublisher;
+
+    @Resource
+    TaskLogRegistry taskLogRegistry;
 
     private final Map<String, DefaultCallback> buildThreadMap = new ConcurrentHashMap<>();
 
@@ -155,18 +164,29 @@ public class ImageService extends BaseService<Image> {
      */
     public List<String> listRemoteTags(Image image) {
         CodeSource source = codeSourceService.findByGitUrl(image.getGitUrl());
-        String username = source == null ? null : source.getUsername();
-        String password = source == null ? null : source.getPassword();
+        GitCredential credential = codeSourceService.credential(source);
         try {
-            return GitTool.listRemoteTags(image.getGitUrl(), username, password);
+            return GitTool.listRemoteTags(image.getGitUrl(), credential);
         } catch (GitAPIException e) {
             if (source == null) {
                 String host = CodeSourceService.hostKey(image.getGitUrl());
                 throw new BusinessException("获取远程 tag 失败：未找到与主机 " + host
-                        + " 匹配的代码源，请在【设置-代码源】配置用户名（可填 oauth2）和访问令牌", e);
+                        + " 匹配的代码源，请在【设置-代码源】配置访问方式与凭据", e);
             }
             throw new BusinessException("获取远程 tag 失败：" + e.getMessage(), e);
         }
+    }
+
+    /**
+     * 解析构建节点 id：未指定时使用系统默认 runner。
+     */
+    public String resolveBuildHostId(String buildHostId) {
+        if (StrUtil.isNotBlank(buildHostId)) {
+            return buildHostId;
+        }
+        Host runner = hostService.getDefaultDockerRunner();
+        Assert.notNull(runner, "未配置构建节点（runner），请先在【主机】中设置");
+        return runner.getId();
     }
 
     /**
@@ -200,6 +220,54 @@ public class ImageService extends BaseService<Image> {
         buildByTag(image, tag);
     }
 
+    /**
+     * 开启自动 Webhook：在代码仓库（GitLab）上创建指向 hookUrl 的 Webhook，并记录其 id。
+     */
+    @Transactional
+    public Image enableWebhook(Image image, String hookUrl) {
+        Assert.hasText(hookUrl, "Webhook 地址不能为空");
+        CodeSource source = codeSourceService.findByGitUrl(image.getGitUrl());
+        Assert.notNull(source, "未找到与代码仓库匹配的代码源，请先在【设置-代码源】中配置");
+        String projectPath = CodeSourceApiService.projectPath(source, image.getGitUrl());
+        String hookId = codeSourceApiService.enableProjectHook(source, projectPath, hookUrl);
+        image.setWebhookHookId(hookId);
+        image.setWebhookAuto(true);
+        return save(image);
+    }
+
+    /**
+     * 关闭自动 Webhook：删除代码仓库上由本系统创建的 Webhook，并清除本地记录。
+     */
+    @Transactional
+    public Image disableWebhook(Image image) {
+        CodeSource source = codeSourceService.findByGitUrl(image.getGitUrl());
+        if (source != null) {
+            String projectPath = CodeSourceApiService.projectPath(source, image.getGitUrl());
+            codeSourceApiService.disableProjectHook(source, projectPath, image.getWebhookHookId());
+        }
+        image.setWebhookHookId(null);
+        image.setWebhookAuto(false);
+        return save(image);
+    }
+
+    /**
+     * 重置 webhook token。若已开启自动 Webhook，则一并删除代码仓库上的旧 Webhook（地址已失效）。
+     */
+    @Transactional
+    public Image resetWebhookToken(Image image) {
+        if (Boolean.TRUE.equals(image.getWebhookAuto())) {
+            try {
+                disableWebhook(image);
+            } catch (Exception e) {
+                log.warn("重置令牌时删除远程 Webhook 失败，请到代码仓库手动清理：{}", e.getMessage());
+                image.setWebhookHookId(null);
+                image.setWebhookAuto(false);
+            }
+        }
+        image.setWebhookToken(RandomUtil.randomString(32));
+        return save(image);
+    }
+
     public void buildImage(BuildRequest p) throws IOException {
         List<BuildLog> processing = buildLogService.findByImageProcessing(p.getImageId());
 
@@ -228,6 +296,7 @@ public class ImageService extends BaseService<Image> {
         buildLog.setTag(tag);
         buildLog = buildLogService.saveLog(buildLog);
         String logId = buildLog.getId();
+        taskLogRegistry.start(logId);
 
 
         DockerClient client = null;
@@ -364,20 +433,15 @@ public class ImageService extends BaseService<Image> {
         } finally {
             IOUtils.closeQuietly(client);
             MDC.remove("logFileId");
+            taskLogRegistry.finish(logId);
         }
     }
 
     private GitTool.CloneResult gitClone(Image image, String tag) throws GitAPIException {
-        String username = null;
-        String password = null;
-        CodeSource source = codeSourceService.findByGitUrl(image.getGitUrl());
-        if (source != null) {
-            username = source.getUsername();
-            password = source.getPassword();
-        }
+        GitCredential credential = codeSourceService.credentialByGitUrl(image.getGitUrl());
 
         log.info("代码下载中...");
-        return GitTool.clone(image.getGitUrl(), username, password, tag);
+        return GitTool.clone(image.getGitUrl(), credential, tag);
     }
 
 
@@ -385,6 +449,19 @@ public class ImageService extends BaseService<Image> {
     public void deleteImage(String id) {
         List<App> apps = appRepository.findAllByImage_Id(id);
         Assert.state(apps.isEmpty(), "该镜像下还有 " + apps.size() + " 个应用，请先删除应用");
+
+        Image image = imageRepository.findById(id).orElse(null);
+        if (image != null && Boolean.TRUE.equals(image.getWebhookAuto())) {
+            try {
+                CodeSource source = codeSourceService.findByGitUrl(image.getGitUrl());
+                if (source != null) {
+                    codeSourceApiService.disableProjectHook(source,
+                            CodeSourceApiService.projectPath(source, image.getGitUrl()), image.getWebhookHookId());
+                }
+            } catch (Exception e) {
+                log.warn("删除镜像时清理远程 Webhook 失败，请到代码仓库手动清理：{}", e.getMessage());
+            }
+        }
 
         List<BuildLog> logList = buildLogService.findByImage(id);
 

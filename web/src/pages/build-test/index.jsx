@@ -1,6 +1,7 @@
-import {Alert, Button, Card, Drawer, Form, Input} from 'antd'
+import {Alert, Button, Card, Drawer, Form, Input, message, Space, Tooltip} from 'antd'
 import React from 'react'
 import {HttpClient, Page, PermActions} from '@jiangood/open-admin'
+import FieldGitRepository from '../../components/FieldGitRepository'
 import LogView from '../../components/LogView'
 
 /**
@@ -12,7 +13,10 @@ export default class extends React.Component {
         logId: null,
         logVisible: false,
         submitting: false,
+        reading: false,
     }
+
+    formRef = React.createRef()
 
     onFinish = values => {
         this.setState({submitting: true})
@@ -21,8 +25,25 @@ export default class extends React.Component {
         }).finally(() => this.setState({submitting: false}))
     }
 
+    /**
+     * 克隆 Git 仓库并读取根目录下的 Dockerfile，回填到编辑框。
+     */
+    readRepositoryDockerfile = e => {
+        e.preventDefault()
+        const gitUrl = this.formRef.current?.getFieldValue('gitUrl')
+        if (!gitUrl) {
+            message.warning('请先填写 Git 仓库地址')
+            return
+        }
+        this.setState({reading: true})
+        HttpClient.get('admin/build-test/read-dockerfile', {gitUrl}).then(rs => {
+            this.formRef.current?.setFieldsValue({dockerfileText: rs.data})
+            message.success('已读取仓库中的 Dockerfile')
+        }).finally(() => this.setState({reading: false}))
+    }
+
     render() {
-        const {logId, logVisible, submitting} = this.state
+        const {logId, logVisible, submitting, reading} = this.state
 
         return <Page padding>
             <Card title='构建测试' style={{maxWidth: 760}}>
@@ -34,14 +55,24 @@ export default class extends React.Component {
                     description='使用「设置-主机管理」中标记为构建节点的主机进行本地构建，不推送到注册中心。'
                 />
 
-                <Form labelCol={{flex: '110px'}} preserve={false} onFinish={this.onFinish}>
+                <Form ref={this.formRef} labelCol={{flex: '150px'}} preserve={false} onFinish={this.onFinish}>
                     <Form.Item label='Git 仓库地址' name='gitUrl'
                                rules={[{required: true, message: '请输入 Git 仓库地址'}]}
-                               tooltip='凭据按地址主机自动匹配「设置-代码源」中的配置'>
-                        <Input placeholder='https://github.com/user/repo.git'/>
+                               tooltip='可直接输入地址，也可从「设置-代码源」的仓库列表中选择；凭据按地址主机自动匹配代码源'>
+                        <FieldGitRepository/>
                     </Form.Item>
 
-                    <Form.Item label='Dockerfile' name='dockerfileText'
+                    <Form.Item label={
+                        <Space size={4}>
+                            Dockerfile
+                            <Tooltip title='克隆 Git 仓库并读取根目录下的 Dockerfile'>
+                                <Button type='link' size='small' style={{padding: 0, height: 'auto'}}
+                                        loading={reading} onClick={this.readRepositoryDockerfile}>
+                                    读取仓库
+                                </Button>
+                            </Tooltip>
+                        </Space>
+                    } name='dockerfileText'
                                rules={[{required: true, message: '请粘贴 Dockerfile 内容'}]}>
                         <Input.TextArea rows={12} style={{fontFamily: 'monospace'}}
                                         placeholder={'FROM alpine:3.20\nRUN echo hello'} />

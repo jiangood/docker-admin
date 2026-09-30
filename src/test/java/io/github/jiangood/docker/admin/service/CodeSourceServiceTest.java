@@ -1,9 +1,13 @@
 package io.github.jiangood.docker.admin.service;
 
+import io.github.jiangood.docker.admin.entity.CodeSource;
+import io.github.jiangood.docker.admin.entity.CodeSourceAuthType;
+import io.github.jiangood.docker.base.tool.GitCredential;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CodeSourceServiceTest {
 
@@ -38,5 +42,77 @@ class CodeSourceServiceTest {
     void hostKey_blankOrInvalid() {
         assertNull(CodeSourceService.hostKey(null));
         assertNull(CodeSourceService.hostKey("  "));
+    }
+
+    @Test
+    void credential_nullSourceIsAnonymous() {
+        assertTrue(CodeSourceService.resolveCredential(null).isNone());
+    }
+
+    @Test
+    void credential_token() {
+        CodeSource source = new CodeSource();
+        source.setAuthType(CodeSourceAuthType.TOKEN);
+        source.setUsername("oauth2");
+        source.setToken("glpat-xxx");
+
+        GitCredential credential = CodeSourceService.resolveCredential(source);
+        assertEquals(GitCredential.Kind.TOKEN, credential.getKind());
+        assertEquals("oauth2", credential.getUsername());
+        assertEquals("glpat-xxx", credential.getSecret());
+    }
+
+    @Test
+    void credential_tokenWithoutTokenFallsBackToAnonymous() {
+        CodeSource source = new CodeSource();
+        source.setAuthType(CodeSourceAuthType.TOKEN);
+
+        assertTrue(CodeSourceService.resolveCredential(source).isNone());
+    }
+
+    @Test
+    void credential_password() {
+        CodeSource source = new CodeSource();
+        source.setAuthType(CodeSourceAuthType.PASSWORD);
+        source.setUsername("alice");
+        source.setPassword("secret");
+
+        GitCredential credential = CodeSourceService.resolveCredential(source);
+        assertEquals(GitCredential.Kind.PASSWORD, credential.getKind());
+        assertEquals("alice", credential.getUsername());
+        assertEquals("secret", credential.getSecret());
+    }
+
+    @Test
+    void credential_sshKey() {
+        CodeSource source = new CodeSource();
+        source.setAuthType(CodeSourceAuthType.SSH_KEY);
+        source.setPrivateKey("-----BEGIN OPENSSH PRIVATE KEY-----");
+        source.setPrivateKeyPassphrase("1234");
+
+        GitCredential credential = CodeSourceService.resolveCredential(source);
+        assertEquals(GitCredential.Kind.SSH_KEY, credential.getKind());
+        assertEquals("-----BEGIN OPENSSH PRIVATE KEY-----", credential.getPrivateKey());
+        assertEquals("1234", credential.getPassphrase());
+    }
+
+    @Test
+    void credential_sshKeyWithoutKeyFallsBackToAnonymous() {
+        CodeSource source = new CodeSource();
+        source.setAuthType(CodeSourceAuthType.SSH_KEY);
+
+        assertTrue(CodeSourceService.resolveCredential(source).isNone());
+    }
+
+    @Test
+    void credential_legacyRowWithoutAuthTypeUsesPasswordAsToken() {
+        CodeSource source = new CodeSource();
+        source.setAuthType(null);
+        source.setUsername("oauth2");
+        source.setPassword("legacy-token");
+
+        GitCredential credential = CodeSourceService.resolveCredential(source);
+        assertEquals(GitCredential.Kind.TOKEN, credential.getKind());
+        assertEquals("legacy-token", credential.getSecret());
     }
 }

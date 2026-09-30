@@ -14,11 +14,15 @@ public class BuildRequest {
 
     String context = "/";
     String dockerfile = "Dockerfile";
+    // 是否复用构建缓存（手动触发不暴露开关，默认复用）
     boolean useCache = true;
 
-    String buildHostId = "default";
+    /**
+     * 构建节点 id，为空时使用系统默认 runner。
+     */
+    String buildHostId;
 
-    // 构建时是否拉取最近镜像
+    // 构建时是否拉取基础镜像（手动触发不暴露开关，默认不拉取）
     boolean pull = false;
 
 }

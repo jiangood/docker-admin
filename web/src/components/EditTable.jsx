@@ -1,4 +1,4 @@
-import {Input, InputNumber, Select} from "antd";
+import {Button, Input, InputNumber, Select} from "antd";
 import React from "react";
 import {DeleteOutlined, ExclamationCircleOutlined, PlusCircleFilled} from '@ant-design/icons';
 
@@ -100,7 +100,8 @@ export default class extends React.Component {
       </table>
 
       {canAdd && <div style={{marginTop: 16, marginBottom: 16}}>
-        <PlusCircleFilled style={{color: '#1890ff'}}/><a onClick={this.add}>添加</a>
+        <PlusCircleFilled style={{color: '#1890ff'}}/><Button type='link' style={{padding: 0}}
+                                                             onClick={this.add}>添加</Button>
       </div>}
     </div>
 

@@ -1,11 +1,11 @@
-import {Alert, Form, Input, Modal, Select, Space} from 'antd'
+import {Alert, Button, Form, Input, Modal, Select, Space} from 'antd'
 import dayjs from 'dayjs'
 import React from 'react'
 
 import {HttpClient, ProTable} from '@jiangood/open-admin'
 
 /**
- * 从代码源（目前支持 GitLab）列出仓库，选中后回填镜像的「代码仓库」。
+ * 从代码源（目前支持 GitLab）列出仓库，选中后通过 onSelect 回填仓库地址。
  */
 export default class CodeSourceProjectPicker extends React.Component {
 
@@ -80,7 +80,7 @@ export default class CodeSourceProjectPicker extends React.Component {
             dataIndex: 'option',
             valueType: 'option',
             width: 80,
-            render: (_, record) => <a onClick={() => this.handlePick(record)}>选择</a>,
+            render: (_, record) => <Button size='small' onClick={() => this.handlePick(record)}>选择</Button>,
         },
     ]
 
@@ -114,7 +114,7 @@ export default class CodeSourceProjectPicker extends React.Component {
                 </Space>
 
                 {selectedType && selectedType !== 'GITLAB' &&
-                    <Alert type='info' showIcon message='该类型暂不支持自动列出仓库，请关闭后手动填写「代码仓库」'/>}
+                    <Alert type='info' showIcon message='该类型暂不支持自动列出仓库，请关闭后手动填写仓库地址'/>}
 
                 <ProTable
                     actionRef={this.tableRef}

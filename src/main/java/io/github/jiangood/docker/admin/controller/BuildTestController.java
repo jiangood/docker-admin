@@ -26,6 +26,15 @@ public class BuildTestController {
     private BuildTestService service;
 
     /**
+     * 读取 Git 仓库中的 Dockerfile 内容，供页面「读取仓库 Dockerfile」按钮回填。
+     */
+    @HasPermission("build-test:view")
+    @RequestMapping("read-dockerfile")
+    public AjaxResult readDockerfile(String gitUrl) {
+        return AjaxResult.ok().data(service.readDockerfile(gitUrl));
+    }
+
+    /**
      * 触发构建，立即返回 logId，供前端打开实时日志。
      */
     @HasPermission("build-test:build")

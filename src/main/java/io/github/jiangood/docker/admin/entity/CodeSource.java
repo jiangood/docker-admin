@@ -15,6 +15,8 @@ import lombok.experimental.FieldNameConstants;
 
 /**
  * 代码源：托管平台（GitLab/Gitee/GitHub/Gitea）或自定义 git 仓库的访问配置，按地址主机匹配。
+ * <p>
+ * 访问方式（{@link #authType}）决定使用哪组凭据：账号密码 / 访问令牌 / SSH 私钥。
  */
 @Remark("代码源")
 @Entity
@@ -33,6 +35,11 @@ public class CodeSource extends BaseEntity {
     @Column(length = 30)
     CodeSourceType type = CodeSourceType.CUSTOM;
 
+    @Remark("访问方式")
+    @Enumerated(EnumType.STRING)
+    @Column(length = 30)
+    CodeSourceAuthType authType = CodeSourceAuthType.TOKEN;
+
     @Remark("地址")
     @NotBlank
     @Column(length = 500)
@@ -42,15 +49,63 @@ public class CodeSource extends BaseEntity {
     @Column(length = 200)
     String username;
 
-    @Remark("访问令牌/密码")
+    @Remark("密码")
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     @Column(length = 500)
     String password;
+
+    @Remark("访问令牌")
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
+    @Column(length = 500)
+    String token;
+
+    @Remark("SSH 私钥")
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
+    @Column(length = 4000)
+    String privateKey;
+
+    @Remark("私钥口令")
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
+    @Column(length = 200)
+    String privateKeyPassphrase;
+
+    /**
+     * 实际生效的访问方式：为空（旧数据，实例化后由启动迁移回填）时按访问令牌处理。
+     */
+    public CodeSourceAuthType effectiveAuthType() {
+        return authType == null ? CodeSourceAuthType.TOKEN : authType;
+    }
+
+    /**
+     * 访问平台 API 用的令牌；账号密码方式返回 null（改用 Basic 认证）。
+     */
+    public String apiToken() {
+        if (effectiveAuthType() == CodeSourceAuthType.TOKEN) {
+            return token != null ? token : password;
+        }
+        return null;
+    }
 
     /**
      * 返回给前端的打码密码，真实密码不参与序列化。
      */
     public String getPasswordMasked() {
-        return password == null || password.isEmpty() ? "" : "******";
+        return mask(password);
+    }
+
+    public String getTokenMasked() {
+        return mask(token);
+    }
+
+    public String getPrivateKeyMasked() {
+        return mask(privateKey);
+    }
+
+    public String getPrivateKeyPassphraseMasked() {
+        return mask(privateKeyPassphrase);
+    }
+
+    private static String mask(String value) {
+        return value == null || value.isEmpty() ? "" : "******";
     }
 }

@@ -40,9 +40,6 @@ public class Image extends BaseEntity {
     @Column(unique = true)
     String name;
 
-    @Remark("中文名称")
-    String cnName;
-
     @Remark("代码仓库")
     @NotNull
     String gitUrl;
@@ -59,6 +56,13 @@ public class Image extends BaseEntity {
     @Remark("Webhook 令牌")
     @Column(unique = true)
     String webhookToken;
+
+
+    @Remark("自动配置 Webhook")
+    Boolean webhookAuto;
+
+    @Remark("代码仓库侧 Webhook ID")
+    String webhookHookId;
 
 
     String remark;
