@@ -8,6 +8,7 @@ import io.github.jiangood.openadmin.framework.perm.HasPermission;
 import io.github.jiangood.openadmin.util.dto.AjaxResult;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.util.Assert;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -53,8 +54,27 @@ public class BuildTestController {
     @PostMapping("build")
     public AjaxResult build(@RequestBody BuildTestRequest request) {
         String logId = "build-test-" + RandomUtil.randomString(16);
-        service.build(logId, request);
+        service.start(logId, request);
         return AjaxResult.ok().data(logId).msg("构建已开始");
+    }
+
+    /**
+     * 取消正在运行的构建。
+     */
+    @HasPermission("build-test:build")
+    @PostMapping("cancel")
+    public AjaxResult cancel(String logId) {
+        Assert.isTrue(service.cancel(logId), "构建任务不存在或已结束");
+        return AjaxResult.ok().msg("已发送取消请求");
+    }
+
+    /**
+     * 当前运行中的构建任务 logId，没有则为空。构建测试不落库，页面刷新后靠它恢复按钮状态。
+     */
+    @HasPermission("build-test:build")
+    @RequestMapping("running")
+    public AjaxResult running() {
+        return AjaxResult.ok().data(service.getRunningLogId());
     }
 
 }

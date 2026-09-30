@@ -2,6 +2,7 @@ package io.github.jiangood.docker.admin.service;
 
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.extra.spring.SpringUtil;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.command.BuildImageCmd;
 import com.github.dockerjava.api.model.BuildResponseItem;
@@ -25,6 +26,9 @@ import org.springframework.util.Assert;
 
 import java.io.File;
 import java.util.Collections;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * 构建测试：以 Git 仓库为构建上下文，用粘贴的 Dockerfile 覆盖后，在默认构建节点上本地构建镜像。
@@ -57,8 +61,53 @@ public class BuildTestService {
     @Resource
     TaskLogRegistry taskLogRegistry;
 
+    /**
+     * 当前运行的构建测试任务 logId。构建节点与默认镜像名都是共用的，同一时间只允许一个任务。
+     */
+    private final AtomicReference<String> runningLogId = new AtomicReference<>();
+
+    /**
+     * 已请求取消、尚未从任务线程里观察到的 logId。
+     */
+    private final Set<String> cancelRequested = ConcurrentHashMap.newKeySet();
+
     public boolean isRunning(String logId) {
         return taskLogRegistry.isRunning(logId);
+    }
+
+    /**
+     * 当前运行中的构建测试任务，无任务时为 null。供页面刷新后恢复按钮状态（任务不落库）。
+     */
+    public String getRunningLogId() {
+        return runningLogId.get();
+    }
+
+    /**
+     * 触发构建测试：先同步占位（并发提交时直接报错），再转异步执行。
+     */
+    public void start(String logId, BuildTestRequest p) {
+        if (!runningLogId.compareAndSet(null, logId)) {
+            throw new BusinessException("已有构建测试任务正在运行，请先等待完成或取消");
+        }
+        // 通过代理调用 @Async 方法，避免自调用失效
+        SpringUtil.getBean(BuildTestService.class).build(logId, p);
+    }
+
+    /**
+     * 取消构建。
+     * <p>
+     * 已进入 docker 构建阶段时直接关闭响应流，构建立即中断；仍在克隆代码阶段时只能记录取消意图，
+     * 由任务线程在克隆结束后自行跳过镜像构建。
+     *
+     * @return false 表示任务不存在或已结束
+     */
+    public boolean cancel(String logId) {
+        if (StrUtil.isBlank(logId) || !logId.equals(runningLogId.get())) {
+            return false;
+        }
+        cancelRequested.add(logId);
+        taskLogRegistry.cancel(logId);
+        return true;
     }
 
     /**
@@ -113,6 +162,11 @@ public class BuildTestService {
         DockerClient client = null;
         File workDir = null;
         try {
+            if (cancelRequested.contains(logId)) {
+                log.info("构建已取消");
+                return;
+            }
+
             String gitUrl = StrUtil.trim(p.getGitUrl());
             Assert.hasText(gitUrl, "请填写 Git 仓库地址");
             Assert.hasText(p.getDockerfileText(), "请粘贴 Dockerfile 内容");
@@ -137,6 +191,12 @@ public class BuildTestService {
             log.info("代码下载完毕 {}", workDir);
             log.info("代码提交信息: {}", cloneResult.getCodeMessage());
 
+            // 克隆阶段无法中断，取消请求在此处生效
+            if (cancelRequested.contains(logId)) {
+                log.info("构建已取消：代码下载阶段无法中断，已跳过镜像构建");
+                return;
+            }
+
             // 用粘贴内容覆盖仓库中的 Dockerfile
             File dockerfileFile = new File(workDir, DOCKERFILE);
             FileUtil.writeUtf8String(p.getDockerfileText(), dockerfileFile);
@@ -156,12 +216,26 @@ public class BuildTestService {
                     .withTags(Collections.singleton(targetImage))
                     .withDockerfile(dockerfileFile);
 
-            buildImageCmd.exec(new DefaultCallback<BuildResponseItem>(logId)).awaitCompletion();
+            // 登记到注册表，页面「取消构建」即关闭该响应流中断构建
+            DefaultCallback<BuildResponseItem> buildCallback = new DefaultCallback<>(logId);
+            taskLogRegistry.register(logId, buildCallback);
+
+            buildImageCmd.exec(buildCallback).awaitCompletion();
             log.info("构建命令执行完毕");
+
+            // 取消时响应流被外部关闭，awaitCompletion 会正常返回（也可能抛出连接被关闭的异常）
+            if (cancelRequested.contains(logId)) {
+                log.info("构建已取消");
+                return;
+            }
 
             log.info("构建测试成功: {}", targetImage);
         } catch (Exception e) {
-            log.error("构建测试失败: {}", e.getMessage(), e);
+            if (cancelRequested.contains(logId)) {
+                log.info("构建已取消: {}", e.getMessage());
+            } else {
+                log.error("构建测试失败: {}", e.getMessage(), e);
+            }
         } finally {
             IOUtils.closeQuietly(client);
             if (workDir != null) {
@@ -169,7 +243,9 @@ public class BuildTestService {
                 FileUtil.del(workDir);
             }
             MDC.remove("logFileId");
+            cancelRequested.remove(logId);
             taskLogRegistry.finish(logId);
+            runningLogId.compareAndSet(logId, null);
         }
     }
 
