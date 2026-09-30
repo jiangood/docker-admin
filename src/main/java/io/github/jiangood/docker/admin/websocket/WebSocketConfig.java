@@ -40,6 +40,9 @@ public class WebSocketConfig implements WebSocketConfigurer {
     private ImageBuildLogHandshakeInterceptor imageBuildLogHandshakeInterceptor;
 
     @Resource
+    private TunnelLogHandshakeInterceptor tunnelLogHandshakeInterceptor;
+
+    @Resource
     private Config config;
 
     @Override
@@ -66,6 +69,11 @@ public class WebSocketConfig implements WebSocketConfigurer {
         // 镜像构建实时日志（复用同一日志 tail 处理器）
         registry.addHandler(syncLogHandler, "/admin/ws/image-build-log/{logId}")
                 .addInterceptors(imageBuildLogHandshakeInterceptor)
+                .setAllowedOriginPatterns(origins);
+
+        // 隧道任务实时日志（复用同一日志 tail 处理器）
+        registry.addHandler(syncLogHandler, "/admin/ws/tunnel-log/{logId}")
+                .addInterceptors(tunnelLogHandshakeInterceptor)
                 .setAllowedOriginPatterns(origins);
     }
 
