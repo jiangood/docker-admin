@@ -13,14 +13,12 @@ import com.jcraft.jsch.UserInfo;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.entity.Registry;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.io.IOUtils;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Hashtable;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 @Slf4j
@@ -32,106 +30,35 @@ public class DockerClientManager {
     private static final int DEFAULT_SSH_PORT = 22;
     private static final String DEFAULT_SSH_USER = "root";
 
-    /**
-     * SSH 客户端的缓存，避免每次操作都重新建立 SSH 连接。
-     * key 由主机 id 与相关配置计算得到，配置变化时自动失效。
-     */
-    private final Map<String, DockerClient> sshClientCache = new ConcurrentHashMap<>();
-    /**
-     * hostKey -> 当前缓存 key，用于配置变化时清理旧连接。
-     */
-    private final Map<String, String> sshClientKeyByHost = new ConcurrentHashMap<>();
-    private final Object sshClientLock = new Object();
-
 
     public DockerClient getClient(Host host) {
         return this.getClient(host, new Registry());
     }
 
 
+    /**
+     * 获取主机对应的 docker 客户端。
+     * <p>
+     * 每次调用都会新建连接，返回的客户端<b>由调用方负责关闭</b>。
+     * <p>
+     * 历史教训：这里曾对 SSH 主机做过客户端缓存，但调用方普遍在 finally 中 close，
+     * 缓存里于是残留了已断开 JSch 会话的连接；第二次取到它时，请求会失败并在
+     * OkHttp 关闭半连接 socket 时报
+     * {@code Cannot invoke "com.jcraft.jsch.Channel.disconnect()" because "this.channel" is null}。
+     * 因此不再缓存客户端——复用连接省下的 SSH 握手时间，远不值得这种难排查的串扰。
+     */
     public DockerClient getClient(Host host, Registry registry) {
-        if (host != null && host.isSsh()) {
-            return getCachedSshClient(host, registry);
-        }
         return createClient(host, registry);
     }
 
     /**
-     * 每次新建连接，用于测试连接等一次性场景。
+     * 每次新建连接。调用方负责关闭，测试连接等一次性场景尤其应该用这个方法。
      */
     public DockerClient createClient(Host host, Registry registry) {
         if (host != null && host.isSsh()) {
             return buildSshClient(host, registry);
         }
         return buildTcpClient(host, registry);
-    }
-
-    /**
-     * 主机配置发生变化（保存/删除）后调用，关闭并移除缓存的 SSH 连接。
-     */
-    public void invalidate(String hostId) {
-        if (StrUtil.isBlank(hostId)) {
-            return;
-        }
-        closeSshClient(hostId);
-    }
-
-    private DockerClient getCachedSshClient(Host host, Registry registry) {
-        String hostKey = sshHostKey(host);
-        String cacheKey = sshCacheKey(host, registry);
-
-        // 配置变化：关闭旧的 SSH 连接
-        String previousKey = sshClientKeyByHost.get(hostKey);
-        if (previousKey != null && !previousKey.equals(cacheKey)) {
-            closeSshClient(hostKey);
-        }
-
-        DockerClient cached = sshClientCache.get(cacheKey);
-        if (cached != null) {
-            return cached;
-        }
-
-        synchronized (sshClientLock) {
-            cached = sshClientCache.get(cacheKey);
-            if (cached != null) {
-                return cached;
-            }
-            DockerClient client = buildSshClient(host, registry);
-            sshClientCache.put(cacheKey, client);
-            sshClientKeyByHost.put(hostKey, cacheKey);
-            return client;
-        }
-    }
-
-    private void closeSshClient(String hostKey) {
-        String cacheKey = sshClientKeyByHost.remove(hostKey);
-        if (cacheKey != null) {
-            IOUtils.closeQuietly(sshClientCache.remove(cacheKey));
-        }
-    }
-
-    private String sshHostKey(Host host) {
-        if (StrUtil.isNotBlank(host.getId())) {
-            return host.getId();
-        }
-        String user = StrUtil.blankToDefault(host.getSshUser(), DEFAULT_SSH_USER);
-        return user + "@" + host.getSshHost() + ":" + host.getSshPort();
-    }
-
-    private String sshCacheKey(Host host, Registry registry) {
-        StringBuilder sb = new StringBuilder(sshHostKey(host));
-        sb.append('|').append(StrUtil.blankToDefault(host.getSshHost(), host.getDockerHost()))
-                .append('|').append(host.getSshPort())
-                .append('|').append(StrUtil.blankToDefault(host.getSshUser(), DEFAULT_SSH_USER))
-                .append('|').append(host.getSshPassword());
-        if (registry != null) {
-            sb.append('|').append(registry.getId())
-                    .append('|').append(registry.getUpdateTime())
-                    .append('|').append(registry.getUrl())
-                    .append('|').append(registry.getUsername())
-                    .append('|').append(registry.getPassword());
-        }
-        return sb.toString();
     }
 
     private DockerClient buildTcpClient(Host host, Registry registry) {

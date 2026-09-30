@@ -275,13 +275,15 @@ public class AppService extends BaseService<App> {
     public void stop(String id) {
         App app = appRepository.findById(id).orElse(null);
 
-
         DockerClient client = dockerManager.getClient(app.getHost());
+        try {
+            List<Container> list = getContainer(app.getName(), client);
 
-        List<Container> list = getContainer(app.getName(), client);
-
-        for (Container container : list) {
-            client.stopContainerCmd(container.getId()).exec();
+            for (Container container : list) {
+                client.stopContainerCmd(container.getId()).exec();
+            }
+        } finally {
+            IOUtils.closeQuietly(client);
         }
     }
 
@@ -290,11 +292,14 @@ public class AppService extends BaseService<App> {
         App app = appRepository.findById(id).orElse(null);
 
         DockerClient client = dockerManager.getClient(app.getHost());
+        try {
+            List<Container> list = getContainer(app.getName(), client);
 
-        List<Container> list = getContainer(app.getName(), client);
-
-        for (Container container : list) {
-            client.startContainerCmd(container.getId()).exec();
+            for (Container container : list) {
+                client.startContainerCmd(container.getId()).exec();
+            }
+        } finally {
+            IOUtils.closeQuietly(client);
         }
     }
 

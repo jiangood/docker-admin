@@ -46,8 +46,6 @@ public class HostController  {
     @PostMapping("save")
     public AjaxResult save(@RequestBody Host input, RequestBodyKeys updateFields) throws Exception {
         service.saveHost(input, updateFields);
-        // 配置可能变化，清理缓存的 SSH 连接
-        dockerClientManager.invalidate(input.getId());
         return AjaxResult.ok().msg("保存成功");
     }
 
@@ -72,7 +70,6 @@ public class HostController  {
     @RequestMapping("delete")
     public AjaxResult delete(String id) {
         service.deleteById(id);
-        dockerClientManager.invalidate(id);
         return AjaxResult.ok().msg("删除成功");
     }
 
