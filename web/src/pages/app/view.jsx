@@ -181,7 +181,6 @@ export default class extends React.Component {
 
                 <Descriptions size="small">
                     <Item label='镜像' span={2}>  {app.imageUrl}:{app.imageTag} </Item>
-                    <Item label='中文名称'>  {app.cnName} </Item>
                     <Item label='状态'>
                         {containerLoading ? "检测中..." :
                             <Tag color={state === 'running' ? 'green' : 'red'}>
@@ -193,6 +192,8 @@ export default class extends React.Component {
 
 
                     <Item label='组织机构'>  {app.sysOrg?.name} </Item>
+
+                    <Item label='备注'>  {app.remark} </Item>
 
                 </Descriptions>
 

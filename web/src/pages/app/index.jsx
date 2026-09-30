@@ -27,13 +27,6 @@ export default class extends React.Component {
             }
         },
         {
-            title: '中文名称',
-            dataIndex: 'cnName',
-            sorter: true,
-        },
-
-
-        {
             title: '版本',
             dataIndex: 'imageTag',
         },
@@ -63,6 +56,10 @@ export default class extends React.Component {
         {
             title: '最近更新',
             dataIndex: 'updateTime',
+        },
+        {
+            title: '备注',
+            dataIndex: 'remark',
         },
         {
             title: '操作',
@@ -187,10 +184,6 @@ export default class extends React.Component {
                             <Input/>
                         </Form.Item>
 
-                        <Form.Item name='cnName' label='中文名称'>
-                            <Input/>
-                        </Form.Item>
-
                         <Form.Item name={['image', 'id']} label='镜像' required rules={[{required: true}]}
                                    tooltip='从构建过的镜像中选择'>
                             <Select options={this.state.imageList}
@@ -217,6 +210,10 @@ export default class extends React.Component {
                             <FieldOrgTreeSelect/>
                         </Form.Item>
 
+                        <Form.Item name='remark' label='备注'>
+                            <Input/>
+                        </Form.Item>
+
                     </Form>
                 </Modal>
 
@@ -232,10 +229,6 @@ export default class extends React.Component {
                           onFinish={this.handleEditFinish}>
                         <Form.Item name='id' noStyle></Form.Item>
 
-                        <Form.Item name='cnName' label='中文名称'>
-                            <Input/>
-                        </Form.Item>
-
                         <Form.Item name={['image', 'id']} label='镜像' required rules={[{required: true}]}>
                             <Select options={this.state.imageList} showSearch placeholder='选择镜像'/>
                         </Form.Item>
@@ -246,6 +239,10 @@ export default class extends React.Component {
 
                         <Form.Item label='所属组织' name={['sysOrg', 'id']}>
                             <FieldOrgTreeSelect/>
+                        </Form.Item>
+
+                        <Form.Item name='remark' label='备注'>
+                            <Input/>
                         </Form.Item>
                     </Form>
                 </Modal>

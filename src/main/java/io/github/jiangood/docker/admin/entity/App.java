@@ -30,9 +30,6 @@ public class App extends BaseEntity {
     @Column(unique = true)
     String name;
 
-    @Remark("中文名称")
-    String cnName;
-
     @ManyToOne
     SysOrg sysOrg;
 
@@ -72,6 +69,8 @@ public class App extends BaseEntity {
     @Lob
     @Convert(converter = AppConfigConverter.class)
     AppConfig config;
+
+    @Remark("备注")
     String remark;
 
 

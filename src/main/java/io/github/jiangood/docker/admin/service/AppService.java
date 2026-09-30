@@ -682,7 +682,7 @@ public class AppService extends BaseService<App> {
         App old = appRepository.findById(input.getId()).orElse(null);
         Assert.notNull(old, "应用不存在");
         old.setSysOrg(input.getSysOrg());
-        old.setCnName(input.getCnName());
+        old.setRemark(input.getRemark());
         old.setImage(input.getImage());
         old.setImageTag(input.getImageTag());
         appRepository.save(old);
