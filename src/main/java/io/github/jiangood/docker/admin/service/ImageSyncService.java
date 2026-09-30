@@ -22,15 +22,17 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.util.Assert;
 
-import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
 /**
- * 镜像同步：借助一台网络通畅的主机拉取公共镜像，然后推送到平台注册中心，
- * 和/或通过 save/load 流式传输到其他目标主机。
+ * 镜像同步：借助一台网络通畅的主机拉取公共镜像，推送到平台注册中心，
+ * 再让各目标主机从注册中心拉取、重新打标签。
+ * <p>
+ * 目标主机不走 save/load 直传：push/pull 是 daemon 原生协议、带进度回调，
+ * 也不要求同步主机与目标主机之间有大带宽直连。
  * <p>
  * 不落库；同步过程写入 {@code /data/logs/{logId}.log}，前端通过 WebSocket 实时查看。
  */
@@ -55,6 +57,17 @@ public class ImageSyncService {
         return taskLogRegistry.isRunning(logId);
     }
 
+    /**
+     * 同步前的参数校验。同步执行，便于把错误直接返回给前端
+     * （{@link #sync} 是异步方法，其中的异常只会写进同步日志）。
+     */
+    public void validate(ImageSyncRequest p) {
+        String hostId = StrUtil.trim(p.getHostId());
+        if (StrUtil.isNotBlank(hostId) && normalizeIds(p.getTargetHostIds()).contains(hostId)) {
+            throw new IllegalArgumentException("同步主机不能同时作为目标主机");
+        }
+    }
+
     @Async
     public void sync(String logId, ImageSyncRequest p) {
         taskLogRegistry.start(logId);
@@ -65,18 +78,15 @@ public class ImageSyncService {
             Assert.hasText(source, "请填写源镜像");
             Assert.hasText(p.getHostId(), "请选择同步主机");
 
-            boolean toRegistry = Boolean.TRUE.equals(p.getToRegistry());
             List<String> targetHostIds = normalizeIds(p.getTargetHostIds());
-            Assert.state(toRegistry || !targetHostIds.isEmpty(), "请至少选择一项同步目标：目标注册中心或目标主机");
+            validate(p);
 
             Host host = hostService.findById(p.getHostId()).orElse(null);
             Assert.notNull(host, "同步主机不存在，请选择一台网络通畅的主机");
 
-            Registry registry = null;
-            if (toRegistry) {
-                registry = registryService.getEffective();
-                Assert.notNull(registry, "未配置镜像注册中心，请先在【设置-镜像注册中心】中配置");
-            }
+            // 镜像一律先推到注册中心，目标主机再从注册中心拉取，因此注册中心是硬依赖
+            Registry registry = registryService.getEffective();
+            Assert.notNull(registry, "未配置镜像注册中心，请先在【设置-镜像注册中心】中配置");
 
             log.info("开始同步镜像");
             log.info("源镜像: {}", source);
@@ -94,11 +104,10 @@ public class ImageSyncService {
 
             String targetName = StrUtil.isNotBlank(p.getTargetName()) ? StrUtil.trim(p.getTargetName()) : lastSegment(repo);
 
-            String registryBase = null;
-            if (toRegistry) {
-                registryBase = StrUtil.removeSuffix(StrUtil.nullToEmpty(registry.getFullUrl()), "/");
-                Assert.hasText(registryBase, "注册中心地址未配置，请先在【设置-镜像注册中心】中配置地址与命名空间");
-            }
+            String registryBase = StrUtil.removeSuffix(StrUtil.nullToEmpty(registry.getFullUrl()), "/");
+            Assert.hasText(registryBase, "注册中心地址未配置，请先在【设置-镜像注册中心】中配置地址与命名空间");
+            String targetRepo = registryBase + "/" + targetName;
+            Assert.state(!StrUtil.containsBlank(targetRepo), "镜像路径不能包含空格");
 
             // 注意：客户端不能携带注册中心凭据。docker-java 会把客户端级凭据
             // （registry.url/username/password）用于所有 pull，拉取 Docker Hub 等公共镜像时
@@ -113,42 +122,28 @@ public class ImageSyncService {
             String sourceRef = repo + ":" + tag;
             log.info("拉取源镜像 {}", sourceRef);
             PullImageCmd pullCmd = client.pullImageCmd(repo).withTag(tag);
-            if (StrUtil.isNotBlank(p.getPlatform())) {
-                log.info("指定平台 {}", p.getPlatform());
-                pullCmd.withPlatform(StrUtil.trim(p.getPlatform()));
-            }
             pullCmd.exec(new DefaultCallback<PullResponseItem>(logId)).awaitCompletion();
             log.info("拉取完成 {}", sourceRef);
 
-            if (toRegistry) {
-                // 推送目的地由镜像名决定：本地必须先打上带注册中心地址的完整 tag，
-                // 否则 docker 推送时会报 "tag does not exist"。
-                String targetRepo = registryBase + "/" + targetName;
-                Assert.state(!StrUtil.containsBlank(targetRepo), "镜像路径不能包含空格");
-                String targetImage = targetRepo + ":" + tag;
-                log.info("注册中心: {}", registryBase);
-                log.info("推送目标镜像: {}", targetImage);
+            RegistryImage registryImage = new RegistryImage(targetRepo + ":" + tag, targetRepo, targetName, tag, registry, logId);
 
-                log.info("重新打标签为目标镜像 {}", targetImage);
-                client.tagImageCmd(sourceRef, targetRepo, tag).exec();
+            // 推送目的地由镜像名决定：本地必须先打上带注册中心地址的完整 tag，
+            // 否则 docker 推送时会报 "tag does not exist"。
+            log.info("注册中心: {}", registryBase);
+            log.info("推送目标镜像 {}", registryImage.image());
+            client.tagImageCmd(sourceRef, targetRepo, tag).exec();
 
-                log.info("推送到注册中心 {}", targetImage);
-                PushImageCmd pushCmd = client.pushImageCmd(targetImage);
-                AuthConfig auth = authOf(registry);
-                if (auth != null) {
-                    pushCmd.withAuthConfig(auth);
-                }
-                pushCmd.exec(new DefaultCallback<PushResponseItem>(logId)).awaitCompletion();
-                log.info("注册中心同步成功: {}", targetImage);
+            log.info("推送到注册中心 {}", registryImage.image());
+            AuthConfig auth = authOf(registry);
+            PushImageCmd pushCmd = client.pushImageCmd(registryImage.image());
+            if (auth != null) {
+                pushCmd.withAuthConfig(auth);
             }
+            pushCmd.exec(new DefaultCallback<PushResponseItem>(logId)).awaitCompletion();
+            log.info("注册中心同步成功: {}", registryImage.image());
 
             if (!targetHostIds.isEmpty()) {
-                // 目标主机走 save/load，使用不带注册中心前缀的本地镜像名
-                String localImage = targetName + ":" + tag;
-                Assert.state(!StrUtil.containsBlank(localImage), "镜像路径不能包含空格");
-                log.info("重新打标签为目标镜像 {}", localImage);
-                client.tagImageCmd(sourceRef, targetName, tag).exec();
-                copyToHosts(host, client, localImage, targetHostIds, logId);
+                distribute(registryImage, targetHostIds);
             }
 
             log.info("镜像同步成功");
@@ -162,13 +157,27 @@ public class ImageSyncService {
     }
 
     /**
-     * 把同步主机上已打标签的镜像逐台传输到目标主机（save → load，不落临时文件）。
+     * 一次同步里与注册中心相关的引用信息。
+     *
+     * @param image 带注册中心前缀的完整引用，如 registry.cn-hangzhou.aliyuncs.com/ztcn/nginx:1.25
+     * @param repo  带注册中心前缀的仓库名，不含 tag
+     * @param name  目标主机上要用的镜像名，不含注册中心前缀
+     * @param tag   镜像 tag
+     */
+    private record RegistryImage(String image, String repo, String name, String tag, Registry registry, String logId) {
+    }
+
+    /**
+     * 让各目标主机从注册中心拉取镜像，重新打成不带注册中心前缀的本地镜像名。
      * <p>
      * 单台失败不影响其他主机，全部结束后汇总结果。
      */
-    private void copyToHosts(Host sourceHost, DockerClient sourceClient,
-                             String localImage, List<String> targetHostIds, String logId) {
-        log.info("开始传输镜像到 {} 台目标主机", targetHostIds.size());
+    private void distribute(RegistryImage reg, List<String> targetHostIds) {
+        log.info("开始分发镜像到 {} 台目标主机", targetHostIds.size());
+        String localImage = reg.name() + ":" + reg.tag();
+        Assert.state(!StrUtil.containsBlank(localImage), "镜像路径不能包含空格");
+
+        AuthConfig auth = authOf(reg.registry());
         List<String> succeeded = new ArrayList<>();
         List<String> failed = new ArrayList<>();
 
@@ -179,24 +188,30 @@ public class ImageSyncService {
                 failed.add(targetHostId);
                 continue;
             }
-            if (targetHost.getId().equals(sourceHost.getId())) {
-                log.info("目标主机与同步主机相同，镜像已存在，跳过：{}", targetHost.getName());
-                succeeded.add(targetHost.getName());
-                continue;
-            }
 
-            log.info("-------- 传输到目标主机: {} ({}) --------", targetHost.getName(),
+            log.info("-------- 分发到目标主机: {} ({}) --------", targetHost.getName(),
                     StrUtil.blankToDefault(targetHost.getDockerHost(), "本机"));
             DockerClient targetClient = null;
             try {
                 targetClient = dockerService.getClient(targetHost);
-                // 注意：localImage 已是「仓库:标签」的完整引用，不能再调用 withTag()。
-                // docker-java 会把 tag 拼接进请求路径（/images/{name}:{tag}/get），
-                // 于是路径变成 maven:3.9-eclipse-temurin-21:3.9-eclipse-temurin-21，
-                // Docker 侧会报 400 invalid reference format。
-                try (InputStream imageStream = sourceClient.saveImageCmd(localImage).exec()) {
-                    targetClient.loadImageCmd(imageStream).exec();
+
+                // 从注册中心拉取。docker-java 不会拆分 tag，repo 与 tag 必须分开传，
+                // 否则空 tag 会被 Docker 理解成「拉取该仓库的全部 tag」。
+                log.info("从注册中心拉取 {}", reg.image());
+                PullImageCmd pullCmd = targetClient.pullImageCmd(reg.repo()).withTag(reg.tag());
+                if (auth != null) {
+                    pullCmd.withAuthConfig(auth);
                 }
+                pullCmd.exec(new DefaultCallback<PullResponseItem>(reg.logId())).awaitCompletion();
+
+                // 拉下来的是带注册中心前缀的名字，重新打成目标主机上的本地镜像名
+                log.info("重新打标签为目标镜像 {}", localImage);
+                targetClient.tagImageCmd(reg.image(), reg.name(), reg.tag()).exec();
+
+                // 清理目标主机上临时打的注册中心前缀 tag（镜像本体保留在 localImage 上）
+                log.info("清理临时标签 {}", reg.image());
+                targetClient.removeImageCmd(reg.image()).exec();
+
                 log.info("目标主机 {} 同步成功: {}", targetHost.getName(), localImage);
                 succeeded.add(targetHost.getName());
             } catch (Exception e) {

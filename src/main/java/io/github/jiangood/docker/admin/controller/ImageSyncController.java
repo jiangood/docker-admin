@@ -13,7 +13,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 镜像同步：选择网络通畅的主机，拉取公共镜像并推送到注册中心。
+ * 镜像同步：选择网络通畅的主机，拉取公共镜像并推送到注册中心，
+ * 目标主机（可选）再从注册中心拉取。
  * <p>
  * 同步过程通过 {@code /admin/ws/sync-log/{logId}} 实时输出日志。
  */
@@ -31,6 +32,8 @@ public class ImageSyncController {
     @HasPermission("image-sync:sync")
     @PostMapping("sync")
     public AjaxResult sync(@RequestBody ImageSyncRequest request) {
+        // 参数校验同步执行，便于把错误直接返回给前端
+        service.validate(request);
         String logId = "sync-" + RandomUtil.randomString(16);
         service.sync(logId, request);
         return AjaxResult.ok().data(logId).msg("同步已开始");

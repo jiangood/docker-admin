@@ -9,7 +9,7 @@ import {Alert} from "antd";
 export default class extends React.Component {
 
     render() {
-        let {url, websocket} = this.props;
+        let {url, websocket, onClose} = this.props;
         if (!url.startsWith("ws://") && !url.startsWith("wss://") && !url.startsWith("http://") && !url.startsWith("https://")) {
             url = UrlUtils.contextPath(url)
             if (websocket) {
@@ -28,6 +28,7 @@ export default class extends React.Component {
                                  follow={follow}
                                  fetchOptions={{credentials: 'include'}}
                                  websocket={websocket}
+                                 websocketOptions={{onClose}}
                                  selectableLines={true}
                                  onScroll={onScroll}/>
                     );
