@@ -4,21 +4,18 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import io.github.jiangood.openadmin.framework.data.BaseEntity;
 import io.github.jiangood.openadmin.util.annotation.Remark;
 import jakarta.persistence.Entity;
-import jakarta.persistence.Lob;
-import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.FieldNameConstants;
 
-import java.time.LocalDateTime;
-
 /**
  * 隧道设置（全局唯一，取最新一条，用法同 {@link Registry}）。
  * <p>
- * nps 的监听端口写在 nps.conf 里，平台生成 conf 后通过 docker cp 写入容器；
- * 节点通过 bridgePort（明文）或 tlsBridgePort（TLS）连接。
+ * 平台据此生成 {@code frps.toml} / {@code frpc.toml}：frps 服务端由用户在主机上手动部署，
+ * 页面只提供配置与 docker 命令；各节点的 frpc 由平台按节点主机部署，新增 / 修改 / 删除隧道时
+ * 会重新生成所属节点的 {@code frpc.toml} 并重建该 frpc 容器。
  */
 @Remark("隧道设置")
 @Entity
@@ -28,175 +25,128 @@ import java.time.LocalDateTime;
 @Table(name = "t_tunnel_setting")
 public class TunnelSetting extends BaseEntity {
 
+    public static final String DEFAULT_FRPS_IMAGE = "ghcr.io/jiangood/frps";
+    public static final String DEFAULT_FRPC_IMAGE = "ghcr.io/jiangood/frpc";
+
     /**
-     * 节点桥接方式：明文桥接（bridge_port）
+     * frps 容器名（单实例，全局唯一），用于页面生成的手动部署命令。
      */
-    public static final String BRIDGE_PLAIN = "plain";
+    public static final String FRPS_CONTAINER = "docker-admin-frps";
+
     /**
-     * 节点桥接方式：TLS 桥接（tls_bridge_port），跨境/受限链路推荐
+     * 客户端与访客访问 frps 的地址（frps 主机的公网 IP 或域名）
      */
-    public static final String BRIDGE_TLS = "tls";
-
-    public static final String DEFAULT_NPS_IMAGE = "yisier1/nps";
-    public static final String DEFAULT_NPC_IMAGE = "yisier1/npc";
-    public static final String DEFAULT_CONF_VOLUME = "docker-admin-nps-conf";
-
-    @Remark("nps 主机")
-    @ManyToOne
-    Host host;
-
     @Remark("连接地址")
-    String npsAddr;
+    String frpsAddr;
 
-    @Remark("HTTP 代理端口")
-    Integer httpProxyPort;
+    /**
+     * frpc 连接 frps 的端口，frps.toml 的 bindPort
+     */
+    @Remark("绑定端口")
+    Integer bindPort;
 
-    @Remark("明文桥接端口")
-    Integer bridgePort;
+    /**
+     * frps 对外提供 HTTP 域名路由的端口，frps.toml 的 vhostHTTPPort
+     */
+    @Remark("HTTP 端口")
+    Integer vhostHttpPort;
 
-    @Remark("TLS 桥接端口")
-    Integer tlsBridgePort;
-
-    @Remark("Web 后台端口")
-    Integer webPort;
-
+    /**
+     * 域名后缀，隧道访问地址为 子域名.域名后缀
+     */
     @Remark("域名后缀")
     String subDomainHost;
 
-    @Remark("Web 用户名")
-    String webUsername;
-
+    /**
+     * frps / frpc 共用的鉴权 token
+     */
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
-    String webPassword;
+    String authToken;
 
-    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
-    String authKey;
+    /**
+     * frpc 是否用 TLS 连接 frps（transport.tls.enable），跨境 / 受限链路建议开启
+     */
+    @Remark("传输加密")
+    Boolean transportTls;
 
-    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
-    String authCryptKey;
+    @Remark("frps 镜像")
+    String frpsImage;
 
-    @Remark("nps 镜像")
-    String npsImage;
+    @Remark("frpc 镜像")
+    String frpcImage;
 
-    @Remark("npc 镜像")
-    String npcImage;
-
-    @Remark("配置卷")
-    String confVolume;
-
-    @Remark("节点桥接方式")
-    String nodeBridgeMode;
-
-    @Lob
-    @Remark("nps.conf 原文")
-    String npsConf;
-
-    @Remark("配置哈希")
-    String confHash;
-
-    String npsContainerId;
-
-    String npsStatus;
-
-    String lastError;
-
-    LocalDateTime lastDeployTime;
-
-    @Remark("总开关")
-    Boolean enabled;
-
-    public String getWebPasswordMasked() {
-        return webPassword == null || webPassword.isEmpty() ? "" : "******";
+    public String authToken() {
+        return authToken == null ? null : authToken.trim();
     }
 
-    public String getAuthKeyMasked() {
-        return authKey == null || authKey.isEmpty() ? "" : "******";
+    public boolean hasAuthToken() {
+        return authToken != null && !authToken.isBlank();
     }
 
-    public boolean isBridgeTls() {
-        return BRIDGE_PLAIN.equalsIgnoreCase(nodeBridgeMode) ? false : true;
+    public String getAuthTokenMasked() {
+        return hasAuthToken() ? "******" : "";
     }
 
-    public int intOrDefault(Integer v, int def) {
+    public String frpsAddr() {
+        return frpsAddr == null ? null : frpsAddr.trim();
+    }
+
+    public String subDomainHost() {
+        return subDomainHost == null ? null : subDomainHost.trim();
+    }
+
+    public int bindPort() {
+        return port(bindPort, 7000);
+    }
+
+    public int vhostHttpPort() {
+        return port(vhostHttpPort, 80);
+    }
+
+    public boolean transportTls() {
+        return transportTls == null || transportTls;
+    }
+
+    public String frpsImage() {
+        return image(frpsImage, DEFAULT_FRPS_IMAGE);
+    }
+
+    public String frpcImage() {
+        return image(frpcImage, DEFAULT_FRPC_IMAGE);
+    }
+
+    /**
+     * 是否已具备使用条件（连接地址 + 域名后缀）。
+     */
+    public boolean configured() {
+        return frpsAddr() != null && !frpsAddr().isBlank()
+                && subDomainHost() != null && !subDomainHost().isBlank();
+    }
+
+    private static int port(Integer v, int def) {
         return v == null || v <= 0 ? def : v;
     }
 
-    public int httpProxyPort() {
-        return intOrDefault(httpProxyPort, 80);
-    }
-
-    public int bridgePort() {
-        return intOrDefault(bridgePort, 8024);
-    }
-
-    public int tlsBridgePort() {
-        return intOrDefault(tlsBridgePort, 443);
-    }
-
-    public int webPort() {
-        return intOrDefault(webPort, 8081);
-    }
-
-    public String npsImage() {
-        return npsImage == null || npsImage.isBlank() ? DEFAULT_NPS_IMAGE : npsImage.trim();
-    }
-
-    public String npcImage() {
-        return npcImage == null || npcImage.isBlank() ? DEFAULT_NPC_IMAGE : npcImage.trim();
-    }
-
-    public String confVolume() {
-        return confVolume == null || confVolume.isBlank() ? DEFAULT_CONF_VOLUME : confVolume.trim();
-    }
-
-    public String webUsername() {
-        return webUsername == null || webUsername.isBlank() ? "admin" : webUsername.trim();
-    }
-
-    /**
-     * 节点实际使用的桥接端口。
-     */
-    public int nodeBridgePort() {
-        return isBridgeTls() ? tlsBridgePort() : bridgePort();
-    }
-
-    /**
-     * 是否已具备部署条件。
-     */
-    public boolean deployable() {
-        return host != null && host.getId() != null
-                && npsAddr != null && !npsAddr.isBlank()
-                && subDomainHost != null && !subDomainHost.isBlank();
+    private static String image(String v, String def) {
+        return v == null || v.isBlank() ? def : v.trim();
     }
 
     @PrePersist
     public void prePersist() {
-        if (enabled == null) {
-            enabled = false;
+        if (bindPort == null) {
+            bindPort = 7000;
         }
-        if (bridgePort == null) {
-            bridgePort = 8024;
+        if (vhostHttpPort == null) {
+            vhostHttpPort = 80;
         }
-        if (tlsBridgePort == null) {
-            tlsBridgePort = 443;
+        if (transportTls == null) {
+            transportTls = true;
         }
-        if (webPort == null) {
-            webPort = 8081;
+        if (frpsImage == null || frpsImage.isBlank()) {
+            frpsImage = DEFAULT_FRPS_IMAGE;
         }
-        if (webUsername == null || webUsername.isBlank()) {
-            webUsername = "admin";
-        }
-        if (nodeBridgeMode == null || nodeBridgeMode.isBlank()) {
-            nodeBridgeMode = BRIDGE_TLS;
-        }
-        if (confVolume == null || confVolume.isBlank()) {
-            confVolume = DEFAULT_CONF_VOLUME;
-        }
-        if (npsImage == null || npsImage.isBlank()) {
-            npsImage = DEFAULT_NPS_IMAGE;
-        }
-        if (npcImage == null || npcImage.isBlank()) {
-            npcImage = DEFAULT_NPC_IMAGE;
+        if (frpcImage == null || frpcImage.isBlank()) {
+            frpcImage = DEFAULT_FRPC_IMAGE;
         }
     }
 

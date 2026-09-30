@@ -17,7 +17,6 @@ import {
 } from 'antd';
 import React from 'react';
 import ConfigForm from "./ConfigForm";
-import TunnelForm from "./TunnelForm";
 import {history} from "@jiangood/open-admin";
 
 import {FieldRemoteSelect, HttpClient, Page, PageUtils} from "@jiangood/open-admin";
@@ -254,11 +253,6 @@ export default class extends React.Component {
                 key: 'publish',
                 label: '发布',
                 children: <PublishForm appId={app.id} onChange={this.reload}/>
-            },
-            {
-                key: 'tunnel',
-                label: '隧道',
-                children: <TunnelForm app={app} onChange={this.reload}/>
             },
             {
                 key: 'setting',

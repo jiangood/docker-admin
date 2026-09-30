@@ -6,7 +6,6 @@ import io.github.jiangood.openadmin.framework.perm.HasPermission;
 import io.github.jiangood.docker.admin.dto.ContainerVo;
 import io.github.jiangood.docker.admin.entity.App;
 import io.github.jiangood.docker.admin.service.AppService;
-import io.github.jiangood.docker.admin.service.TunnelService;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import io.github.jiangood.openadmin.util.dto.AjaxResult;
 import io.github.jiangood.openadmin.util.dto.Option;
@@ -42,9 +41,6 @@ public class AppController {
     @Resource
     private AppService service;
 
-    @Resource
-    private TunnelService tunnelService;
-
     @HasPermission("app:view")
     @RequestMapping("list")
     public AjaxResult list(String searchText, String hostId, String orgId, @PageableDefault(sort = {"updateTime", "createTime"}, direction = Sort.Direction.DESC) Pageable pageable, HttpSession session) {
@@ -76,7 +72,6 @@ public class AppController {
         String url = LogUrlTool.getLogViewUrl(id);
         app.setLogUrl(url);
         service.fillImageUrl(app);
-        app.setTunnelInfo(tunnelService.tunnelInfo(app));
         return AjaxResult.ok().data(app);
     }
 
@@ -147,18 +142,6 @@ public class AppController {
         service.updateAppVersion(id, version);
 
         return AjaxResult.ok().msg("更新指定已发布");
-    }
-
-
-    /**
-     * 开启 / 关闭应用隧道。
-     */
-    @HasPermission("app:tunnel")
-    @RequestMapping("updateTunnel")
-    public AjaxResult updateTunnel(String id, Boolean enabled, String subdomain, Integer port) {
-        App app = assertAppAccess(id);
-        tunnelService.updateTunnel(app, Boolean.TRUE.equals(enabled), subdomain, port);
-        return AjaxResult.ok().msg(Boolean.TRUE.equals(enabled) ? "已开启隧道，正在同步" : "已关闭隧道，正在同步");
     }
 
 

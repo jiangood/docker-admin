@@ -15,16 +15,19 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
- * 隧道任务日志 WebSocket 握手鉴权。
+ * 隧道部署日志 WebSocket 握手鉴权。
  * <p>
- * 与镜像同步日志同理：{@code afterConnectionEstablished} 时已无 Spring Security 上下文，
- * 因此权限校验必须在握手拦截器（仍在请求线程）中完成：校验 {@code tunnel:view} 权限，
+ * {@code afterConnectionEstablished} 执行时已脱离 HTTP 请求线程、没有 Spring Security 上下文，
+ * 因此权限校验必须放在握手拦截器（仍在请求线程）中完成：校验 {@code tunnel:view} 权限，
  * 并限制 logId 取值以防目录穿越。
  */
 @Slf4j
 @Component
 public class TunnelLogHandshakeInterceptor implements HandshakeInterceptor {
 
+    /**
+     * 仅允许隧道任务生成的 logId。
+     */
     static final Pattern LOG_ID_PATTERN = Pattern.compile("^[A-Za-z0-9_-]{1,64}$");
 
     @Override
@@ -37,7 +40,7 @@ public class TunnelLogHandshakeInterceptor implements HandshakeInterceptor {
             response.setStatusCode(HttpStatus.BAD_REQUEST);
             return false;
         }
-        if (!hasViewPermission()) {
+        if (!hasPermission()) {
             log.warn("隧道日志 WebSocket 握手被拒绝，缺少 tunnel:view 权限");
             response.setStatusCode(HttpStatus.FORBIDDEN);
             return false;
@@ -45,7 +48,7 @@ public class TunnelLogHandshakeInterceptor implements HandshakeInterceptor {
         return true;
     }
 
-    private boolean hasViewPermission() {
+    private boolean hasPermission() {
         LoginUser user = LoginTool.getUser();
         if (user == null) {
             return false;

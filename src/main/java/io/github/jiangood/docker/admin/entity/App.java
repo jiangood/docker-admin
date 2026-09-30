@@ -66,22 +66,6 @@ public class App extends BaseEntity {
     String imageUrl;
 
 
-    @Remark("隧道开关")
-    Boolean tunnelEnabled;
-
-    @Remark("隧道子域名")
-    String tunnelSubdomain;
-
-    @Remark("隧道端口")
-    Integer tunnelPort;
-
-    /**
-     * 隧道信息（内网/隧道访问地址等），仅在返回给前端时填充，不持久化。
-     */
-    @Transient
-    TunnelInfo tunnelInfo;
-
-
     @Lob
     @Convert(converter = AppConfigConverter.class)
     AppConfig config;
@@ -169,32 +153,6 @@ public class App extends BaseEntity {
         Integer publicPort;
         Integer privatePort;
         String protocol;
-
-    }
-
-
-    /**
-     * 隧道信息（返回给前端，不持久化）。
-     */
-    @Data
-    public static class TunnelInfo {
-
-        Boolean enabled = false;
-
-        /** 子域名（不含域名后缀） */
-        String subdomain;
-
-        /** 实际暴露到主机侧的端口 */
-        Integer port;
-
-        /** 内网访问地址 */
-        String innerUrl;
-
-        /** 隧道访问地址 */
-        String tunnelUrl;
-
-        /** 校验/同步失败原因 */
-        String error;
 
     }
 

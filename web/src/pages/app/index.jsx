@@ -1,4 +1,4 @@
-import {Button, Form, Input, Menu, Modal, Select, Splitter} from 'antd';
+import {Button, Form, Input, Menu, Modal, Select} from 'antd';
 import React from 'react';
 import ContainerStatus from "../../components/ContainerStatus";
 import {
@@ -6,7 +6,6 @@ import {
     FieldOrgTreeSelect,
     FieldRemoteSelect,
     HttpClient,
-    OrgTree,
     Page,
     PageUtils,
     ProTable
@@ -75,7 +74,6 @@ export default class extends React.Component {
 
     ];
     state = {
-        selectedOrgId: null,
         deployVisible: false,
         editVisible: false,
         editValues: {},
@@ -136,35 +134,28 @@ export default class extends React.Component {
     render() {
         return (
             <Page padding>
-                <Splitter>
-                    <Splitter.Panel defaultSize={250}>
-                        <OrgTree onChange={(v) => {
-                            this.setState({selectedOrgId: v}, () => this.reload())
-                        }}/>
-                    </Splitter.Panel>
-                    <Splitter.Panel style={{paddingLeft: 16}}>
-                        <ProTable
-                            actionRef={this.tableRef}
-                            toolBarRender={() => [
-                                <Button key="add" type="primary"
-                                        onClick={this.handleAdd}>
-                                    新增
-                                </Button>
-                            ]}
-                            searchFormRender={() => (
-                                <Form.Item label='运行主机' name='hostId'>
-                                    <FieldRemoteSelect url="admin/host/options" placeholder='全部主机'/>
-                                </Form.Item>
-                            )}
-                            request={(params) => {
-                                params.orgId = this.state.selectedOrgId
-                                return HttpClient.get('admin/app/list', params);
-                            }}
-                            columns={this.columns}
+                <ProTable
+                    actionRef={this.tableRef}
+                    toolBarRender={() => [
+                        <Button key="add" type="primary"
+                                onClick={this.handleAdd}>
+                            新增
+                        </Button>
+                    ]}
+                    searchFormRender={() => (
+                        <>
+                            <Form.Item label='组织机构' name='orgId'>
+                                <FieldOrgTreeSelect placeholder='全部组织机构'/>
+                            </Form.Item>
+                            <Form.Item label='运行主机' name='hostId'>
+                                <FieldRemoteSelect url="admin/host/options" placeholder='全部主机'/>
+                            </Form.Item>
+                        </>
+                    )}
+                    request={(params) => HttpClient.get('admin/app/list', params)}
+                    columns={this.columns}
 
-                        />
-                    </Splitter.Panel>
-                </Splitter>
+                />
                 <Modal title='新增应用' open={this.state.deployVisible} destroyOnHidden={true}
                        onOk={() => this.formRef.current.submit()}
                        onCancel={() => this.setState({deployVisible: false})}

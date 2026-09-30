@@ -1,27 +1,22 @@
 package io.github.jiangood.docker.admin.controller;
 
-import cn.hutool.core.util.RandomUtil;
+import io.github.jiangood.docker.admin.entity.TunnelNode;
 import io.github.jiangood.docker.admin.entity.TunnelSetting;
 import io.github.jiangood.docker.admin.service.TunnelService;
 import io.github.jiangood.openadmin.framework.perm.HasPermission;
 import io.github.jiangood.openadmin.util.dto.AjaxResult;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.util.Assert;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-
 /**
- * 隧道（nps）：选一台主机作为 nps 服务端并容器化部署，为各节点下发 npc 客户端，
- * 按应用配置维护 nps 侧的域名解析。
+ * 隧道（frp）：平台维护连接配置与隧道列表，并通过 docker-java 部署各节点的 frpc 容器。
  * <p>
- * 过程日志通过 {@code /admin/ws/tunnel-log/{logId}} 实时输出。
+ * frps 服务端不由平台下发，页面只返回配置与 docker 部署命令；frpc 等耗时操作返回 logId，
+ * 前端通过 {@code /admin/ws/tunnel-log/{logId}} 查看实时日志。
  */
 @RestController
 @Slf4j
@@ -32,31 +27,12 @@ public class TunnelController {
     private TunnelService service;
 
     /**
-     * 设置 + 掩码后的 conf 原文。
+     * 设置 + frps 配置预览（token 掩码）。
      */
     @HasPermission("tunnel:view")
     @RequestMapping("info")
     public AjaxResult info() {
-        TunnelSetting setting = service.getSetting();
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("setting", setting);
-        data.put("conf", service.confForView());
-        return AjaxResult.ok().data(data);
-    }
-
-    @HasPermission("tunnel:view")
-    @RequestMapping("conf")
-    public AjaxResult conf() {
-        return AjaxResult.ok().data(service.confForView());
-    }
-
-    /**
-     * 按表单字段渲染默认 conf，供编辑器初始化 / 重置。
-     */
-    @HasPermission("tunnel:view")
-    @RequestMapping("generateConf")
-    public AjaxResult generateConf(@RequestBody TunnelSetting input) {
-        return AjaxResult.ok().data(service.previewConf(input));
+        return AjaxResult.ok().data(service.info());
     }
 
     @HasPermission("tunnel:save")
@@ -67,82 +43,101 @@ public class TunnelController {
     }
 
     /**
-     * 部署 / 重启 nps。
+     * 保存 frpc 部署参数（客户端镜像）。
      */
-    @HasPermission("tunnel:deploy")
-    @PostMapping("deployNps")
-    public AjaxResult deployNps() {
-        service.requireSetting();
-        String logId = newLogId();
-        service.deployNps(logId);
-        return AjaxResult.ok().data(logId).msg("部署已开始");
+    @HasPermission("tunnel:save")
+    @PostMapping("saveDeployFrpc")
+    public AjaxResult saveDeployFrpc(@RequestBody TunnelSetting input) {
+        service.saveDeployFrpc(input);
+        return AjaxResult.ok().msg("保存成功");
     }
 
-    /**
-     * 功能总开关。
-     */
-    @HasPermission("tunnel:deploy")
-    @PostMapping("toggle")
-    public AjaxResult toggle(boolean enabled) {
-        service.requireSetting();
-        String logId = newLogId();
-        service.toggle(enabled, logId);
-        return AjaxResult.ok().data(logId).msg(enabled ? "正在启用..." : "正在停用...");
-    }
+    // ------------------------------------------------------------------ 节点（frpc）
 
-    /**
-     * 各主机上的 nps / npc 容器（含残留）。
-     */
-    @HasPermission("tunnel:view")
-    @RequestMapping("containers")
-    public AjaxResult containers() {
-        return AjaxResult.ok().data(service.listContainers());
-    }
-
-    /**
-     * 手动清理容器。
-     */
-    @HasPermission("tunnel:clean")
-    @PostMapping("clean")
-    public AjaxResult clean(@RequestBody List<String> containerIds) {
-        Assert.notEmpty(containerIds, "请选择要清理的容器");
-        String logId = newLogId();
-        service.cleanContainers(containerIds, logId);
-        return AjaxResult.ok().data(logId).msg("清理已开始");
-    }
-
-    /**
-     * 连通性检测。
-     */
-    @HasPermission("tunnel:view")
-    @RequestMapping("probe")
-    public AjaxResult probe(String hostId) {
-        return AjaxResult.ok().data(service.probe(hostId));
-    }
-
-    /**
-     * 节点（npc）列表。
-     */
     @HasPermission("tunnel:view")
     @RequestMapping("nodes")
     public AjaxResult nodes() {
         return AjaxResult.ok().data(service.listNodes());
     }
 
-    /**
-     * 手动重新同步某个节点的域名解析。
-     */
-    @HasPermission("tunnel:deploy")
-    @PostMapping("syncNode")
-    public AjaxResult syncNode(String hostId) {
-        Assert.hasText(hostId, "请选择节点");
-        String logId = newLogId();
-        service.syncNode(hostId, logId);
-        return AjaxResult.ok().data(logId).msg("同步已开始");
+    @HasPermission("tunnel:save")
+    @PostMapping("saveNode")
+    public AjaxResult saveNode(@RequestBody TunnelNode input) {
+        service.saveNode(input);
+        return AjaxResult.ok().msg("保存成功");
     }
 
-    private static String newLogId() {
-        return "tunnel-" + RandomUtil.randomString(16);
+    /**
+     * 删除节点：连同该节点的隧道与 frpc 容器一起清理。
+     */
+    @HasPermission("tunnel:save")
+    @PostMapping("deleteNode")
+    public AjaxResult deleteNode(String id) {
+        return AjaxResult.ok().data(service.deleteNode(id)).msg("已开始删除节点");
+    }
+
+    /**
+     * 部署 / 重建单个节点的 frpc（强制拉取镜像）。
+     */
+    @HasPermission("tunnel:save")
+    @PostMapping("deployFrpc")
+    public AjaxResult deployFrpc(String nodeId) {
+        return AjaxResult.ok().data(service.deployFrpc(nodeId)).msg("已开始部署 frpc");
+    }
+
+    @HasPermission("tunnel:save")
+    @PostMapping("removeFrpc")
+    public AjaxResult removeFrpc(String nodeId) {
+        return AjaxResult.ok().data(service.removeFrpc(nodeId)).msg("已开始移除 frpc");
+    }
+
+    /**
+     * 按最新设置重建全部节点的 frpc。
+     */
+    @HasPermission("tunnel:save")
+    @PostMapping("rebuildAllFrpc")
+    public AjaxResult rebuildAllFrpc() {
+        return AjaxResult.ok().data(service.rebuildAllFrpc()).msg("已开始重建全部 frpc");
+    }
+
+    // ------------------------------------------------------------------ 隧道
+
+    @HasPermission("tunnel:view")
+    @RequestMapping("tunnels")
+    public AjaxResult tunnels() {
+        return AjaxResult.ok().data(service.listTunnels());
+    }
+
+    /**
+     * 新增隧道：自动重新生成所属节点的 frpc 配置并重建容器。
+     */
+    @HasPermission("tunnel:route")
+    @PostMapping("addTunnel")
+    public AjaxResult addTunnel(String nodeId, String appId, Integer port, String subdomain, String remark) {
+        return AjaxResult.ok().data(service.addTunnel(nodeId, appId, port, subdomain, remark))
+                .msg("隧道已创建，正在重建 frpc");
+    }
+
+    @HasPermission("tunnel:route")
+    @PostMapping("editTunnel")
+    public AjaxResult editTunnel(String id, String subdomain, Integer port, String remark) {
+        return AjaxResult.ok().data(service.editTunnel(id, subdomain, port, remark))
+                .msg("隧道已修改，正在重建 frpc");
+    }
+
+    @HasPermission("tunnel:route")
+    @PostMapping("deleteTunnel")
+    public AjaxResult deleteTunnel(String id) {
+        return AjaxResult.ok().data(service.deleteTunnel(id)).msg("隧道已删除，正在重建 frpc");
+    }
+
+    /**
+     * 隧道表单元数据：应用主机地址、可选端口、默认子域名。
+     */
+    @HasPermission("tunnel:view")
+    @RequestMapping("appMeta")
+    public AjaxResult appMeta(String id) {
+        return AjaxResult.ok().data(service.appMeta(id));
     }
 
 }

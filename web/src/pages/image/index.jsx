@@ -1,12 +1,11 @@
 import {PlusOutlined} from '@ant-design/icons'
-import {Button, Form, Input, Modal, Popconfirm, Splitter} from 'antd'
+import {Button, Form, Input, Modal, Popconfirm} from 'antd'
 import React from 'react'
 
 import {
     PermActions,
     FieldOrgTreeSelect,
     HttpClient,
-    OrgTree,
     Page,
     PageUtils,
     ProTable
@@ -20,10 +19,6 @@ export default class extends React.Component {
     state = {
         formValues: {},
         formOpen: false,
-
-
-        selectedOrgId: null
-
     }
 
     formRef = React.createRef()
@@ -137,36 +132,24 @@ export default class extends React.Component {
 
     render() {
         return <Page padding>
-            <Splitter>
-                <Splitter.Panel defaultSize={250}>
-                    <OrgTree onChange={(v) => {
-                        this.setState({selectedOrgId: v}, () => {
-                            this.tableRef.current.reload()
-                        })
-
-                    }}/>
-
-                </Splitter.Panel>
-                <Splitter.Panel style={{paddingLeft: 16}}>
-                    <ProTable
-                        actionRef={this.tableRef}
-                        toolBarRender={() => {
-                            return <PermActions>
-                                <Button perm='image:save' type='primary' onClick={this.handleAdd}>
-                                    <PlusOutlined/> 新增
-                                </Button>
-                            </PermActions>
-                        }}
-                        request={(params) => {
-                            params.orgId = this.state.selectedOrgId
-                            return HttpClient.get('admin/image/page', params);
-                        }}
-                        columns={this.columns}
-                        showToolbarSearch
-                    >
-                    </ProTable>
-                </Splitter.Panel>
-            </Splitter>
+            <ProTable
+                actionRef={this.tableRef}
+                toolBarRender={() => {
+                    return <PermActions>
+                        <Button perm='image:save' type='primary' onClick={this.handleAdd}>
+                            <PlusOutlined/> 新增
+                        </Button>
+                    </PermActions>
+                }}
+                searchFormRender={() => (
+                    <Form.Item label='组织机构' name='orgId'>
+                        <FieldOrgTreeSelect placeholder='全部组织机构'/>
+                    </Form.Item>
+                )}
+                request={(params) => HttpClient.get('admin/image/page', params)}
+                columns={this.columns}
+            >
+            </ProTable>
 
 
             <Modal title='镜像信息'

@@ -71,7 +71,7 @@ public class WebSocketConfig implements WebSocketConfigurer {
                 .addInterceptors(imageBuildLogHandshakeInterceptor)
                 .setAllowedOriginPatterns(origins);
 
-        // 隧道任务实时日志（复用同一日志 tail 处理器）
+        // 隧道部署实时日志（复用同一日志 tail 处理器）
         registry.addHandler(syncLogHandler, "/admin/ws/tunnel-log/{logId}")
                 .addInterceptors(tunnelLogHandshakeInterceptor)
                 .setAllowedOriginPatterns(origins);

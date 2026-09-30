@@ -63,9 +63,6 @@ public class AppService extends BaseService<App> {
     @Resource
     private RegistryService registryService;
 
-    @Resource
-    private TunnelService tunnelService;
-
     /**
      * 保存应用：新建走 create，编辑走 update。
      */
@@ -77,7 +74,6 @@ public class AppService extends BaseService<App> {
         } else {
             saved = update(input, updateFields);
         }
-        tunnelService.onAppChanged(saved);
         return saved;
     }
 
@@ -322,7 +318,6 @@ public class AppService extends BaseService<App> {
         App saved = appRepository.save(app);
 
         this.deploy(app);
-        tunnelService.onAppChanged(saved);
 
         return saved;
     }
@@ -377,11 +372,6 @@ public class AppService extends BaseService<App> {
         deleteContainer(app);
 
         appRepository.deleteById(id);
-
-        // 应用已删除后再对账，节点上的域名解析会被清理
-        if (app != null && Boolean.TRUE.equals(app.getTunnelEnabled())) {
-            tunnelService.onAppChanged(app);
-        }
     }
 
 
@@ -442,7 +432,6 @@ public class AppService extends BaseService<App> {
         app.setConfig(appConfig);
 
         app = appRepository.save(app);
-        tunnelService.onAppChanged(app);
         return app;
     }
 
@@ -715,10 +704,9 @@ public class AppService extends BaseService<App> {
         Assert.notNull(host, "主机不存在");
 
         App newApp = new App();
-        // 不复制 id/name/host 及审计字段；隧道配置也不复制，避免子域名冲突
+        // 不复制 id/name/host 及审计字段
         BeanUtils.copyProperties(app, newApp, "id", "name", "host", "imageUrl", "createUser", "createTime",
-                "updateUser", "updateTime", "logUrl", "config", "tunnelInfo",
-                "tunnelEnabled", "tunnelSubdomain", "tunnelPort");
+                "updateUser", "updateTime", "logUrl", "config");
         newApp.setName(buildCopyName(app.getName()));
         newApp.setHost(host);
         if (app.getConfig() != null) {

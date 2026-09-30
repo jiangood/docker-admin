@@ -1,11 +1,12 @@
 package io.github.jiangood.docker.admin.entity;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
 import io.github.jiangood.openadmin.framework.data.BaseEntity;
 import io.github.jiangood.openadmin.util.annotation.Remark;
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
@@ -14,9 +15,10 @@ import lombok.experimental.FieldNameConstants;
 import java.time.LocalDateTime;
 
 /**
- * 隧道节点：一个节点（主机）= 一个 nps 客户端 + 一个 npc 容器。
+ * 隧道节点：一个 frpc 客户端，直接复用平台已有的主机（{@link Host}）作为部署目标。
  * <p>
- * 只有「存在已开启隧道应用」的节点才会被创建，记录用于复用 vkey 与展示状态。
+ * 平台通过 docker-java 在该主机上以 host 网络部署 frpc 容器，配置由平台按该节点上的
+ * 隧道（{@link Tunnel}）生成，经 {@code docker cp} 写入容器后启动。
  */
 @Remark("隧道节点")
 @Entity
@@ -27,27 +29,26 @@ import java.time.LocalDateTime;
 @Table(name = "t_tunnel_node")
 public class TunnelNode extends BaseEntity {
 
+    @Remark("节点名称")
+    @Column(unique = true)
+    String name;
+
     @Remark("主机")
+    @NotNull
     @ManyToOne
+    @ToString.Exclude
     Host host;
 
-    @Remark("nps 客户端 id")
-    Integer npsClientId;
+    @Remark("备注")
+    String remark;
 
-    @ToString.Exclude
-    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
-    String vkey;
-
-    @Remark("容器 id")
+    @Remark("frpc 容器")
     String containerId;
-
-    @Remark("状态")
-    String status;
 
     @Remark("错误")
     String lastError;
 
-    @Remark("最后同步")
-    LocalDateTime lastSyncTime;
+    @Remark("最后部署")
+    LocalDateTime lastDeployTime;
 
 }
