@@ -52,6 +52,12 @@ public class GitTool {
     private static final String TOKEN_USERNAME = "oauth2";
 
     /**
+     * 代码克隆根目录，每次克隆在其下按 仓库名/时间戳 新建工作目录。
+     * 目录不会随构建结束自动删除，由 {@code CleanGitCodeJob} 定时清理。
+     */
+    public static final String CLONE_BASE_DIR = "/data/gitcode";
+
+    /**
      * 接受任意 SSH 主机密钥：代码源可配置的是私钥而非 known_hosts，
      * 因此只做信任并告警，不做主机密钥校验。
      */
@@ -130,7 +136,7 @@ public class GitTool {
         String dirName = url.substring(url.lastIndexOf("/") + 1);
         dirName = dirName.replace(".git", "");
 
-        File workDir = new File("/data/gitcode/" + dirName + "/" + DateUtil.date().toString("yyyyMMddHHmmss"));
+        File workDir = new File(CLONE_BASE_DIR, dirName + "/" + DateUtil.date().toString("yyyyMMddHHmmss"));
 
         long start = System.currentTimeMillis();
 
