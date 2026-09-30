@@ -75,7 +75,6 @@ export default class extends React.Component {
 
     ];
     state = {
-        hostId: null,
         selectedOrgId: null,
         deployVisible: false,
         editVisible: false,
@@ -138,7 +137,7 @@ export default class extends React.Component {
         return (
             <Page padding>
                 <Splitter>
-                    <Splitter.Panel size={250}>
+                    <Splitter.Panel defaultSize={250}>
                         <OrgTree onChange={(v) => {
                             this.setState({selectedOrgId: v}, () => this.reload())
                         }}/>
@@ -147,24 +146,21 @@ export default class extends React.Component {
                         <ProTable
                             actionRef={this.tableRef}
                             toolBarRender={() => [
-                                <FieldRemoteSelect key="hostFilter" allowClear showSearch
-                                                   url="admin/host/options" placeholder="过滤主机"
-                                                   onChange={value => {
-                                                       this.setState({hostId: value}, () => this.reload())
-                                                   }}
-                                />,
-                                <Button type="primary"
+                                <Button key="add" type="primary"
                                         onClick={this.handleAdd}>
                                     新增
                                 </Button>
                             ]}
+                            searchFormRender={() => (
+                                <Form.Item label='运行主机' name='hostId'>
+                                    <FieldRemoteSelect url="admin/host/options" placeholder='全部主机'/>
+                                </Form.Item>
+                            )}
                             request={(params) => {
-                                params.hostId = this.state.hostId
                                 params.orgId = this.state.selectedOrgId
                                 return HttpClient.get('admin/app/list', params);
                             }}
                             columns={this.columns}
-                            showToolbarSearch
 
                         />
                     </Splitter.Panel>

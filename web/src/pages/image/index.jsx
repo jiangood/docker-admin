@@ -138,7 +138,7 @@ export default class extends React.Component {
     render() {
         return <Page padding>
             <Splitter>
-                <Splitter.Panel size={250}>
+                <Splitter.Panel defaultSize={250}>
                     <OrgTree onChange={(v) => {
                         this.setState({selectedOrgId: v}, () => {
                             this.tableRef.current.reload()
