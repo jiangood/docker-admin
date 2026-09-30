@@ -1,4 +1,5 @@
-import {Button, Input, Space} from 'antd'
+import {CloudOutlined} from '@ant-design/icons'
+import {Button, Input, Space, Tooltip} from 'antd'
 import React from 'react'
 
 import CodeSourceProjectPicker from './CodeSourceProjectPicker'
@@ -32,7 +33,11 @@ export default class extends React.Component {
                        disabled={disabled}
                        placeholder={placeholder}
                        onChange={this.handleInputChange}/>
-                <Button disabled={disabled} onClick={() => this.setState({pickerOpen: true})}>从代码源选择</Button>
+                <Tooltip title='从代码源选择'>
+                    <Button disabled={disabled}
+                            icon={<CloudOutlined/>}
+                            onClick={() => this.setState({pickerOpen: true})}/>
+                </Tooltip>
             </Space.Compact>
 
             <CodeSourceProjectPicker open={this.state.pickerOpen}
