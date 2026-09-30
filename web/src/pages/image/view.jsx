@@ -309,7 +309,11 @@ export default class extends React.Component {
         key: 'version',
         label: '镜像版本',
         children: <Space wrap>
-          {versions.length === 0 ? <span>-</span> : versions.map(t => <Tag key={t} color='blue'>{t}</Tag>)}
+          {versions.length === 0 ? <span>-</span> : versions.map(t => {
+            // 接口返回的是 {value, label, data} 形式的 Option，取其中的 tag 文本渲染
+            const tag = t?.value ?? t;
+            return <Tag key={tag} color='blue'>{tag}</Tag>
+          })}
         </Space>
       },
       {
