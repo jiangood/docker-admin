@@ -234,10 +234,7 @@ export default class extends React.Component {
         </Descriptions>
 
         <div style={{display: 'flex', justifyContent: 'end'}}>
-          <Space>
-            <Button onClick={this.triggerPipeline} type="primary">立即构建</Button>
-            <Button onClick={this.cleanError} title='清理失败的记录'>清理</Button>
-          </Space>
+          <Button onClick={this.triggerPipeline} type="primary">立即构建</Button>
         </div>
 
       </Card>
@@ -291,15 +288,22 @@ export default class extends React.Component {
       {
         key: 'build',
         label: '构建历史',
-        children: <ProTable
-          actionRef={this.actionRef}
-          request={(params) => {
-            params.imageId = image.id
-            return HttpClient.get("admin/buildLog/list", params);
-          }}
-          columns={this.columns}
-          showSearch={false}
-        />
+        children: <div className='image-build-history'>
+          <ProTable
+            actionRef={this.actionRef}
+            toolBarRender={() => (
+              <div style={{display: 'flex', justifyContent: 'flex-end'}}>
+                <Button onClick={this.cleanError}>清理失败记录</Button>
+              </div>
+            )}
+            request={(params) => {
+              params.imageId = image.id
+              return HttpClient.get("admin/buildLog/list", params);
+            }}
+            columns={this.columns}
+            showSearch={false}
+          />
+        </div>
       },
       {
         key: 'version',

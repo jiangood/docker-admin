@@ -1,0 +1,8 @@
+/*
+ * 页面级样式覆盖。
+ * 框架的 ProTable 工具栏只渲染了左侧容器（.pro-table-toolbar-left），
+ * 这里把它撑满，使 toolBarRender 中的内容可以右对齐。
+ */
+.image-build-history .pro-table-toolbar-left {
+    flex: 1;
+}
