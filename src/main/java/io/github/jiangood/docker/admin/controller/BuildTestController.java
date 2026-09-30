@@ -2,6 +2,7 @@ package io.github.jiangood.docker.admin.controller;
 
 import cn.hutool.core.util.RandomUtil;
 import io.github.jiangood.docker.admin.dto.BuildTestRequest;
+import io.github.jiangood.docker.admin.dto.WriteDockerfileRequest;
 import io.github.jiangood.docker.admin.service.BuildTestService;
 import io.github.jiangood.openadmin.framework.perm.HasPermission;
 import io.github.jiangood.openadmin.util.dto.AjaxResult;
@@ -32,6 +33,17 @@ public class BuildTestController {
     @RequestMapping("read-dockerfile")
     public AjaxResult readDockerfile(String gitUrl) {
         return AjaxResult.ok().data(service.readDockerfile(gitUrl));
+    }
+
+    /**
+     * 将编辑后的 Dockerfile 提交并推送到 Git 仓库，返回新提交的短 id。
+     */
+    @HasPermission("build-test:write")
+    @PostMapping("write-dockerfile")
+    public AjaxResult writeDockerfile(@RequestBody WriteDockerfileRequest request) {
+        String commit = service.writeDockerfile(request.getGitUrl(), request.getDockerfileText(),
+                request.getCommitMessage(), request.getBranch());
+        return AjaxResult.ok().data(commit).msg("已写入并推送到仓库（提交 " + commit + "）");
     }
 
     /**

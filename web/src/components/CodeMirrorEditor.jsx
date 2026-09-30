@@ -11,11 +11,24 @@ import 'codemirror/mode/yaml/yaml';
 import 'codemirror/mode/shell/shell'
 import 'codemirror/mode/dockerfile/dockerfile'
 
+// 内容为空时的占位提示
+import 'codemirror/addon/display/placeholder'
+
 // 数据校验
 import 'codemirror/addon/lint/lint.css'
 import 'codemirror/addon/lint/yaml-lint.js'
 
 
+/**
+ * CodeMirror 5 编辑器封装。
+ * <p>
+ * 可直接放在 Form.Item 下使用，接收框架注入的 value / onChange。
+ * value 被外部修改（如表单回填、重置）时会同步到编辑器，无需靠 key 重挂载。
+ *
+ * @param mode        语法高亮，默认 yaml，可传 dockerfile / shell 等
+ * @param height      编辑器高度（像素），默认 300
+ * @param placeholder 内容为空时的占位提示
+ */
 class CodeMirrorEditor extends React.Component {
 
     editor = null;
@@ -26,19 +39,30 @@ class CodeMirrorEditor extends React.Component {
         this.init();
     }
 
+    componentDidUpdate(prevProps) {
+        const {value} = this.props;
+        if (!this.editor || value === prevProps.value) {
+            return;
+        }
+        const next = value ?? '';
+        if (next !== this.editor.getValue()) {
+            this.editor.setValue(next);
+        }
+    }
+
     init = () => {
-        const value = this.props.value;
-        const dom = this.ref.current
-        this.editor = CodeMirror.fromTextArea(dom, {
-            value: value,
-            mode:  'yaml',
+        this.editor = CodeMirror.fromTextArea(this.ref.current, {
+            mode: this.props.mode || 'yaml',
             tabSize: 2,
-            theme: "darcula",
+            theme: 'darcula',
+            lineNumbers: true,
+            placeholder: this.props.placeholder,
+            readOnly: this.props.readOnly,
         });
-        this.editor.setSize(null, 300);
+        this.editor.setSize(null, this.props.height || 300);
 
         this.editor.on('change', (cm) => {
-            this.props.onChange(cm.getValue());
+            this.props.onChange?.(cm.getValue());
         });
     };
 
@@ -51,7 +75,7 @@ class CodeMirrorEditor extends React.Component {
     }
 
     render() {
-        return (<textarea ref={this.ref} value={this.props.value}/>);
+        return (<textarea ref={this.ref} defaultValue={this.props.value}/>);
     }
 }
 

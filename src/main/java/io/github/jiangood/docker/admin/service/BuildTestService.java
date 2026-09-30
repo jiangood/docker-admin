@@ -80,6 +80,32 @@ public class BuildTestService {
         }
     }
 
+    /**
+     * 将编辑后的 Dockerfile 写入 Git 仓库根目录，提交并推送。
+     *
+     * @param branch 目标分支，留空使用仓库默认分支
+     * @return 新提交的短 id
+     */
+    public String writeDockerfile(String gitUrl, String dockerfileText, String commitMessage, String branch) {
+        String url = StrUtil.trim(gitUrl);
+        Assert.hasText(url, "请先填写 Git 仓库地址");
+        Assert.hasText(dockerfileText, "请填写 Dockerfile 内容");
+
+        try {
+            GitCredential credential = codeSourceService.credentialByGitUrl(url);
+            String commit = GitTool.writeTextFile(url, credential, DOCKERFILE, dockerfileText, commitMessage, branch);
+            if (commit == null) {
+                throw new BusinessException("Dockerfile 内容与仓库一致，无需写入");
+            }
+            log.info("Dockerfile 已写入仓库 {}，提交 {}", url, commit);
+            return commit;
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new BusinessException("写入仓库失败：" + e.getMessage(), e);
+        }
+    }
+
     @Async
     public void build(String logId, BuildTestRequest p) {
         taskLogRegistry.start(logId);

@@ -86,6 +86,7 @@ menus:
     perms:
       - {name: 查看, code: build-test:view}
       - {name: 构建, code: build-test:build}
+      - {name: 写入仓库, code: build-test:write}
   tunnel:
     pid: tool
     name: 隧道
@@ -94,6 +95,5 @@ menus:
     seq: 300
     perms:
       - {name: 查看, code: tunnel:view}
-      - {name: 保存, code: tunnel:save}
-      - {name: 部署, code: tunnel:deploy}
-      - {name: 清理容器, code: tunnel:clean}
+      - {name: 保存配置, code: tunnel:save}
+      - {name: 启用 / 同步, code: tunnel:deploy}

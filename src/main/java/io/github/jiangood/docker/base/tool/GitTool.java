@@ -13,11 +13,15 @@ import org.eclipse.jgit.api.CloneCommand;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.LogCommand;
 import org.eclipse.jgit.api.LsRemoteCommand;
+import org.eclipse.jgit.api.PushCommand;
 import org.eclipse.jgit.api.TransportCommand;
 import org.eclipse.jgit.api.errors.GitAPIException;
+import org.eclipse.jgit.lib.PersonIdent;
 import org.eclipse.jgit.lib.Ref;
 import org.eclipse.jgit.lib.TextProgressMonitor;
 import org.eclipse.jgit.revwalk.RevCommit;
+import org.eclipse.jgit.transport.PushResult;
+import org.eclipse.jgit.transport.RemoteRefUpdate;
 import org.eclipse.jgit.transport.SshTransport;
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
 import org.eclipse.jgit.transport.sshd.IdentityPasswordProvider;
@@ -26,6 +30,7 @@ import org.eclipse.jgit.transport.sshd.SshdSessionFactory;
 import org.eclipse.jgit.transport.sshd.SshdSessionFactoryBuilder;
 
 import java.io.File;
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.security.PublicKey;
 import java.time.Instant;
@@ -50,6 +55,13 @@ public class GitTool {
 
     /** GitLab 等平台使用访问令牌时，用户名可填任意非空值，统一使用 oauth2。 */
     private static final String TOKEN_USERNAME = "oauth2";
+
+    /** 平台写入仓库时的提交人身份；未配置 git user.name/email 时避免提交失败。 */
+    private static final String COMMITTER_NAME = "docker-admin";
+    private static final String COMMITTER_EMAIL = "docker-admin@localhost";
+
+    /** 未指定提交说明时的默认说明。 */
+    private static final String DEFAULT_COMMIT_MESSAGE = "chore: 更新 Dockerfile";
 
     /**
      * 代码克隆根目录，每次克隆在其下按 仓库名/时间戳 新建工作目录。
@@ -131,6 +143,64 @@ public class GitTool {
         }
     }
 
+    /**
+     * 将文本写入远程仓库中的指定文件，提交并推送（文件不存在则新建）。
+     * <p>
+     * 使用完整克隆而非浅克隆，避免 JGit 从浅仓库推送时的兼容问题。
+     *
+     * @param message 提交说明，为空时使用默认说明
+     * @param branch  目标分支；为空时使用仓库默认分支，非空时克隆该分支并推回
+     * @return 新提交的短 id；内容与仓库一致、无需提交时返回 null
+     */
+    public static String writeTextFile(String url, GitCredential credential, String path, String content, String message,
+            String branch) throws GitAPIException, IOException {
+        File workDir = new File(FileUtil.getTmpDir(), "gitcode-write/" + IdUtil.fastSimpleUUID());
+        FileUtil.mkdir(workDir);
+
+        CloneCommand cloneCommand = Git.cloneRepository()
+                .setURI(url)
+                .setDirectory(workDir)
+                .setBranch(StrUtil.trimToNull(branch))
+                .setCloneSubmodules(false);
+
+        SshdSessionFactory sshFactory = applyCredential(cloneCommand, url, credential);
+        try (Git git = cloneCommand.call()) {
+            String targetBranch = git.getRepository().getBranch();
+
+            File file = new File(workDir, path);
+            FileUtil.mkParentDirs(file);
+            FileUtil.writeUtf8String(content, file);
+
+            if (git.status().call().isClean()) {
+                log.info("{} 内容与仓库一致，无需提交", path);
+                return null;
+            }
+
+            git.add().addFilepattern(path).call();
+
+            PersonIdent identity = new PersonIdent(COMMITTER_NAME, COMMITTER_EMAIL);
+            RevCommit commit = git.commit()
+                    .setMessage(StrUtil.blankToDefault(message, DEFAULT_COMMIT_MESSAGE))
+                    .setAuthor(identity)
+                    .setCommitter(identity)
+                    .call();
+            log.info("已提交 {}：{}", commit.getName(), commit.getShortMessage());
+
+            PushCommand pushCommand = git.push()
+                    .setRemote("origin")
+                    .add("refs/heads/" + targetBranch + ":refs/heads/" + targetBranch);
+            // 复用克隆时的 SSH 会话工厂；令牌 / 账号密码方式此调用返回 null
+            applyCredential(pushCommand, url, credential, sshFactory);
+            assertPushed(pushCommand.call());
+
+            log.info("已推送到 {} 分支 {}", url, targetBranch);
+            return commit.getName().substring(0, 8);
+        } finally {
+            closeQuietly(sshFactory);
+            FileUtil.del(workDir);
+        }
+    }
+
     public static CloneResult clone(String url, GitCredential credential, String branchOrTag) throws GitAPIException {
 
         String dirName = url.substring(url.lastIndexOf("/") + 1);
@@ -185,6 +255,17 @@ public class GitTool {
      * @return SSH 私钥方式返回会话工厂，由调用方在使用完毕后关闭；其他方式返回 null
      */
     private static SshdSessionFactory applyCredential(TransportCommand<?, ?> command, String url, GitCredential credential) {
+        return applyCredential(command, url, credential, null);
+    }
+
+    /**
+     * 同上，可复用已有的 SSH 会话工厂（如同一仓库先克隆后推送），避免重复创建与清理。
+     *
+     * @param existing SSH 会话工厂，为 null 时按需新建
+     * @return 实际使用的 SSH 会话工厂；非 SSH 方式返回 null
+     */
+    private static SshdSessionFactory applyCredential(TransportCommand<?, ?> command, String url, GitCredential credential,
+            SshdSessionFactory existing) {
         if (credential == null || credential.isNone()) {
             // 无凭据：按公开仓库匿名访问
             return null;
@@ -194,7 +275,7 @@ public class GitTool {
             if (!isSshUrl(url)) {
                 throw new IllegalArgumentException("SSH 私钥方式需要 ssh:// 或 git@host:path 形式的仓库地址：" + url);
             }
-            SshdSessionFactory factory = createSshSessionFactory(credential);
+            SshdSessionFactory factory = existing != null ? existing : createSshSessionFactory(credential);
             command.setTransportConfigCallback(transport -> {
                 if (transport instanceof SshTransport sshTransport) {
                     sshTransport.setSshSessionFactory(factory);
@@ -209,6 +290,21 @@ public class GitTool {
                 : credential.getUsername().trim();
         command.setCredentialsProvider(new UsernamePasswordCredentialsProvider(username, credential.getSecret()));
         return null;
+    }
+
+    /**
+     * 校验推送结果：存在被拒绝的引用（如非快进、无权限）时抛出异常。
+     */
+    private static void assertPushed(Iterable<PushResult> results) {
+        for (PushResult result : results) {
+            for (RemoteRefUpdate update : result.getRemoteUpdates()) {
+                RemoteRefUpdate.Status status = update.getStatus();
+                if (status != RemoteRefUpdate.Status.OK && status != RemoteRefUpdate.Status.UP_TO_DATE) {
+                    throw new IllegalStateException("推送被拒绝：" + status
+                            + (StrUtil.isBlank(update.getMessage()) ? "" : "（" + update.getMessage() + "）"));
+                }
+            }
+        }
     }
 
     /**
