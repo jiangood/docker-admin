@@ -40,7 +40,7 @@ export default class extends React.Component {
 
 
     updateVersion = (values) => {
-        HttpClient.get("admin/app/updateVersion", {id: this.id, version: values.imageTag}).then(rs => {
+        HttpClient.get("admin/app/updateVersion", {id: this.id, version: values.version}).then(rs => {
             this.props.onChange()
         })
     }
@@ -88,7 +88,7 @@ export default class extends React.Component {
                 <Col span={12}>
                     <Card title='手动发布'>
                         <Form onFinish={this.updateVersion} layout={'inline'}>
-                            <Form.Item name='imageTag' rules={[{required: true, message: '请选择版本'}]}>
+                            <Form.Item name='version' rules={[{required: true, message: '请选择版本'}]}>
                                 <Select style={{width: 180}}
                                         options={this.state.versionOptions}
                                         showSearch

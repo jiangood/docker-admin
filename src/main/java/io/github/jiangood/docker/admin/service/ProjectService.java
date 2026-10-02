@@ -16,14 +16,15 @@ import io.github.jiangood.docker.base.tool.GitCredential;
 import io.github.jiangood.docker.base.tool.GitTool;
 import io.github.jiangood.docker.admin.BuildSuccessEvent;
 import io.github.jiangood.docker.admin.dao.AppRepository;
-import io.github.jiangood.docker.admin.dao.ImageRepository;
+import io.github.jiangood.docker.admin.dao.ProjectRepository;
 import io.github.jiangood.docker.admin.dto.BuildRequest;
 import io.github.jiangood.docker.admin.entity.App;
 import io.github.jiangood.docker.admin.entity.BuildLog;
 import io.github.jiangood.docker.admin.entity.CodeSource;
 import io.github.jiangood.docker.admin.entity.Host;
-import io.github.jiangood.docker.admin.entity.Image;
+import io.github.jiangood.docker.admin.entity.Project;
 import io.github.jiangood.docker.admin.entity.Registry;
+import io.github.jiangood.docker.admin.util.ImageUrlUtils;
 import io.github.jiangood.docker.admin.websocket.TaskLogRegistry;
 import io.github.jiangood.docker.sdk.engine.DefaultCallback;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
@@ -58,9 +59,9 @@ import java.util.regex.Pattern;
 @Service
 @Slf4j
 @RequiredArgsConstructor
-public class ImageService extends BaseService<Image> {
+public class ProjectService extends BaseService<Project> {
 
-    private final ImageRepository imageRepository;
+    private final ProjectRepository projectRepository;
 
     @Resource
     RegistryService registryService;
@@ -82,7 +83,10 @@ public class ImageService extends BaseService<Image> {
     BuildLogService buildLogService;
 
     @Resource
-    ImageVersionService imageVersionService;
+    ImageTagService imageTagService;
+
+    @Resource
+    ImageRepoService imageRepoService;
 
     @Resource
     AppRepository appRepository;
@@ -97,24 +101,29 @@ public class ImageService extends BaseService<Image> {
 
 
     /**
-     * 镜像完整地址：registry.url/namespace/name。未配置注册中心时仅返回镜像名。
+     * 镜像url：registry.url/namespace/name。未配置注册中心时仅返回项目名。
      */
-    public String getFullImageUrl(Image image) {
-        if (image == null) {
+    public String getFullImageUrl(Project project) {
+        if (project == null) {
             return null;
         }
-        Registry registry = registryService.getEffective();
-        if (registry == null) {
-            return image.getName();
-        }
-        return registry.getUrl() + "/" + registry.getNamespace() + "/" + image.getName();
+        return ImageUrlUtils.repoUrl(registryService.getEffective(), project.getName());
     }
 
     /**
-     * 保存镜像：新建走 create，编辑走 update。
+     * 填充镜像url（不持久化），供前端展示。
+     */
+    public void fillImageUrl(Project project) {
+        if (project != null) {
+            project.setImageUrl(getFullImageUrl(project));
+        }
+    }
+
+    /**
+     * 保存项目：新建走 create，编辑走 update。
      */
     @Transactional
-    public Image saveImage(Image input, List<String> updateFields) {
+    public Project saveProject(Project input, List<String> updateFields) {
         if (StrUtil.isBlank(input.getId())) {
             return create(input);
         }
@@ -160,16 +169,16 @@ public class ImageService extends BaseService<Image> {
     }
 
     /**
-     * 拉取镜像对应远程仓库的 tag 列表。
+     * 拉取项目对应远程仓库的 tag 列表。
      */
-    public List<String> listRemoteTags(Image image) {
-        CodeSource source = codeSourceService.findByGitUrl(image.getGitUrl());
+    public List<String> listRemoteTags(Project project) {
+        CodeSource source = codeSourceService.findByGitUrl(project.getGitUrl());
         GitCredential credential = codeSourceService.credential(source);
         try {
-            return GitTool.listRemoteTags(image.getGitUrl(), credential);
+            return GitTool.listRemoteTags(project.getGitUrl(), credential);
         } catch (GitAPIException e) {
             if (source == null) {
-                String host = CodeSourceService.hostKey(image.getGitUrl());
+                String host = CodeSourceService.hostKey(project.getGitUrl());
                 throw new BusinessException("获取远程 tag 失败：未找到与主机 " + host
                         + " 匹配的代码源，请在【设置-代码源】配置访问方式与凭据", e);
             }
@@ -192,15 +201,15 @@ public class ImageService extends BaseService<Image> {
     /**
      * 用指定 tag 触发构建（Webhook 使用，构建节点取系统默认 runner）。
      */
-    public void buildByTag(Image image, String tag) {
+    public void buildByTag(Project project, String tag) {
         Assert.isTrue(isValidTag(tag), "tag 格式不正确，需形如 v1.0.1");
         Host runner = hostService.getDefaultDockerRunner();
         Assert.notNull(runner, "未配置构建节点（runner），请先在【主机】中设置");
 
         BuildRequest req = new BuildRequest();
-        req.setImageId(image.getId());
+        req.setProjectId(project.getId());
         req.setTag(tag);
-        req.setDockerfile(image.getDockerfile());
+        req.setDockerfile(project.getDockerfile());
         req.setBuildHostId(runner.getId());
         try {
             buildImage(req);
@@ -210,89 +219,89 @@ public class ImageService extends BaseService<Image> {
     }
 
     /**
-     * Webhook 入口：按 token 找到镜像并用推送的 tag 触发构建。
+     * Webhook 入口：按 token 找到项目并用推送的 tag 触发构建。
      */
     public void triggerByToken(String token, String tag) {
         Assert.hasText(tag, "未从 Webhook 请求中解析到 tag");
         Assert.isTrue(isValidTag(tag), "tag 格式不正确，需形如 v1.0.1：" + tag);
-        Image image = imageRepository.findByWebhookToken(token);
-        Assert.notNull(image, "无效的 webhook token");
-        buildByTag(image, tag);
+        Project project = projectRepository.findByWebhookToken(token);
+        Assert.notNull(project, "无效的 webhook token");
+        buildByTag(project, tag);
     }
 
     /**
      * 开启自动 Webhook：在代码仓库（GitLab）上创建指向 hookUrl 的 Webhook，并记录其 id。
      */
     @Transactional
-    public Image enableWebhook(Image image, String hookUrl) {
+    public Project enableWebhook(Project project, String hookUrl) {
         Assert.hasText(hookUrl, "Webhook 地址不能为空");
-        CodeSource source = codeSourceService.findByGitUrl(image.getGitUrl());
+        CodeSource source = codeSourceService.findByGitUrl(project.getGitUrl());
         Assert.notNull(source, "未找到与代码仓库匹配的代码源，请先在【设置-代码源】中配置");
-        String projectPath = CodeSourceApiService.projectPath(source, image.getGitUrl());
+        String projectPath = CodeSourceApiService.projectPath(source, project.getGitUrl());
         String hookId = codeSourceApiService.enableProjectHook(source, projectPath, hookUrl);
-        image.setWebhookHookId(hookId);
-        image.setWebhookAuto(true);
-        return save(image);
+        project.setWebhookHookId(hookId);
+        project.setWebhookAuto(true);
+        return save(project);
     }
 
     /**
      * 关闭自动 Webhook：删除代码仓库上由本系统创建的 Webhook，并清除本地记录。
      */
     @Transactional
-    public Image disableWebhook(Image image) {
-        CodeSource source = codeSourceService.findByGitUrl(image.getGitUrl());
+    public Project disableWebhook(Project project) {
+        CodeSource source = codeSourceService.findByGitUrl(project.getGitUrl());
         if (source != null) {
-            String projectPath = CodeSourceApiService.projectPath(source, image.getGitUrl());
-            codeSourceApiService.disableProjectHook(source, projectPath, image.getWebhookHookId());
+            String projectPath = CodeSourceApiService.projectPath(source, project.getGitUrl());
+            codeSourceApiService.disableProjectHook(source, projectPath, project.getWebhookHookId());
         }
-        image.setWebhookHookId(null);
-        image.setWebhookAuto(false);
-        return save(image);
+        project.setWebhookHookId(null);
+        project.setWebhookAuto(false);
+        return save(project);
     }
 
     /**
      * 重置 webhook token。若已开启自动 Webhook，则一并删除代码仓库上的旧 Webhook（地址已失效）。
      */
     @Transactional
-    public Image resetWebhookToken(Image image) {
-        if (Boolean.TRUE.equals(image.getWebhookAuto())) {
+    public Project resetWebhookToken(Project project) {
+        if (Boolean.TRUE.equals(project.getWebhookAuto())) {
             try {
-                disableWebhook(image);
+                disableWebhook(project);
             } catch (Exception e) {
                 log.warn("重置令牌时删除远程 Webhook 失败，请到代码仓库手动清理：{}", e.getMessage());
-                image.setWebhookHookId(null);
-                image.setWebhookAuto(false);
+                project.setWebhookHookId(null);
+                project.setWebhookAuto(false);
             }
         }
-        image.setWebhookToken(RandomUtil.randomString(32));
-        return save(image);
+        project.setWebhookToken(RandomUtil.randomString(32));
+        return save(project);
     }
 
     public void buildImage(BuildRequest p) throws IOException {
-        List<BuildLog> processing = buildLogService.findByImageProcessing(p.getImageId());
+        List<BuildLog> processing = buildLogService.findByProjectProcessing(p.getProjectId());
 
         for (BuildLog buildLog : processing) {
             stopBuild(buildLog.getId());
         }
 
         // 通过代理调用 @Async 方法，避免自调用失效
-        SpringUtil.getBean(ImageService.class).buildImageJob(p);
+        SpringUtil.getBean(ProjectService.class).buildImageJob(p);
     }
 
 
     @Async
     public void buildImageJob(BuildRequest p) {
         String tag = p.getTag();
-        String imageId = p.getImageId();
+        String projectId = p.getProjectId();
         String context = p.getContext();
         String dockerfile = p.getDockerfile();
 
 
-        Image image = imageRepository.findById(imageId).orElse(null);
+        Project project = projectRepository.findById(projectId).orElse(null);
         BuildLog buildLog = new BuildLog();
-        buildLog.setImageId(image.getId());
-        buildLog.setImageName(image.getName());
-        buildLog.setDockerfile(image.getDockerfile());
+        buildLog.setProjectId(project.getId());
+        buildLog.setProjectName(project.getName());
+        buildLog.setDockerfile(project.getDockerfile());
         buildLog.setTag(tag);
         buildLog = buildLogService.saveLog(buildLog);
         String logId = buildLog.getId();
@@ -303,14 +312,14 @@ public class ImageService extends BaseService<Image> {
         MDC.put("logFileId", logId);
         try {
 
-            log.info("开始构建镜像任务, 镜像：{}， 仓库：{}， tag：{}", image.getName(), image.getGitUrl(), tag);
+            log.info("开始构建镜像任务, 项目：{}， 仓库：{}， tag：{}", project.getName(), project.getGitUrl(), tag);
 
             Host host = hostService.findById(p.getBuildHostId()).orElse(null);
 
             Assert.notNull(host, "无构建主机");
             log.info("构建主机信息... 名称：{}, host:{}", host.getName(), host.getDockerHost());
 
-            GitTool.CloneResult cloneResult = gitClone(image, tag);
+            GitTool.CloneResult cloneResult = gitClone(project, tag);
             File workDir = cloneResult.getDir();
             log.info("代码下载完毕 " + workDir);
             log.info("代码提交信息: {}", cloneResult.getCodeMessage());
@@ -333,9 +342,9 @@ public class ImageService extends BaseService<Image> {
             client = dockerService.getClient(host, registry);
 
 
-            String imageUrl = registry.getUrl() + "/" + registry.getNamespace() + "/" + image.getName();
+            String imageUrl = ImageUrlUtils.repoUrl(registry, project.getName());
 
-            String imageTag = imageUrl + ":" + tag;
+            String imageTag = ImageUrlUtils.full(imageUrl, tag);
 
             log.info("目标镜像： {}", imageTag);
             Assert.state(!StrUtil.containsBlank(imageUrl), "镜像路径不能包含空格");
@@ -366,8 +375,8 @@ public class ImageService extends BaseService<Image> {
                     .withDockerfile(dockerfileFile);
 
 
-            if (StrUtil.isNotEmpty(image.getBuildArg())) {
-                Map<String, String> buildArgsMap = UriComponentsBuilder.newInstance().query(image.getBuildArg()).build().getQueryParams().toSingleValueMap();
+            if (StrUtil.isNotEmpty(project.getBuildArg())) {
+                Map<String, String> buildArgsMap = UriComponentsBuilder.newInstance().query(project.getBuildArg()).build().getQueryParams().toSingleValueMap();
                 for (Map.Entry<String, String> e : buildArgsMap.entrySet()) {
                     log.info("构建参数: {}={}", e.getKey(), e.getValue());
                     buildImageCmd.withBuildArg(e.getKey(), e.getValue());
@@ -394,11 +403,12 @@ public class ImageService extends BaseService<Image> {
             pushImageCmd.exec(new DefaultCallback<>(logId)).awaitCompletion();
             log.info("推送镜像结束 {}", imageTag);
 
-            // 记录镜像声明的端口与卷，容器配置只允许使用这些声明项
+            // 登记镜像仓库与标签，并记录镜像声明的端口与卷
             try {
-                imageVersionService.inspect(client, imageTag, image.getId(), tag);
+                imageRepoService.upsert(imageUrl, project.getName(), "BUILD", registry.getId(), project.getSysOrg());
+                imageTagService.inspect(client, imageTag, imageUrl, tag, buildLog.getId(), "BUILD");
             } catch (Exception e) {
-                log.warn("读取镜像声明失败: {}", e.getMessage());
+                log.warn("登记镜像失败: {}", e.getMessage());
             }
 
 
@@ -414,7 +424,7 @@ public class ImageService extends BaseService<Image> {
             event.setTag(tag);
 
             applicationEventPublisher.publishEvent(event);
-            log.info("抛出构建事件 {}", event.getBuildLog().getImageName());
+            log.info("抛出构建事件 {}", event.getBuildLog().getProjectName());
 
             log.info("构建阶段结束");
         } catch (Exception e) {
@@ -437,72 +447,78 @@ public class ImageService extends BaseService<Image> {
         }
     }
 
-    private GitTool.CloneResult gitClone(Image image, String tag) throws GitAPIException {
-        GitCredential credential = codeSourceService.credentialByGitUrl(image.getGitUrl());
+    private GitTool.CloneResult gitClone(Project project, String tag) throws GitAPIException {
+        GitCredential credential = codeSourceService.credentialByGitUrl(project.getGitUrl());
 
         log.info("代码下载中...");
-        return GitTool.clone(image.getGitUrl(), credential, tag);
+        return GitTool.clone(project.getGitUrl(), credential, tag);
     }
 
 
     @Transactional
-    public void deleteImage(String id) {
-        List<App> apps = appRepository.findAllByImage_Id(id);
-        Assert.state(apps.isEmpty(), "该镜像下还有 " + apps.size() + " 个应用，请先删除应用");
+    public void deleteProject(String id) {
+        Project project = projectRepository.findById(id).orElse(null);
+        String imageUrl = getFullImageUrl(project);
 
-        Image image = imageRepository.findById(id).orElse(null);
-        if (image != null && Boolean.TRUE.equals(image.getWebhookAuto())) {
+        List<App> apps = StrUtil.isBlank(imageUrl) ? List.of() : appRepository.findAllByImageUrl(imageUrl);
+        Assert.state(apps.isEmpty(), "该项目下还有 " + apps.size() + " 个应用，请先删除应用");
+
+        if (project != null && Boolean.TRUE.equals(project.getWebhookAuto())) {
             try {
-                CodeSource source = codeSourceService.findByGitUrl(image.getGitUrl());
+                CodeSource source = codeSourceService.findByGitUrl(project.getGitUrl());
                 if (source != null) {
                     codeSourceApiService.disableProjectHook(source,
-                            CodeSourceApiService.projectPath(source, image.getGitUrl()), image.getWebhookHookId());
+                            CodeSourceApiService.projectPath(source, project.getGitUrl()), project.getWebhookHookId());
                 }
             } catch (Exception e) {
-                log.warn("删除镜像时清理远程 Webhook 失败，请到代码仓库手动清理：{}", e.getMessage());
+                log.warn("删除项目时清理远程 Webhook 失败，请到代码仓库手动清理：{}", e.getMessage());
             }
         }
 
-        List<BuildLog> logList = buildLogService.findByImage(id);
+        List<BuildLog> logList = buildLogService.findByProject(id);
 
         for (BuildLog buildLog : logList) {
             buildLogService.deleteById(buildLog.getId());
         }
 
-        imageVersionService.removeByImageId(id);
-        imageRepository.deleteById(id);
+        imageTagService.deleteByImageUrl(imageUrl);
+        imageRepoService.deleteByImageUrl(imageUrl);
+        projectRepository.deleteById(id);
     }
 
 
     @Transactional
-    public void cleanErrorLog(String imageId) {
-        buildLogService.cleanErrorLog(imageId);
+    public void cleanErrorLog(String projectId) {
+        buildLogService.cleanErrorLog(projectId);
     }
 
     /**
-     * 该镜像的版本（tag），倒序。
+     * 该项目产出的镜像版本（tag），倒序。
      */
-    public List<String> tags(String imageId) {
-        return imageVersionService.tags(imageId);
+    public List<String> tags(String projectId) {
+        Project project = projectRepository.findById(projectId).orElse(null);
+        return imageTagService.tags(getFullImageUrl(project));
     }
 
     /**
-     * 使用该镜像的应用。
+     * 使用该项目镜像的应用。
      */
-    public List<App> apps(String imageId) {
-        if (StrUtil.isBlank(imageId)) {
+    public List<App> apps(String projectId) {
+        Project project = projectRepository.findById(projectId).orElse(null);
+        String imageUrl = getFullImageUrl(project);
+        if (StrUtil.isBlank(imageUrl)) {
             return List.of();
         }
-        return appRepository.findAllByImage_Id(imageId);
+        return appRepository.findAllByImageUrl(imageUrl);
     }
 
-    public Page<Image> findAll(String searchText, Pageable pageable) {
+    public Page<Project> findAll(String searchText, Pageable pageable) {
         if (StrUtil.isNotEmpty(searchText)) {
-            Spec<Image> q = Spec.of();
+            Spec<Project> q = Spec.of();
             q.like("name", "%" + searchText.trim() + "%");
-            return imageRepository.findAll(q, pageable);
+            return projectRepository.findAll(q, pageable);
         }
-        return imageRepository.findAll(pageable);
+        return projectRepository.findAll(pageable);
     }
 
 }

@@ -1,4 +1,4 @@
-import {Button, Form, Input, Menu, Modal, Select} from 'antd';
+import {Button, Form, Input, Modal, Select} from 'antd';
 import React from 'react';
 import ContainerStatus from "../../components/ContainerStatus";
 import {
@@ -24,6 +24,10 @@ export default class extends React.Component {
                 return <Button type='link' style={{padding: 0}}
                                onClick={() => PageUtils.open('/app/view?id=' + row.id, '应用-' + name)}>{name}</Button>
             }
+        },
+        {
+            title: '镜像仓库',
+            dataIndex: 'imageUrl',
         },
         {
             title: '版本',
@@ -118,13 +122,13 @@ export default class extends React.Component {
     }
 
     loadImageList = searchText => {
-        HttpClient.get('admin/image/options', {searchText}).then(rs => {
+        HttpClient.get('admin/image-repo/options', {searchText}).then(rs => {
             this.setState({imageList: rs.data || []})
         })
     }
 
-    onImageSelect = imageId => {
-        HttpClient.get('admin/image/versions', {imageId}).then(rs => {
+    onImageSelect = imageUrl => {
+        HttpClient.get('admin/image-repo/tags', {imageUrl}).then(rs => {
             this.setState({tagOptions: rs.data || []})
         })
     }
@@ -171,17 +175,17 @@ export default class extends React.Component {
                             <Input/>
                         </Form.Item>
 
-                        <Form.Item name={['image', 'id']} label='镜像' required rules={[{required: true}]}
-                                   tooltip='从构建过的镜像中选择'>
+                        <Form.Item name='imageUrl' label='镜像仓库' required rules={[{required: true}]}
+                                   tooltip='从镜像仓库中选择'>
                             <Select options={this.state.imageList}
                                     showSearch
                                     onSelect={this.onImageSelect}
-                                    placeholder='选择镜像'></Select>
+                                    placeholder='选择镜像仓库'></Select>
                         </Form.Item>
 
 
                         <Form.Item name='imageTag' label='版本' required rules={[{required: true}]}
-                                   tooltip='选择该镜像已构建的 tag'>
+                                   tooltip='选择该镜像仓库已构建的 tag'>
                             <Select options={this.state.tagOptions}
                                     showSearch
                                     placeholder='选择版本'></Select>
@@ -216,8 +220,10 @@ export default class extends React.Component {
                           onFinish={this.handleEditFinish}>
                         <Form.Item name='id' noStyle></Form.Item>
 
-                        <Form.Item name={['image', 'id']} label='镜像' required rules={[{required: true}]}>
-                            <Select options={this.state.imageList} showSearch placeholder='选择镜像'/>
+                        <Form.Item name='imageUrl' label='镜像仓库' required rules={[{required: true}]}>
+                            <Select options={this.state.imageList} showSearch
+                                    onSelect={this.onImageSelect}
+                                    placeholder='选择镜像仓库'/>
                         </Form.Item>
 
                         <Form.Item name='imageTag' label='版本' required rules={[{required: true}]}>

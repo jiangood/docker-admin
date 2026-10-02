@@ -26,8 +26,8 @@ public class BuildLog extends BaseEntity {
     String buildHostName;
     String buildHostId;
 
-    String imageName;
-    String imageId;
+    String projectName;
+    String projectId;
 
     String imageUrl;
 

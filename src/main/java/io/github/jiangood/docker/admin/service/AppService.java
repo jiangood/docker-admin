@@ -17,7 +17,8 @@ import io.github.jiangood.docker.admin.entity.App;
 import io.github.jiangood.docker.admin.entity.BuildLog;
 import io.github.jiangood.docker.admin.entity.DeployLog;
 import io.github.jiangood.docker.admin.entity.Host;
-import io.github.jiangood.docker.admin.entity.ImageVersion;
+import io.github.jiangood.docker.admin.entity.ImageTag;
+import io.github.jiangood.docker.admin.entity.Project;
 import io.github.jiangood.docker.admin.entity.Registry;
 import io.github.jiangood.docker.sdk.engine.DefaultCallback;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
@@ -55,13 +56,16 @@ public class AppService extends BaseService<App> {
     DockerClientManager dockerManager;
 
     @Resource
-    ImageVersionService imageVersionService;
+    ImageTagService imageTagService;
 
     @Resource
-    ImageService imageService;
+    ProjectService projectService;
 
     @Resource
     private RegistryService registryService;
+
+    @Resource
+    TunnelService tunnelService;
 
     /**
      * 保存应用：新建走 create，编辑走 update。
@@ -101,7 +105,7 @@ public class AppService extends BaseService<App> {
             Host host = app.getHost();
 
             // 镜像
-            String image = imageService.getFullImageUrl(app.getImage()) + ":" + app.getImageTag();
+            String image = app.getImageUrl() + ":" + app.getImageTag();
 
             client = getClient(host);
 
@@ -114,15 +118,15 @@ public class AppService extends BaseService<App> {
             App.AppConfig cfg = app.getConfig();
 
             // 仅当镜像来自镜像表（平台构建/已知）且声明非空时，对应维度才严格限制
-            ImageVersion imageVersion = imageVersionService.find(imageIdOf(app), app.getImageTag()).orElse(null);
-            boolean strictPorts = strictPorts(imageVersion);
-            boolean strictVolumes = strictVolumes(imageVersion);
+            ImageTag imageTag = imageTagService.find(app.getImageUrl(), app.getImageTag()).orElse(null);
+            boolean strictPorts = strictPorts(imageTag);
+            boolean strictVolumes = strictVolumes(imageTag);
             if (strictPorts || strictVolumes) {
-                validateConfig(cfg, imageVersion);
+                validateConfig(cfg, imageTag);
             }
             // 严格时按镜像声明构造，否则按用户配置构造
-            List<String> declaredPorts = strictPorts ? imageVersion.getExposedPorts() : portsFromConfig(cfg);
-            List<String> declaredVolumes = strictVolumes ? imageVersion.getVolumes() : volumesFromConfig(cfg);
+            List<String> declaredPorts = strictPorts ? imageTag.getExposedPorts() : portsFromConfig(cfg);
+            List<String> declaredVolumes = strictVolumes ? imageTag.getVolumes() : volumesFromConfig(cfg);
 
 
             List<Container> containers = getContainer(app.getName(), client);
@@ -369,6 +373,7 @@ public class AppService extends BaseService<App> {
     public void deleteApp(String id) {
         // 远程删除应用
         App app = appRepository.findById(id).orElse(null);
+        tunnelService.removeAppTunnel(app);
         deleteContainer(app);
 
         appRepository.deleteById(id);
@@ -376,19 +381,10 @@ public class AppService extends BaseService<App> {
 
 
     /**
-     * 该应用镜像可用的版本（来自镜像版本表），倒序。
+     * 该应用镜像可用的版本（来自镜像标签表），倒序。
      */
-    public List<String> getImageVersions(String imageId) {
-        return imageVersionService.tags(imageId);
-    }
-
-    /**
-     * 填充镜像完整地址（不持久化），供前端展示。
-     */
-    public void fillImageUrl(App app) {
-        if (app != null) {
-            app.setImageUrl(imageService.getFullImageUrl(app.getImage()));
-        }
+    public List<String> getImageVersions(String imageUrl) {
+        return imageTagService.tags(imageUrl);
     }
 
     public void updateAppVersion(String id, String tag) {
@@ -425,7 +421,7 @@ public class AppService extends BaseService<App> {
         App app = appRepository.findById(id).orElse(null);
         Assert.notNull(app, "应用不存在");
         normalizeConfig(appConfig);
-        ImageVersion iv = imageVersionService.find(imageIdOf(app), app.getImageTag()).orElse(null);
+        ImageTag iv = imageTagService.find(app.getImageUrl(), app.getImageTag()).orElse(null);
         if (iv != null) {
             validateConfig(appConfig, iv);
         }
@@ -441,11 +437,10 @@ public class AppService extends BaseService<App> {
      */
     public ImageConfigMetaVo getConfigMeta(App app) {
         ImageConfigMetaVo vo = new ImageConfigMetaVo();
-        vo.setImageUrl(imageService.getFullImageUrl(app.getImage()));
-        vo.setImageTag(app.getImageTag());
+        vo.setImageUrl(app.getImageUrl());
 
         App.AppConfig cfg = app.getConfig();
-        ImageVersion iv = imageVersionService.find(imageIdOf(app), app.getImageTag()).orElse(null);
+        ImageTag iv = imageTagService.find(app.getImageUrl(), app.getImageTag()).orElse(null);
         boolean strictPorts = strictPorts(iv);
         boolean strictVolumes = strictVolumes(iv);
         vo.setStrictPorts(strictPorts);
@@ -529,14 +524,14 @@ public class AppService extends BaseService<App> {
     /**
      * 是否严格限制端口：镜像来自镜像表且声明了端口。
      */
-    private static boolean strictPorts(ImageVersion iv) {
+    private static boolean strictPorts(ImageTag iv) {
         return iv != null && iv.getExposedPorts() != null && !iv.getExposedPorts().isEmpty();
     }
 
     /**
      * 是否严格限制卷：镜像来自镜像表且声明了卷。
      */
-    private static boolean strictVolumes(ImageVersion iv) {
+    private static boolean strictVolumes(ImageTag iv) {
         return iv != null && iv.getVolumes() != null && !iv.getVolumes().isEmpty();
     }
 
@@ -571,7 +566,7 @@ public class AppService extends BaseService<App> {
     /**
      * 校验：严格维度下，配置中的端口/卷必须全部是镜像声明中存在的项。
      */
-    private void validateConfig(App.AppConfig cfg, ImageVersion iv) {
+    private void validateConfig(App.AppConfig cfg, ImageTag iv) {
         if (cfg == null || iv == null) {
             return;
         }
@@ -655,8 +650,16 @@ public class AppService extends BaseService<App> {
         log.info("构建成功，开始检测关联应用");
         BuildLog buildLog = event.getBuildLog();
 
-        List<App> list = new ArrayList<>();
-        list.addAll(appRepository.findAllByImage_Id(buildLog.getImageId()));
+        Project project = projectService.findById(buildLog.getProjectId()).orElse(null);
+        if (project == null) {
+            return;
+        }
+        String imageUrl = projectService.getFullImageUrl(project);
+        if (StrUtil.isBlank(imageUrl)) {
+            return;
+        }
+
+        List<App> list = appRepository.findAllByImageUrl(imageUrl);
         // 让注解生效
         AppService $this = SpringUtil.getBean(getClass());
 
@@ -665,15 +668,9 @@ public class AppService extends BaseService<App> {
             if (!auto) {
                 continue;
             }
-            if (StrUtil.equals(buildLog.getImageId(), imageIdOf(app))) {
-                app.setImageTag(event.getTag());
-                $this.deploy(app);
-            }
+            app.setImageTag(event.getTag());
+            $this.deploy(app);
         }
-    }
-
-    private static String imageIdOf(App app) {
-        return app == null || app.getImage() == null ? null : app.getImage().getId();
     }
 
     /**
@@ -691,7 +688,7 @@ public class AppService extends BaseService<App> {
         Assert.notNull(old, "应用不存在");
         old.setSysOrg(input.getSysOrg());
         old.setRemark(input.getRemark());
-        old.setImage(input.getImage());
+        old.setImageUrl(input.getImageUrl());
         old.setImageTag(input.getImageTag());
         appRepository.save(old);
     }
@@ -705,7 +702,7 @@ public class AppService extends BaseService<App> {
 
         App newApp = new App();
         // 不复制 id/name/host 及审计字段
-        BeanUtils.copyProperties(app, newApp, "id", "name", "host", "imageUrl", "createUser", "createTime",
+        BeanUtils.copyProperties(app, newApp, "id", "name", "host", "createUser", "createTime",
                 "updateUser", "updateTime", "logUrl", "config");
         newApp.setName(buildCopyName(app.getName()));
         newApp.setHost(host);

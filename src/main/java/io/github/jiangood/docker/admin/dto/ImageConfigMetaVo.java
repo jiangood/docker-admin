@@ -6,7 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 容器配置元数据：镜像表（ImageVersion）中声明的端口/卷，并合并已保存的主机侧映射值。
+ * 容器配置元数据：镜像标签表（ImageTag）中声明的端口/卷，并合并已保存的主机侧映射值。
  * <p>
  * 只有当镜像来自镜像表且声明非空时，对应维度才为严格模式（容器侧只读、不可增删）。
  */
@@ -14,8 +14,6 @@ import java.util.List;
 public class ImageConfigMetaVo {
 
     String imageUrl;
-
-    String imageTag;
 
     /**
      * 端口是否严格：镜像来自镜像表且声明了端口。严格时容器端口/协议只读、不可增删。

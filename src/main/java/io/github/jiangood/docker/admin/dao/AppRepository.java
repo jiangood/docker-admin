@@ -7,9 +7,11 @@ import java.util.List;
 
 public interface AppRepository extends BaseRepository<App, String> {
 
-    List<App> findAllByImage_Id(String imageId);
+    List<App> findAllByImageUrl(String imageUrl);
 
     List<App> findAllByHost_Id(String hostId);
+
+    List<App> findAllByTunnelClient_Id(String tunnelClientId);
 
     boolean existsByName(String name);
 

@@ -2,29 +2,20 @@ package io.github.jiangood.docker.admin.service;
 
 import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
-import com.github.dockerjava.api.DockerClient;
-import com.github.dockerjava.api.model.Container;
+import com.fasterxml.jackson.databind.JsonNode;
 import io.github.jiangood.docker.admin.dao.AppRepository;
-import io.github.jiangood.docker.admin.dao.TunnelNodeRepository;
-import io.github.jiangood.docker.admin.dao.TunnelRepository;
+import io.github.jiangood.docker.admin.dao.TunnelClientRepository;
 import io.github.jiangood.docker.admin.entity.App;
 import io.github.jiangood.docker.admin.entity.Host;
-import io.github.jiangood.docker.admin.entity.Tunnel;
-import io.github.jiangood.docker.admin.entity.TunnelNode;
-import io.github.jiangood.docker.admin.entity.TunnelSetting;
-import io.github.jiangood.docker.sdk.engine.DockerClientManager;
-import io.github.jiangood.openadmin.framework.data.BaseService;
-import io.github.jiangood.openadmin.util.BusinessException;
+import io.github.jiangood.docker.admin.entity.TunnelClient;
 import jakarta.annotation.Resource;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.io.IOUtils;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.Assert;
 
-import java.net.URI;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -32,444 +23,427 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
-import static io.github.jiangood.docker.admin.service.TunnelDeployService.ACTION_DELETE_NODE;
-import static io.github.jiangood.docker.admin.service.TunnelDeployService.ACTION_DEPLOY_ALL_FRPC;
-import static io.github.jiangood.docker.admin.service.TunnelDeployService.ACTION_DEPLOY_FRPC;
-import static io.github.jiangood.docker.admin.service.TunnelDeployService.ACTION_REDEPLOY_FRPC;
-import static io.github.jiangood.docker.admin.service.TunnelDeployService.ACTION_REMOVE_FRPC;
-import static io.github.jiangood.docker.admin.service.TunnelDeployService.ROLE_FRPC;
-import static io.github.jiangood.docker.admin.service.TunnelDeployService.roleLabels;
-
 /**
- * 隧道（frp）：平台保存连接配置、按节点生成 frpc 配置并重建容器，同时维护落库的隧道（子域名 → 应用端口）。
+ * 隧道（http-tunnel）：平台通过每个客户端自身的隧道管理 API（{@code --api-port}）维护隧道。
  * <p>
- * frps 服务端不由平台下发，页面只提供配置与 docker 部署命令，由用户在主机上手动部署；
- * 新增 / 修改 / 删除隧道后会自动重新生成所属节点的 frpc.toml 并重建该 frpc 容器。
+ * 客户端进程运行在各业务主机上，平台只保存其名称、令牌、API 地址与域名，不部署容器、不生成配置。
+ * 应用在详情页「隧道」标签里显式选择客户端，完整域名 = 域名前缀 + "." + 客户端域名；
+ * 目标地址在客户端主机上解析（{@code 127.0.0.1:<主机端口>}）。
  */
 @Service
 @Slf4j
 @RequiredArgsConstructor
-public class TunnelService extends BaseService<TunnelSetting> {
+public class TunnelService {
 
-    private final TunnelNodeRepository nodeRepository;
-    private final TunnelRepository tunnelRepository;
+    private final TunnelClientRepository clientRepository;
 
-    @Resource
-    AppRepository appRepository;
+    private final AppRepository appRepository;
 
     @Resource
-    HostService hostService;
+    HttpTunnelApiClient api;
 
-    @Resource
-    FrpConfigManager confManager;
-
-    @Resource
-    TunnelDeployService deployService;
-
-    @Resource
-    DockerClientManager dockerManager;
-
-    @Resource
-    RegistryService registryService;
-
-    // ------------------------------------------------------------------ 设置
+    // ------------------------------------------------------------------ 客户端
 
     /**
-     * 生效的隧道设置（数据库中的最新一条）。
+     * 客户端列表：本地登记 + 尽力读取客户端实时状态。
      */
-    public TunnelSetting getSetting() {
-        List<TunnelSetting> list = findAll(Sort.by(Sort.Direction.DESC, "updateTime"));
-        return list.isEmpty() ? null : list.get(0);
-    }
-
-    public TunnelSetting requireSetting() {
-        TunnelSetting s = getSetting();
-        Assert.notNull(s, "尚未配置隧道，请先在【隧道管理】页面填写配置并保存");
-        return s;
-    }
-
-    public TunnelSetting requireConfiguredSetting() {
-        TunnelSetting s = requireSetting();
-        Assert.isTrue(s.configured(), "隧道设置不完整：请先在【服务端】填写连接地址与域名后缀");
-        return s;
-    }
-
-    /**
-     * 页面初始化：设置（token 不回传）+ frps 配置与手动部署命令。
-     * <p>
-     * frps 由用户在主机上手动部署，这里返回真实的 {@code frps.toml}（含 token）与
-     * docker 命令；{@code frpsConf} 仍是 token 掩码的预览，供【服务端】页签使用。
-     */
-    public Map<String, Object> info() {
-        TunnelSetting s = getSetting();
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("setting", s);
-        data.put("frpsConf", s == null ? null : confManager.frpsConfForView(s));
-        data.put("frpsToml", s == null ? null : confManager.frpsConf(s));
-        data.put("frpsCommand", s == null ? null : frpsDockerCommand(s));
-        return data;
-    }
-
-    /**
-     * 手动部署 frps 的 docker 命令：配置以 {@code -v} 挂载宿主机上的 {@code frps.toml}，
-     * 与平台部署 frpc 时保持一致的 host 网络与重启策略。
-     */
-    private String frpsDockerCommand(TunnelSetting s) {
-        String conf = FrpConfigManager.FRPS_CONF;
-        return "docker run -d \\\n"
-                + "  --name " + TunnelSetting.FRPS_CONTAINER + " \\\n"
-                + "  --restart always \\\n"
-                + "  --network host \\\n"
-                + "  -v " + conf + ":" + conf + ":ro \\\n"
-                + "  " + s.frpsImage();
-    }
-
-    /**
-     * 保存隧道行为配置（连接地址 / 域名后缀 / 端口 / token 等）。
-     * <p>
-     * frps 由用户手动部署，此处只保存生成 frps.toml 所需的连接参数；
-     * frpc 的客户端镜像由 {@link #saveDeployFrpc} 单独维护，两者互不覆盖。
-     */
-    @Transactional
-    public TunnelSetting saveSetting(TunnelSetting input) {
-        Assert.notNull(input, "参数不能为空");
-        Assert.hasText(input.frpsAddr(), "请填写连接地址");
-        Assert.hasText(input.subDomainHost(), "请填写域名后缀");
-
-        TunnelSetting target = current();
-        target.setFrpsAddr(StrUtil.trim(input.getFrpsAddr()));
-        target.setBindPort(input.getBindPort());
-        target.setVhostHttpPort(input.getVhostHttpPort());
-        target.setSubDomainHost(StrUtil.trim(input.getSubDomainHost()));
-        target.setTransportTls(input.getTransportTls());
-        if (StrUtil.isNotBlank(input.getAuthToken())) {
-            target.setAuthToken(input.getAuthToken().trim());
-        } else if (StrUtil.isBlank(target.getAuthToken())) {
-            target.setAuthToken(RandomUtil.randomString(24));
-        }
-        return save(target);
-    }
-
-    /**
-     * 保存 frpc 部署参数（客户端镜像）。
-     */
-    @Transactional
-    public TunnelSetting saveDeployFrpc(TunnelSetting input) {
-        Assert.notNull(input, "参数不能为空");
-        TunnelSetting target = current();
-        target.setFrpcImage(StrUtil.trim(input.getFrpcImage()));
-        return save(target);
-    }
-
-    private TunnelSetting current() {
-        TunnelSetting old = getSetting();
-        return old != null ? old : new TunnelSetting();
-    }
-
-    // ------------------------------------------------------------------ 部署（异步，返回 logId）
-
-    public String deployFrpc(String nodeId) {
-        requireConfiguredSetting();
-        requireNode(nodeId);
-        return deployService.submit(ACTION_DEPLOY_FRPC, nodeId);
-    }
-
-    public String removeFrpc(String nodeId) {
-        requireNode(nodeId);
-        return deployService.submit(ACTION_REMOVE_FRPC, nodeId);
-    }
-
-    /**
-     * 按最新设置重建全部节点的 frpc（改了 token / 连接地址 / 端口后用）。
-     */
-    public String rebuildAllFrpc() {
-        requireConfiguredSetting();
-        return deployService.submit(ACTION_DEPLOY_ALL_FRPC, null);
-    }
-
-    // ------------------------------------------------------------------ 节点
-
-    /**
-     * 节点列表：含主机、容器实时状态与隧道数量。
-     */
-    public List<Map<String, Object>> listNodes() {
+    public List<Map<String, Object>> listClients() {
         List<Map<String, Object>> list = new ArrayList<>();
-        for (TunnelNode node : nodeRepository.findAll(Sort.by(Sort.Direction.ASC, "createTime"))) {
-            Map<String, Object> item = new LinkedHashMap<>();
-            item.put("id", node.getId());
-            item.put("name", node.getName());
-            item.put("remark", node.getRemark());
-            item.put("hostId", node.getHost() == null ? null : node.getHost().getId());
-            item.put("hostName", node.getHost() == null ? null : node.getHost().getName());
-            item.put("containerId", node.getContainerId());
-            item.put("lastDeployTime", node.getLastDeployTime());
-            item.put("lastError", node.getLastError());
-            item.put("tunnelCount", tunnelRepository.findAllByNode_Id(node.getId()).size());
-            item.put("state", node.getHost() == null ? null
-                    : containerState(node.getHost(), roleLabels(ROLE_FRPC, node.getId())));
-            list.add(item);
+        for (TunnelClient c : clientRepository.findAll(Sort.by(Sort.Direction.ASC, "name"))) {
+            list.add(clientItem(c));
         }
         return list;
     }
 
-    @Transactional
-    public TunnelNode saveNode(TunnelNode input) {
-        Assert.notNull(input, "参数不能为空");
-        String name = StrUtil.trim(input.getName());
-        Assert.hasText(name, "请填写节点名称");
-        String hostId = input.getHost() == null ? null : input.getHost().getId();
-        Assert.hasText(hostId, "请选择主机");
-        Host host = hostService.findById(hostId).orElse(null);
-        Assert.notNull(host, "主机不存在");
+    private Map<String, Object> clientItem(TunnelClient c) {
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("id", c.getId());
+        item.put("name", c.getName());
+        item.put("apiUrl", c.getApiUrl());
+        item.put("domain", c.getDomain());
+        item.put("remark", c.getRemark());
+        item.put("hasToken", StrUtil.isNotBlank(c.getToken()));
+        item.put("tokenMasked", c.getTokenMasked());
+        item.put("configured", c.configured());
 
-        boolean dup = StrUtil.isBlank(input.getId())
-                ? nodeRepository.existsByName(name)
-                : nodeRepository.existsByNameAndIdNot(name, input.getId());
-        Assert.isTrue(!dup, "节点名称已存在：" + name);
-
-        TunnelNode node = StrUtil.isBlank(input.getId()) ? new TunnelNode() : requireNode(input.getId());
-        node.setName(name);
-        node.setHost(host);
-        node.setRemark(StrUtil.trim(input.getRemark()));
-        return nodeRepository.save(node);
+        JsonNode status = null;
+        String statusError = null;
+        if (c.configured()) {
+            try {
+                status = api.status(c);
+            } catch (Exception e) {
+                statusError = e.getMessage();
+            }
+        }
+        item.put("connected", status == null ? null : status.path("connected").asBoolean(false));
+        item.put("tunnelCount", status == null ? null : status.path("tunnels").asInt(0));
+        item.put("statusError", statusError);
+        return item;
     }
 
     /**
-     * 删除节点：连同该节点的隧道与 frpc 容器一起清理（异步，返回 logId）。
+     * 新增 / 修改客户端（仅本地登记，客户端进程由用户自行部署）。
      */
-    public String deleteNode(String id) {
-        requireNode(id);
-        return deployService.submit(ACTION_DELETE_NODE, id);
+    @Transactional
+    public TunnelClient saveClient(TunnelClient input) {
+        Assert.notNull(input, "参数不能为空");
+        boolean create = StrUtil.isBlank(input.getId());
+        TunnelClient c;
+        if (create) {
+            String name = StrUtil.trim(input.getName());
+            Assert.hasText(name, "请填写客户端名称");
+            assertClientName(name);
+            Assert.isTrue(!clientRepository.existsByName(name), "客户端名称已存在：" + name);
+            c = new TunnelClient();
+            c.setName(name);
+        } else {
+            c = requireClient(input.getId());
+        }
+
+        Assert.hasText(input.getApiUrl(), "请填写客户端 API 地址");
+        c.setApiUrl(StrUtil.trim(input.getApiUrl()));
+        c.setDomain(StrUtil.trimToNull(input.getDomain()));
+        c.setRemark(StrUtil.trimToNull(input.getRemark()));
+        if (StrUtil.isNotBlank(input.getToken())) {
+            c.setToken(input.getToken().trim());
+        } else if (StrUtil.isBlank(c.getToken())) {
+            c.setToken(RandomUtil.randomString(32));
+        }
+        return clientRepository.save(c);
     }
 
-    private TunnelNode requireNode(String nodeId) {
-        Assert.hasText(nodeId, "请选择节点");
-        TunnelNode node = nodeRepository.findById(nodeId).orElse(null);
-        Assert.notNull(node, "节点不存在");
-        return node;
+    /**
+     * 删除客户端：先尽力删除其在客户端侧的隧道，再清理引用它的应用（关闭隧道并解除引用），最后删本地登记。
+     */
+    @Transactional
+    public void deleteClient(String id) {
+        TunnelClient c = requireClient(id);
+
+        if (c.configured()) {
+            try {
+                JsonNode arr = api.listTunnels(c);
+                if (arr != null && arr.isArray()) {
+                    for (JsonNode t : arr) {
+                        String domain = text(t, "name");
+                        if (StrUtil.isNotBlank(domain)) {
+                            try {
+                                api.deleteTunnel(c, domain);
+                            } catch (Exception e) {
+                                log.warn("删除客户端 {} 的隧道 {} 失败：{}", c.getName(), domain, e.getMessage());
+                            }
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("读取客户端 {} 的隧道失败：{}", c.getName(), e.getMessage());
+            }
+        }
+
+        List<App> affected = appRepository.findAllByTunnelClient_Id(c.getId());
+        for (App app : affected) {
+            app.setTunnelEnabled(false);
+            app.setTunnelClient(null);
+        }
+        appRepository.saveAll(affected);
+        appRepository.flush();
+        clientRepository.deleteById(c.getId());
+    }
+
+    /**
+     * 测试客户端管理 API 连通性，返回其 {@code /api/status}。
+     */
+    public JsonNode testClient(String id) {
+        TunnelClient c = requireClient(id);
+        Assert.isTrue(c.configured(), "客户端「" + c.getName() + "」未配置 API 地址或令牌");
+        return api.status(c);
+    }
+
+    private TunnelClient requireClient(String id) {
+        Assert.hasText(id, "缺少客户端 id");
+        TunnelClient c = clientRepository.findById(id).orElse(null);
+        Assert.notNull(c, "客户端不存在");
+        return c;
+    }
+
+    private static void assertClientName(String name) {
+        Assert.isTrue(name.matches("[A-Za-z0-9][A-Za-z0-9._-]{0,63}"),
+                "客户端名称只能包含字母、数字、点、下划线和短横线：" + name);
     }
 
     // ------------------------------------------------------------------ 隧道
 
+    /**
+     * 全部隧道（逐个客户端调用其管理 API 聚合：域名 → 目标地址）。
+     * <p>
+     * 隧道由应用详情页的「隧道」标签维护，这里只提供只读列表。
+     */
     public List<Map<String, Object>> listTunnels() {
-        TunnelSetting s = getSetting();
         List<Map<String, Object>> list = new ArrayList<>();
-        for (Tunnel t : tunnelRepository.findAll(Sort.by(Sort.Direction.DESC, "createTime"))) {
-            Map<String, Object> item = new LinkedHashMap<>();
-            item.put("id", t.getId());
-            item.put("name", t.getName());
-            item.put("subdomain", t.getSubdomain());
-            item.put("nodeId", t.getNode() == null ? null : t.getNode().getId());
-            item.put("nodeName", t.getNode() == null ? null : t.getNode().getName());
-            item.put("appId", t.getApp() == null ? null : t.getApp().getId());
-            item.put("appName", t.getApp() == null ? null : t.getApp().getName());
-            item.put("localIp", t.getLocalIp());
-            item.put("localPort", t.getLocalPort());
-            item.put("scheme", StrUtil.blankToDefault(t.getScheme(), "http"));
-            item.put("remark", t.getRemark());
-            item.put("url", accessUrl(s, t));
-            list.add(item);
+        for (TunnelClient c : clientRepository.findAll(Sort.by(Sort.Direction.ASC, "name"))) {
+            if (!c.configured()) {
+                continue;
+            }
+            try {
+                JsonNode arr = api.listTunnels(c);
+                if (arr == null || !arr.isArray()) {
+                    continue;
+                }
+                for (JsonNode t : arr) {
+                    String domain = text(t, "name");
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("client", c.getName());
+                    item.put("domain", domain);
+                    item.put("localAddr", text(t, "local_addr"));
+                    item.put("url", domainUrl(domain));
+                    list.add(item);
+                }
+            } catch (Exception e) {
+                log.warn("读取客户端 {} 的隧道失败：{}", c.getName(), e.getMessage());
+            }
         }
         return list;
     }
 
     /**
-     * 新增隧道：新增后自动重新生成所属节点的 frpc 配置并重建容器。
-     * <p>
-     * 不加 {@code @Transactional}：先让保存提交，异步重建任务才能读到这条新隧道。
-     *
-     * @return 部署任务的 logId
+     * 新增 / 修改隧道（PUT 幂等）。域名在服务端全局唯一。
      */
-    public String addTunnel(String nodeId, String appId, Integer port, String subdomain, String remark) {
-        TunnelSetting s = requireConfiguredSetting();
-        TunnelNode node = requireNode(nodeId);
-        App app = requireApp(appId);
-
-        String sub = StrUtil.blankToDefault(slug(subdomain), slug(app.getName()));
-        assertSubdomain(sub);
-        assertSubdomainFree(sub, null);
-
-        int hostPort = resolveHostPort(app, port);
-        String localIp = requireHostAddress(app.getHost());
-
-        Tunnel t = new Tunnel();
-        t.setName(sub);
-        t.setNode(node);
-        t.setApp(app);
-        t.setSubdomain(sub);
-        t.setLocalIp(localIp);
-        t.setLocalPort(hostPort);
-        t.setScheme("http");
-        t.setRemark(StrUtil.blankToDefault(StrUtil.trim(remark), app.getName()));
-        tunnelRepository.save(t);
-        log.info("新增隧道 {} -> {}:{}（节点 {}）", sub + "." + s.subDomainHost(), localIp, hostPort, node.getName());
-        return deployService.submit(ACTION_REDEPLOY_FRPC, node.getId());
+    public void putTunnel(TunnelClient client, String domain, String localAddr) {
+        Assert.notNull(client, "缺少客户端");
+        Assert.isTrue(client.configured(), "客户端「" + client.getName() + "」未配置 API 地址或令牌");
+        Assert.hasText(localAddr, "请填写目标地址");
+        api.putTunnel(client, normalizeDomain(domain), StrUtil.trim(localAddr));
     }
 
+    // ------------------------------------------------------------------ 应用隧道
+
     /**
-     * 修改隧道（子域名 / 端口 / 备注）。
+     * 应用详情页「隧道」标签所需的元数据。
      */
-    public String editTunnel(String id, String subdomain, Integer port, String remark) {
-        Assert.hasText(id, "缺少隧道 id");
-        Tunnel t = tunnelRepository.findById(id).orElse(null);
-        Assert.notNull(t, "隧道不存在");
+    public Map<String, Object> appTunnelMeta(String appId) {
+        App app = requireApp(appId);
+        Host host = app.getHost();
 
-        String sub = StrUtil.blankToDefault(slug(subdomain), t.getSubdomain());
-        assertSubdomain(sub);
-        assertSubdomainFree(sub, id);
-        t.setSubdomain(sub);
-        t.setName(sub);
-        t.setRemark(StrUtil.trim(remark));
-
-        if (t.getApp() != null) {
-            t.setLocalIp(requireHostAddress(t.getApp().getHost()));
-            // 编辑时端口直接填主机侧的目标端口，不再按容器端口二次换算
-            if (port != null) {
-                t.setLocalPort(port);
-            }
+        String prefix = app.getTunnelPrefix();
+        if (StrUtil.isBlank(prefix)) {
+            prefix = slug(app.getName());
         }
-        tunnelRepository.save(t);
-        return t.getNode() == null ? null : deployService.submit(ACTION_REDEPLOY_FRPC, t.getNode().getId());
-    }
 
-    /**
-     * 删除隧道并重建所属节点的 frpc。
-     */
-    public String deleteTunnel(String id) {
-        Assert.hasText(id, "缺少隧道 id");
-        Tunnel t = tunnelRepository.findById(id).orElse(null);
-        Assert.notNull(t, "隧道不存在");
-        String nodeId = t.getNode() == null ? null : t.getNode().getId();
-        tunnelRepository.delete(t);
-        return nodeId == null ? null : deployService.submit(ACTION_REDEPLOY_FRPC, nodeId);
-    }
+        TunnelClient selected = app.getTunnelClient();
+        String error = null;
+        if (clientRepository.count() == 0) {
+            error = "请先在【隧道管理 - 客户端】新增客户端";
+        } else if (selected != null && StrUtil.isBlank(selected.getDomain())) {
+            error = "隧道客户端「" + selected.getName() + "」未配置域名";
+        }
 
-    /**
-     * 隧道表单所需的元数据：应用主机地址、可选端口、默认子域名。
-     */
-    public Map<String, Object> appMeta(String appId) {
-        App app = requireApp(appId);
+        List<Map<String, Object>> clients = new ArrayList<>();
+        for (TunnelClient c : clientRepository.findAll(Sort.by(Sort.Direction.ASC, "name"))) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("id", c.getId());
+            item.put("name", c.getName());
+            item.put("domain", c.getDomain());
+            item.put("configured", c.configured());
+            clients.add(item);
+        }
+
+        String fullDomain = (StrUtil.isNotBlank(prefix) && selected != null
+                && StrUtil.isNotBlank(selected.getDomain()))
+                ? prefix + "." + selected.getDomain() : null;
+
         Map<String, Object> data = new LinkedHashMap<>();
-        data.put("id", app.getId());
-        data.put("name", app.getName());
-        data.put("hostName", app.getHost() == null ? null : app.getHost().getName());
-        data.put("hostAddress", hostAddress(app.getHost()));
-        data.put("defaultSubdomain", slug(app.getName()));
-
-        List<Map<String, Object>> ports = new ArrayList<>();
-        App.AppConfig cfg = app.getConfig();
-        String mode = cfg == null ? "bridge" : cfg.getNetworkMode();
-        if (cfg != null && cfg.getPorts() != null) {
-            for (App.PortBinding p : cfg.getPorts()) {
-                if (p == null || p.getPrivatePort() == null) {
-                    continue;
-                }
-                boolean host = "host".equalsIgnoreCase(mode);
-                Integer hostPort = host ? p.getPrivatePort() : p.getPublicPort();
-                Map<String, Object> item = new LinkedHashMap<>();
-                item.put("privatePort", p.getPrivatePort());
-                item.put("publicPort", p.getPublicPort());
-                item.put("hostPort", hostPort);
-                item.put("protocol", StrUtil.blankToDefault(p.getProtocol(), "tcp").toUpperCase(Locale.ROOT));
-                item.put("label", "容器 " + p.getPrivatePort()
-                        + (hostPort != null ? " → 主机 " + hostPort : "（未映射主机端口）"));
-                ports.add(item);
-            }
-        }
-        data.put("ports", ports);
-        data.put("networkMode", mode);
+        data.put("enabled", Boolean.TRUE.equals(app.getTunnelEnabled()));
+        data.put("prefix", prefix);
+        data.put("clientId", selected == null ? null : selected.getId());
+        data.put("client", selected == null ? null : selected.getName());
+        data.put("domain", selected == null ? null : selected.getDomain());
+        data.put("fullDomain", fullDomain);
+        data.put("url", fullDomain == null ? null : domainUrl(fullDomain));
+        data.put("hostName", host == null ? null : host.getName());
+        data.put("port", app.getTunnelPort());
+        data.put("ports", portOptions(app));
+        data.put("clients", clients);
+        data.put("configured", error == null);
+        data.put("configError", error);
         return data;
     }
 
-    private App requireApp(String appId) {
-        Assert.hasText(appId, "请选择应用");
-        App app = appRepository.findById(appId).orElse(null);
-        Assert.notNull(app, "应用不存在");
-        return app;
-    }
+    /**
+     * 应用隧道开关：开启时按 域名前缀 + 所选客户端域名 拼出完整域名并写入客户端，
+     * 关闭、换客户端或改前缀时清理旧映射。
+     */
+    @Transactional
+    public App saveAppTunnel(String appId, boolean enabled, String clientId, String prefix, Integer port) {
+        App app = requireApp(appId);
 
-    private void assertSubdomain(String sub) {
-        Assert.isTrue(StrUtil.isNotBlank(sub), "子域名不能为空（应用名称为中文时请手动填写）");
-        Assert.isTrue(sub.matches("[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?"),
-                "子域名只能包含小写字母、数字和短横线：" + sub);
-    }
+        if (enabled) {
+            Assert.hasText(clientId, "请选择隧道客户端");
+            TunnelClient client = requireClient(clientId);
+            Assert.isTrue(client.configured(), "客户端「" + client.getName() + "」未配置 API 地址或令牌");
+            Assert.hasText(client.getDomain(), "隧道客户端「" + client.getName() + "」未配置域名");
+            String p = slug(StrUtil.blankToDefault(StrUtil.trim(prefix), app.getName()));
+            Assert.hasText(p, "请填写域名前缀");
+            int hostPort = resolveHostPort(app, port);
+            String fullDomain = normalizeDomain(p + "." + client.getDomain());
 
-    private void assertSubdomainFree(String sub, String excludeId) {
-        boolean exists = StrUtil.isBlank(excludeId)
-                ? tunnelRepository.existsBySubdomainIgnoreCase(sub)
-                : tunnelRepository.existsBySubdomainIgnoreCaseAndIdNot(sub, excludeId);
-        Assert.isTrue(!exists, "子域名已被占用：" + sub);
-    }
+            cleanupApplied(app, client, fullDomain);
+            api.putTunnel(client, fullDomain, "127.0.0.1:" + hostPort);
 
-    private String accessUrl(TunnelSetting s, Tunnel t) {
-        if (s == null || StrUtil.isBlank(s.subDomainHost()) || StrUtil.isBlank(t.getSubdomain())) {
-            return null;
+            app.setTunnelEnabled(true);
+            app.setTunnelPrefix(p);
+            app.setTunnelPort(port);
+            app.setTunnelClient(client);
+        } else {
+            cleanupApplied(app, null, null);
+            app.setTunnelEnabled(false);
+            app.setTunnelClient(null);
         }
-        String host = t.getSubdomain() + "." + s.subDomainHost();
-        return s.vhostHttpPort() == 80 ? "http://" + host : "http://" + host + ":" + s.vhostHttpPort();
+        return appRepository.save(app);
     }
-
-    // ------------------------------------------------------------------ 工具
 
     /**
-     * 容器实时状态（running / exited / created），未部署或查询失败返回 null。
+     * 清理应用上一次下发到客户端的隧道映射。
+     * 换客户端时删除旧客户端的映射；同一客户端改前缀时删除旧域名；域名未变则跳过（PUT 幂等覆盖）。
      */
-    private String containerState(Host host, Map<String, String> labelFilter) {
-        if (host == null) {
-            return null;
+    private void cleanupApplied(App app, TunnelClient target, String newDomain) {
+        if (!Boolean.TRUE.equals(app.getTunnelEnabled())) {
+            return;
         }
-        DockerClient client = null;
+        TunnelClient old = app.getTunnelClient();
+        String oldDomain = appliedDomain(app, old);
+        if (oldDomain == null) {
+            return;
+        }
+        boolean sameClient = target != null && old != null && StrUtil.equals(target.getId(), old.getId());
+        boolean sameDomain = newDomain != null && oldDomain.equalsIgnoreCase(newDomain);
+        if (sameClient && sameDomain) {
+            return;
+        }
+        if (old != null && old.configured()) {
+            try {
+                api.deleteTunnel(old, oldDomain);
+            } catch (Exception e) {
+                log.warn("清理应用 {} 的隧道 {} 失败：{}", app.getName(), oldDomain, e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * 删除应用时清理其隧道（尽力而为，失败只记日志，不阻断删除）。
+     */
+    public void removeAppTunnel(App app) {
+        if (app == null || !Boolean.TRUE.equals(app.getTunnelEnabled())) {
+            return;
+        }
         try {
-            client = getClient(host);
-            List<Container> list = client.listContainersCmd()
-                    .withShowAll(true)
-                    .withLabelFilter(labelFilter)
-                    .exec();
-            return list.isEmpty() ? null : list.get(0).getState();
+            TunnelClient client = app.getTunnelClient();
+            String old = appliedDomain(app, client);
+            if (old != null && client != null && client.configured()) {
+                api.deleteTunnel(client, old);
+            }
         } catch (Exception e) {
-            log.debug("查询隧道容器状态失败: {}", e.getMessage());
-            return null;
-        } finally {
-            IOUtils.closeQuietly(client);
+            log.warn("删除应用 {} 的隧道失败：{}", app.getName(), e.getMessage());
         }
     }
 
-    private DockerClient getClient(Host host) {
-        io.github.jiangood.docker.admin.entity.Registry registry = registryService.getEffective();
-        return registry != null ? dockerManager.getClient(host, registry) : dockerManager.getClient(host);
+    /**
+     * 依据应用已保存的前缀与客户端域名，重建上次下发的完整域名。
+     */
+    private static String appliedDomain(App app, TunnelClient client) {
+        if (!Boolean.TRUE.equals(app.getTunnelEnabled())
+                || StrUtil.isBlank(app.getTunnelPrefix())
+                || client == null || StrUtil.isBlank(client.getDomain())) {
+            return null;
+        }
+        return normalizeDomain(app.getTunnelPrefix() + "." + client.getDomain());
     }
 
     /**
-     * 应用实际暴露到主机侧的端口：bridge 模式取主机映射端口，host 模式取容器端口。
+     * 应用实际暴露到主机侧的端口：bridge 取主机映射端口，host 取容器端口。
      */
-    public int resolveHostPort(App app, Integer containerPort) {
+    private int resolveHostPort(App app, Integer containerPort) {
         App.AppConfig cfg = app.getConfig();
         Assert.notNull(cfg, "应用未配置容器参数");
-        String mode = cfg.getNetworkMode();
-        Assert.isTrue(!"none".equalsIgnoreCase(mode), "应用网络模式为 none，无法暴露端口");
+        Assert.isTrue(!"none".equalsIgnoreCase(cfg.getNetworkMode()), "应用网络模式为 none，无法暴露端口");
         Assert.notNull(containerPort, "请选择要暴露的端口");
-        boolean bridge = StrUtil.isBlank(mode) || "bridge".equalsIgnoreCase(mode);
+        boolean host = "host".equalsIgnoreCase(cfg.getNetworkMode());
         if (cfg.getPorts() != null) {
             for (App.PortBinding p : cfg.getPorts()) {
                 if (p == null || !Objects.equals(p.getPrivatePort(), containerPort)) {
                     continue;
                 }
-                if (bridge) {
-                    if (p.getPublicPort() == null) {
-                        throw new BusinessException("端口 " + containerPort
-                                + " 未映射到主机端口，隧道无法访问；请先在【容器配置】里填写主机端口");
-                    }
-                    return p.getPublicPort();
+                if (host) {
+                    return containerPort;
                 }
-                return containerPort;
+                Assert.notNull(p.getPublicPort(),
+                        "端口 " + containerPort + " 未映射到主机端口，隧道无法访问；请先在【容器配置】里填写主机端口");
+                return p.getPublicPort();
             }
         }
-        // 手输的端口不在应用端口列表里：按主机侧端口直接使用
         return containerPort;
     }
 
+    private List<Map<String, Object>> portOptions(App app) {
+        List<Map<String, Object>> ports = new ArrayList<>();
+        App.AppConfig cfg = app.getConfig();
+        if (cfg == null || cfg.getPorts() == null) {
+            return ports;
+        }
+        boolean host = "host".equalsIgnoreCase(cfg.getNetworkMode());
+        for (App.PortBinding p : cfg.getPorts()) {
+            if (p == null || p.getPrivatePort() == null) {
+                continue;
+            }
+            Integer hostPort = host ? p.getPrivatePort() : p.getPublicPort();
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("privatePort", p.getPrivatePort());
+            item.put("publicPort", p.getPublicPort());
+            item.put("hostPort", hostPort);
+            item.put("protocol", StrUtil.blankToDefault(p.getProtocol(), "tcp").toUpperCase(Locale.ROOT));
+            item.put("label", "容器 " + p.getPrivatePort()
+                    + (hostPort != null ? " → 主机 " + hostPort : "（未映射主机端口）"));
+            ports.add(item);
+        }
+        return ports;
+    }
+
+    private App requireApp(String appId) {
+        Assert.hasText(appId, "缺少应用 id");
+        App app = appRepository.findById(appId).orElse(null);
+        Assert.notNull(app, "应用不存在");
+        return app;
+    }
+
+    // ------------------------------------------------------------------ 工具
+
     /**
-     * 子域名默认取应用名称（按 DNS label 规范化）。
+     * 域名规范化：去掉协议头与路径、转小写、去尾点，并做基本格式校验。
+     */
+    public static String normalizeDomain(String domain) {
+        Assert.hasText(domain, "域名不能为空");
+        String d = domain.trim().toLowerCase(Locale.ROOT);
+        d = StrUtil.removePrefix(d, "http://");
+        d = StrUtil.removePrefix(d, "https://");
+        int slash = d.indexOf('/');
+        if (slash >= 0) {
+            d = d.substring(0, slash);
+        }
+        d = StrUtil.removeSuffix(d, ".");
+        Assert.isTrue(d.matches("[a-z0-9]([a-z0-9.-]*[a-z0-9])?"), "域名格式不正确：" + domain);
+        return d;
+    }
+
+    /**
+     * 按域名拼出隧道的访问地址（HTTP）。
+     */
+    public static String domainUrl(String domain) {
+        if (StrUtil.isBlank(domain)) {
+            return null;
+        }
+        return "http://" + domain;
+    }
+
+    /**
+     * 域名前缀默认取应用名称（按 DNS label 规范化）。
      */
     public static String slug(String name) {
         if (StrUtil.isBlank(name)) {
@@ -483,33 +457,11 @@ public class TunnelService extends BaseService<TunnelSetting> {
         return s;
     }
 
-    /**
-     * 主机地址（隧道目标所在的地址）。
-     */
-    public static String hostAddress(Host host) {
-        if (host == null) {
+    private static String text(JsonNode node, String field) {
+        if (node == null) {
             return null;
         }
-        if (host.isSsh()) {
-            return host.getSshHost();
-        }
-        String dh = host.getDockerHost();
-        if (StrUtil.isBlank(dh)) {
-            // 本机（默认端点）时，从宿主机的角度即 127.0.0.1
-            return Host.TYPE_LOCAL.equalsIgnoreCase(host.getConnectionType()) ? "127.0.0.1" : null;
-        }
-        try {
-            URI uri = URI.create(dh.contains("://") ? dh : "tcp://" + dh);
-            return uri.getHost();
-        } catch (Exception e) {
-            return null;
-        }
+        JsonNode value = node.get(field);
+        return value == null || value.isNull() ? null : value.asText();
     }
-
-    private static String requireHostAddress(Host host) {
-        String addr = hostAddress(host);
-        Assert.hasText(addr, "应用所在主机没有可用的地址，无法作为隧道目标");
-        return addr;
-    }
-
 }

@@ -6,6 +6,7 @@ import io.github.jiangood.openadmin.framework.perm.HasPermission;
 import io.github.jiangood.docker.admin.dto.ContainerVo;
 import io.github.jiangood.docker.admin.entity.App;
 import io.github.jiangood.docker.admin.service.AppService;
+import io.github.jiangood.docker.admin.service.TunnelService;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import io.github.jiangood.openadmin.util.dto.AjaxResult;
 import io.github.jiangood.openadmin.util.dto.Option;
@@ -41,6 +42,9 @@ public class AppController {
     @Resource
     private AppService service;
 
+    @Resource
+    private TunnelService tunnelService;
+
     @HasPermission("app:view")
     @RequestMapping("list")
     public AjaxResult list(String searchText, String hostId, String orgId, @PageableDefault(sort = {"updateTime", "createTime"}, direction = Sort.Direction.DESC) Pageable pageable, HttpSession session) {
@@ -71,7 +75,6 @@ public class AppController {
 
         String url = LogUrlTool.getLogViewUrl(id);
         app.setLogUrl(url);
-        service.fillImageUrl(app);
         return AjaxResult.ok().data(app);
     }
 
@@ -82,6 +85,28 @@ public class AppController {
         ContainerVo container = service.getContainerVo(app);
 
         return AjaxResult.ok().data(container);
+    }
+
+    /**
+     * 应用详情页「隧道」标签的元数据（当前配置、可选端口、默认前缀、可选客户端）。
+     */
+    @HasPermission("app:view")
+    @RequestMapping("tunnelMeta")
+    public AjaxResult tunnelMeta(String id) {
+        assertAppAccess(id);
+        return AjaxResult.ok().data(tunnelService.appTunnelMeta(id));
+    }
+
+    /**
+     * 配置应用隧道：完整域名 = 域名前缀 + "." + 所选客户端域名。
+     */
+    @HasPermission("app:tunnel")
+    @RequestMapping("updateTunnel")
+    public AjaxResult updateTunnel(String id, Boolean enabled, String clientId, String prefix, Integer port) {
+        assertAppAccess(id);
+        boolean on = Boolean.TRUE.equals(enabled);
+        App app = tunnelService.saveAppTunnel(id, on, clientId, prefix, port);
+        return AjaxResult.ok().msg(on ? "隧道已开启" : "隧道已关闭").data(app);
     }
 
     /**
@@ -152,8 +177,8 @@ public class AppController {
     @RequestMapping("versions")
     public AjaxResult versions(String id) {
         App app = assertAppAccess(id);
-        String imageId = app.getImage() == null ? null : app.getImage().getId();
-        List<Option> options = service.getImageVersions(imageId).stream()
+        String imageUrl = app.getImageUrl();
+        List<Option> options = service.getImageVersions(imageUrl).stream()
                 .map(v -> new Option(v, v))
                 .toList();
         return AjaxResult.ok().data(options);

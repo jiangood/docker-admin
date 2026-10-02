@@ -51,6 +51,12 @@ public class ImageSyncService {
     RegistryService registryService;
 
     @Resource
+    ImageRepoService imageRepoService;
+
+    @Resource
+    ImageTagService imageTagService;
+
+    @Resource
     DockerClientManager dockerService;
 
     public boolean isRunning(String logId) {
@@ -141,6 +147,10 @@ public class ImageSyncService {
             }
             pushCmd.exec(new DefaultCallback<PushResponseItem>(logId)).awaitCompletion();
             log.info("注册中心同步成功: {}", registryImage.image());
+
+            // 登记镜像仓库与标签
+            imageRepoService.upsert(targetRepo, targetName, "SYNC", registry.getId(), null);
+            imageTagService.upsert(targetRepo, tag, "SYNC");
 
             if (!targetHostIds.isEmpty()) {
                 distribute(registryImage, targetHostIds);

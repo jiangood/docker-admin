@@ -44,10 +44,14 @@ public class App extends BaseEntity {
     Host host;
 
 
-    @Remark("镜像")
-    @ManyToOne
-    Image image;
+    /**
+     * 镜像url（不带 tag 的仓库地址），应用运行的镜像所属仓库。
+     */
+    @Remark("镜像地址")
+    @Column(length = 400)
+    String imageUrl;
 
+    @Remark("版本")
     @Column(length = 20)
     String imageTag;
 
@@ -59,12 +63,6 @@ public class App extends BaseEntity {
     @Transient
     String logUrl;
 
-    /**
-     * 镜像完整地址（registry/namespace/name），仅在返回给前端时填充，不持久化。
-     */
-    @Transient
-    String imageUrl;
-
 
     @Lob
     @Convert(converter = AppConfigConverter.class)
@@ -73,11 +71,35 @@ public class App extends BaseEntity {
     @Remark("备注")
     String remark;
 
+    /**
+     * 隧道（http-tunnel）：应用详情页「隧道」标签的配置。
+     * 只需开关、域名前缀、端口与所选客户端；完整域名 = 域名前缀 + "." + 所选客户端域名，
+     * 即 tunnelPrefix + "." + {@link TunnelClient#getDomain()}，因此这里不保存域名。
+     */
+    @Remark("隧道开关")
+    Boolean tunnelEnabled;
+
+    @Remark("域名前缀")
+    String tunnelPrefix;
+
+    @Remark("隧道端口")
+    Integer tunnelPort;
+
+    /**
+     * 应用隧道使用的客户端，在应用详情页显式选择。
+     */
+    @Remark("隧道客户端")
+    @ManyToOne
+    TunnelClient tunnelClient;
+
 
    @PrePersist
     public void prePersist() {
         if (autoDeploy == null) {
             autoDeploy = true;
+        }
+        if (tunnelEnabled == null) {
+            tunnelEnabled = false;
         }
         if (config == null) {
             config = new AppConfig();

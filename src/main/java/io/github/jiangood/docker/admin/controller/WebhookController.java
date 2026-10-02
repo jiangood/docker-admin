@@ -2,7 +2,7 @@ package io.github.jiangood.docker.admin.controller;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.github.jiangood.docker.admin.service.ImageService;
+import io.github.jiangood.docker.admin.service.ProjectService;
 import io.github.jiangood.openadmin.util.dto.AjaxResult;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -27,7 +27,7 @@ public class WebhookController {
     private static final String[] TAG_FIELDS = {"tag_name", "tag", "ref_name"};
 
     @Resource
-    private ImageService imageService;
+    private ProjectService projectService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -38,7 +38,7 @@ public class WebhookController {
             log.info("Webhook 未识别到 tag 推送，忽略。body={}", body);
             return AjaxResult.ok().msg("ignored");
         }
-        imageService.triggerByToken(token, tag);
+        projectService.triggerByToken(token, tag);
         return AjaxResult.ok().msg("构建已触发：" + tag);
     }
 

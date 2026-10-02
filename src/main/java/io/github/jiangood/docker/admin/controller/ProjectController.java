@@ -4,9 +4,9 @@ import cn.hutool.core.util.StrUtil;
 import io.github.jiangood.docker.admin.dto.BuildRequest;
 import io.github.jiangood.docker.admin.entity.App;
 import io.github.jiangood.docker.admin.entity.BuildLog;
-import io.github.jiangood.docker.admin.entity.Image;
+import io.github.jiangood.docker.admin.entity.Project;
 import io.github.jiangood.docker.admin.service.BuildLogService;
-import io.github.jiangood.docker.admin.service.ImageService;
+import io.github.jiangood.docker.admin.service.ProjectService;
 import io.github.jiangood.docker.base.OrgAccessTool;
 import io.github.jiangood.openadmin.util.dto.AjaxResult;
 import io.github.jiangood.openadmin.util.dto.Option;
@@ -28,37 +28,38 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 镜像：从代码仓库构建、带版本的镜像仓库。
+ * 项目：从代码仓库构建、产出带版本镜像的构建定义。
  */
 @RestController
-@RequestMapping("admin/image")
-public class ImageController {
+@RequestMapping("admin/project")
+public class ProjectController {
     @Resource
-    private ImageService service;
+    private ProjectService service;
 
     @Resource
     private BuildLogService logService;
 
 
-    @HasPermission("image:view")
+    @HasPermission("project:view")
     @RequestMapping("page")
     public AjaxResult page(String orgId, String searchText, @PageableDefault(direction = Sort.Direction.DESC, sort = {"updateTime"}) Pageable pageable) {
-        Spec<Image> q = buildQuery();
+        Spec<Project> q = buildQuery();
         q.orLike(searchText, "name", "remark");
-
 
         if (StrUtil.isNotEmpty(orgId)) {
             q.eq("sysOrg.id", orgId);
         }
 
-
-        Page<Image> page = this.service.findAll(q, pageable);
+        Page<Project> page = this.service.findAll(q, pageable);
+        for (Project project : page) {
+            service.fillImageUrl(project);
+        }
 
         return AjaxResult.ok().data(page);
     }
 
-    private Spec<Image> buildQuery() {
-        Spec<Image> q = Spec.of();
+    private Spec<Project> buildQuery() {
+        Spec<Project> q = Spec.of();
         q.or(qq -> {
             qq.isNull("sysOrg.id");
             qq.in("sysOrg.id", LoginTool.getOrgPermissions());
@@ -67,62 +68,63 @@ public class ImageController {
         return q;
     }
 
-    @HasPermission("image:save")
+    @HasPermission("project:save")
     @PostMapping({"save"})
-    public AjaxResult save(@RequestBody Image param, RequestBodyKeys updateFields) throws Exception {
-        // 修改已有镜像时校验数据权限（新增不受限）
+    public AjaxResult save(@RequestBody Project param, RequestBodyKeys updateFields) throws Exception {
+        // 修改已有项目时校验数据权限（新增不受限）
         if (StrUtil.isNotBlank(param.getId())) {
-            assertImageAccess(param.getId());
+            assertProjectAccess(param.getId());
         }
         if (param.getSysOrg() == null || param.getSysOrg().getId() == null) {
             param.setSysOrg(null);
         }
         param.setGitUrl(param.getGitUrl().trim());
         param.setName(param.getName().trim());
-        Image result = this.service.saveImage(param, updateFields);
+        Project result = this.service.saveProject(param, updateFields);
         return AjaxResult.ok().data(result.getId()).msg("保存成功");
     }
 
 
-    @HasPermission("image:delete")
+    @HasPermission("project:delete")
     @PostMapping({"delete"})
     public AjaxResult delete(String id) {
-        assertImageAccess(id);
-        this.service.deleteImage(id);
+        assertProjectAccess(id);
+        this.service.deleteProject(id);
         return AjaxResult.ok().msg("删除成功");
     }
 
-    @HasPermission("image:view")
+    @HasPermission("project:view")
     @RequestMapping("get")
     public AjaxResult get(String id) {
-        Image image = assertImageAccess(id);
-        return AjaxResult.ok().data(image);
+        Project project = assertProjectAccess(id);
+        service.fillImageUrl(project);
+        return AjaxResult.ok().data(project);
     }
 
     /**
-     * 按 id 读取镜像并校验组织数据权限，无权限时抛业务异常。
+     * 按 id 读取项目并校验组织数据权限，无权限时抛业务异常。
      */
-    private Image assertImageAccess(String id) {
-        Image image = service.findById(id).orElse(null);
-        Assert.notNull(image, "镜像不存在");
-        OrgAccessTool.assertAccess(image.getSysOrg());
-        return image;
+    private Project assertProjectAccess(String id) {
+        Project project = service.findById(id).orElse(null);
+        Assert.notNull(project, "项目不存在");
+        OrgAccessTool.assertAccess(project.getSysOrg());
+        return project;
     }
 
 
-    @HasPermission("image:build")
+    @HasPermission("project:build")
     @RequestMapping("build")
-    public AjaxResult build(BuildRequest buildRequest, @RequestParam String imageId, String buildHostId) throws IOException {
-        Image image = assertImageAccess(imageId);
+    public AjaxResult build(BuildRequest buildRequest, @RequestParam String projectId, String buildHostId) throws IOException {
+        Project project = assertProjectAccess(projectId);
         service.checkBuildImage();
-        Assert.isTrue(ImageService.isValidTag(buildRequest.getTag()), "tag 格式不正确，需形如 v1.0.1");
+        Assert.isTrue(ProjectService.isValidTag(buildRequest.getTag()), "tag 格式不正确，需形如 v1.0.1");
 
         // 更新最近时间,方便排序
-        image.setUpdateTime(LocalDateTime.now());
-        image = service.save(image);
+        project.setUpdateTime(LocalDateTime.now());
+        project = service.save(project);
 
-        buildRequest.setImageId(image.getId());
-        buildRequest.setDockerfile(image.getDockerfile());
+        buildRequest.setProjectId(project.getId());
+        buildRequest.setDockerfile(project.getDockerfile());
         buildRequest.setBuildHostId(service.resolveBuildHostId(buildHostId));
         service.buildImage(buildRequest);
 
@@ -132,79 +134,79 @@ public class ImageController {
     /**
      * 远程 tag 列表（只保留 vX.Y.Z 形式的版本 tag）。
      */
-    @HasPermission("image:view")
+    @HasPermission("project:view")
     @RequestMapping("tags")
-    public AjaxResult tags(String imageId) {
-        Image image = assertImageAccess(imageId);
-        List<Option> options = service.listRemoteTags(image).stream()
-                .filter(ImageService::isValidTag)
+    public AjaxResult tags(String projectId) {
+        Project project = assertProjectAccess(projectId);
+        List<Option> options = service.listRemoteTags(project).stream()
+                .filter(ProjectService::isValidTag)
                 .map(t -> new Option(t, t))
                 .toList();
         return AjaxResult.ok().data(options);
     }
 
     /**
-     * 重置镜像的 webhook token。
+     * 重置项目的 webhook token。
      */
-    @HasPermission("image:webhook")
+    @HasPermission("project:webhook")
     @RequestMapping("resetWebhook")
     public AjaxResult resetWebhook(String id) {
-        Image image = assertImageAccess(id);
-        image = service.resetWebhookToken(image);
-        return AjaxResult.ok().msg("已重置").data(image.getWebhookToken());
+        Project project = assertProjectAccess(id);
+        project = service.resetWebhookToken(project);
+        return AjaxResult.ok().msg("已重置").data(project.getWebhookToken());
     }
 
     /**
      * 开启自动 Webhook：在代码仓库（GitLab）上创建指向 hookUrl 的 Webhook。
      */
-    @HasPermission("image:webhook")
+    @HasPermission("project:webhook")
     @RequestMapping("enableWebhook")
     public AjaxResult enableWebhook(String id, String hookUrl) {
-        Image image = assertImageAccess(id);
-        service.enableWebhook(image, hookUrl);
+        Project project = assertProjectAccess(id);
+        service.enableWebhook(project, hookUrl);
         return AjaxResult.ok().msg("已开启自动 Webhook");
     }
 
     /**
      * 关闭自动 Webhook：删除代码仓库上由本系统创建的 Webhook。
      */
-    @HasPermission("image:webhook")
+    @HasPermission("project:webhook")
     @RequestMapping("disableWebhook")
     public AjaxResult disableWebhook(String id) {
-        Image image = assertImageAccess(id);
-        service.disableWebhook(image);
+        Project project = assertProjectAccess(id);
+        service.disableWebhook(project);
         return AjaxResult.ok().msg("已关闭自动 Webhook");
     }
 
-    @HasPermission("image:build")
+    @HasPermission("project:build")
     @RequestMapping("stopBuild")
     public AjaxResult stopBuild(@RequestParam String id) throws IOException {
         BuildLog buildLog = logService.findById(id).orElse(null);
         Assert.notNull(buildLog, "构建记录不存在");
-        assertImageAccess(buildLog.getImageId());
+        assertProjectAccess(buildLog.getProjectId());
         service.stopBuild(id);
 
         return AjaxResult.ok();
     }
 
-    @HasPermission("image:build")
+    @HasPermission("project:build")
     @RequestMapping("cleanErrorLog")
     public AjaxResult cleanErrorLog(@RequestParam String id) {
-        assertImageAccess(id);
+        assertProjectAccess(id);
         service.cleanErrorLog(id);
         return AjaxResult.ok();
     }
 
 
-    @HasPermission("image:view")
+    @HasPermission("project:view")
     @RequestMapping("options")
     public AjaxResult options() {
-        Spec<Image> q = buildQuery();
+        Spec<Project> q = buildQuery();
 
-        List<Image> list = service.findAll(q, Sort.by(Sort.Direction.DESC, "updateTime"));
+        List<Project> list = service.findAll(q, Sort.by(Sort.Direction.DESC, "updateTime"));
 
         List<Option> options = new ArrayList<>();
-        for (Image h : list) {
+        for (Project h : list) {
             options.add(new Option(h.getId(), h.getName()));
         }
 
@@ -213,29 +215,26 @@ public class ImageController {
     }
 
     /**
-     * 该镜像的可用版本（tag），倒序，供应用选择。
+     * 该项目产出的可用版本（tag），倒序，供应用选择。
      */
-    @HasPermission("image:view")
+    @HasPermission("project:view")
     @RequestMapping("versions")
-    public AjaxResult versions(String imageId) {
-        assertImageAccess(imageId);
-        List<Option> options = service.tags(imageId).stream()
+    public AjaxResult versions(String projectId) {
+        assertProjectAccess(projectId);
+        List<Option> options = service.tags(projectId).stream()
                 .map(v -> new Option(v, v))
                 .toList();
         return AjaxResult.ok().data(options);
     }
 
     /**
-     * 使用该镜像的应用。
+     * 使用该项目镜像的应用。
      */
-    @HasPermission("image:view")
+    @HasPermission("project:view")
     @RequestMapping("apps")
-    public AjaxResult apps(String imageId) {
-        assertImageAccess(imageId);
-        List<App> apps = service.apps(imageId);
-        for (App app : apps) {
-            app.setImageUrl(service.getFullImageUrl(app.getImage()));
-        }
+    public AjaxResult apps(String projectId) {
+        assertProjectAccess(projectId);
+        List<App> apps = service.apps(projectId);
         return AjaxResult.ok().data(apps);
     }
 

@@ -24,20 +24,24 @@ export default class extends React.Component {
     formRef = React.createRef()
     tableRef = React.createRef()
 
-    // 用户是否手动改过镜像名；改过之后不再随代码仓库自动覆盖
+    // 用户是否手动改过项目名；改过之后不再随代码仓库自动覆盖
     nameTouched = false
 
     columns = [
 
 
         {
-            title: '镜像',
+            title: '项目',
             dataIndex: 'name',
             render: (name, row) => {
                 return <Button type='link' style={{padding: 0}}
-                               onClick={() => PageUtils.open('/image/view?id=' + row.id, "镜像-" + name)}>{name}</Button>
+                               onClick={() => PageUtils.open('/project/view?id=' + row.id, "项目-" + name)}>{name}</Button>
             },
 
+        },
+        {
+            title: '镜像地址',
+            dataIndex: 'imageUrl',
         },
         {
             title: '代码仓库',
@@ -67,8 +71,8 @@ export default class extends React.Component {
             valueType: 'option',
             render: (_, record) => (
                 <PermActions>
-                    <Button size='small' perm='image:save' onClick={() => this.handleEdit(record)}> 修改 </Button>
-                    <Popconfirm perm='image:delete' title='是否确定删除镜像'
+                    <Button size='small' perm='project:save' onClick={() => this.handleEdit(record)}> 修改 </Button>
+                    <Popconfirm perm='project:delete' title='是否确定删除项目'
                                 onConfirm={() => this.handleDelete(record)}>
                         <Button size='small'>删除</Button>
                     </Popconfirm>
@@ -85,16 +89,16 @@ export default class extends React.Component {
     }
 
     handleEdit = record => {
-        // 已有镜像的镜像名视为用户设定，不随代码仓库自动覆盖
+        // 已有项目的项目名视为用户设定，不随代码仓库自动覆盖
         this.nameTouched = true
         this.setState({formOpen: true, formValues: record})
     }
 
     /**
-     * 由代码仓库地址推导镜像名：取仓库路径最后一段，去掉 .git 后缀，
+     * 由代码仓库地址推导项目名：取仓库路径最后一段，去掉 .git 后缀，
      * 转小写并将非法字符替换为短横线（镜像名需以小写字母开头）。
      */
-    deriveImageName = gitUrl => {
+    deriveProjectName = gitUrl => {
         if (!gitUrl) {
             return ''
         }
@@ -111,13 +115,13 @@ export default class extends React.Component {
             return
         }
         if ('gitUrl' in changedValues && !this.nameTouched) {
-            this.formRef.current?.setFieldsValue({name: this.deriveImageName(changedValues.gitUrl)})
+            this.formRef.current?.setFieldsValue({name: this.deriveProjectName(changedValues.gitUrl)})
         }
     }
 
 
     onFinish = values => {
-        HttpClient.post('admin/image/save', values).then(rs => {
+        HttpClient.post('admin/project/save', values).then(rs => {
             this.setState({formOpen: false})
             this.tableRef.current.reload()
         })
@@ -125,7 +129,7 @@ export default class extends React.Component {
 
 
     handleDelete = record => {
-        HttpClient.postForm('admin/image/delete', {id: record.id}).then(rs => {
+        HttpClient.postForm('admin/project/delete', {id: record.id}).then(rs => {
             this.tableRef.current.reload()
         })
     }
@@ -136,7 +140,7 @@ export default class extends React.Component {
                 actionRef={this.tableRef}
                 toolBarRender={() => {
                     return <PermActions>
-                        <Button perm='image:save' type='primary' onClick={this.handleAdd}>
+                        <Button perm='project:save' type='primary' onClick={this.handleAdd}>
                             <PlusOutlined/> 新增
                         </Button>
                     </PermActions>
@@ -146,13 +150,13 @@ export default class extends React.Component {
                         <FieldOrgTreeSelect placeholder='全部组织机构'/>
                     </Form.Item>
                 )}
-                request={(params) => HttpClient.get('admin/image/page', params)}
+                request={(params) => HttpClient.get('admin/project/page', params)}
                 columns={this.columns}
             >
             </ProTable>
 
 
-            <Modal title='镜像信息'
+            <Modal title='项目信息'
                    open={this.state.formOpen}
                    onOk={() => this.formRef.current.submit()}
                    onCancel={() => this.setState({formOpen: false})}
@@ -169,12 +173,12 @@ export default class extends React.Component {
                     <Form.Item name='id' noStyle></Form.Item>
                     <Form.Item label='代码仓库' name='gitUrl'
                                rules={[{required: true, message: '请输入代码仓库'}]}
-                               tooltip='可直接输入地址，也可从「设置-代码源」的仓库列表中选择；选择后自动填入镜像名'>
+                               tooltip='可直接输入地址，也可从「设置-代码源」的仓库列表中选择；选择后自动填入项目名'>
                         <FieldGitRepository/>
                     </Form.Item>
 
-                    <Form.Item label='镜像名' name='name' rules={[{required: true}]}
-                               help='不能包含中文，小写字母开头；默认取代码仓库名'>
+                    <Form.Item label='项目名' name='name' rules={[{required: true}]}
+                               help='不能包含中文，小写字母开头；默认取代码仓库名，决定镜像地址'>
                         <Input/>
                     </Form.Item>
 

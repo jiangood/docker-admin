@@ -11,30 +11,32 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.FieldNameConstants;
 
 /**
- * 镜像：一个从代码仓库构建、带版本（tag）的镜像仓库。
+ * 项目：一个从代码仓库构建、产出带版本（tag）镜像的构建定义。
  * <p>
- * 每个镜像对应一个镜像地址（registry.url/namespace + name），构建产生的 tag 即为其版本。
+ * 每个项目对应一个镜像仓库地址（registry.url/namespace + name），
+ * 构建产生的 tag 即为其镜像标签（{@link ImageTag}）。
  */
-@Remark("镜像")
+@Remark("项目")
 @Getter
 @Setter
 @Entity
 @FieldNameConstants
-@Table(name = "t_image")
-public class Image extends BaseEntity {
+@Table(name = "t_project")
+public class Project extends BaseEntity {
 
     @Remark("组织")
     @ManyToOne
     SysOrg sysOrg;
 
 
-    @Remark("镜像名")
+    @Remark("项目名")
     @ValidateStartWithLetter
     @NotNull
     @Column(unique = true)
@@ -66,6 +68,13 @@ public class Image extends BaseEntity {
 
 
     String remark;
+
+    /**
+     * 镜像url（不带 tag 的仓库地址），按当前注册中心与项目名计算，不持久化。
+     */
+    @Remark("镜像地址")
+    @Transient
+    String imageUrl;
 
 
     @PrePersist

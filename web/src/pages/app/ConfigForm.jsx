@@ -5,7 +5,7 @@ import CodeMirrorEditor from "../../components/CodeMirrorEditor";
 import {HttpClient} from "@jiangood/open-admin";
 
 /**
- * 容器配置：镜像来自镜像表（平台构建/已知）且声明了端口/卷时，对应部分按声明只读；
+ * 容器配置：镜像（imageUrl + tag）在镜像标签表中有声明端口/卷时，对应部分按声明只读；
  * 否则（如公共镜像、未声明）可自由配置端口与卷。
  */
 export default class extends React.Component {
@@ -99,7 +99,7 @@ export default class extends React.Component {
 
                 {(!strictPorts || !strictVolumes) &&
                     <Alert type='info' showIcon style={{marginBottom: 16}}
-                           message='该镜像不在镜像表中或其未声明端口/卷，端口与卷可自由配置'/>}
+                           message='该镜像未在镜像标签表中登记或未声明端口/卷，端口与卷可自由配置'/>}
 
                 <Form.Item label='网络模式' name='networkMode'>
                     <Select style={{width: 200}}

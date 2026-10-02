@@ -44,6 +44,9 @@ cd web && npm run dev                    # frontend dev server on :8600, proxies
 - **数据库配置**走自定义属性（`db_ip`、`db_port`、`db_database`、`db_username`、`db_password`），
   不是标准 Spring datasource；默认走 H2 无需配置。
 - **菜单配置**在 `src/main/resources/application-menu-docker.yml`，可用 `-override.yml` 覆盖。
+- **领域模型：** `Project`(项目，构建定义) → `ImageRepo`(镜像仓库，`imageUrl` 唯一) → `ImageTag`(镜像标签，`imageUrl`+`tag`)。
+  项目与镜像仓库按 `imageUrl` 相等关联；`App` 只存 `imageUrl` + `imageTag`，与项目/镜像均无 id 外键。
+  原 `Image` / `ImageVersion` 已移除；菜单为「项目」(`/project`) 与「镜像仓库」(`/image-repo`)，旧 `image:*` 权限码已废弃。
 - **Tests** 是 `main()` 方法（如 `DockerSdkTest`、`PrintTest`），**不是** JUnit 测试，
   无法通过 `mvn test` 运行，需要在 IDE 里单独执行。
 - **权限**用 open-admin 的 `@HasPermission("app:view")`，不是标准 Spring Security 注解。

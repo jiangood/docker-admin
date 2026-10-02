@@ -20,11 +20,11 @@ public class BuildLogService extends BaseService<BuildLog> {
     private final BuildLogRepository buildLogRepository;
 
     /**
-     * 某个镜像下所有构建成功的版本（tag），倒序。
+     * 某个项目下所有构建成功的版本（tag），倒序。
      */
-    public List<String> versions(String imageId) {
+    public List<String> versions(String projectId) {
         Spec<BuildLog> q = Spec.of();
-        q.eq(BuildLog.Fields.imageId, imageId);
+        q.eq(BuildLog.Fields.projectId, projectId);
         q.eq(BuildLog.Fields.success, true);
         return distinctTagsDesc(buildLogRepository.findAll(q));
     }
@@ -43,20 +43,20 @@ public class BuildLogService extends BaseService<BuildLog> {
         return buildLogRepository.saveAndFlush(buildLog);
     }
 
-    public List<BuildLog> findByImage(String imageId) {
+    public List<BuildLog> findByProject(String projectId) {
         Spec<BuildLog> q = Spec.of();
-        q.eq(BuildLog.Fields.imageId, imageId);
+        q.eq(BuildLog.Fields.projectId, projectId);
         return buildLogRepository.findAll(q);
     }
 
     @Transactional
-    public void cleanErrorLog(String imageId) {
-        buildLogRepository.deleteErrorLogsByImageId(imageId);
+    public void cleanErrorLog(String projectId) {
+        buildLogRepository.deleteErrorLogsByProjectId(projectId);
     }
 
-    public List<BuildLog> findByImageProcessing(String imageId) {
+    public List<BuildLog> findByProjectProcessing(String projectId) {
         Spec<BuildLog> q = Spec.of();
-        q.eq(BuildLog.Fields.imageId, imageId);
+        q.eq(BuildLog.Fields.projectId, projectId);
         q.isNull(BuildLog.Fields.success);
         return buildLogRepository.findAll(q);
     }

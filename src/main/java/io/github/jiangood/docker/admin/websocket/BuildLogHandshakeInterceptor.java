@@ -15,18 +15,18 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
- * 隧道部署日志 WebSocket 握手鉴权。
+ * 构建日志 WebSocket 握手鉴权。
  * <p>
  * {@code afterConnectionEstablished} 执行时已脱离 HTTP 请求线程、没有 Spring Security 上下文，
- * 因此权限校验必须放在握手拦截器（仍在请求线程）中完成：校验 {@code tunnel:view} 权限，
+ * 因此权限校验必须放在握手拦截器（仍在请求线程）中完成：校验 {@code project:view} 权限，
  * 并限制 logId 取值以防目录穿越。
  */
 @Slf4j
 @Component
-public class TunnelLogHandshakeInterceptor implements HandshakeInterceptor {
+public class BuildLogHandshakeInterceptor implements HandshakeInterceptor {
 
     /**
-     * 仅允许隧道任务生成的 logId。
+     * 仅允许构建任务生成的 logId。
      */
     static final Pattern LOG_ID_PATTERN = Pattern.compile("^[A-Za-z0-9_-]{1,64}$");
 
@@ -36,12 +36,12 @@ public class TunnelLogHandshakeInterceptor implements HandshakeInterceptor {
         String path = request.getURI().getPath();
         String logId = path.substring(path.lastIndexOf('/') + 1);
         if (!LOG_ID_PATTERN.matcher(logId).matches()) {
-            log.warn("隧道日志 WebSocket 握手被拒绝，非法 logId: {}", logId);
+            log.warn("构建日志 WebSocket 握手被拒绝，非法 logId: {}", logId);
             response.setStatusCode(HttpStatus.BAD_REQUEST);
             return false;
         }
         if (!hasPermission()) {
-            log.warn("隧道日志 WebSocket 握手被拒绝，缺少 tunnel:view 权限");
+            log.warn("构建日志 WebSocket 握手被拒绝，缺少 project:view 权限");
             response.setStatusCode(HttpStatus.FORBIDDEN);
             return false;
         }
@@ -54,7 +54,9 @@ public class TunnelLogHandshakeInterceptor implements HandshakeInterceptor {
             return false;
         }
         Set<String> permissions = user.getPermissions();
-        return permissions != null && (permissions.contains("*") || permissions.contains("tunnel:view"));
+        return permissions != null && (permissions.contains("*")
+                || permissions.contains("project:view")
+                || permissions.contains("project:build"));
     }
 
     @Override

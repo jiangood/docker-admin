@@ -34,9 +34,6 @@
     <logger name="io.github.jiangood.docker.admin.service.BuildTestService">
         <appender-ref ref="docker-log-appender" />
     </logger>
-    <logger name="io.github.jiangood.docker.admin.service.TunnelDeployService">
-        <appender-ref ref="docker-log-appender" />
-    </logger>
     <logger name="io.github.jiangood.docker.sdk">
         <appender-ref ref="docker-log-appender" />
     </logger>

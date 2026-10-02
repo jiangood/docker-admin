@@ -29,7 +29,7 @@ function getIcon(key, index) {
 export default class extends React.Component {
 
   state = {
-    image: null,
+    project: null,
     showTrigger: false,
     logRow: null,
     tagOptions: [],
@@ -43,7 +43,7 @@ export default class extends React.Component {
   componentDidMount() {
     this.id = PageUtils.currentParams().id
 
-    this.loadImage()
+    this.loadProject()
     this.loadVersions()
     this.loadApps()
 
@@ -59,16 +59,16 @@ export default class extends React.Component {
     }
   }
 
-  loadImage = () => {
-    HttpClient.get('admin/image/get', {id: this.id}).then(rs => this.setState({image: rs.data}))
+  loadProject = () => {
+    HttpClient.get('admin/project/get', {id: this.id}).then(rs => this.setState({project: rs.data}))
   }
 
   loadVersions = () => {
-    HttpClient.get('admin/image/versions', {imageId: this.id}).then(rs => this.setState({versions: rs.data || []}))
+    HttpClient.get('admin/project/versions', {projectId: this.id}).then(rs => this.setState({versions: rs.data || []}))
   }
 
   loadApps = () => {
-    HttpClient.get('admin/image/apps', {imageId: this.id}).then(rs => this.setState({apps: rs.data || []}))
+    HttpClient.get('admin/project/apps', {projectId: this.id}).then(rs => this.setState({apps: rs.data || []}))
   }
 
   reload = () => {
@@ -76,8 +76,8 @@ export default class extends React.Component {
   }
 
   retry = row => {
-    HttpClient.get("admin/image/build", {
-      imageId: row.imageId,
+    HttpClient.get("admin/project/build", {
+      projectId: row.projectId,
       tag: row.tag,
       buildHostId: row.buildHostId
     }).then(rs => {
@@ -86,7 +86,7 @@ export default class extends React.Component {
   }
 
   stop = row => {
-    HttpClient.get("admin/image/stopBuild", row).then(rs => {
+    HttpClient.get("admin/project/stopBuild", row).then(rs => {
       this.reload()
     })
   }
@@ -100,54 +100,54 @@ export default class extends React.Component {
   }
 
   triggerPipeline = () => {
-    HttpClient.get('admin/image/tags', {imageId: this.id}).then(rs => {
+    HttpClient.get('admin/project/tags', {projectId: this.id}).then(rs => {
       this.setState({tagOptions: rs.data || []})
     })
     this.setState({showTrigger: true})
   }
 
   submitTrigger = (values) => {
-    HttpClient.get("admin/image/build", values).then(rs => {
+    HttpClient.get("admin/project/build", values).then(rs => {
       this.setState({showTrigger: false})
       this.actionRef.current.reload()
     })
   }
 
   cleanError = () => {
-    HttpClient.get("admin/image/cleanErrorLog", {id: this.state.image.id}).then(rs => {
+    HttpClient.get("admin/project/cleanErrorLog", {id: this.state.project.id}).then(rs => {
       this.actionRef.current.reload()
     })
   }
 
   resetWebhook = () => {
-    HttpClient.get("admin/image/resetWebhook", {id: this.state.image.id}).then(() => {
-      this.loadImage()
+    HttpClient.get("admin/project/resetWebhook", {id: this.state.project.id}).then(() => {
+      this.loadProject()
     })
   }
 
   toggleWebhook = (checked) => {
-    const id = this.state.image.id
+    const id = this.state.project.id
     if (checked && !this.webhookUrl()) {
       return
     }
     this.setState({webhookLoading: true})
     const request = checked
-      ? HttpClient.get('admin/image/enableWebhook', {id, hookUrl: this.webhookUrl()})
-      : HttpClient.get('admin/image/disableWebhook', {id})
-    request.then(() => this.loadImage())
+      ? HttpClient.get('admin/project/enableWebhook', {id, hookUrl: this.webhookUrl()})
+      : HttpClient.get('admin/project/disableWebhook', {id})
+    request.then(() => this.loadProject())
       .finally(() => this.setState({webhookLoading: false}))
   }
 
   webhookUrl = () => {
-    const token = this.state.image?.webhookToken
+    const token = this.state.project?.webhookToken
     if (!token) return ''
     return window.location.origin + UrlUtils.contextPath('/admin/public/webhook/' + token)
   }
 
   columns = [
     {
-      title: '镜像',
-      dataIndex: 'imageName',
+      title: '项目',
+      dataIndex: 'projectName',
     },
     {
       title: '开始时间',
@@ -217,20 +217,21 @@ export default class extends React.Component {
   ]
 
   render() {
-    if (this.state.image == null) {
+    if (this.state.project == null) {
       return <Spin/>
     }
 
-    const {image, showTrigger, logRow, tagOptions} = this.state;
+    const {project, showTrigger, logRow, tagOptions} = this.state;
 
     return (<>
 
       <Card className='mb-2'>
-        <Descriptions title={image.name}>
-          <Descriptions.Item label='id'>{image.id}</Descriptions.Item>
-          <Descriptions.Item label='代码源'>{image.gitUrl}</Descriptions.Item>
-          <Descriptions.Item label='dockerfile'>{image.dockerfile}</Descriptions.Item>
-          <Descriptions.Item label='创建时间'>{image.createTime}</Descriptions.Item>
+        <Descriptions title={project.name}>
+          <Descriptions.Item label='id'>{project.id}</Descriptions.Item>
+          <Descriptions.Item label='镜像地址'>{project.imageUrl}</Descriptions.Item>
+          <Descriptions.Item label='代码源'>{project.gitUrl}</Descriptions.Item>
+          <Descriptions.Item label='dockerfile'>{project.dockerfile}</Descriptions.Item>
+          <Descriptions.Item label='创建时间'>{project.createTime}</Descriptions.Item>
         </Descriptions>
 
         <div style={{display: 'flex', justifyContent: 'end'}}>
@@ -252,10 +253,10 @@ export default class extends React.Component {
           onFinish={this.submitTrigger}
           labelCol={{flex: '100px'}}
           initialValues={{
-            imageId: image.id
+            projectId: project.id
           }}
           preserve={false}>
-          <Form.Item name="imageId" hidden>
+          <Form.Item name="projectId" hidden>
           </Form.Item>
           <Form.Item name="tag" label="构建 tag" rules={[{required: true, message: '请选择 tag'}]}
                      help="只支持 vX.Y.Z 形式的版本 tag">
@@ -274,7 +275,7 @@ export default class extends React.Component {
              footer={null}
              onCancel={this.closeLog}>
         {logRow
-          ? <LogView url={'/admin/ws/image-build-log/' + logRow.id} websocket={true}/>
+          ? <LogView url={'/admin/ws/build-log/' + logRow.id} websocket={true}/>
           : null}
       </Modal>
 
@@ -282,13 +283,13 @@ export default class extends React.Component {
   }
 
   renderTabs = () => {
-    const {image, versions, apps, webhookLoading} = this.state;
+    const {project, versions, apps, webhookLoading} = this.state;
 
     const items = [
       {
         key: 'build',
         label: '构建历史',
-        children: <div className='image-build-history'>
+        children: <div className='project-build-history'>
           <ProTable
             actionRef={this.actionRef}
             toolBarRender={() => (
@@ -297,7 +298,7 @@ export default class extends React.Component {
               </div>
             )}
             request={(params) => {
-              params.imageId = image.id
+              params.projectId = project.id
               return HttpClient.get("admin/buildLog/list", params);
             }}
             columns={this.columns}
@@ -307,7 +308,7 @@ export default class extends React.Component {
       },
       {
         key: 'version',
-        label: '镜像版本',
+        label: '构建版本',
         children: <Space wrap>
           {versions.length === 0 ? <span>-</span> : versions.map(t => {
             // 接口返回的是 {value, label, data} 形式的 Option，取其中的 tag 文本渲染
@@ -346,7 +347,7 @@ export default class extends React.Component {
             <Descriptions.Item label='自动配置'>
               <Space wrap>
                 <Switch
-                  checked={!!image.webhookAuto}
+                  checked={!!project.webhookAuto}
                   loading={webhookLoading}
                   onChange={this.toggleWebhook}
                 />

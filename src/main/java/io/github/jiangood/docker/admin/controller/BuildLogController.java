@@ -2,9 +2,9 @@ package io.github.jiangood.docker.admin.controller;
 
 import cn.hutool.core.util.StrUtil;
 import io.github.jiangood.docker.admin.entity.BuildLog;
-import io.github.jiangood.docker.admin.entity.Image;
+import io.github.jiangood.docker.admin.entity.Project;
 import io.github.jiangood.docker.admin.service.BuildLogService;
-import io.github.jiangood.docker.admin.service.ImageService;
+import io.github.jiangood.docker.admin.service.ProjectService;
 import io.github.jiangood.docker.base.OrgAccessTool;
 import io.github.jiangood.openadmin.framework.auth.LoginTool;
 import io.github.jiangood.openadmin.framework.data.specification.Spec;
@@ -33,26 +33,26 @@ public class BuildLogController {
     private BuildLogService service;
 
     @Resource
-    private ImageService imageService;
+    private ProjectService projectService;
 
-    @HasPermission("image:view")
+    @HasPermission("project:view")
     @RequestMapping("list")
-    public AjaxResult list(String imageId, @PageableDefault(sort = "createTime", direction = Sort.Direction.DESC) Pageable pageable) {
+    public AjaxResult list(String projectId, @PageableDefault(sort = "createTime", direction = Sort.Direction.DESC) Pageable pageable) {
         Spec<BuildLog> q = Spec.of();
-        if (StrUtil.isNotBlank(imageId)) {
-            // 指定镜像时必须校验该镜像的数据权限
-            Image image = imageService.findById(imageId).orElse(null);
-            Assert.notNull(image, "镜像不存在");
-            OrgAccessTool.assertAccess(image.getSysOrg());
-            q.eq("imageId", imageId);
+        if (StrUtil.isNotBlank(projectId)) {
+            // 指定项目时必须校验该项目的组织数据权限
+            Project project = projectService.findById(projectId).orElse(null);
+            Assert.notNull(project, "项目不存在");
+            OrgAccessTool.assertAccess(project.getSysOrg());
+            q.eq("projectId", projectId);
         } else {
-            // 未指定镜像时限制在当前用户可访问的镜像范围内
-            List<String> imageIds = accessibleImageIds();
-            if (imageIds.isEmpty()) {
-                // 无可访问镜像时构造一个永假条件，避免空 IN 查询
-                q.eq("imageId", "__no_access__");
+            // 未指定项目时限制在当前用户可访问的项目范围内
+            List<String> projectIds = accessibleProjectIds();
+            if (projectIds.isEmpty()) {
+                // 无可访问项目时构造一个永假条件，避免空 IN 查询
+                q.eq("projectId", "__no_access__");
             } else {
-                q.in("imageId", imageIds);
+                q.in("projectId", projectIds);
             }
         }
         Page<BuildLog> page = service.findAll(q, pageable);
@@ -69,17 +69,17 @@ public class BuildLogController {
     }
 
     /**
-     * 当前用户可访问的镜像 id 列表（管理员返回全部）。
+     * 当前用户可访问的项目 id 列表（管理员返回全部）。
      */
-    private List<String> accessibleImageIds() {
-        Spec<Image> q = Spec.of();
+    private List<String> accessibleProjectIds() {
+        Spec<Project> q = Spec.of();
         if (!LoginTool.isAdmin()) {
             q.or(qq -> {
                 qq.isNull("sysOrg.id");
                 qq.in("sysOrg.id", LoginTool.getOrgPermissions());
             });
         }
-        return imageService.findAll(q, Sort.unsorted()).stream().map(Image::getId).toList();
+        return projectService.findAll(q, Sort.unsorted()).stream().map(Project::getId).toList();
     }
 
 }
