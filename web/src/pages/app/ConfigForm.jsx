@@ -1,4 +1,4 @@
-import {Alert, Button, Form, Input, message, Select, Spin} from "antd";
+import {Button, Form, Input, message, Select, Spin} from "antd";
 import React from "react";
 import EditTable from "../../components/EditTable";
 import CodeMirrorEditor from "../../components/CodeMirrorEditor";
@@ -96,10 +96,6 @@ export default class extends React.Component {
 
             <Form ref={this.formRef} colon={false} labelCol={{flex: '100px'}} onFinish={this.update}
                   initialValues={initialValues}>
-
-                {(!strictPorts || !strictVolumes) &&
-                    <Alert type='info' showIcon style={{marginBottom: 16}}
-                           message='该镜像未在镜像标签表中登记或未声明端口/卷，端口与卷可自由配置'/>}
 
                 <Form.Item label='网络模式' name='networkMode'>
                     <Select style={{width: 200}}
