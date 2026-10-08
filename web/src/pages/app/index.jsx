@@ -1,6 +1,7 @@
 import {AutoComplete, Button, Form, Input, Modal} from 'antd';
 import React from 'react';
 import ContainerStatus from "../../components/ContainerStatus";
+import FieldImageUrl from "../../components/FieldImageUrl";
 import {
     PermActions,
     FieldOrgTreeSelect,
@@ -81,7 +82,6 @@ export default class extends React.Component {
         deployVisible: false,
         editVisible: false,
         editValues: {},
-        imageList: [],
         tagOptions: [],
     }
 
@@ -90,11 +90,6 @@ export default class extends React.Component {
     reload = () => {
         this.tableRef.current.reload()
     }
-
-    componentDidMount() {
-        this.loadImageList()
-    }
-
 
     handleSave = value => {
         HttpClient.post('admin/app/save', value).then(() => {
@@ -106,12 +101,15 @@ export default class extends React.Component {
     formRef = React.createRef()
     editFormRef = React.createRef()
     tableRef = React.createRef()
+    tagTimer = null
+
     handleAdd = () => {
-        this.setState({deployVisible: true})
+        this.setState({deployVisible: true, tagOptions: []})
     }
 
     handleEdit = record => {
         this.setState({editVisible: true, editValues: record})
+        this.loadTags(record.imageUrl)
     }
 
     handleEditFinish = values => {
@@ -121,16 +119,33 @@ export default class extends React.Component {
         })
     }
 
-    loadImageList = searchText => {
-        HttpClient.get('admin/image-repo/options', {searchText}).then(rs => {
-            this.setState({imageList: rs.data || []})
+    /**
+     * 加载某个镜像已有的版本号。未登记的镜像地址返回空，因此自定义地址不会出现下拉选项。
+     */
+    loadTags = imageUrl => {
+        if (!imageUrl) {
+            this.setState({tagOptions: []})
+            return
+        }
+        HttpClient.get('admin/image-repo/tags', {imageUrl}).then(rs => {
+            this.setState({tagOptions: rs.data || []})
+        }).catch(() => {
+            this.setState({tagOptions: []})
         })
     }
 
-    onImageSelect = imageUrl => {
-        HttpClient.get('admin/image-repo/tags', {imageUrl}).then(rs => {
-            this.setState({tagOptions: rs.data || []})
-        })
+    /**
+     * 镜像地址变化时防抖联动版本下拉，避免输入过程中频繁请求。
+     */
+    onImageChange = imageUrl => {
+        clearTimeout(this.tagTimer)
+        this.tagTimer = setTimeout(() => this.loadTags(imageUrl), 300)
+    }
+
+    handleImageValuesChange = changedValues => {
+        if ('imageUrl' in changedValues) {
+            this.onImageChange(changedValues.imageUrl)
+        }
     }
 
 
@@ -169,22 +184,21 @@ export default class extends React.Component {
                         layout='horizontal'
                         labelCol={{flex: '100px'}}
                         ref={this.formRef}
+                        onValuesChange={this.handleImageValuesChange}
                         onFinish={this.handleSave}
                     >
                         <Form.Item name='name' label='应用名称' required rules={[{required: true}]}>
                             <Input/>
                         </Form.Item>
 
-                        <Form.Item name='imageUrl' label='镜像仓库' required rules={[{required: true}]}
-                                   tooltip='可从已登记镜像中选择，也可直接输入任意镜像地址，如 ghcr.io/jiangood/http-tunnel'>
-                            <AutoComplete options={this.state.imageList}
-                                           onSelect={this.onImageSelect}
-                                           placeholder='选择或输入镜像地址'/>
+                        <Form.Item name='imageUrl' label='镜像' required rules={[{required: true}]}
+                                   tooltip='可直接输入任意镜像地址，如 ghcr.io/jiangood/http-tunnel；也可点击右侧按钮从镜像仓库选择'>
+                            <FieldImageUrl/>
                         </Form.Item>
 
 
                         <Form.Item name='imageTag' label='版本' required rules={[{required: true}]}
-                                   tooltip='可从该镜像已有的 tag 中选择，也可直接输入版本号'>
+                                   tooltip='已登记的镜像会列出其版本，也可直接输入版本号'>
                             <AutoComplete options={this.state.tagOptions}
                                            placeholder='选择或输入版本，如 latest'/>
                         </Form.Item>
@@ -215,18 +229,19 @@ export default class extends React.Component {
                 >
                     <Form ref={this.editFormRef} labelCol={{flex: '100px'}}
                           initialValues={this.state.editValues}
+                          onValuesChange={this.handleImageValuesChange}
                           onFinish={this.handleEditFinish}>
                         <Form.Item name='id' noStyle></Form.Item>
 
-                        <Form.Item name='imageUrl' label='镜像仓库' required rules={[{required: true}]}
-                                   tooltip='可从已登记镜像中选择，也可直接输入任意镜像地址，如 ghcr.io/jiangood/http-tunnel'>
-                            <AutoComplete options={this.state.imageList}
-                                           onSelect={this.onImageSelect}
-                                           placeholder='选择或输入镜像地址'/>
+                        <Form.Item name='imageUrl' label='镜像' required rules={[{required: true}]}
+                                   tooltip='可直接输入任意镜像地址，如 ghcr.io/jiangood/http-tunnel；也可点击右侧按钮从镜像仓库选择'>
+                            <FieldImageUrl/>
                         </Form.Item>
 
-                        <Form.Item name='imageTag' label='版本' required rules={[{required: true}]}>
-                            <Input placeholder='请输入版本'/>
+                        <Form.Item name='imageTag' label='版本' required rules={[{required: true}]}
+                                   tooltip='已登记的镜像会列出其版本，也可直接输入版本号'>
+                            <AutoComplete options={this.state.tagOptions}
+                                           placeholder='选择或输入版本，如 latest'/>
                         </Form.Item>
 
                         <Form.Item label='所属组织' name={['sysOrg', 'id']}>
