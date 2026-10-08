@@ -1,4 +1,4 @@
-import {Button, Form, Input, Modal, Select} from 'antd';
+import {AutoComplete, Button, Form, Input, Modal} from 'antd';
 import React from 'react';
 import ContainerStatus from "../../components/ContainerStatus";
 import {
@@ -176,19 +176,17 @@ export default class extends React.Component {
                         </Form.Item>
 
                         <Form.Item name='imageUrl' label='镜像仓库' required rules={[{required: true}]}
-                                   tooltip='从镜像仓库中选择'>
-                            <Select options={this.state.imageList}
-                                    showSearch
-                                    onSelect={this.onImageSelect}
-                                    placeholder='选择镜像仓库'></Select>
+                                   tooltip='可从已登记镜像中选择，也可直接输入任意镜像地址，如 ghcr.io/jiangood/http-tunnel'>
+                            <AutoComplete options={this.state.imageList}
+                                           onSelect={this.onImageSelect}
+                                           placeholder='选择或输入镜像地址'/>
                         </Form.Item>
 
 
                         <Form.Item name='imageTag' label='版本' required rules={[{required: true}]}
-                                   tooltip='选择该镜像仓库已构建的 tag'>
-                            <Select options={this.state.tagOptions}
-                                    showSearch
-                                    placeholder='选择版本'></Select>
+                                   tooltip='可从该镜像已有的 tag 中选择，也可直接输入版本号'>
+                            <AutoComplete options={this.state.tagOptions}
+                                           placeholder='选择或输入版本，如 latest'/>
                         </Form.Item>
 
 
@@ -220,10 +218,11 @@ export default class extends React.Component {
                           onFinish={this.handleEditFinish}>
                         <Form.Item name='id' noStyle></Form.Item>
 
-                        <Form.Item name='imageUrl' label='镜像仓库' required rules={[{required: true}]}>
-                            <Select options={this.state.imageList} showSearch
-                                    onSelect={this.onImageSelect}
-                                    placeholder='选择镜像仓库'/>
+                        <Form.Item name='imageUrl' label='镜像仓库' required rules={[{required: true}]}
+                                   tooltip='可从已登记镜像中选择，也可直接输入任意镜像地址，如 ghcr.io/jiangood/http-tunnel'>
+                            <AutoComplete options={this.state.imageList}
+                                           onSelect={this.onImageSelect}
+                                           placeholder='选择或输入镜像地址'/>
                         </Form.Item>
 
                         <Form.Item name='imageTag' label='版本' required rules={[{required: true}]}>
