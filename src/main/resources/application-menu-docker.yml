@@ -9,7 +9,7 @@ menus:
     name: 项目
     path: /project
     icon: ContainerOutlined
-    seq: 100
+    seq: 150
     perms:
       - {name: 查看, code: project:view}
       - {name: 保存, code: project:save}
@@ -21,7 +21,7 @@ menus:
     name: 镜像仓库
     path: /image-repo
     icon: ContainerOutlined
-    seq: 150
+    seq: 100
     perms:
       - {name: 查看, code: image-repo:view}
       - {name: 删除, code: image-repo:delete}
