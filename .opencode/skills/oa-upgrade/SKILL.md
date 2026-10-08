@@ -83,7 +83,7 @@ https://github.com/jiangood/open-admin/releases/tag/v{target_version}
 | 配置变更 | 更新 application.yml 中的配置项 |
 | 前端组件变更 | 更新 JSX 中的组件引用 |
 | 注解变化 | 更新 `@HasPermission`、`@Log` 等注解的用法 |
-| 数据库迁移 | 执行 Flyway 迁移脚本或 DDL |
+| 数据库迁移 | 执行 DDL 或数据迁移脚本（框架已不再使用 Flyway） |
 
 ### 6. 编译与测试验证
 
@@ -105,17 +105,16 @@ npm run build
 
 如有编译或测试失败，根据错误信息修复后重新从失败步骤开始验证。
 
-### 7. 框架文件同步（skills + docs + AGENTS.md）
+### 7. 框架文件同步（skills + docs）
 
-升级后需将新版本的框架文件（`.opencode/skills/`、`docs/open-admin/`、`AGENTS.md`）同步到业务项目根目录，供 opencode 使用新版本 skill 与文档。
+升级后需将新版本的框架文件（`.opencode/skills/`、`docs/open-admin/`）同步到业务项目根目录，供 opencode 使用新版本 skill 与文档。
 
-**调用 `oa-sync-docs` skill**：以目标版本号为参数执行该 skill，它会从 GitHub Release 下载 `framework-files.zip` 并按规则同步：
+**调用 `oa-upgrade-docs` skill**：以目标版本号为参数执行该 skill，它会从 GitHub Release 下载 `framework-files.zip` 并按规则同步：
 
-- `<项目根>/.opencode/skills/oa-crud/`、`oa-upgrade/`、`oa-sync-docs/`、`oa-sonar-scan/` — 覆盖写入（不删除业务本地 skill）
+- `<项目根>/.opencode/skills/oa-crud/`、`oa-upgrade/`、`oa-upgrade-docs/`、`oa-sonar-scan/` — 覆盖写入（不删除业务本地 skill）
 - `<项目根>/docs/open-admin/*.md` — 全量镜像（删除孤儿文件）
-- `<项目根>/AGENTS.md` — 仅在不存在时生成（不覆盖业务自定义）；新版本随 `docs/open-admin/AGENTS.md` 提供
 
-> 若 `oa-sync-docs` skill 不可用（首次接入 / 文件缺失），需先手动从 `https://github.com/jiangood/open-admin/releases/download/v{版本}/framework-files.zip` 下载 ZIP 并解压到项目根目录，或告知开发者该 release 资产缺失。
+> 若 `oa-upgrade-docs` skill 不可用（首次接入 / 文件缺失），需先手动从 `https://github.com/jiangood/open-admin/releases/download/v{版本}/framework-files.zip` 下载 ZIP 并解压到项目根目录，或告知开发者该 release 资产缺失。
 
 ### 8. 其他检查（可选）
 
@@ -129,14 +128,13 @@ npm run build
 - [ ] `npm run build` 正常
 - [ ] Release Notes 中的 Breaking Changes 已逐项处理
 - [ ] Git 提交日志中涉及业务代码的变更已适配
-- [ ] 升级后已调用 `oa-sync-docs` skill 同步 `.opencode/skills/` 与 `docs/open-admin/` 为新版本内容
+- [ ] 升级后已调用 `oa-upgrade-docs` skill 同步 `.opencode/skills/` 与 `docs/open-admin/` 为新版本内容
 - [ ] 升级后功能正常（登录、菜单、CRUD 操作）
 
 ## 代码规范
 
-- Java import 使用框架的全限定名
-- 前端 import 使用 `@jiangood/open-admin` 包名
-- 推荐构造器注入（`@RequiredArgsConstructor` + `private final`）；框架基类允许 `@Autowired` 字段注入
+- 迁移后的代码遵循 [development.md](../../../docs/open-admin/development.md) 开发规范（命名、构造器注入、`AjaxResult` 等）
+- Java import 使用框架的全限定名；前端 import 使用 `@jiangood/open-admin` 包名
 - 使用 Release Notes 中推荐的新 API 替代废弃 API
 
 ## 参考

@@ -9,7 +9,7 @@
     </parent>
     <groupId>io.github.jiangood</groupId>
     <artifactId>docker-admin</artifactId>
-    <version>4.7.4</version>
+    <version>4.7.5</version>
     <name>docker-admin</name>
 
     <properties>
@@ -23,7 +23,7 @@
                容易各自漂移，产生类路径混用。
           统一改用属性后，dependabot 的 groups 配置可将同类升级合并为一个 PR。
         -->
-        <open-admin.version>3.1.2</open-admin.version>
+        <open-admin.version>3.1.3</open-admin.version>
 
         <!--
           hutool 各模块必须同版本：hutool-core / hutool-extra / hutool-http
