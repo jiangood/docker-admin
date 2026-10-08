@@ -1,6 +1,9 @@
+import {readFileSync} from 'node:fs';
 import {defineConfig, loadEnv} from 'vite';
 import react from '@vitejs/plugin-react';
 import openAdmin from '@jiangood/open-admin/vite-plugin';
+
+const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf-8'));
 
 export default defineConfig(({mode, command}) => {
     const env = loadEnv(mode, process.cwd(), '');
@@ -10,6 +13,9 @@ export default defineConfig(({mode, command}) => {
     console.log('前端端口' + port + ',后端端口' + serverPort + ',请求上下文' + servletContext)
 
     return {
+        define: {
+            __APP_VERSION__: JSON.stringify(pkg.version),
+        },
         plugins: [react(), openAdmin()],
         base: command === 'build' ? './' : '/',
         resolve: {
