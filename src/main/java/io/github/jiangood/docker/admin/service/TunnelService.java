@@ -229,12 +229,6 @@ public class TunnelService {
         }
 
         TunnelClient selected = app.getTunnelClient();
-        String error = null;
-        if (clientRepository.count() == 0) {
-            error = "请先在【隧道管理 - 客户端】新增客户端";
-        } else if (selected != null && StrUtil.isBlank(selected.getDomain())) {
-            error = "隧道客户端「" + selected.getName() + "」未配置域名";
-        }
 
         List<Map<String, Object>> clients = new ArrayList<>();
         for (TunnelClient c : clientRepository.findAll(Sort.by(Sort.Direction.ASC, "name"))) {
@@ -262,8 +256,6 @@ public class TunnelService {
         data.put("port", app.getTunnelPort());
         data.put("ports", portOptions(app));
         data.put("clients", clients);
-        data.put("configured", error == null);
-        data.put("configError", error);
         return data;
     }
 

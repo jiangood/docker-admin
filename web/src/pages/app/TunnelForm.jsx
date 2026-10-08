@@ -1,4 +1,4 @@
-import {Alert, Button, Descriptions, Form, Input, message, Select, Space, Spin, Switch} from 'antd';
+import {Button, Descriptions, Form, Input, message, Select, Space, Spin, Switch} from 'antd';
 import React from 'react';
 import {HttpClient, PermActions} from '@jiangood/open-admin';
 
@@ -84,11 +84,6 @@ export default class extends React.Component {
         const canEnable = !!client && client.configured && !!client.domain && ports.length > 0
 
         return <>
-            {!meta.configured && (
-                <Alert type='warning' showIcon style={{marginBottom: 16}}
-                       message='暂不能配置隧道' description={meta.configError}/>
-            )}
-
             <Form colon={false} labelCol={{flex: '100px'}} style={{maxWidth: 720}}>
                 <Form.Item label='隧道客户端'
                            tooltip='选择一个已登记的客户端，平台通过它的管理 API 下发隧道'>
