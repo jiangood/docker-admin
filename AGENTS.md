@@ -21,7 +21,29 @@ cd web && npm install && npm run build   # frontend only, output web/dist/
 
 # Dev
 cd web && npm run dev                    # frontend dev server on :8600, proxies to :8601
+
+# Release（推 tag 即发版）
+git add pom.xml web/package.json && git commit -m "chore(release): x.y.z"
+git tag vx.y.z && git push && git push origin vx.y.z
 ```
+
+## Releases
+
+发版只有三步，**推 `v*` tag 就算发完**，其余交给 CI：
+
+1. 同步改两处版本号：`pom.xml` 的 `<version>`、`web/package.json` 的 `"version"`。
+   （`web/package-lock.json` 根包版本历来不跟随，保持不动。）
+2. 提交 `chore(release): x.y.z`，只含上面两个文件。
+3. 打 `v*` tag 并推送。
+
+- **推完 tag 不要再手动验证发布结果**：不用去查 ghcr.io / 阿里云的 manifest 或镜像 tag，
+  `.github/workflows/publish-docker-image.yml` 会自动构建镜像、推 ghcr.io 与阿里云
+  （`:latest` + `:vx.y.z` 双 tag），并创建正文自动生成的 GitHub Release。
+  想确认状态就 `gh run list` 看那条 workflow。
+- 版本号不严格按 semver 递增，跟随仓库历史习惯（4.7.1 → 4.7.2）即可。
+- 本地 `gh` token 缺 `read:packages` scope，`gh api user/packages/...` 会 403，
+  这与发布无关，不要误判成发布失败。
+- 推 GitHub 偶发 443 超时，重试 `git push` 即可（tag 已在本地建好时只重推 `origin`）。
 
 ## Key facts
 
@@ -56,6 +78,6 @@ cd web && npm run dev                    # frontend dev server on :8600, proxies
   `web/src/components/CodeMirrorEditor.jsx` 依赖 CM5 专有路径与 API，
   升级前必须先完成迁移。原因见 `.github/dependabot.yml` 中的 ignore 规则。
 - **`web/package-lock.json` 已纳入版本管理**，构建应可复现，不要再 gitignore 它。
-- **CI：** `.github/workflows/build.yml` 在 push/PR 上跑前后端构建；
-  `.github/workflows/publish-docker-image.yml` 在 `v*` tag 上发布镜像到 ghcr.io 与阿里云。
+- **CI：** `.github/workflows/` 下只有 `publish-docker-image.yml`，在 `v*` tag 上发布镜像到 ghcr.io 与阿里云。
+  **push/PR 上没有构建流水线**，前后端构建需本地跑。
 - **No codegen, no migrations** — schema 手工管理或使用 open-admin 默认结构。
