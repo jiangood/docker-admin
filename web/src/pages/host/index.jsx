@@ -93,7 +93,7 @@ export default class extends React.Component {
                         查看
                     </Button>
                     <Button size='small' perm='host:save' onClick={() => this.handleTestRow(record)}>
-                        {this.state.testingId === record.id ? '测试中...' : '测试连接'}
+                        {this.state.testingId === record.id ? '测试中…' : '测试连接'}
                     </Button>
                     <Button size='small' perm='host:save' onClick={() => this.handleEdit(record)}>修改</Button>
                     <Popconfirm perm='host:delete' title='是否确定删除主机' onConfirm={() => this.handleDelete(record)}>

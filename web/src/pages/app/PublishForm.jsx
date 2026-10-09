@@ -73,7 +73,7 @@ export default class extends React.Component {
 
             <Row gutter={24}>
 
-                <Col span={12}> <Card title='自动发布'>
+                <Col xs={24} lg={12}> <Card title='自动发布'>
                     <Form onValuesChange={changedValues => this.setAutoDeploy(changedValues.autoDeploy)}>
                         <Form.Item
                             name='autoDeploy'
@@ -85,7 +85,7 @@ export default class extends React.Component {
                     镜像构建成功后，自动更新
                 </Card>
                 </Col>
-                <Col span={12}>
+                <Col xs={24} lg={12}>
                     <Card title='手动发布'>
                         <Form onFinish={this.updateVersion} layout={'inline'}>
                             <Form.Item name='version' rules={[{required: true, message: '请选择或输入版本'}]}>
@@ -97,7 +97,7 @@ export default class extends React.Component {
                                               placeholder='请选择或输入版本号'/>
                             </Form.Item>
                             <Form.Item label=' '>
-                                <Button type="primary" danger htmlType='submit'>更新应用</Button>
+                                <Button type="primary" htmlType='submit'>更新应用</Button>
                             </Form.Item>
                         </Form>
                     </Card>
@@ -113,7 +113,7 @@ export default class extends React.Component {
                         <FieldRemoteSelect url='admin/host/options' placeholder='请选择新主机' style={{width: 300}}/>
                     </Form.Item>
 
-                    <Button type="primary" danger htmlType='submit'>确定复制</Button>
+                    <Button type="primary" htmlType='submit'>确定复制</Button>
                 </Form>
                 <Gap/>
                 注意：复制应用不会自动部署，也不会复制主机上的文件

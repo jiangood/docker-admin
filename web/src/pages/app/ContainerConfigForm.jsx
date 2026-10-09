@@ -150,7 +150,7 @@ export default function ContainerConfigForm({namePrefix, imageUrl, imageTag, app
     }, [loading, meta])
 
     if (loading) {
-        return <Spin/>
+        return <div className='center-box'><Spin/></div>
     }
 
     const name = f => [...namePrefix, f]

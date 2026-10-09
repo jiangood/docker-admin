@@ -30,7 +30,7 @@ export default class extends React.Component {
     }
 
     onFinish = values => {
-        const hide = message.loading('保存中...', 0)
+        const hide = message.loading('保存中…', 0)
         HttpClient.post('admin/registry/save', values).then(rs => {
             message.success(rs.msg || '保存成功')
             this.load()

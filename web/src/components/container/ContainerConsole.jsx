@@ -30,7 +30,7 @@ export default class extends React.Component {
         }
 
         return <>
-            <Space style={{marginBottom: 8}}>
+            <Space className='mb-2'>
                 <span>Shell</span>
                 <Select size='small' style={{width: 160}} value={this.state.shell} options={SHELLS}
                         onChange={v => this.setState({shell: v, key: this.state.key + 1})}/>

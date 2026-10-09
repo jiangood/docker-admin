@@ -2,6 +2,7 @@ import {Button, Card, Descriptions, Empty, Modal, Result, Spin, Table, Tabs, Tag
 import React from 'react'
 import {HttpClient, Page, PageUtils} from "@jiangood/open-admin"
 import ContainerDetail from "../../components/container/ContainerDetail"
+import LinkButton from "../../components/LinkButton"
 import {formatBytes, formatTime, stateColor, stateLabel} from "../../components/container/utils"
 
 const CONNECTION_LABELS = {local: '本机', tcp: '远程 TCP', ssh: 'SSH', unix: '本机'}
@@ -113,7 +114,7 @@ export default class extends React.Component {
         const containerColumns = [
             {
                 title: '名称', dataIndex: 'name',
-                render: (name, record) => <a onClick={() => this.openContainer(record)}>{name}</a>
+                render: (name, record) => <LinkButton onClick={() => this.openContainer(record)}>{name}</LinkButton>
             },
             {title: '镜像', dataIndex: 'image', ellipsis: true},
             {
@@ -171,9 +172,9 @@ export default class extends React.Component {
         ]
 
         return <Page padding>
-            <Card className='mb-2' title={host ? host.name : '主机'}>
+            <Card className='mb-4' title={host ? host.name : '主机'}>
                 {infoError && <Result status='warning' title='无法连接主机' subTitle={infoError}
-                                     style={{padding: 0, marginBottom: 12}}/>}
+                                     className='mb-3' style={{padding: 0}}/>}
                 <Descriptions size='small' column={2}
                               items={[
                                   {key: 'name', label: '名称', children: host?.name || '-'},

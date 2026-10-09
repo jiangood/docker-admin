@@ -13,6 +13,7 @@ import {
     PageUtils,
     ProTable
 } from "@jiangood/open-admin";
+import LinkButton from "../../components/LinkButton";
 
 
 export default class extends React.Component {
@@ -24,8 +25,8 @@ export default class extends React.Component {
             dataIndex: 'name',
             sorter: true,
             render: (name, row) => {
-                return <Button type='link' style={{padding: 0}}
-                               onClick={() => PageUtils.open('/app/view?id=' + row.id, '应用-' + name)}>{name}</Button>
+                return <LinkButton
+                    onClick={() => PageUtils.open('/app/view?id=' + row.id, '应用-' + name)}>{name}</LinkButton>
             }
         },
         {
@@ -291,8 +292,8 @@ export default class extends React.Component {
                                     onChange={e => this.setState({runCommand: e.target.value})}
                                     placeholder='docker run -d --name my-nginx -p 8080:80 -v /data:/data -e TZ=Asia/Shanghai nginx:latest'/>
                     {this.state.runWarnings.length > 0 && (
-                        <Alert className='mt-2' type='warning' showIcon
-                               message={this.state.runWarnings.join('；')}/>
+                        <Alert className='mt-4' type='warning' showIcon
+                               title={this.state.runWarnings.join('；')}/>
                     )}
                 </Modal>
 

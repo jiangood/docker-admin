@@ -39,8 +39,8 @@ export default class extends React.Component {
         }
 
         return <Page padding>
-            <Card className='mb-2'>
-                <Descriptions title={repo.imageUrl}>
+            <Card className='mb-4' title={repo.imageUrl}>
+                <Descriptions>
                     <Descriptions.Item label='仓库名'>{repo.name}</Descriptions.Item>
                     <Descriptions.Item label='来源'>{sourceTag(repo.source)}</Descriptions.Item>
                     <Descriptions.Item label='组织机构'>{repo.sysOrg?.name}</Descriptions.Item>
@@ -48,7 +48,7 @@ export default class extends React.Component {
                 </Descriptions>
             </Card>
 
-            <Card className='mb-2'>
+            <Card className='mb-4'>
                 <Tabs items={[
                     {
                         key: 'tags',

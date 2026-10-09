@@ -26,6 +26,8 @@ import {FieldRemoteSelect, HttpClient, Page, PageUtils} from "@jiangood/open-adm
 import PublishForm from "./PublishForm";
 import LogView from "../../components/LogView";
 import ContainerDetail from "../../components/container/ContainerDetail";
+import LinkButton from "../../components/LinkButton";
+import {stateColor, stateLabel} from "../../components/container/utils";
 
 const Item = Descriptions.Item
 
@@ -108,14 +110,14 @@ export default class extends React.Component {
             container.state = 'deploying'
             this.setState({container})
 
-            const hide = message.loading('部署中...', 0)
+            const hide = message.loading('部署中…', 0)
             HttpClient.get('admin/app/updateVersion', {
                 id: this.state.app.id,
                 version: values.version,
                 forcePull: values.forcePull
             }).then(() => {
                 this.setState({deployVisible: false})
-                message.success('部署指令已发送，异步执行中...')
+                message.success('部署指令已发送，异步执行中…')
                 this.loadApp()
                 this.loadContainer()
             }).finally(hide)
@@ -134,7 +136,7 @@ export default class extends React.Component {
 
     handleDelete = () => {
         const id = this.state.app.id
-        const hide = message.loading('删除中...',0)
+        const hide = message.loading('删除中…',0)
         HttpClient.get("admin/app/delete", {id}).then(rs => {
             hide();
 
@@ -160,7 +162,7 @@ export default class extends React.Component {
     rename = () => {
         let appId = this.state.app.id;
         let {newName} = this.state;
-        const hide = message.loading('指令发送中...')
+        const hide = message.loading('指令发送中…')
         HttpClient.post("admin/app/rename", {appId, newName}).then(rs => {
 
             this.setState({app: rs.data, showEditName: false})
@@ -171,7 +173,7 @@ export default class extends React.Component {
         const {container, app, loading, containerLoading} = this.state;
 
         if (loading) {
-            return <Spin/>
+            return <Page padding><Spin/></Page>
         }
         const {state} = container;
 
@@ -179,8 +181,8 @@ export default class extends React.Component {
         return (<Page padding>
             
             <Card title={app.name} extra={<Space>
-                <Button disabled={state !== 'exited'} onClick={this.start} type="primary">启动</Button>
-                <Button disabled={state !== 'running'} onClick={this.stop} type="primary" danger>停止</Button>
+                <Button disabled={state !== 'exited'} onClick={this.start}>启动</Button>
+                <Button disabled={state !== 'running'} onClick={this.stop}>停止</Button>
                 <Button onClick={this.openDeploy} loading={state === 'deploying'} type="primary">重新部署</Button>
             </Space>}>
 
@@ -188,9 +190,9 @@ export default class extends React.Component {
                 <Descriptions size="small">
                     <Item label='镜像' span={2}>  {app.imageUrl}:{app.imageTag} </Item>
                     <Item label='状态'>
-                        {containerLoading ? "检测中..." :
-                            <Tag color={state === 'running' ? 'green' : 'red'}>
-                                {container.status}</Tag>}
+                        {containerLoading ? '检测中…' :
+                            <Tag color={stateColor(state)}>
+                                {container.status || stateLabel(state)}</Tag>}
 
                     </Item>
 
@@ -207,7 +209,7 @@ export default class extends React.Component {
             </Card>
 
 
-            <Card className='mt-2'>
+            <Card className='mt-4'>
                 {this.renderTabs()}
             </Card>
 
@@ -252,7 +254,7 @@ export default class extends React.Component {
                 children: container && container.id
                     ? <ContainerDetail hostId={app.host?.id} containerId={container.id} appId={app.id}
                                        height={520} onClose={this.reload}/>
-                    : <Alert type='info' showIcon message='容器未部署'/>
+                    : <Alert type='info' showIcon title='容器未部署'/>
             },
             {
                 key: 'config',
@@ -280,10 +282,10 @@ export default class extends React.Component {
                         <Col flex="auto">
 
                             {!this.state.showEditName ? <div>
-                                {this.state.app.name} <Button type='link' style={{padding: 0}} onClick={() => this.setState({
+                                {this.state.app.name} <LinkButton onClick={() => this.setState({
                                 newName: this.state.app.name,
                                 showEditName: true
-                            })}>修改名称</Button>
+                            })}>修改名称</LinkButton>
                             </div> : <div>
 
                                 <Input value={this.state.newName} style={{width: 200}}
@@ -302,7 +304,7 @@ export default class extends React.Component {
                         <Col flex="auto">
                             <Space direction={"vertical"}>
                                 <Alert
-                                    message="请注意，删除应用将清除该应用的所有数据，且该操作不能被恢复，您确定要删除吗?"
+                                    title="请注意，删除应用将清除该应用的所有数据，且该操作不能被恢复，您确定要删除吗?"
                                     type="warning"
                                 ></Alert>
                                 <Button danger type="primary" onClick={this.handleDelete}>删除应用</Button>

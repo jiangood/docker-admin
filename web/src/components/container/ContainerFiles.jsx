@@ -2,6 +2,7 @@ import React from "react";
 import {Alert, Breadcrumb, Button, Empty, message, Modal, Space, Spin, Table, Tag, Typography} from "antd";
 import {DownloadOutlined, FileOutlined, FolderOutlined, ReloadOutlined} from "@ant-design/icons";
 import {getToken, HttpClient, PermUtils} from "@jiangood/open-admin";
+import LinkButton from "../LinkButton";
 import {formatBytes} from "./utils";
 
 /**
@@ -59,7 +60,7 @@ export default class extends React.Component {
     download = record => {
         const {hostId, containerId} = this.props
         const isDir = record.type === 'dir'
-        const hide = message.loading('下载中...', 0)
+        const hide = message.loading('下载中…', 0)
         HttpClient.download({
             url: isDir ? 'admin/container/downloadDir' : 'admin/container/download',
             params: {hostId, containerId, path: record.path},
@@ -71,7 +72,7 @@ export default class extends React.Component {
     breadcrumbItems = () => {
         const {path} = this.state
         const parts = (path || '/').split('/').filter(Boolean)
-        const items = [{title: <a onClick={() => this.load('/')}>/</a>}]
+        const items = [{title: <LinkButton onClick={() => this.load('/')}>/</LinkButton>}]
         let acc = ''
         parts.forEach((p, i) => {
             acc += '/' + p
@@ -79,7 +80,7 @@ export default class extends React.Component {
             items.push({
                 title: i === parts.length - 1
                     ? <span>{p}</span>
-                    : <a onClick={() => this.load(target)}>{p}</a>
+                    : <LinkButton onClick={() => this.load(target)}>{p}</LinkButton>
             })
         })
         return items
@@ -87,6 +88,7 @@ export default class extends React.Component {
 
     render() {
         const {files, loading, error, preview, path} = this.state
+        const token = getToken()
 
         if (!PermUtils.hasPermission('container:file')) {
             return <Alert type='warning' showIcon title='缺少 container:file 权限，无法浏览容器文件'/>
@@ -97,13 +99,13 @@ export default class extends React.Component {
                 title: '名称', dataIndex: 'name',
                 render: (name, record) => {
                     const icon = record.type === 'dir'
-                        ? <FolderOutlined style={{color: getToken().colorWarning}}/>
+                        ? <FolderOutlined style={{color: token.colorWarning}}/>
                         : record.type === 'link'
-                            ? <FileOutlined style={{color: getToken().colorPrimary}}/>
+                            ? <FileOutlined style={{color: token.colorPrimary}}/>
                             : <FileOutlined/>
-                    return <a onClick={() => this.enter(record)} style={{marginLeft: 0}}>
+                    return <LinkButton onClick={() => this.enter(record)}>
                         <Space size={6}>{icon}{name}</Space>
-                    </a>
+                    </LinkButton>
                 }
             },
             {
@@ -129,7 +131,7 @@ export default class extends React.Component {
         ]
 
         return <>
-            <Space style={{marginBottom: 12}} wrap>
+            <Space className='mb-3' wrap>
                 <Breadcrumb items={this.breadcrumbItems()}/>
                 <Button size='small' icon={<ReloadOutlined/>} onClick={this.refresh}>刷新</Button>
                 <Typography.Text type='secondary'>路径：{path}</Typography.Text>
@@ -146,10 +148,11 @@ export default class extends React.Component {
                    onCancel={() => this.setState({preview: {open: false, name: '', content: '', loading: false}})}>
                 <Spin spinning={preview.loading}>
                     <Typography>
-                        <pre style={{
-                            margin: 0, maxHeight: 520, overflow: 'auto', whiteSpace: 'pre-wrap',
-                            wordBreak: 'break-all', background: '#f6f6f6', padding: 12, borderRadius: 4,
-                        }}>{preview.content}</pre>
+                        <pre className='code-block'
+                             style={{
+                                 maxHeight: 520, background: token.colorFillTertiary,
+                                 padding: 'var(--space-3)', borderRadius: 'var(--radius-sm)',
+                             }}>{preview.content}</pre>
                     </Typography>
                 </Spin>
             </Modal>

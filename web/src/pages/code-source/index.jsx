@@ -134,7 +134,7 @@ export default class extends React.Component {
                 <Form.Item label='SSH 私钥' name='privateKey'
                            rules={[{required: !configured, message: '请粘贴 SSH 私钥'}]}
                            tooltip={configured ? '当前已设置私钥，留空表示不修改' : 'OpenSSH 格式私钥，仓库地址需为 ssh:// 或 git@host:path'}>
-                    <Input.TextArea rows={6} style={{fontFamily: 'monospace'}}
+                    <Input.TextArea rows={6} className='mono'
                                     placeholder={configured ? '******（留空不修改）'
                                         : '-----BEGIN OPENSSH PRIVATE KEY-----\n...'}/>
                 </Form.Item>

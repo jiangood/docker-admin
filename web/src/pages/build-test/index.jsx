@@ -176,7 +176,7 @@ export default class extends React.Component {
                                   <Tooltip placement='left' title={
                                       <>
                                           <div>以 Git 仓库为构建上下文，粘贴的 Dockerfile 会覆盖仓库中的同名文件。</div>
-                                          <div style={{marginTop: 4}}>使用「设置-主机管理」中标记为构建节点的主机进行本地构建，不推送到注册中心。</div>
+                                          <div className='mt-1'>使用「设置-主机管理」中标记为构建节点的主机进行本地构建，不推送到注册中心。</div>
                                       </>
                                   }>
                                       <QuestionCircleOutlined style={{color: getToken().colorTextSecondary, cursor: 'help'}}/>
@@ -191,7 +191,7 @@ export default class extends React.Component {
                     </Col>
 
                     <Col xs={24} lg={8} xl={7}>
-                        <div style={{display: 'flex', flexDirection: 'column', gap: 16}}>
+                        <div className='gap-4' style={{display: 'flex', flexDirection: 'column'}}>
                             <Card title='构建配置'
                                   extra={logId ? (
                                       <Button type='link' size='small' icon={<FileTextOutlined/>}
@@ -222,7 +222,7 @@ export default class extends React.Component {
                             </Card>
 
                             <Card title='Dockerfile 操作'>
-                                <div style={{display: 'flex', flexDirection: 'column', gap: 8}}>
+                                <div className='gap-2' style={{display: 'flex', flexDirection: 'column'}}>
                                     <Perm code='build-test:view'>
                                         <Button block icon={<ReloadOutlined/>}
                                                 loading={reading} onClick={this.readRepositoryDockerfile}>
@@ -264,8 +264,8 @@ export default class extends React.Component {
                    onOk={this.submitWrite}
                    onCancel={() => this.setState({writeOpen: false})}
                    destroyOnHidden>
-                <Alert type='warning' showIcon style={{marginBottom: 16}}
-                       message='将编辑器的内容写入仓库根目录的 Dockerfile，并提交推送'
+                <Alert type='warning' showIcon className='mb-4'
+                       title='将编辑器的内容写入仓库根目录的 Dockerfile，并提交推送'
                        description='凭据按 Git 仓库地址主机自动匹配代码源；推送会直接修改远程仓库，请确认内容无误。'/>
                 <Form ref={this.writeFormRef} layout='vertical'>
                     <Form.Item label='目标分支' name='branch'

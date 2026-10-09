@@ -79,27 +79,19 @@ export default function ContainerInfo({detail}) {
 
         <Section title={`环境变量 (${env.length})`}>
             {env.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE}/> :
-                <pre style={preStyle}>{env.join('\n')}</pre>}
+                <pre className='code-block' style={{maxHeight: 240}}>{env.join('\n')}</pre>}
         </Section>
 
         <Section title={`标签 (${labels.length})`}>
             {labels.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE}/> :
-                <pre style={preStyle}>{labels.map(([k, v]) => `${k}=${v}`).join('\n')}</pre>}
+                <pre className='code-block' style={{maxHeight: 240}}>{labels.map(([k, v]) => `${k}=${v}`).join('\n')}</pre>}
         </Section>
     </>
 }
 
-const preStyle = {
-    margin: 0,
-    whiteSpace: 'pre-wrap',
-    wordBreak: 'break-all',
-    maxHeight: 240,
-    overflow: 'auto',
-}
-
 function Section({title, children}) {
-    return <div style={{marginTop: 16}}>
-        <div style={{fontWeight: 600, marginBottom: 8}}>{title}</div>
+    return <div className='mt-4'>
+        <div className='mb-2' style={{fontWeight: 600}}>{title}</div>
         {children}
     </div>
 }

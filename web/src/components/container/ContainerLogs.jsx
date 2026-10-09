@@ -9,7 +9,7 @@ import LogView from "../LogView";
 export default function ContainerLogs({url, running, height}) {
     return <>
         {!running &&
-            <Alert type='info' showIcon title='容器未运行，仅显示历史日志' style={{marginBottom: 8}}/>}
+            <Alert type='info' showIcon className='mb-2' title='容器未运行，仅显示历史日志'/>}
         <LogView url={url} websocket height={height || 500}/>
     </>
 }

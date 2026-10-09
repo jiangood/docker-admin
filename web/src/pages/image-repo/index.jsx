@@ -10,6 +10,8 @@ import {
     ProTable
 } from "@jiangood/open-admin"
 
+import LinkButton from '../../components/LinkButton'
+
 
 const SOURCE_LABELS = {
     BUILD: {text: '构建', color: 'green'},
@@ -31,10 +33,10 @@ export default class extends React.Component {
             title: '镜像地址',
             dataIndex: 'imageUrl',
             render: (imageUrl, row) => (
-                <Button type='link' style={{padding: 0}}
-                        onClick={() => PageUtils.open('/image-repo/view?id=' + row.id, "镜像仓库-" + imageUrl)}>
+                <LinkButton
+                    onClick={() => PageUtils.open('/image-repo/view?id=' + row.id, "镜像仓库-" + imageUrl)}>
                     {imageUrl}
-                </Button>
+                </LinkButton>
             ),
         },
         {

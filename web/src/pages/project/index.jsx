@@ -12,6 +12,7 @@ import {
 } from "@jiangood/open-admin"
 
 import FieldGitRepository from '../../components/FieldGitRepository'
+import LinkButton from '../../components/LinkButton'
 
 
 export default class extends React.Component {
@@ -34,8 +35,8 @@ export default class extends React.Component {
             title: '项目',
             dataIndex: 'name',
             render: (name, row) => {
-                return <Button type='link' style={{padding: 0}}
-                               onClick={() => PageUtils.open('/project/view?id=' + row.id, "项目-" + name)}>{name}</Button>
+                return <LinkButton
+                    onClick={() => PageUtils.open('/project/view?id=' + row.id, "项目-" + name)}>{name}</LinkButton>
             },
 
         },

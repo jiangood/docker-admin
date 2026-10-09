@@ -10,7 +10,7 @@ import ContainerConsole from "./ContainerConsole";
 import {stateColor, stateLabel, wsContainerLogPath} from "./utils";
 
 /**
- * 通用容器组件：垂直 Tab 展示基本信息 / 日志 / 配置 / 文件 / 控制台。
+ * 通用容器组件：垂直 Tab 展示概览 / 日志 / 配置 / 文件 / 终端。
  * 参照 Docker Desktop，按 hostId + containerId 定位容器，可用于主机详情与应用详情。
  * <p>
  * 传入 appId 时会改用应用维度的接口（额外校验组织数据权限）：
@@ -67,7 +67,7 @@ export default class extends React.Component {
         const {height, extra} = this.props
 
         if (loading) {
-            return <div style={{padding: 24, textAlign: 'center'}}><Spin/></div>
+            return <div className='center-box'><Spin/></div>
         }
         if (error) {
             return <Alert type='error' showIcon title={error}/>
@@ -85,7 +85,7 @@ export default class extends React.Component {
         const items = [
             {
                 key: 'info',
-                label: '基本信息',
+                label: '概览',
                 children: <div style={{height: tabHeight, overflow: 'auto'}}><ContainerInfo detail={detail}/></div>
             },
             {
@@ -109,16 +109,16 @@ export default class extends React.Component {
             },
             {
                 key: 'console',
-                label: '控制台',
+                label: '终端',
                 children: <ContainerConsole hostId={this.props.hostId} containerId={this.props.containerId}
                                             running={running} height={tabHeight - 40}/>
             },
         ]
 
         return <>
-            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 12}}>
+            <div className='mb-3 gap-3' style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
                 <Space wrap>
-                    <Typography.Text strong style={{fontSize: 16}}>{detail.name}</Typography.Text>
+                    <Typography.Title level={5} style={{margin: 0}}>{detail.name}</Typography.Title>
                     <Tag color={stateColor(detail.state)}>{stateLabel(detail.state)}</Tag>
                     <Typography.Text type='secondary'>{detail.idShort}</Typography.Text>
                 </Space>

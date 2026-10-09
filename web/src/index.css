@@ -1,10 +1,33 @@
 /*
- * 业务级全局样式规范。
+ * 业务级全局样式与设计 token。
  *
  * - 主题色由框架在运行时写入 documentElement（--primary-color / --primary-color-hover）；
  *   语义色统一通过 getToken() 从 antd 主题读取，不在此处重复定义。
- * - 这里只放与主题无关的排版 / 间距 / 容器规范。
+ * - 这里定义与主题无关的间距 / 圆角 / 字号刻度，以及少量布局工具类。
+ *
+ * 刻度以 4px 为基准，与 antd 的 sizeUnit 对齐：
+ *   .mt-2 / .mb-2 = 8px（--space-2），.mt-4 / .mb-4 = 16px（--space-4）。
  */
+
+:root {
+    /* 间距刻度（4px 基准） */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 24px;
+    --space-6: 32px;
+
+    /* 圆角（与 antd borderRadius 对齐） */
+    --radius-sm: 4px;
+    --radius: 6px;
+    --radius-lg: 8px;
+
+    /* 字号（与 antd fontSize* 对齐） */
+    --font-size-sm: 12px;
+    --font-size: 14px;
+    --font-size-lg: 16px;
+}
 
 /*
  * 表单 / 详情 / 工具页统一卡片：固定最大宽度并居中，
@@ -17,14 +40,48 @@
 }
 
 /*
- * 通用间距工具。
- * 此前 .mt-2 / .mb-2 被页面使用但未定义，等于没有间距，卡片会贴在一起；
- * 这里补上定义，使沿用这些类名的页面间距生效且一致。
+ * 间距工具类：后缀为刻度序号（.mt-2 = 8px、.mb-4 = 16px）。
+ * 页面用它替代散落的 style={{marginTop/marginBottom: N}}，保证间距成体系。
  */
-.mt-2 {
-    margin-top: 16px;
+.mt-1 { margin-top: var(--space-1); }
+.mt-2 { margin-top: var(--space-2); }
+.mt-3 { margin-top: var(--space-3); }
+.mt-4 { margin-top: var(--space-4); }
+.mt-5 { margin-top: var(--space-5); }
+.mb-1 { margin-bottom: var(--space-1); }
+.mb-2 { margin-bottom: var(--space-2); }
+.mb-3 { margin-bottom: var(--space-3); }
+.mb-4 { margin-bottom: var(--space-4); }
+.mb-5 { margin-bottom: var(--space-5); }
+
+/* flex 间距工具类 */
+.gap-1 { gap: var(--space-1); }
+.gap-2 { gap: var(--space-2); }
+.gap-3 { gap: var(--space-3); }
+.gap-4 { gap: var(--space-4); }
+
+/* 右对齐操作行 */
+.row-end {
+    display: flex;
+    justify-content: flex-end;
 }
 
-.mb-2 {
-    margin-bottom: 16px;
+/* 居中占位（如局部加载中的 Spin） */
+.center-box {
+    padding: var(--space-5);
+    text-align: center;
+}
+
+/* 等宽字体（密钥、命令行等） */
+.mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* 等宽代码块：日志 / 预览 / 环境变量等 pre 内容的公共排版 */
+.code-block {
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-all;
+    overflow: auto;
+    font-size: var(--font-size-sm);
 }

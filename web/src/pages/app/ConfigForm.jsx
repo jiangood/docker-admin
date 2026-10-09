@@ -11,7 +11,7 @@ export default class extends React.Component {
 
     update = (values) => {
         const config = values.config
-        const hide = message.loading("修改配置中...", 0)
+        const hide = message.loading("修改配置中…", 0)
         HttpClient.post('admin/app/updateConfig?id=' + this.props.app.id, config).then(rs => {
             this.props.onChange(rs.data)
         }).finally(hide)
@@ -32,7 +32,7 @@ export default class extends React.Component {
                                  imageUrl={app.imageUrl} imageTag={app.imageTag}/>
 
             <Form.Item label=' '>
-                <Button type="primary" danger htmlType='submit' size={"large"}>保存并重启</Button>
+                <Button type="primary" htmlType='submit' size="large">保存并重启</Button>
             </Form.Item>
         </Form>
     }

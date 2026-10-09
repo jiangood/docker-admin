@@ -114,7 +114,7 @@ export default class CodeSourceProjectPicker extends React.Component {
                 </Space>
 
                 {selectedType && selectedType !== 'GITLAB' &&
-                    <Alert type='info' showIcon message='该类型暂不支持自动列出仓库，请关闭后手动填写仓库地址'/>}
+                    <Alert type='info' showIcon title='该类型暂不支持自动列出仓库，请关闭后手动填写仓库地址'/>}
 
                 <ProTable
                     actionRef={this.tableRef}

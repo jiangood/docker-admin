@@ -158,7 +158,7 @@ export default class extends React.Component {
         const {clients, clientsLoading} = this.state
         return (
             <div>
-                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8}}>
+                <div className='mb-2' style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
                     <Typography.Text type='secondary'>
                         一个客户端 = 一台业务主机上运行的 http-tunnel client 进程，名称、令牌与 API 地址需与之匹配。
                     </Typography.Text>
@@ -173,7 +173,7 @@ export default class extends React.Component {
                        dataSource={clients} columns={this.clientColumns}
                        pagination={false}/>
 
-                <Typography.Text type='secondary' style={{display: 'block', marginTop: 8}}>
+                <Typography.Text type='secondary' className='mt-2' style={{display: 'block'}}>
                     客户端需以 <code>--api-port</code> 启动管理 API；API 地址形如 http://主机:2336，令牌与客户端 <code>--token</code> 一致。
                 </Typography.Text>
             </div>
@@ -194,7 +194,7 @@ export default class extends React.Component {
         const {tunnels, tunnelsLoading} = this.state
         return (
             <div>
-                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8}}>
+                <div className='mb-2' style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
                     <Typography.Text type='secondary'>
                         隧道由应用详情页的「隧道」标签创建与删除，这里仅查看。
                     </Typography.Text>
@@ -205,7 +205,7 @@ export default class extends React.Component {
                        dataSource={tunnels} columns={this.tunnelColumns}
                        pagination={false}/>
 
-                <Typography.Text type='secondary' style={{display: 'block', marginTop: 8}}>
+                <Typography.Text type='secondary' className='mt-2' style={{display: 'block'}}>
                     域名需解析到隧道服务端 IP；服务端按 Host 头路由，重名域名会被拒绝。
                 </Typography.Text>
             </div>
@@ -222,8 +222,8 @@ export default class extends React.Component {
 
         return <Page padding>
             <Card className='page-card'>
-                <Alert type='info' showIcon style={{marginBottom: 12}}
-                       message='服务端与客户端都由你自行部署'
+                <Alert type='info' showIcon className='mb-3'
+                       title='服务端与客户端都由你自行部署'
                        description={'平台只登记客户端并通过其管理 API 维护隧道；改动会由客户端转发给服务端，'
                            + '验证后落盘 server.toml 并推送给在线客户端。'}/>
                 <Tabs items={items} activeKey={activeTab} onChange={key => this.setState({activeTab: key})}/>

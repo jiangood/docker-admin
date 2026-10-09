@@ -200,7 +200,7 @@ export default class extends React.Component {
       }
     },
     {
-      title: '-',
+      title: '操作',
       dataIndex: 'option',
       valueType: 'option',
       fixed: 'right',
@@ -225,8 +225,8 @@ export default class extends React.Component {
 
     return (<Page padding>
 
-      <Card className='mb-2'>
-        <Descriptions title={project.name}>
+      <Card className='mb-4' title={project.name}>
+        <Descriptions>
           <Descriptions.Item label='id'>{project.id}</Descriptions.Item>
           <Descriptions.Item label='镜像地址'>{project.imageUrl}</Descriptions.Item>
           <Descriptions.Item label='代码源'>{project.gitUrl}</Descriptions.Item>
@@ -234,13 +234,13 @@ export default class extends React.Component {
           <Descriptions.Item label='创建时间'>{project.createTime}</Descriptions.Item>
         </Descriptions>
 
-        <div style={{display: 'flex', justifyContent: 'end'}}>
+        <div className='row-end'>
           <Button onClick={this.triggerPipeline} type="primary">立即构建</Button>
         </div>
 
       </Card>
 
-      <Card className='mb-2'>
+      <Card className='mb-4'>
         {this.renderTabs()}
       </Card>
 
@@ -263,7 +263,7 @@ export default class extends React.Component {
             <Select options={tagOptions} showSearch placeholder='请选择远程 tag'/>
           </Form.Item>
 
-          <div style={{display: 'flex', justifyContent: 'end'}}>
+          <div className='row-end'>
             <Button type='primary' htmlType="submit">确定</Button>
           </div>
         </Form>
@@ -293,7 +293,7 @@ export default class extends React.Component {
           <ProTable
             actionRef={this.actionRef}
             toolBarRender={() => (
-              <div style={{display: 'flex', justifyContent: 'flex-end'}}>
+              <div className='row-end'>
                 <Button onClick={this.cleanError}>清理失败记录</Button>
               </div>
             )}
@@ -339,9 +339,9 @@ export default class extends React.Component {
           <Alert
             type='info'
             showIcon
-            message='推送 tag 自动构建'
+            className='mb-4'
+            title='推送 tag 自动构建'
             description='向下面的地址推送形如 vX.Y.Z 的 tag，即可使用系统默认构建节点自动构建对应版本。'
-            style={{marginBottom: 16}}
           />
           <Descriptions column={1} size='small' bordered>
             <Descriptions.Item label='自动配置'>

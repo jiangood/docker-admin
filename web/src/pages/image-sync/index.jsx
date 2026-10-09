@@ -108,7 +108,7 @@ export default class extends React.Component {
      */
     imageOptions = () => {
         const label = (value, group) => (
-            <span style={{display: 'flex', justifyContent: 'space-between', gap: 16}}>
+            <span className='gap-4' style={{display: 'flex', justifyContent: 'space-between'}}>
                 <span>{value}</span>
                 <Typography.Text type='secondary'>{group}</Typography.Text>
             </span>
@@ -204,8 +204,8 @@ export default class extends React.Component {
             <Alert
                 type='info'
                 showIcon
-                style={{marginBottom: 16}}
-                message='选择一台网络通畅的主机拉取公共镜像，推送到注册中心'
+                className='mb-4'
+                title='选择一台网络通畅的主机拉取公共镜像，推送到注册中心'
                 description='国内主机直连 Docker Hub 等公共仓库较慢，可借助网络通畅的主机做中转。镜像会先推送到注册中心，再按需分发到目标主机；同步过程中会从右侧弹出实时日志。'
             />
 
@@ -219,8 +219,8 @@ export default class extends React.Component {
                     <Alert
                         type='warning'
                         showIcon
-                        style={{marginBottom: 16}}
-                        message='尚未配置镜像注册中心，请先前往【设置 - 镜像注册中心】完成配置'
+                        className='mb-4'
+                        title='尚未配置镜像注册中心，请先前往【设置 - 镜像注册中心】完成配置'
                     />
                 )}
 

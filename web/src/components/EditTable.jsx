@@ -1,8 +1,14 @@
-import {Button, Input, InputNumber, Select} from "antd";
+import {Button, Input, InputNumber, Select, Tooltip} from "antd";
 import React from "react";
-import {DeleteOutlined, ExclamationCircleOutlined, PlusCircleFilled} from '@ant-design/icons';
+import {DeleteOutlined, ExclamationCircleOutlined, PlusOutlined} from '@ant-design/icons';
 import {getToken} from "@jiangood/open-admin";
 
+/**
+ * 可编辑表格（表单内联编辑）：端口 / 卷 / 环境变量等键值行。
+ *
+ * 原生 table 按 antd Table 的观感自绘：表头底色、分隔线、内边距与主题 token 对齐，
+ * 使它在表单里与其它页面组件保持一致，而不是一张无边框的裸表。
+ */
 export default class extends React.Component {
 
   state = {
@@ -81,28 +87,48 @@ export default class extends React.Component {
     const canAdd = this.props.canAdd !== false;
     const canRemove = this.props.canRemove !== false;
     const colSpan = columns.length + (canRemove ? 1 : 0);
+
+    const token = getToken()
+    const thStyle = {
+      padding: 'var(--space-2) var(--space-3)',
+      textAlign: 'left',
+      fontWeight: 500,
+      color: token.colorTextHeading,
+      background: token.colorFillAlter,
+      borderBottom: `1px solid ${token.colorBorderSecondary}`,
+    }
+    const tdStyle = {
+      padding: 'var(--space-1) var(--space-3)',
+      borderBottom: `1px solid ${token.colorBorderSecondary}`,
+    }
+    const actionTdStyle = {...tdStyle, width: 48, textAlign: 'center'}
+
     return <div>
-      <table>
+      <table style={{width: '100%', borderCollapse: 'collapse'}}>
         <thead>
         <tr>
-          {columns.map(c => <th key={c.dataIndex}>{c.title}</th>)}
-          {canRemove && <th></th>}
+          {columns.map(c => <th key={c.dataIndex} style={thStyle}>{c.title}</th>)}
+          {canRemove && <th style={{...thStyle, width: 48}}></th>}
         </tr>
         </thead>
         <tbody>
         {dataSource.length === 0 && <tr>
-          <td height={50} colSpan={colSpan}>
+          <td colSpan={colSpan}
+              style={{...tdStyle, padding: 'var(--space-5) var(--space-3)', textAlign: 'center', color: token.colorTextSecondary}}>
             <ExclamationCircleOutlined/> {extra || '暂无数据'}
           </td>
         </tr>}
 
 
         {dataSource.map((p, i) => <tr key={i}>
-          {columns.map(c => <td key={c.dataIndex} align='center'>
+          {columns.map(c => <td key={c.dataIndex} style={tdStyle}>
             {this.renderCell(c, p, i)}
           </td>)}
-          {canRemove && <td>
-            <DeleteOutlined onClick={() => this.remove(i)}></DeleteOutlined>
+          {canRemove && <td style={actionTdStyle}>
+            <Tooltip title='删除'>
+              <Button type='text' size='small' danger aria-label='删除'
+                      icon={<DeleteOutlined/>} onClick={() => this.remove(i)}/>
+            </Tooltip>
           </td>}
         </tr>)}
 
@@ -110,10 +136,8 @@ export default class extends React.Component {
         </tbody>
       </table>
 
-      {canAdd && <div style={{marginTop: 16, marginBottom: 16}}>
-        <PlusCircleFilled style={{color: getToken().colorPrimary}}/><Button type='link' style={{padding: 0}}
-                                                             onClick={this.add}>添加</Button>
-      </div>}
+      {canAdd && <Button type='link' icon={<PlusOutlined/>} className='mt-4 mb-2' style={{padding: 0}}
+                         onClick={this.add}>添加</Button>}
     </div>
 
   }
