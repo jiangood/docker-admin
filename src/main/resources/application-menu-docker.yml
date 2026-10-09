@@ -25,6 +25,10 @@ menus:
     perms:
       - {name: 查看, code: image-repo:view}
       - {name: 删除, code: image-repo:delete}
+  divider-image-repo:
+    pid: biz
+    type: divider
+    seq: 120
   app:
     pid: biz
     name: 应用
@@ -38,6 +42,10 @@ menus:
       - {name: 删除, code: app:delete}
       - {name: 部署, code: app:deploy}
       - {name: 隧道, code: app:tunnel}
+  divider-app:
+    pid: biz
+    type: divider
+    seq: 250
   setting:
     pid: biz
     name: 设置
