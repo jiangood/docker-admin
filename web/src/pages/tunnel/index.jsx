@@ -23,6 +23,7 @@ export default class extends React.Component {
 
         clientModal: false,
         clientEditing: null,
+        clientFormValues: {},
         clientSaving: false,
     }
 
@@ -58,14 +59,17 @@ export default class extends React.Component {
 
     openClientModal = row => {
         const editing = row || null
-        this.setState({clientModal: true, clientEditing: editing}, () => {
-            this.clientFormRef.current && this.clientFormRef.current.setFieldsValue({
-                name: editing ? editing.name : '',
-                domain: editing ? editing.domain : '',
-                apiUrl: editing ? editing.apiUrl : '',
-                token: '',
-                remark: editing ? editing.remark : '',
-            })
+        // 通过 initialValues 回填：Modal 使用 destroyOnHidden，表单会随弹窗销毁/重建，
+        // 在 setState 回调里 setFieldsValue 时表单尚未挂载，数据会丢失。
+        this.setState({
+            clientModal: true,
+            clientEditing: editing,
+            clientFormValues: editing ? {
+                name: editing.name,
+                apiUrl: editing.apiUrl,
+                domain: editing.domain,
+                remark: editing.remark,
+            } : {},
         })
     }
 
@@ -209,7 +213,7 @@ export default class extends React.Component {
     }
 
     render() {
-        const {activeTab, clientModal, clientSaving, clientEditing} = this.state
+        const {activeTab, clientModal, clientSaving, clientEditing, clientFormValues} = this.state
 
         const items = [
             {key: 'clients', label: '客户端', forceRender: true, children: this.renderClients()},
@@ -230,7 +234,8 @@ export default class extends React.Component {
                    confirmLoading={clientSaving}
                    onOk={this.saveClient}
                    onCancel={() => this.setState({clientModal: false})}>
-                <Form ref={this.clientFormRef} labelCol={{flex: '90px'}} preserve={false}>
+                <Form ref={this.clientFormRef} labelCol={{flex: '90px'}}
+                      initialValues={clientFormValues} preserve={false}>
                     <Form.Item label='名称' name='name' rules={[{required: true, message: '请填写客户端名称'}]}>
                         <Input disabled={!!clientEditing} placeholder='如 home，需与客户端 --name 一致'/>
                     </Form.Item>
