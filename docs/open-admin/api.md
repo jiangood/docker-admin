@@ -47,6 +47,33 @@ public class DataSyncJob extends BaseJob {
 }
 ```
 
+### 代码生成
+
+系统管理 →「代码生成」页面：动态扫描已注册实体（继承 `BaseEntity` 且标注 `@Entity`），按选中实体生成常见 CRUD 代码并写入项目源码目录（先预览确认，再写入）。
+
+| 端点 | HTTP | 权限 | 说明 |
+|------|------|------|------|
+| `admin/codegen/entity-options` | GET | `sys-codegen:read` | 扫描实体列表（`value` 全限定类名，`label` 中文名，`data` 含 `module`/`packageName`/`frameworkEntity`） |
+| `admin/codegen/entity-info` | GET | `sys-codegen:read` | 单实体字段元数据（`className`） |
+| `admin/codegen/preview` | POST | `sys-codegen:generate` | 只生成不写盘，返回各文件路径/内容/是否已存在 |
+| `admin/codegen/generate` | POST | `sys-codegen:generate` | 写入文件，返回 `written`/`skipped` |
+
+请求体（`CodegenReq`）：`className`（必填）、`module`（缺省取类名 kebab-case）、`label`（缺省取实体 `@Remark`）、`parentMenu`（默认 `sys`）、`overwrite`（是否覆盖已存在文件）。
+
+生成物：
+
+| 类型 | 路径 | 说明 |
+|------|------|------|
+| Repository | `{实体包去掉 .entity}/repository/{Entity}Repository.java` | 继承 `BaseRepository<Entity, String>` |
+| Service | `{模块包}/service/{Entity}Service.java` | 继承 `BaseService`，含 `@FileField` 时自动生成 claim/unclaim 事务方法 |
+| Controller | `{模块包}/controller/{Entity}Controller.java` | `admin/{module}` 下 `page/info/create/update/delete`，`@HasPermission` + `@Log` |
+| 前端页面 | `web/src/pages/{module}/index.jsx` | `ProTable` + `FormModal`，按字段类型选用 `Field*`/`View*` 组件 |
+| 菜单 | `src/main/resources/application-menu-{module}.yml` | 挂在指定父菜单（默认 `sys`），含读/建/改/删权限 |
+
+字段映射：String→`Input`、`@Lob`/TEXT→`Input.TextArea`、数字→`InputNumber`、布尔→`FieldBoolean`、日期→`FieldDate`、枚举（`@DictType`）→`FieldDictSelect`、`@FileField(html=true)`→`FieldEditor`、图片类文件→`FieldUploadImage`、其他文件→`FieldUploadFile`；查询条件为可搜索 String 字段的 `searchText` 模糊匹配 + 枚举/布尔等值过滤。
+
+写盘根目录由 `sys.codegen.*` 配置（见 [config.md](config.md)），路径越界会被拒绝；目标文件已存在且未开启 `overwrite` 时跳过。
+
 ## 前端
 
 ### 组件
@@ -159,6 +186,9 @@ import { PermActions } from '@jiangood/open-admin';
   toolBarRender={(params, {selectedRows, selectedRowKeys}) => (
     <Button type="primary" onClick={this.handleAdd}>新增</Button>
   )}
+  toolBarRightRender={(params) => (
+    <Button danger onClick={this.handleClean}>清理失败记录</Button>
+  )}
   defaultPageSize={20}
   scrollY={500}
 />
@@ -171,6 +201,7 @@ import { PermActions } from '@jiangood/open-admin';
 | `actionRef` | 表格操作句柄（`reload` / `clearSelection`） |
 | `formRef` | 搜索表单实例（`getFieldsValue` 等） |
 | `toolBarRender` | 工具栏渲染，参数为当前搜索值 + 行选择状态 |
+| `toolBarRightRender` | 工具栏右侧渲染，参数同 `toolBarRender`；用于导出/清理/刷新等右侧操作 |
 | `rowSelection` | 行选择：`true` 为 checkbox，对象可覆盖 `type`/`onChange` |
 | `treeMode` | 树形数据模式，关闭分页 |
 | `searchFormRender` | 搜索表单渲染函数，返回 `Form.Item` 列表 |
@@ -260,12 +291,25 @@ class ReportPage extends React.Component {
 | `FieldBoolean` | 布尔值选择（`type`：select/radio/checkbox/switch） |
 | `FieldDate` / `FieldDateRange` | 日期/日期范围（`type`：如 `YYYY-MM-DD`、`YYYY-MM`、`YYYY-QQ`、`YYYY-MM-DD HH:mm:ss`、`HH:mm:ss`） |
 | `FieldNumberRange` | 数字范围（值形如 `"1/100"`） |
-| `FieldSysOrgTree` / `FieldSysOrgTreeSelect` | 系统组织树 / 树选择（`type`：dept/unit/shop） |
+| `FieldSysOrgTree` / `FieldSysOrgTreeSelect` | 系统组织树 / 树选择（`type`：dept/unit） |
 | `FieldUploadFile` | 通用文件上传（`/admin/sysFile/upload`） |
 | `FieldUploadImage` | 图片上传（裁剪/压缩，`/admin/sysFile/uploadImage`） |
 | `FieldEditor` | 富文本编辑器 |
 | `FieldPercent` | 百分比输入（0~100，内部按 0~1 存储） |
 | `FieldTable` / `FieldTableSelect` | 可编辑表格 / 下拉表格选择 |
+
+#### 业务快捷组件
+
+系统数据的预配置快捷组件（内部已绑定对应系统端点，无需 `url`）：
+
+| 组件 | 用途 |
+|------|------|
+| `FieldUserSelect` | 系统用户下拉（`/admin/sysUser/options`） |
+| `FieldUserSelectMultiple` | 系统用户多选 |
+| `FieldUnitTreeSelect` | 系统单位树选择（`/admin/sysOrg/unit-tree`） |
+| `FieldDeptTreeSelect` | 系统部门树选择（`/admin/sysOrg/dept-tree`） |
+| `FieldOrgTreeSelect` | `FieldDeptTreeSelect` 的别名 |
+| `FieldOrgTreeMultipleSelect` | 系统部门树多选 |
 
 #### 文件上传字段
 

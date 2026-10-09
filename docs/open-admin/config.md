@@ -13,15 +13,34 @@
 | `sys.file.minio.*` | MinIO 对象存储配置 | — |
 | `sys.session-idle-time` | Session 超时（分钟） | 180 |
 | `sys.job-enable` | 定时任务开关 | true |
+| `sys.codegen.backend-dir` | 代码生成后端源码根目录（相对项目根） | src/main/java |
+| `sys.codegen.resource-dir` | 代码生成资源目录（菜单 YAML 输出位置） | src/main/resources |
+| `sys.codegen.frontend-dir` | 代码生成前端页面根目录 | web/src/pages |
+| `sys.codegen.frontend-import` | 生成页面引入框架组件的模块名；留空自动识别（框架仓库用相对路径，业务项目用 `@jiangood/open-admin`） | 空 |
 
-> 框架的 `.opencode/skills/` 与 `docs/open-admin/` 由 `oa-sync-docs` skill 从框架 GitHub Release 下载 `framework-files.zip` 同步到业务项目根目录（内容比对，无变更不写入），并在根目录生成 `AGENTS.md`（不存在时生成，已存在且不同时询问确认后更新）。无需配置。
+> 框架的 `.opencode/skills/` 与 `docs/open-admin/` 由 `oa-upgrade-docs` skill 从框架 GitHub Release 下载 `framework-files.zip` 同步到业务项目根目录（内容比对，无变更不写入）。无需配置。
+
+## 数据库
+
+框架自身（示例应用 / 独立运行 / Docker 镜像）默认使用**内置 H2 文件数据库**（MySQL 兼容模式），零外部依赖、开箱即用：
+
+| 配置 | 说明 | 默认 |
+|------|------|------|
+| `db_path` | H2 数据库文件路径（不含扩展名） | /data/db/open-admin |
+| `spring.jpa.hibernate.ddl-auto` | 建表策略 | update（自动建表/更新） |
+
+- 数据文件、上传文件、日志均在 `/data` 下，容器部署请持久化该目录（见 `docker-compose/docker-compose.yml`）
+- 本地开发可用 `-Ddb_path=./data/db/open-admin` 覆盖
+- 切换 MySQL：`--spring.profiles.active=mysql`，连接参数见 `application-mysql.yml` 中的 `db_*` 变量
+- 业务项目自行配置数据源；推荐同样默认 H2、可选 MySQL（参考 open-admin-example）
+- 建表由 JPA 完成，种子数据由 `SeedDataInitializer` 幂等写入（不覆盖已有记录）
 
 ## 文件存储
 
 通过 `sys.file.store-type` 选择后端（`LOCAL` / `MINIO`）：
 
 - `LOCAL` — 本地文件系统，保存到 `sys.file.upload-path`，按 `public/`、`private/` 子目录区分可见性
-- `MINIO` — MinIO 对象存储（官方 `io.minio:minio` 客户端），配置 `sys.file.minio.{endpoint,accessKey,secretKey,bucketName}`；`endpoint` 需带协议前缀（如 `http://localhost:9000`），bucket 需提前创建
+- `MINIO` — MinIO 对象存储（官方 `io.minio:minio` 客户端），配置 `sys.file.minio.{endpoint,accessKey,secretKey,bucketName}`；`endpoint` 需带协议前缀（如 `http://localhost:9000`），bucket 需提前创建。业务项目需自行添加 `io.minio:minio` 与 `com.squareup.okhttp3:okhttp-jvm` 依赖（minio 9.x 的 Maven 元数据引用的 okhttp 为空壳，实际类在 okhttp-jvm）
 
 文件 `objectName` 带可见性前缀（如 `public/202607/xxx.jpg` / `private/202607/xxx.pdf`），本地磁盘路径 = `sys.file.upload-path` + `objectName`，与 URL `/file/{objectName}` 完全一致。
 
