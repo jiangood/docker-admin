@@ -25,6 +25,7 @@ import {history} from "@jiangood/open-admin";
 import {FieldRemoteSelect, HttpClient, Page, PageUtils} from "@jiangood/open-admin";
 import PublishForm from "./PublishForm";
 import LogView from "../../components/LogView";
+import ContainerDetail from "../../components/container/ContainerDetail";
 
 const Item = Descriptions.Item
 
@@ -235,11 +236,9 @@ export default class extends React.Component {
     }
 
     renderTabs = () => {
-        const {app} = this.state
+        const {app, container} = this.state
 
 
-
-        let consoleLogUrl = '/admin/ws/log/' + app.id;
         let publishLogUrl = '/admin/sys/log/' + app.id;
         const items = [
             {
@@ -248,9 +247,12 @@ export default class extends React.Component {
                 children: <LogView url={publishLogUrl} websocket={false}/>
             },
             {
-                key: 'containerLog',
-                label: '控制台日志',
-                children: <LogView url={consoleLogUrl} websocket={true}/>
+                key: 'container',
+                label: '容器',
+                children: container && container.id
+                    ? <ContainerDetail hostId={app.host?.id} containerId={container.id} appId={app.id}
+                                       height={520} onClose={this.reload}/>
+                    : <Alert type='info' showIcon message='容器未部署'/>
             },
             {
                 key: 'config',

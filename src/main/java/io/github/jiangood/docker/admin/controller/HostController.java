@@ -31,6 +31,9 @@ public class HostController  {
     private HostService service;
 
     @Resource
+    private io.github.jiangood.docker.admin.service.HostDockerService hostDockerService;
+
+    @Resource
     private DockerClientManager dockerClientManager;
 
     @HasPermission("host:list")
@@ -90,6 +93,42 @@ public class HostController  {
             options.add(new Option(h.getId(), h.getName()));
         }
         return AjaxResult.ok().data(options);
+    }
+
+    /**
+     * 主机 Docker 引擎信息（详情页头部）。
+     */
+    @HasPermission("host:list")
+    @RequestMapping("info")
+    public AjaxResult info(String id) {
+        Host host = requireHost(id);
+        return AjaxResult.ok().data(hostDockerService.info(host));
+    }
+
+    /**
+     * 主机基础信息。
+     */
+    @HasPermission("host:list")
+    @RequestMapping("get")
+    public AjaxResult get(String id) {
+        return AjaxResult.ok().data(requireHost(id));
+    }
+
+    /**
+     * 主机上的镜像列表。
+     */
+    @HasPermission("host:list")
+    @RequestMapping("images")
+    public AjaxResult images(String id) {
+        Host host = requireHost(id);
+        return AjaxResult.ok().data(hostDockerService.listImages(host));
+    }
+
+    private Host requireHost(String id) {
+        org.springframework.util.Assert.hasText(id, "id 不能为空");
+        Host host = service.findById(id).orElse(null);
+        org.springframework.util.Assert.notNull(host, "主机不存在");
+        return host;
     }
 
 

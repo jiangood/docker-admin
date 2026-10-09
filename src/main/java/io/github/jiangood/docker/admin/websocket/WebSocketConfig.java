@@ -28,6 +28,18 @@ public class WebSocketConfig implements WebSocketConfigurer {
     private ContainerLogHandshakeInterceptor handshakeInterceptor;
 
     @Resource
+    private GenericContainerLogWebSocketHandler genericContainerLogHandler;
+
+    @Resource
+    private GenericContainerLogHandshakeInterceptor genericContainerLogHandshakeInterceptor;
+
+    @Resource
+    private ContainerExecWebSocketHandler containerExecHandler;
+
+    @Resource
+    private ContainerExecHandshakeInterceptor containerExecHandshakeInterceptor;
+
+    @Resource
     private SyncLogWebSocketHandler syncLogHandler;
 
     @Resource
@@ -51,6 +63,16 @@ public class WebSocketConfig implements WebSocketConfigurer {
         // 容器实时日志
         registry.addHandler(handler, "/admin/ws/log/{id}")
                 .addInterceptors(handshakeInterceptor)
+                .setAllowedOriginPatterns(origins);
+
+        // 通用容器实时日志（主机 + 容器维度）
+        registry.addHandler(genericContainerLogHandler, "/admin/ws/container-log/{hostId}/{containerId}")
+                .addInterceptors(genericContainerLogHandshakeInterceptor)
+                .setAllowedOriginPatterns(origins);
+
+        // 容器交互式控制台
+        registry.addHandler(containerExecHandler, "/admin/ws/container-exec/{hostId}/{containerId}")
+                .addInterceptors(containerExecHandshakeInterceptor)
                 .setAllowedOriginPatterns(origins);
 
         // 镜像同步实时日志

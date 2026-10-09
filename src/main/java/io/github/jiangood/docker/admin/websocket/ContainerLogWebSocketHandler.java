@@ -50,16 +50,20 @@ public class ContainerLogWebSocketHandler extends TextWebSocketHandler {
         }
         Host host = app.getHost();
         Container container = appService.getContainer(app);
-        if (container == null || "exited".equalsIgnoreCase(container.getState())) {
-            // 发送容器状态
-            session.sendMessage(new TextMessage("容器已退出"));
+        if (container == null) {
+            session.sendMessage(new TextMessage("容器未部署"));
             return;
         }
         String containerId = container.getId();
+        // 已停止（exited/created/dead 等）的容器同样可以读取历史日志，只是不再跟随输出
+        boolean running = "running".equalsIgnoreCase(container.getState());
 
         executorService.submit(() -> {
             try {
-                dockerLogService.streamContainerLogs(session.getId(), host, containerId, session);
+                if (!running) {
+                    session.sendMessage(new TextMessage("容器当前状态：" + container.getState() + "，以下为历史日志"));
+                }
+                dockerLogService.streamContainerLogs(session.getId(), host, containerId, session, running);
             } catch (Exception e) {
                 log.error("执行容器日志命令失败", e);
                 try {

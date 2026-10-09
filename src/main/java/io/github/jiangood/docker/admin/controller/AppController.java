@@ -1,11 +1,13 @@
 package io.github.jiangood.docker.admin.controller;
 
 import cn.hutool.core.util.StrUtil;
+import com.github.dockerjava.api.model.Container;
 import io.github.jiangood.docker.base.OrgAccessTool;
 import io.github.jiangood.openadmin.framework.perm.HasPermission;
 import io.github.jiangood.docker.admin.dto.ContainerVo;
 import io.github.jiangood.docker.admin.entity.App;
 import io.github.jiangood.docker.admin.service.AppService;
+import io.github.jiangood.docker.admin.service.ContainerService;
 import io.github.jiangood.docker.admin.service.TunnelService;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import io.github.jiangood.openadmin.util.dto.AjaxResult;
@@ -44,6 +46,9 @@ public class AppController {
 
     @Resource
     private TunnelService tunnelService;
+
+    @Resource
+    private ContainerService containerService;
 
     @HasPermission("app:view")
     @RequestMapping("list")
@@ -85,6 +90,19 @@ public class AppController {
         ContainerVo container = service.getContainerVo(app);
 
         return AjaxResult.ok().data(container);
+    }
+
+    /**
+     * 应用容器的详情（基本信息 + 只读配置），供应用详情页的通用容器组件使用。
+     * 与主机维度的 {@code admin/container/inspect} 相对，这里额外做了组织数据权限校验。
+     */
+    @HasPermission("app:view")
+    @RequestMapping("containerDetail")
+    public AjaxResult containerDetail(String id) {
+        App app = assertAppAccess(id);
+        Container container = service.getContainer(app);
+        Assert.notNull(container, "容器未部署");
+        return AjaxResult.ok().data(containerService.inspect(app.getHost(), container.getId()));
     }
 
     /**

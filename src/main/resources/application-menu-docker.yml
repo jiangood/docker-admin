@@ -61,6 +61,9 @@ menus:
       - {name: 查看, code: host:list}
       - {name: 保存, code: host:save}
       - {name: 删除, code: host:delete}
+      - {name: 容器控制台, code: container:exec}
+      - {name: 容器文件, code: container:file}
+      - {name: 容器操作, code: container:operate}
   setting-registry:
     pid: setting
     name: 注册中心

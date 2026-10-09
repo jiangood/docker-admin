@@ -26,7 +26,13 @@ public class DockerLogService {
     private DockerClientManager dockerClientManager;
 
 
-    public void streamContainerLogs(String sessionId, Host host, String containerId, WebSocketSession session) {
+    /**
+     * 拉取容器日志并推送到 WebSocket。
+     *
+     * @param follow 是否持续跟随输出。运行中的容器传 {@code true}；已停止的容器传
+     *               {@code false}，只拉取历史日志（Docker 守护进程支持读取已停止容器的日志）。
+     */
+    public void streamContainerLogs(String sessionId, Host host, String containerId, WebSocketSession session, boolean follow) {
         try {
             DockerClient dockerClient = dockerClientManager.getClient(host);
 
@@ -35,7 +41,7 @@ public class DockerLogService {
             dockerClient.logContainerCmd(containerId)
                     .withStdOut(true)
                     .withStdErr(true)
-                    .withFollowStream(true)
+                    .withFollowStream(follow)
                     .withTail(2000)
                     .exec(callback);
 

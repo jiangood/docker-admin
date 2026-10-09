@@ -88,6 +88,10 @@ export default class extends React.Component {
             valueType: 'option',
             render: (_, record) => (
                 <PermActions>
+                    <Button size='small' perm='host:list'
+                            onClick={() => PageUtils.open('/host/view?id=' + record.id, '主机-' + record.name)}>
+                        查看
+                    </Button>
                     <Button size='small' perm='host:save' onClick={() => this.handleTestRow(record)}>
                         {this.state.testingId === record.id ? '测试中...' : '测试连接'}
                     </Button>
