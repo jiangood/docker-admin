@@ -10,7 +10,7 @@ import {
   Loading3QuartersOutlined,
   MinusCircleTwoTone
 } from "@ant-design/icons";
-import {DateUtils, HttpClient, PageUtils, ProTable, UrlUtils, ViewText} from "@jiangood/open-admin";
+import {DateUtils, getToken, HttpClient, Page, PageUtils, ProTable, UrlUtils, ViewText} from "@jiangood/open-admin";
 import LogView from "../../components/LogView";
 
 
@@ -18,8 +18,8 @@ function getIcon(key, index) {
   const iconDict = {
     PENDING: <ClockCircleOutlined key={index}/>,
     PROCESSING: <Loading3QuartersOutlined key={index} spin/>,
-    SUCCESS: <CheckCircleFilled key={index} style={{color: 'green'}}/>,
-    ERROR: <CloseCircleFilled key={index} style={{color: 'red'}}/>,
+    SUCCESS: <CheckCircleFilled key={index} style={{color: getToken().colorSuccess}}/>,
+    ERROR: <CloseCircleFilled key={index} style={{color: getToken().colorError}}/>,
     CANCEL: <MinusCircleTwoTone/>
   }
   return iconDict[key]
@@ -218,12 +218,12 @@ export default class extends React.Component {
 
   render() {
     if (this.state.project == null) {
-      return <Spin/>
+      return <Page padding><Spin/></Page>
     }
 
     const {project, showTrigger, logRow, tagOptions} = this.state;
 
-    return (<>
+    return (<Page padding>
 
       <Card className='mb-2'>
         <Descriptions title={project.name}>
@@ -279,7 +279,7 @@ export default class extends React.Component {
           : null}
       </Modal>
 
-    </>)
+    </Page>)
   }
 
   renderTabs = () => {
@@ -335,7 +335,7 @@ export default class extends React.Component {
       {
         key: 'webhook',
         label: 'Webhook',
-        children: <div style={{maxWidth: 900}}>
+        children: <div className='page-card'>
           <Alert
             type='info'
             showIcon
@@ -351,10 +351,10 @@ export default class extends React.Component {
                   loading={webhookLoading}
                   onChange={this.toggleWebhook}
                 />
-                <span style={{color: '#999'}}>
+                <Typography.Text type='secondary'>
                   开启后在当前代码仓库（GitLab）自动创建上面的 Webhook 地址；关闭时自动删除。
                   需在【设置-代码源】中配置 GitLab 类型与访问令牌（api 权限）。
-                </span>
+                </Typography.Text>
               </Space>
             </Descriptions.Item>
             <Descriptions.Item label='Webhook 地址'>
@@ -367,10 +367,10 @@ export default class extends React.Component {
               </Space>
             </Descriptions.Item>
             <Descriptions.Item label='说明'>
-              <span style={{color: '#999'}}>
+              <Typography.Text type='secondary'>
                 重置令牌后旧地址立即失效，需要同步更新代码仓库中的 Webhook 配置；
                 若已开启自动配置，重置令牌会自动删除仓库上的旧 Webhook，需要重新开启。
-              </span>
+              </Typography.Text>
             </Descriptions.Item>
           </Descriptions>
         </div>

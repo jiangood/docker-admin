@@ -1,4 +1,4 @@
-import {Alert, Button, Card, Form, Input, message, Modal, Space, Table, Tabs, Tag, Tooltip} from 'antd';
+import {Alert, Button, Card, Form, Input, message, Modal, Space, Table, Tabs, Tag, Tooltip, Typography} from 'antd';
 import {PlusOutlined, ReloadOutlined} from '@ant-design/icons';
 import React from 'react';
 import {HttpClient, Page, PermActions} from '@jiangood/open-admin';
@@ -159,9 +159,9 @@ export default class extends React.Component {
         return (
             <div>
                 <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8}}>
-                    <span style={{color: '#999'}}>
+                    <Typography.Text type='secondary'>
                         一个客户端 = 一台业务主机上运行的 http-tunnel client 进程，名称、令牌与 API 地址需与之匹配。
-                    </span>
+                    </Typography.Text>
                     <Space>
                         <Button size='small' icon={<ReloadOutlined/>} onClick={this.loadClients}>刷新</Button>
                         <Button perm='tunnel:save' size='small' type='primary' icon={<PlusOutlined/>}
@@ -173,9 +173,9 @@ export default class extends React.Component {
                        dataSource={clients} columns={this.clientColumns}
                        pagination={false}/>
 
-                <div style={{color: '#999', marginTop: 8}}>
+                <Typography.Text type='secondary' style={{display: 'block', marginTop: 8}}>
                     客户端需以 <code>--api-port</code> 启动管理 API；API 地址形如 http://主机:2336，令牌与客户端 <code>--token</code> 一致。
-                </div>
+                </Typography.Text>
             </div>
         )
     }
@@ -195,9 +195,9 @@ export default class extends React.Component {
         return (
             <div>
                 <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8}}>
-                    <span style={{color: '#999'}}>
+                    <Typography.Text type='secondary'>
                         隧道由应用详情页的「隧道」标签创建与删除，这里仅查看。
-                    </span>
+                    </Typography.Text>
                     <Button size='small' icon={<ReloadOutlined/>} onClick={this.loadTunnels}>刷新</Button>
                 </div>
 
@@ -205,9 +205,9 @@ export default class extends React.Component {
                        dataSource={tunnels} columns={this.tunnelColumns}
                        pagination={false}/>
 
-                <div style={{color: '#999', marginTop: 8}}>
+                <Typography.Text type='secondary' style={{display: 'block', marginTop: 8}}>
                     域名需解析到隧道服务端 IP；服务端按 Host 头路由，重名域名会被拒绝。
-                </div>
+                </Typography.Text>
             </div>
         )
     }
@@ -221,7 +221,7 @@ export default class extends React.Component {
         ]
 
         return <Page padding>
-            <Card style={{maxWidth: 1100}}>
+            <Card className='page-card'>
                 <Alert type='info' showIcon style={{marginBottom: 12}}
                        message='服务端与客户端都由你自行部署'
                        description={'平台只登记客户端并通过其管理 API 维护隧道；改动会由客户端转发给服务端，'

@@ -1,4 +1,4 @@
-import {Alert, AutoComplete, Button, Card, Drawer, Form, Input, Select} from 'antd'
+import {Alert, AutoComplete, Button, Card, Drawer, Form, Input, Select, Typography} from 'antd'
 import React from 'react'
 import {FileTextOutlined} from '@ant-design/icons'
 import {HttpClient, Page, PermActions} from '@jiangood/open-admin'
@@ -108,9 +108,9 @@ export default class extends React.Component {
      */
     imageOptions = () => {
         const label = (value, group) => (
-            <span>
-                {value}
-                <span style={{float: 'right', color: '#999'}}>{group}</span>
+            <span style={{display: 'flex', justifyContent: 'space-between', gap: 16}}>
+                <span>{value}</span>
+                <Typography.Text type='secondary'>{group}</Typography.Text>
             </span>
         )
         const recent = this.state.recentImages
@@ -209,7 +209,7 @@ export default class extends React.Component {
                 description='国内主机直连 Docker Hub 等公共仓库较慢，可借助网络通畅的主机做中转。镜像会先推送到注册中心，再按需分发到目标主机；同步过程中会从右侧弹出实时日志。'
             />
 
-            <Card title='镜像同步' style={{maxWidth: 720}}
+            <Card title='镜像同步' className='page-card'
                   extra={logId ? (
                       <Button type='link' size='small' icon={<FileTextOutlined/>} onClick={this.openLog}>
                           查看同步日志
