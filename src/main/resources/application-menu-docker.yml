@@ -20,7 +20,7 @@ menus:
     pid: biz
     name: 镜像仓库
     path: /image-repo
-    icon: ContainerOutlined
+    icon: DatabaseOutlined
     seq: 100
     perms:
       - {name: 查看, code: image-repo:view}
