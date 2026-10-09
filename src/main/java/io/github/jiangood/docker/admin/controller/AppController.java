@@ -162,9 +162,9 @@ public class AppController {
 
     @HasPermission("app:save")
     @RequestMapping("updateVersion")
-    public AjaxResult updateVersion(String id, String version) {
+    public AjaxResult updateVersion(String id, String version, Boolean forcePull) {
         assertAppAccess(id);
-        service.updateAppVersion(id, version);
+        service.updateAppVersion(id, version, Boolean.TRUE.equals(forcePull));
 
         return AjaxResult.ok().msg("更新指定已发布");
     }

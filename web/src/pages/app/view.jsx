@@ -1,15 +1,17 @@
 import {
     Alert,
+    AutoComplete,
     Button,
     Card,
+    Checkbox,
     Col,
     Descriptions,
     Divider,
+    Form,
     Input,
     message,
     Modal,
     Row,
-    Select,
     Space,
     Spin,
     Tabs,
@@ -44,8 +46,10 @@ export default class extends React.Component {
 
         deployVisible: false,
         versionOptions: [],
-        targetVersion: '',
     }
+
+    deployFormRef = React.createRef()
+
     componentDidMount() {
         let id = PageUtils.currentParams().id
         this.id = id;
@@ -92,29 +96,29 @@ export default class extends React.Component {
         HttpClient.get('admin/app/versions', {id: this.state.app.id}).then(rs => {
             this.setState({
                 versionOptions: rs.data || [],
-                targetVersion: this.state.app.imageTag,
                 deployVisible: true
             })
         })
     }
 
     submitDeploy = () => {
-        const {targetVersion} = this.state
-        if (!targetVersion) {
-            message.warning('请选择版本')
-            return
-        }
-        const {container} = this.state
-        container.state = 'deploying'
-        this.setState({container})
+        this.deployFormRef.current.validateFields().then(values => {
+            const {container} = this.state
+            container.state = 'deploying'
+            this.setState({container})
 
-        const hide = message.loading('部署中...', 0)
-        HttpClient.get('admin/app/updateVersion', {id: this.state.app.id, version: targetVersion}).then(() => {
-            this.setState({deployVisible: false})
-            message.success('部署指令已发送，异步执行中...')
-            this.loadApp()
-            this.loadContainer()
-        }).finally(hide)
+            const hide = message.loading('部署中...', 0)
+            HttpClient.get('admin/app/updateVersion', {
+                id: this.state.app.id,
+                version: values.version,
+                forcePull: values.forcePull
+            }).then(() => {
+                this.setState({deployVisible: false})
+                message.success('部署指令已发送，异步执行中...')
+                this.loadApp()
+                this.loadContainer()
+            }).finally(hide)
+        })
     }
     start = () => {
         HttpClient.post('admin/app/start/' + this.state.app.id).then(() => {
@@ -211,16 +215,20 @@ export default class extends React.Component {
                    onOk={this.submitDeploy}
                    onCancel={() => this.setState({deployVisible: false})}
                    destroyOnHidden>
-                <div style={{marginBottom: 8}}>镜像：{app.imageUrl}</div>
-                <Select style={{width: '100%'}}
-                        value={this.state.targetVersion}
-                        onChange={v => this.setState({targetVersion: v})}
-                        options={this.state.versionOptions}
-                        showSearch
-                        placeholder='选择要部署的版本'/>
-                <div style={{marginTop: 8, color: '#999'}}>
-                    版本来自该镜像的构建记录。
-                </div>
+                <Form ref={this.deployFormRef} layout='vertical'
+                      initialValues={{version: app.imageTag, forcePull: false}}>
+                    <Form.Item name='version' label='版本'
+                               rules={[{required: true, message: '请选择或输入版本'}]}>
+                        <AutoComplete options={this.state.versionOptions}
+                                      filterOption={(inputValue, option) =>
+                                          (option?.value ?? '').toUpperCase().indexOf(inputValue.toUpperCase()) !== -1
+                                      }
+                                      placeholder='请选择或输入版本号'/>
+                    </Form.Item>
+                    <Form.Item name='forcePull' valuePropName='checked' style={{marginBottom: 0}}>
+                        <Checkbox>强制拉取镜像</Checkbox>
+                    </Form.Item>
+                </Form>
             </Modal>
 
         </Page>)

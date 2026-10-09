@@ -5,6 +5,7 @@ import cn.hutool.extra.spring.SpringUtil;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.command.CreateContainerCmd;
 import com.github.dockerjava.api.command.CreateContainerResponse;
+import com.github.dockerjava.api.exception.NotFoundException;
 import com.github.dockerjava.api.model.*;
 import io.github.jiangood.docker.base.tool.YamlTool;
 import io.github.jiangood.docker.admin.BuildSuccessEvent;
@@ -88,6 +89,16 @@ public class AppService extends BaseService<App> {
 
     @Async
     public void deploy(App app) {
+        deploy(app, false);
+    }
+
+    /**
+     * 部署应用。
+     *
+     * @param forcePull 是否强制从仓库拉取镜像；为 false 时若本地已存在同名镜像则跳过拉取，直接使用本地镜像
+     */
+    @Async
+    public void deploy(App app, boolean forcePull) {
         Assert.notNull(app, "应用不存在");
         deployingList.add(app.getId());
         DockerClient client = null;
@@ -115,8 +126,12 @@ public class AppService extends BaseService<App> {
             client = getClient(host, app.getImageUrl());
 
 
-            log.info("开始拉取镜像 {}", image);
-            client.pullImageCmd(image).exec(new DefaultCallback<>(app.getId())).awaitCompletion();
+            if (!forcePull && imageExists(client, image)) {
+                log.info("本地已存在镜像 {}，跳过拉取（如需更新请勾选强制拉取）", image);
+            } else {
+                log.info("开始拉取镜像 {}", image);
+                client.pullImageCmd(image).exec(new DefaultCallback<>(app.getId())).awaitCompletion();
+            }
 
 
             log.info("开始部署镜像 {}", image);
@@ -284,6 +299,21 @@ public class AppService extends BaseService<App> {
 
     }
 
+    /**
+     * 本地是否已存在指定镜像（含 tag）。镜像不存在或查询失败时按不存在处理，交由后续 pull 兜底。
+     */
+    private boolean imageExists(DockerClient client, String image) {
+        try {
+            client.inspectImageCmd(image).exec();
+            return true;
+        } catch (NotFoundException e) {
+            return false;
+        } catch (Exception e) {
+            log.warn("查询本地镜像失败，将执行拉取: {}", image, e);
+            return false;
+        }
+    }
+
     public void stop(String id) {
         App app = appRepository.findById(id).orElse(null);
 
@@ -393,13 +423,17 @@ public class AppService extends BaseService<App> {
     }
 
     public void updateAppVersion(String id, String tag) {
+        updateAppVersion(id, tag, false);
+    }
+
+    public void updateAppVersion(String id, String tag, boolean forcePull) {
         Assert.hasLength(tag, "tag不能为空");
         // 远程删除应用
         App app = appRepository.findById(id).orElse(null);
         app.setImageTag(tag);
         appRepository.save(app);
 
-        SpringUtil.getBean(getClass()).deploy(app);
+        SpringUtil.getBean(getClass()).deploy(app, forcePull);
     }
 
     private void deleteContainer(App app) {
