@@ -1,6 +1,6 @@
 import {Card, Descriptions, Spin, Table, Tabs, Typography} from 'antd'
 import React from 'react'
-import {HttpClient, PageUtils} from "@jiangood/open-admin"
+import {HttpClient, Page, PageUtils} from "@jiangood/open-admin"
 import {sourceTag} from "./index"
 
 
@@ -35,10 +35,10 @@ export default class extends React.Component {
     render() {
         const {repo, tags, apps} = this.state
         if (!repo) {
-            return <Spin/>
+            return <Page padding><Spin/></Page>
         }
 
-        return <>
+        return <Page padding>
             <Card className='mb-2'>
                 <Descriptions title={repo.imageUrl}>
                     <Descriptions.Item label='仓库名'>{repo.name}</Descriptions.Item>
@@ -93,6 +93,6 @@ export default class extends React.Component {
                     },
                 ]}/>
             </Card>
-        </>
+        </Page>
     }
 }

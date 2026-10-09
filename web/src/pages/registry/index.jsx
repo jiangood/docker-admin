@@ -45,7 +45,7 @@ export default class extends React.Component {
         const hasPassword = !!values.passwordMasked
 
         return <Page padding>
-            <Card title='镜像注册中心' style={{maxWidth: 640}}>
+            <Card title='镜像注册中心' className='page-card'>
                 <Form ref={this.formRef} labelCol={{flex: '120px'}}
                       initialValues={values} onFinish={this.onFinish} preserve={false}>
 
