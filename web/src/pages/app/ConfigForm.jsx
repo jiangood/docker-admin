@@ -1,7 +1,6 @@
 import {Button, Form, Input, message, Select, Spin} from "antd";
 import React from "react";
 import EditTable from "../../components/EditTable";
-import CodeMirrorEditor from "../../components/CodeMirrorEditor";
 import {HttpClient} from "@jiangood/open-admin";
 
 /**
@@ -33,21 +32,26 @@ export default class extends React.Component {
     formRef = React.createRef()
 
     portsColumns = (strict) => strict ? [
+        {title: '主机端口', dataIndex: 'publicPort', dataType: 'InputNumber'},
         {title: '容器端口', dataIndex: 'privatePort', readonly: true},
         {title: '协议', dataIndex: 'protocol', readonly: true},
-        {title: '主机端口', dataIndex: 'publicPort', dataType: 'InputNumber'},
     ] : [
+        {title: '主机端口', dataIndex: 'publicPort', dataType: 'InputNumber'},
         {title: '容器端口', dataIndex: 'privatePort', dataType: 'InputNumber'},
         {title: '协议', dataIndex: 'protocol', dataType: 'Select', valueEnum: {TCP: 'TCP', UDP: 'UDP'}},
-        {title: '主机端口', dataIndex: 'publicPort', dataType: 'InputNumber'},
     ]
 
     bindsColumns = (strict) => strict ? [
+        {title: '主机路径', dataIndex: 'publicVolume', dataType: 'Input'},
         {title: '容器路径', dataIndex: 'privateVolume', readonly: true},
-        {title: '主机路径', dataIndex: 'publicVolume', dataType: 'Input'},
     ] : [
-        {title: '容器路径', dataIndex: 'privateVolume', dataType: 'Input'},
         {title: '主机路径', dataIndex: 'publicVolume', dataType: 'Input'},
+        {title: '容器路径', dataIndex: 'privateVolume', dataType: 'Input'},
+    ]
+
+    envColumns = [
+        {title: '变量名', dataIndex: 'name', dataType: 'Input'},
+        {title: '变量值', dataIndex: 'value', dataType: 'Input'},
     ]
 
     deviceColumns = [
@@ -90,6 +94,7 @@ export default class extends React.Component {
             ...app.config,
             ports: meta ? meta.ports : (app.config.ports || []),
             binds: meta ? meta.volumes : (app.config.binds || []),
+            envs: app.config.envs || [],
         }
 
         return <>
@@ -129,8 +134,10 @@ export default class extends React.Component {
                                extra='暂无卷'/>
                 </Form.Item>
 
-                <Form.Item label='环境变量' tooltip='yml格式' name='environmentYAML'>
-                    <CodeMirrorEditor/>
+                <Form.Item label='环境变量' tooltip='每行一个环境变量' name='envs'>
+                    <EditTable columns={this.envColumns}
+                               defaultRow={{name: '', value: ''}}
+                               extra='暂无环境变量'/>
                 </Form.Item>
 
                 <Form.Item label='启动命令' name='cmd'>

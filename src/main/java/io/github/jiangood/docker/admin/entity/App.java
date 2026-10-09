@@ -128,6 +128,15 @@ public class App extends BaseEntity {
         List<BindConfig> binds = new ArrayList<>();
 
 
+        /**
+         * 环境变量（键值对）。
+         */
+        List<EnvVar> envs = new ArrayList<>();
+
+        /**
+         * @deprecated 旧版环境变量 YAML，仅用于兼容读取，读取时由 AppConfigConverter 迁移到 {@link #envs}。
+         */
+        @Deprecated
         String environmentYAML;
 
         /**
@@ -175,6 +184,15 @@ public class App extends BaseEntity {
         Integer publicPort;
         Integer privatePort;
         String protocol;
+
+    }
+
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    @Data
+    public static class EnvVar {
+        String name;
+        String value;
 
     }
 

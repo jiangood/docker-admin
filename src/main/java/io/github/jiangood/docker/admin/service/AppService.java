@@ -7,7 +7,6 @@ import com.github.dockerjava.api.command.CreateContainerCmd;
 import com.github.dockerjava.api.command.CreateContainerResponse;
 import com.github.dockerjava.api.exception.NotFoundException;
 import com.github.dockerjava.api.model.*;
-import io.github.jiangood.docker.base.tool.YamlTool;
 import io.github.jiangood.docker.admin.BuildSuccessEvent;
 import io.github.jiangood.docker.admin.dao.AppRepository;
 import io.github.jiangood.docker.admin.dao.DeployLogRepository;
@@ -208,10 +207,14 @@ public class AppService extends BaseService<App> {
 
 
             // 环境变量
-            Map<String, Object> dict = YamlTool.yamlToFlattenedMap(cfg.getEnvironmentYAML());
             List<String> envs = new ArrayList<>();
-            for (Map.Entry<String, Object> e : dict.entrySet()) {
-                envs.add(e.getKey() + "=" + e.getValue());
+            if (cfg.getEnvs() != null) {
+                for (App.EnvVar e : cfg.getEnvs()) {
+                    if (e == null || StrUtil.isBlank(e.getName())) {
+                        continue;
+                    }
+                    envs.add(e.getName() + "=" + StrUtil.nullToEmpty(e.getValue()));
+                }
             }
 
 
@@ -599,6 +602,9 @@ public class AppService extends BaseService<App> {
         }
         if (cfg.getBinds() == null) {
             cfg.setBinds(new ArrayList<>());
+        }
+        if (cfg.getEnvs() == null) {
+            cfg.setEnvs(new ArrayList<>());
         }
     }
 
