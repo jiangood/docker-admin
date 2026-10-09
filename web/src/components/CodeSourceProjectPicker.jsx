@@ -103,7 +103,7 @@ export default class CodeSourceProjectPicker extends React.Component {
                       footer={null}
                       width={800}
                       destroyOnHidden>
-            <Space direction='vertical' style={{width: '100%'}}>
+            <Space orientation='vertical' style={{width: '100%'}}>
                 <Space>
                     <span>代码源</span>
                     <Select style={{minWidth: 260}}

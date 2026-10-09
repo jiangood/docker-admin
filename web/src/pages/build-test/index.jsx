@@ -241,7 +241,7 @@ export default class extends React.Component {
                 </Row>
             </Form>
 
-            <Drawer title='构建日志' width={860} open={logVisible}
+            <Drawer title='构建日志' size={860} open={logVisible}
                     mask={{closable: false}}
                     extra={runningLogId ? (
                         <Perm code='build-test:build'>

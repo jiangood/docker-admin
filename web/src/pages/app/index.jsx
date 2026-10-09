@@ -276,7 +276,7 @@ export default class extends React.Component {
                             <Input/>
                         </Form.Item>
 
-                        <Divider orientation='left' plain>容器配置</Divider>
+                        <Divider titlePlacement='left' plain>容器配置</Divider>
 
                         <ContainerConfigForm namePrefix={['config']}
                                              imageUrl={this.state.imageUrl} imageTag={this.state.imageTag}/>

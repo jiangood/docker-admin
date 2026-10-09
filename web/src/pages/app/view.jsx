@@ -302,7 +302,7 @@ export default class extends React.Component {
                     <Row wrap={false}>
                         <Col flex="100px">删除应用</Col>
                         <Col flex="auto">
-                            <Space direction={"vertical"}>
+                            <Space orientation={"vertical"}>
                                 <Alert
                                     title="请注意，删除应用将清除该应用的所有数据，且该操作不能被恢复，您确定要删除吗?"
                                     type="warning"

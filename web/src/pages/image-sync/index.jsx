@@ -279,7 +279,7 @@ export default class extends React.Component {
                 </Form>
             </Card>
 
-            <Drawer title='同步日志' width={860} open={logVisible}
+            <Drawer title='同步日志' size={860} open={logVisible}
                     mask={{closable: false}}
                     onClose={() => this.setState({logVisible: false})}>
                 {logId
