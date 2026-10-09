@@ -134,12 +134,6 @@ public class App extends BaseEntity {
         List<EnvVar> envs = new ArrayList<>();
 
         /**
-         * @deprecated 旧版环境变量 YAML，仅用于兼容读取，读取时由 AppConfigConverter 迁移到 {@link #envs}。
-         */
-        @Deprecated
-        String environmentYAML;
-
-        /**
          *   host:主机模式（同主机IP）
          *   bridge:桥接（虚拟IP，NAT）
          *   none:  无需网络'

@@ -1,31 +1,37 @@
 import {Tag} from "antd";
 import React from "react";
-import {HttpClient, StringUtils} from "@jiangood/open-admin";
+import {HttpClient} from "@jiangood/open-admin";
+import {stateColor, stateLabel} from "./container/utils";
 
 
 /**
- * 容器状态
+ * 应用容器状态
  */
 export default class extends React.Component {
 
   state = {
+    state: null,
     status: '-'
   }
 
   componentDidMount() {
-    const {hostId, appName,containerId} = this.props
-    HttpClient.get("admin/container/status", {hostId, appName,containerId}).then(rs => {
-      this.setState({status: rs.data})
-    }).catch(()=>{
-      this.setState({status:'未知'})
+    const {appId} = this.props
+    if (!appId) {
+      return
+    }
+    HttpClient.get("admin/app/container", {id: appId}).then(rs => {
+      const container = rs.data || {}
+      this.setState({
+        state: container.state,
+        status: container.status || stateLabel(container.state),
+      })
+    }).catch(() => {
+      this.setState({status: '未知'})
     })
   }
 
   render() {
-    const s = this.state.status;
-    if (s && (StringUtils.contains(s,'Up') || StringUtils.contains(s, "running"))) {
-      return <Tag color={"green"}>{s} </Tag>
-    }
-    return <Tag color={"red"}>{s}</Tag>
+    const {state, status} = this.state
+    return <Tag color={stateColor(state)}>{status}</Tag>
   }
 }

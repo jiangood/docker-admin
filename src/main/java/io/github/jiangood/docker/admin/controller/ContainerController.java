@@ -1,10 +1,6 @@
 package io.github.jiangood.docker.admin.controller;
 
 import cn.hutool.core.util.StrUtil;
-import com.github.dockerjava.api.DockerClient;
-import com.github.dockerjava.api.command.InspectContainerResponse;
-import com.github.dockerjava.api.command.ListContainersCmd;
-import com.github.dockerjava.api.model.Container;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.dto.ContainerDetailVo;
 import io.github.jiangood.docker.admin.dto.ContainerFileVo;
@@ -12,13 +8,10 @@ import io.github.jiangood.docker.admin.dto.ContainerSummaryVo;
 import io.github.jiangood.docker.admin.service.ContainerService;
 import io.github.jiangood.docker.admin.service.HostService;
 import io.github.jiangood.docker.admin.util.ContainerPermTool;
-import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import io.github.jiangood.openadmin.framework.perm.HasPermission;
 import io.github.jiangood.openadmin.util.dto.AjaxResult;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletResponse;
-import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.io.IOUtils;
 import org.springframework.util.Assert;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -28,10 +21,8 @@ import java.io.OutputStream;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.Map;
 
 @RestController
-@Slf4j
 @RequestMapping(value = "admin/container")
 public class ContainerController {
 
@@ -39,46 +30,7 @@ public class ContainerController {
     private HostService hostService;
 
     @Resource
-    private DockerClientManager dockerClientManager;
-
-    @Resource
     private ContainerService containerService;
-
-    /**
-     * 兼容旧接口：按应用标签查询容器状态。
-     */
-    @HasPermission("app:view")
-    @RequestMapping("status")
-    public AjaxResult status(String hostId, String appName, String containerId) {
-        log.debug("查询容器状态:{}", appName);
-        DockerClient cli = null;
-        try {
-            Host host = hostService.findById(hostId).orElse(null);
-            cli = dockerClientManager.getClient(host);
-
-            if (containerId != null) {
-                InspectContainerResponse res = cli.inspectContainerCmd(containerId).exec();
-                return AjaxResult.ok().data(res.getState().getStatus());
-            }
-
-            ListContainersCmd cmd = cli.listContainersCmd();
-            if (appName != null) {
-                Map<String, String> appLabelFilter = dockerClientManager.getAppLabelFilter(appName);
-                cmd.withLabelFilter(appLabelFilter);
-            }
-
-            List<Container> list = cmd.withShowAll(true).exec();
-            if (list.isEmpty()) {
-                return AjaxResult.ok().data("未知");
-            }
-            return AjaxResult.ok().data(list.get(0).getStatus());
-        } catch (Exception e) {
-            log.warn("查询容器状态失败: {}", e.getMessage());
-            return AjaxResult.ok().data("未知");
-        } finally {
-            IOUtils.closeQuietly(cli);
-        }
-    }
 
     // ------------------------------------------------------------------ 查看
 

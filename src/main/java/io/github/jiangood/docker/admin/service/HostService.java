@@ -63,10 +63,9 @@ public class HostService extends BaseService<Host> {
     }
 
     /**
-     * 归一化主机连接配置，兼容历史数据并补全默认值。
+     * 归一化主机连接配置并补全默认值。
      * <ul>
      *     <li>连接方式为空：按 dockerHost 前缀推断（unix 视为本机，否则远程 TCP）</li>
-     *     <li>连接方式为旧值 unix：归一为 local</li>
      *     <li>SSH：端口默认 22、用户默认 root</li>
      *     <li>非 SSH：dockerHost 允许为空（本机使用平台默认端点），缺少协议头时自动补全</li>
      * </ul>
@@ -80,8 +79,6 @@ public class HostService extends BaseService<Host> {
 
         if (StrUtil.isBlank(type)) {
             type = StrUtil.startWithIgnoreCase(dockerHost, "unix") ? Host.TYPE_LOCAL : Host.TYPE_TCP;
-        } else if (Host.TYPE_UNIX.equalsIgnoreCase(type)) {
-            type = Host.TYPE_LOCAL;
         }
         host.setConnectionType(type);
 

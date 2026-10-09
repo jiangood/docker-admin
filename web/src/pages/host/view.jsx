@@ -5,7 +5,7 @@ import ContainerDetail from "../../components/container/ContainerDetail"
 import LinkButton from "../../components/LinkButton"
 import {formatBytes, formatTime, stateColor, stateLabel} from "../../components/container/utils"
 
-const CONNECTION_LABELS = {local: '本机', tcp: '远程 TCP', ssh: 'SSH', unix: '本机'}
+const CONNECTION_LABELS = {local: '本机', tcp: '远程 TCP', ssh: 'SSH'}
 
 function connectionLabel(type) {
     return CONNECTION_LABELS[type] || CONNECTION_LABELS[(type || '').toLowerCase()] || type || '-'
@@ -19,7 +19,7 @@ function endpointOf(host) {
     if (type === 'ssh') {
         return `ssh://${host.sshUser || 'root'}@${host.sshHost}:${host.sshPort || 22}`
     }
-    if (type === 'local' || type === 'unix') {
+    if (type === 'local') {
         return host.dockerHost || '本机（默认）'
     }
     return host.dockerHost || '-'

@@ -70,23 +70,6 @@ public class CodeSource extends BaseEntity {
     String privateKeyPassphrase;
 
     /**
-     * 实际生效的访问方式：为空（旧数据，实例化后由启动迁移回填）时按访问令牌处理。
-     */
-    public CodeSourceAuthType effectiveAuthType() {
-        return authType == null ? CodeSourceAuthType.TOKEN : authType;
-    }
-
-    /**
-     * 访问平台 API 用的令牌；账号密码方式返回 null（改用 Basic 认证）。
-     */
-    public String apiToken() {
-        if (effectiveAuthType() == CodeSourceAuthType.TOKEN) {
-            return token != null ? token : password;
-        }
-        return null;
-    }
-
-    /**
      * 返回给前端的打码密码，真实密码不参与序列化。
      */
     public String getPasswordMasked() {

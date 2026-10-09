@@ -172,7 +172,7 @@ public class CodeSourceApiService {
      * 按访问方式设置平台 API 认证头：访问令牌用 PRIVATE-TOKEN，账号密码用 Basic。
      */
     private static void applyAuth(HttpRequest.Builder builder, CodeSource source) {
-        CodeSourceAuthType authType = source.effectiveAuthType();
+        CodeSourceAuthType authType = source.getAuthType();
         Assert.isTrue(authType != CodeSourceAuthType.SSH_KEY,
                 "SSH 私钥方式无法调用平台 API，请把代码源的访问方式改为访问令牌或账号密码");
 
@@ -184,7 +184,7 @@ public class CodeSourceApiService {
             return;
         }
 
-        String token = source.apiToken();
+        String token = source.getToken();
         if (StrUtil.isNotBlank(token)) {
             builder.header("PRIVATE-TOKEN", token);
         }

@@ -47,7 +47,7 @@ export default class extends React.Component {
             dataIndex: 'containerStatus',
             hideInForm: true,
             render: (_, row) => {
-                return <ContainerStatus hostId={row.host?.id} appName={row.name}></ContainerStatus>
+                return <ContainerStatus appId={row.id}></ContainerStatus>
             }
         },
         {

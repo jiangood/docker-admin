@@ -40,11 +40,6 @@ public class Host extends BaseEntity {
      * 连接方式：SSH 登录后通过 docker system dial-stdio 连接
      */
     public static final String TYPE_SSH = "ssh";
-    /**
-     * 旧版本的本机 unix socket 类型，兼容历史数据，保存时统一归一为 {@link #TYPE_LOCAL}
-     */
-    @Deprecated
-    public static final String TYPE_UNIX = "unix";
 
     @Remark("名称")
     @NotNull

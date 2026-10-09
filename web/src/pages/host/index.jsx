@@ -14,21 +14,13 @@ const CONNECTION_TYPES = [
 const LOCAL_TIP = '留空则使用平台本机 Docker：Linux 为 unix:///var/run/docker.sock，Windows 为 tcp://localhost:2375。'
     + '如需 rootless 等自定义路径，可在此填写 socket 路径。'
 
-/** 兼容旧数据的连接方式取值（unix -> 本机） */
-function normalizeType(v) {
-    if (v === 'unix') {
-        return 'local'
-    }
-    return v || 'local'
-}
-
 function connectionTypeLabel(v) {
-    const item = CONNECTION_TYPES.find(i => i.value === normalizeType(v))
+    const item = CONNECTION_TYPES.find(i => i.value === (v || 'local'))
     return item ? item.label : '本机'
 }
 
 function endpointOf(record) {
-    const type = normalizeType(record.connectionType)
+    const type = record.connectionType || 'local'
     if (type === 'ssh') {
         return `ssh://${record.sshUser || 'root'}@${record.sshHost}:${record.sshPort || 22}`
     }
@@ -109,7 +101,7 @@ export default class extends React.Component {
     }
 
     handleEdit = record => {
-        const type = normalizeType(record.connectionType)
+        const type = record.connectionType || 'local'
         // 远程 TCP 只展示 IP/主机（保存时后端再补 tcp:// 与默认端口）
         const dockerHost = type === 'tcp' && record.dockerHost
             ? record.dockerHost.replace(/^tcp:\/\//i, '')
@@ -205,9 +197,9 @@ export default class extends React.Component {
                         <Select options={CONNECTION_TYPES}/>
                     </Form.Item>
 
-                    <Form.Item noStyle shouldUpdate={(prev, cur) => normalizeType(prev.connectionType) !== normalizeType(cur.connectionType)}>
+                    <Form.Item noStyle shouldUpdate={(prev, cur) => (prev.connectionType || 'local') !== (cur.connectionType || 'local')}>
                         {({getFieldValue}) => {
-                            const type = normalizeType(getFieldValue('connectionType'))
+                            const type = getFieldValue('connectionType') || 'local'
                             if (type === 'ssh') {
                                 return <>
                                     <Form.Item label='SSH地址' name='sshHost' rules={[{required: true}]}>

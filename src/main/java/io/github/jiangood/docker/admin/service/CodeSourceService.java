@@ -9,7 +9,6 @@ import io.github.jiangood.docker.base.tool.GitCredential;
 import io.github.jiangood.openadmin.framework.data.BaseService;
 import io.github.jiangood.openadmin.util.dto.Option;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.Assert;
@@ -21,7 +20,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-@Slf4j
 @Service
 @RequiredArgsConstructor
 public class CodeSourceService extends BaseService<CodeSource> {
@@ -59,7 +57,7 @@ public class CodeSourceService extends BaseService<CodeSource> {
         if (source == null) {
             return GitCredential.NONE;
         }
-        switch (source.effectiveAuthType()) {
+        switch (source.getAuthType()) {
             case PASSWORD:
                 if (StrUtil.isBlank(source.getPassword()) && StrUtil.isBlank(source.getUsername())) {
                     return GitCredential.NONE;
@@ -69,7 +67,7 @@ public class CodeSourceService extends BaseService<CodeSource> {
                 return GitCredential.sshKey(source.getPrivateKey(), source.getPrivateKeyPassphrase());
             case TOKEN:
             default:
-                return GitCredential.token(source.getUsername(), source.apiToken());
+                return GitCredential.token(source.getUsername(), source.getToken());
         }
     }
 
@@ -98,7 +96,7 @@ public class CodeSourceService extends BaseService<CodeSource> {
         CodeSource old = findById(input.getId()).orElse(null);
         Assert.notNull(old, "代码源不存在");
         if (input.getAuthType() == null) {
-            input.setAuthType(old.effectiveAuthType());
+            input.setAuthType(old.getAuthType());
         }
         if (StrUtil.isBlank(input.getPassword())) {
             input.setPassword(old.getPassword());
@@ -136,7 +134,7 @@ public class CodeSourceService extends BaseService<CodeSource> {
      * 只保留当前访问方式对应的凭据，避免切换方式后遗留旧凭据。
      */
     private void clearUnusedCredential(CodeSource input) {
-        switch (input.effectiveAuthType()) {
+        switch (input.getAuthType()) {
             case PASSWORD:
                 input.setToken(null);
                 input.setPrivateKey(null);
@@ -159,7 +157,7 @@ public class CodeSourceService extends BaseService<CodeSource> {
      * 按访问方式校验必填凭据。
      */
     private void validateCredential(CodeSource input) {
-        switch (input.effectiveAuthType()) {
+        switch (input.getAuthType()) {
             case PASSWORD:
                 Assert.hasText(input.getUsername(), "账号密码方式请填写用户名");
                 Assert.hasText(input.getPassword(), "账号密码方式请填写密码");
@@ -175,31 +173,6 @@ public class CodeSourceService extends BaseService<CodeSource> {
     }
 
     /**
-     * 启动迁移：旧数据的访问方式为空，且令牌存于 password 列，回填为访问令牌方式。幂等，无待迁移数据时直接跳过。
-     */
-    @Transactional
-    public int backfillLegacyAuth() {
-        List<CodeSource> changed = new ArrayList<>();
-        for (CodeSource source : codeSourceRepository.findAll()) {
-            if (source.getAuthType() != null) {
-                continue;
-            }
-            source.setAuthType(CodeSourceAuthType.TOKEN);
-            if (StrUtil.isNotBlank(source.getPassword())) {
-                source.setToken(source.getPassword());
-                source.setPassword(null);
-            }
-            changed.add(source);
-        }
-        if (changed.isEmpty()) {
-            return 0;
-        }
-        codeSourceRepository.saveAll(changed);
-        log.info("已回填 {} 条代码源的访问方式为访问令牌（旧数据令牌存于密码列，已迁移到令牌列）", changed.size());
-        return changed.size();
-    }
-
-    /**
      * 供下拉选择使用，不返回密码。
      */
     public List<Option> options() {
@@ -209,7 +182,7 @@ public class CodeSourceService extends BaseService<CodeSource> {
             Option option = new Option(c.getId(), c.getName());
             option.setData(Map.of(
                     "type", c.getType() == null ? CodeSourceType.CUSTOM.name() : c.getType().name(),
-                    "authType", c.effectiveAuthType().name(),
+                    "authType", c.getAuthType().name(),
                     "url", StrUtil.nullToEmpty(c.getUrl())));
             options.add(option);
         }
