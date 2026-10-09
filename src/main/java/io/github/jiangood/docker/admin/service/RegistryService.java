@@ -35,7 +35,7 @@ public class RegistryService extends BaseService<Registry> {
      * 保存注册中心（全局唯一，单条记录）。
      */
     @Transactional
-    public Registry saveRegistry(Registry input) {
+    public Registry saveRegistry(Registry input, List<String> updateFields) {
         if (StrUtil.isBlank(input.getId())) {
             // 单例：已有记录则更新，避免出现多条
             Registry exist = getEffective();
@@ -51,6 +51,6 @@ public class RegistryService extends BaseService<Registry> {
         if (StrUtil.isBlank(input.getPassword())) {
             input.setPassword(old.getPassword());
         }
-        return update(input, null);
+        return update(input, updateFields);
     }
 }
