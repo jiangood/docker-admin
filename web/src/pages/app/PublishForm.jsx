@@ -1,5 +1,5 @@
 import React from "react";
-import {Button, Card, Col, Form, message, Modal, Row, Select, Skeleton, Switch} from "antd";
+import {AutoComplete, Button, Card, Col, Form, message, Modal, Row, Skeleton, Switch} from "antd";
 import {FieldRemoteSelect, Gap, HttpClient, PageUtils} from "@jiangood/open-admin";
 
 /**
@@ -88,11 +88,13 @@ export default class extends React.Component {
                 <Col span={12}>
                     <Card title='手动发布'>
                         <Form onFinish={this.updateVersion} layout={'inline'}>
-                            <Form.Item name='version' rules={[{required: true, message: '请选择版本'}]}>
-                                <Select style={{width: 180}}
-                                        options={this.state.versionOptions}
-                                        showSearch
-                                        placeholder='请选择版本号'/>
+                            <Form.Item name='version' rules={[{required: true, message: '请选择或输入版本'}]}>
+                                <AutoComplete style={{width: 180}}
+                                              options={this.state.versionOptions}
+                                              filterOption={(inputValue, option) =>
+                                                  (option?.value ?? '').toUpperCase().indexOf(inputValue.toUpperCase()) !== -1
+                                              }
+                                              placeholder='请选择或输入版本号'/>
                             </Form.Item>
                             <Form.Item label=' '>
                                 <Button type="primary" danger htmlType='submit'>更新应用</Button>
