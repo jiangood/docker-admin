@@ -256,7 +256,7 @@ public class AppService extends BaseService<App> {
             log.info("主机配置{}", hostConfig.getBinds());
             CreateContainerCmd containerCmd = client.createContainerCmd(image);
             containerCmd
-                    .withName(app.getName() + "_1")
+                    .withName(app.getName())
                     .withLabels(dockerManager.getAppLabelFilter(app.getName()))
                     .withHostConfig(hostConfig)
                     .withExposedPorts(exposedPorts) // 使用镜像声明的端口
