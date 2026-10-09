@@ -1,8 +1,30 @@
 /*
- * 页面级样式覆盖。
- * 框架的 ProTable 工具栏只渲染了左侧容器（.pro-table-toolbar-left），
- * 这里把它撑满，使 toolBarRender 中的内容可以右对齐。
+ * 业务级全局样式规范。
+ *
+ * - 主题色由框架在运行时写入 documentElement（--primary-color / --primary-color-hover）；
+ *   语义色统一通过 getToken() 从 antd 主题读取，不在此处重复定义。
+ * - 这里只放与主题无关的排版 / 间距 / 容器规范。
  */
-.image-build-history .pro-table-toolbar-left {
-    flex: 1;
+
+/*
+ * 表单 / 详情 / 工具页统一卡片：固定最大宽度并居中，
+ * 取代此前各页各写一个 maxWidth（640 / 720 / 900 / 1100 …）的写法。
+ */
+.page-card {
+    max-width: 960px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/*
+ * 通用间距工具。
+ * 此前 .mt-2 / .mb-2 被页面使用但未定义，等于没有间距，卡片会贴在一起；
+ * 这里补上定义，使沿用这些类名的页面间距生效且一致。
+ */
+.mt-2 {
+    margin-top: 16px;
+}
+
+.mb-2 {
+    margin-bottom: 16px;
 }
