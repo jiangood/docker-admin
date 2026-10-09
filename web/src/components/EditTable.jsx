@@ -1,6 +1,7 @@
 import {Button, Input, InputNumber, Select} from "antd";
 import React from "react";
 import {DeleteOutlined, ExclamationCircleOutlined, PlusCircleFilled} from '@ant-design/icons';
+import {getToken} from "@jiangood/open-admin";
 
 export default class extends React.Component {
 
@@ -110,7 +111,7 @@ export default class extends React.Component {
       </table>
 
       {canAdd && <div style={{marginTop: 16, marginBottom: 16}}>
-        <PlusCircleFilled style={{color: '#1890ff'}}/><Button type='link' style={{padding: 0}}
+        <PlusCircleFilled style={{color: getToken().colorPrimary}}/><Button type='link' style={{padding: 0}}
                                                              onClick={this.add}>添加</Button>
       </div>}
     </div>

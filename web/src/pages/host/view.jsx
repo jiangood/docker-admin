@@ -1,4 +1,4 @@
-import {Button, Card, Descriptions, Empty, Modal, Result, Spin, Table, Tabs, Tag} from 'antd'
+import {Button, Card, Descriptions, Empty, Modal, Result, Spin, Table, Tabs, Tag, Typography} from 'antd'
 import React from 'react'
 import {HttpClient, Page, PageUtils} from "@jiangood/open-admin"
 import ContainerDetail from "../../components/container/ContainerDetail"
@@ -120,7 +120,7 @@ export default class extends React.Component {
                 title: '状态', dataIndex: 'state', width: 220,
                 render: (state, record) => <>
                     <Tag color={stateColor(state)}>{stateLabel(state)}</Tag>
-                    <span style={{color: '#999'}}>{record.status}</span>
+                    <Typography.Text type='secondary'>{record.status}</Typography.Text>
                 </>
             },
             {

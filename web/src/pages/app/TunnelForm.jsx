@@ -1,4 +1,4 @@
-import {Button, Descriptions, Form, Input, message, Select, Space, Spin, Switch} from 'antd';
+import {Button, Descriptions, Form, Input, message, Select, Space, Spin, Switch, Typography} from 'antd';
 import React from 'react';
 import {HttpClient, PermActions} from '@jiangood/open-admin';
 
@@ -98,9 +98,9 @@ export default class extends React.Component {
                         <Switch checked={enabled} loading={saving}
                                 onChange={v => this.save(v)}
                                 disabled={!enabled && !canEnable}/>
-                        <span style={{color: '#999'}}>
+                        <Typography.Text type='secondary'>
                             通过 http-tunnel 把该应用暴露到公网域名（客户端：{client ? client.name : '未选择'}）
-                        </span>
+                        </Typography.Text>
                     </Space>
                 </Form.Item>
 
@@ -108,7 +108,7 @@ export default class extends React.Component {
                     <Input style={{width: 240}} value={prefix} placeholder='默认取应用名称'
                            onChange={e => this.setState({prefix: e.target.value})}
                            disabled={!enabled}/>
-                    <span style={{marginLeft: 8, color: '#999'}}>.{client && client.domain ? client.domain : '域名'}</span>
+                    <Typography.Text type='secondary' style={{marginLeft: 8}}>.{client && client.domain ? client.domain : '域名'}</Typography.Text>
                 </Form.Item>
 
                 <Form.Item label='应用端口' tooltip='应用映射到主机侧、由客户端转发访问的端口'>

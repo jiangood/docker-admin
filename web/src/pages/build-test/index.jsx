@@ -7,7 +7,7 @@ import {
     ReloadOutlined,
     StopOutlined
 } from '@ant-design/icons'
-import {HttpClient, Page, Perm, PermUtils} from '@jiangood/open-admin'
+import {getToken, HttpClient, Page, Perm, PermUtils} from '@jiangood/open-admin'
 import CodeMirrorEditor from '../../components/CodeMirrorEditor'
 import FieldGitRepository from '../../components/FieldGitRepository'
 import LogView from '../../components/LogView'
@@ -179,7 +179,7 @@ export default class extends React.Component {
                                           <div style={{marginTop: 4}}>使用「设置-主机管理」中标记为构建节点的主机进行本地构建，不推送到注册中心。</div>
                                       </>
                                   }>
-                                      <QuestionCircleOutlined style={{color: '#999', cursor: 'help'}}/>
+                                      <QuestionCircleOutlined style={{color: getToken().colorTextSecondary, cursor: 'help'}}/>
                                   </Tooltip>
                               }>
                             <Form.Item name='dockerfileText' style={{marginBottom: 0}}

@@ -1,5 +1,5 @@
 import React from "react";
-import {Alert, Button, Select, Space} from "antd";
+import {Alert, Button, Select, Space, Typography} from "antd";
 import {PermUtils} from "@jiangood/open-admin";
 import ContainerTerminal from "./ContainerTerminal";
 import {wsContainerExecUrl} from "./utils";
@@ -35,7 +35,7 @@ export default class extends React.Component {
                 <Select size='small' style={{width: 160}} value={this.state.shell} options={SHELLS}
                         onChange={v => this.setState({shell: v, key: this.state.key + 1})}/>
                 <Button size='small' onClick={() => this.setState({key: this.state.key + 1})}>重新连接</Button>
-                <span style={{color: '#999'}}>需要 container:exec 权限</span>
+                <Typography.Text type='secondary'>需要 container:exec 权限</Typography.Text>
             </Space>
             <ContainerTerminal key={this.state.key}
                                url={wsContainerExecUrl(hostId, containerId, this.state.shell)}

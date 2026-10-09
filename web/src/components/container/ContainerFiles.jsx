@@ -1,7 +1,7 @@
 import React from "react";
 import {Alert, Breadcrumb, Button, Empty, message, Modal, Space, Spin, Table, Tag, Typography} from "antd";
 import {DownloadOutlined, FileOutlined, FolderOutlined, ReloadOutlined} from "@ant-design/icons";
-import {HttpClient, PermUtils} from "@jiangood/open-admin";
+import {getToken, HttpClient, PermUtils} from "@jiangood/open-admin";
 import {formatBytes} from "./utils";
 
 /**
@@ -97,9 +97,9 @@ export default class extends React.Component {
                 title: '名称', dataIndex: 'name',
                 render: (name, record) => {
                     const icon = record.type === 'dir'
-                        ? <FolderOutlined style={{color: '#faad14'}}/>
+                        ? <FolderOutlined style={{color: getToken().colorWarning}}/>
                         : record.type === 'link'
-                            ? <FileOutlined style={{color: '#1677ff'}}/>
+                            ? <FileOutlined style={{color: getToken().colorPrimary}}/>
                             : <FileOutlined/>
                     return <a onClick={() => this.enter(record)} style={{marginLeft: 0}}>
                         <Space size={6}>{icon}{name}</Space>
@@ -132,7 +132,7 @@ export default class extends React.Component {
             <Space style={{marginBottom: 12}} wrap>
                 <Breadcrumb items={this.breadcrumbItems()}/>
                 <Button size='small' icon={<ReloadOutlined/>} onClick={this.refresh}>刷新</Button>
-                <span style={{color: '#999'}}>路径：{path}</span>
+                <Typography.Text type='secondary'>路径：{path}</Typography.Text>
             </Space>
 
             {error ? <Alert type='error' showIcon title={error}/> :

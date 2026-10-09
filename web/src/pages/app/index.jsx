@@ -1,4 +1,4 @@
-import {Alert, AutoComplete, Button, Divider, Form, Input, Modal} from 'antd';
+import {Alert, AutoComplete, Button, Divider, Form, Input, Modal, Typography} from 'antd';
 import React from 'react';
 import ContainerStatus from "../../components/ContainerStatus";
 import FieldImageUrl from "../../components/FieldImageUrl";
@@ -240,9 +240,9 @@ export default class extends React.Component {
                             <Button onClick={() => this.setState({runVisible: true, runCommand: '', runWarnings: []})}>
                                 docker run
                             </Button>
-                            <span style={{marginLeft: 12, color: '#999'}}>
+                            <Typography.Text type='secondary' style={{marginLeft: 12}}>
                                 粘贴 docker run 命令，自动解析镜像与容器配置
-                            </span>
+                            </Typography.Text>
                         </Form.Item>
 
                         <Form.Item name='name' label='应用名称' required rules={[{required: true}]}>
