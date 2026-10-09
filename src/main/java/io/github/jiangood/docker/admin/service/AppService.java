@@ -478,11 +478,27 @@ public class AppService extends BaseService<App> {
      * 镜像来自镜像表且声明非空时对应维度为严格模式（容器侧只读、不可增删），否则可自由编辑。
      */
     public ImageConfigMetaVo getConfigMeta(App app) {
-        ImageConfigMetaVo vo = new ImageConfigMetaVo();
-        vo.setImageUrl(app.getImageUrl());
+        return buildConfigMeta(app.getImageUrl(), app.getImageTag(), app.getConfig());
+    }
 
-        App.AppConfig cfg = app.getConfig();
-        ImageTag iv = imageTagService.find(app.getImageUrl(), app.getImageTag()).orElse(null);
+    /**
+     * 按镜像地址 + 版本构造容器配置元数据，不含任何已保存的主机侧映射。
+     * 供新建应用 / docker run 等尚无应用记录的场景使用。
+     */
+    public ImageConfigMetaVo getImageConfigMeta(String imageUrl, String imageTag) {
+        return buildConfigMeta(imageUrl, imageTag, null);
+    }
+
+    /**
+     * 构造容器配置元数据。
+     *
+     * @param cfg 已保存的配置，用于合并主机侧映射值；新建场景可为 null
+     */
+    private ImageConfigMetaVo buildConfigMeta(String imageUrl, String imageTag, App.AppConfig cfg) {
+        ImageConfigMetaVo vo = new ImageConfigMetaVo();
+        vo.setImageUrl(imageUrl);
+
+        ImageTag iv = imageTagService.find(imageUrl, imageTag).orElse(null);
         boolean strictPorts = strictPorts(iv);
         boolean strictVolumes = strictVolumes(iv);
         vo.setStrictPorts(strictPorts);

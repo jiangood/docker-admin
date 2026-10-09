@@ -120,6 +120,16 @@ public class AppController {
     }
 
     /**
+     * 按镜像地址 + 版本读取容器配置元数据（镜像声明的端口/卷）。
+     * 供新建应用 / docker run 等尚无应用记录的场景使用。
+     */
+    @HasPermission("app:view")
+    @RequestMapping("configMetaByImage")
+    public AjaxResult configMetaByImage(String imageUrl, String imageTag) {
+        return AjaxResult.ok().data(service.getImageConfigMeta(imageUrl, imageTag));
+    }
+
+    /**
      * 按 id 读取应用并校验组织数据权限，无权限时抛业务异常。
      */
     private App assertAppAccess(String id) {
@@ -139,6 +149,17 @@ public class AppController {
         }
         service.saveApp(app, requestBodyKeys);
         return AjaxResult.ok().msg("保存成功");
+    }
+
+    /**
+     * 新建应用并立即部署（新增应用弹窗「确定后直接部署」）。
+     */
+    @HasPermission("app:deploy")
+    @RequestMapping("saveAndDeploy")
+    public AjaxResult saveAndDeploy(@RequestBody App app) throws Exception {
+        App saved = service.saveApp(app, null);
+        service.deploy(saved);
+        return AjaxResult.ok().msg("部署指令已发送");
     }
 
     @HasPermission("app:save")

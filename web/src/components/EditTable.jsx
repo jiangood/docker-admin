@@ -13,6 +13,16 @@ export default class extends React.Component {
     this.state.dataSource = props.value || [];
   }
 
+  /**
+   * 外部整体替换 value（如 docker run 解析回填）时同步内部数据。
+   * 内部编辑是原地修改并回传同一个数组引用，因此这里不会误触发重置。
+   */
+  componentDidUpdate(prevProps) {
+    if (prevProps.value !== this.props.value) {
+      this.setState({dataSource: this.props.value || []})
+    }
+  }
+
   add = () => {
     let {dataSource} = this.state;
     // 深拷贝默认行，避免多行共享同一引用

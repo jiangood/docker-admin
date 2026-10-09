@@ -1,7 +1,9 @@
-import {AutoComplete, Button, Form, Input, Modal} from 'antd';
+import {Alert, AutoComplete, Button, Divider, Form, Input, Modal} from 'antd';
 import React from 'react';
 import ContainerStatus from "../../components/ContainerStatus";
 import FieldImageUrl from "../../components/FieldImageUrl";
+import ContainerConfigForm from "./ContainerConfigForm";
+import {parseDockerRun} from "./dockerRunParser";
 import {
     PermActions,
     FieldOrgTreeSelect,
@@ -83,6 +85,15 @@ export default class extends React.Component {
         editVisible: false,
         editValues: {},
         tagOptions: [],
+
+        // 新增弹窗内联动容器配置组件所需的镜像信息
+        imageUrl: '',
+        imageTag: '',
+
+        // docker run 命令解析弹窗
+        runVisible: false,
+        runCommand: '',
+        runWarnings: [],
     }
 
 
@@ -91,8 +102,11 @@ export default class extends React.Component {
         this.tableRef.current.reload()
     }
 
+    /**
+     * 新增应用：保存后立即部署。
+     */
     handleSave = value => {
-        HttpClient.post('admin/app/save', value).then(() => {
+        HttpClient.post('admin/app/saveAndDeploy', value).then(() => {
             this.reload()
             this.setState({deployVisible: false})
         })
@@ -104,7 +118,11 @@ export default class extends React.Component {
     tagTimer = null
 
     handleAdd = () => {
-        this.setState({deployVisible: true, tagOptions: []})
+        this.setState({
+            deployVisible: true, tagOptions: [],
+            imageUrl: '', imageTag: '',
+            runVisible: false, runCommand: '', runWarnings: [],
+        })
     }
 
     handleEdit = record => {
@@ -145,9 +163,39 @@ export default class extends React.Component {
     handleImageValuesChange = changedValues => {
         if ('imageUrl' in changedValues) {
             this.onImageChange(changedValues.imageUrl)
+            this.setState({imageUrl: changedValues.imageUrl})
+        }
+        if ('imageTag' in changedValues) {
+            this.setState({imageTag: changedValues.imageTag})
         }
     }
 
+    /**
+     * 解析 docker run 命令，回填镜像与容器配置。
+     */
+    parseRun = () => {
+        const result = parseDockerRun(this.state.runCommand)
+        if (!result.imageUrl) {
+            this.setState({runWarnings: result.warnings && result.warnings.length ? result.warnings : ['未找到镜像']})
+            return
+        }
+        const values = {
+            imageUrl: result.imageUrl,
+            imageTag: result.imageTag,
+            config: result.config,
+        }
+        if (result.name) {
+            values.name = result.name
+        }
+        this.formRef.current.setFieldsValue(values)
+        this.loadTags(result.imageUrl)
+        this.setState({
+            imageUrl: result.imageUrl,
+            imageTag: result.imageTag,
+            runWarnings: result.warnings || [],
+            runVisible: false,
+        })
+    }
 
 
     render() {
@@ -156,10 +204,11 @@ export default class extends React.Component {
                 <ProTable
                     actionRef={this.tableRef}
                     toolBarRender={() => [
-                        <Button key="add" type="primary"
-                                onClick={this.handleAdd}>
-                            新增
-                        </Button>
+                        <PermActions key="add">
+                            <Button type="primary" perm='app:deploy' onClick={this.handleAdd}>
+                                新增应用
+                            </Button>
+                        </PermActions>
                     ]}
                     searchFormRender={() => (
                         <>
@@ -178,7 +227,7 @@ export default class extends React.Component {
                 <Modal title='新增应用' open={this.state.deployVisible} destroyOnHidden={true}
                        onOk={() => this.formRef.current.submit()}
                        onCancel={() => this.setState({deployVisible: false})}
-                       width={800}
+                       width={860}
                 >
                     <Form
                         layout='horizontal'
@@ -187,6 +236,15 @@ export default class extends React.Component {
                         onValuesChange={this.handleImageValuesChange}
                         onFinish={this.handleSave}
                     >
+                        <Form.Item label=' '>
+                            <Button onClick={() => this.setState({runVisible: true, runCommand: '', runWarnings: []})}>
+                                docker run
+                            </Button>
+                            <span style={{marginLeft: 12, color: '#999'}}>
+                                粘贴 docker run 命令，自动解析镜像与容器配置
+                            </span>
+                        </Form.Item>
+
                         <Form.Item name='name' label='应用名称' required rules={[{required: true}]}>
                             <Input/>
                         </Form.Item>
@@ -217,7 +275,25 @@ export default class extends React.Component {
                             <Input/>
                         </Form.Item>
 
+                        <Divider orientation='left' plain>容器配置</Divider>
+
+                        <ContainerConfigForm namePrefix={['config']}
+                                             imageUrl={this.state.imageUrl} imageTag={this.state.imageTag}/>
+
                     </Form>
+                </Modal>
+
+                <Modal title='docker run' open={this.state.runVisible} destroyOnHidden
+                       okText='解析' onOk={this.parseRun}
+                       onCancel={() => this.setState({runVisible: false})}
+                       width={720}>
+                    <Input.TextArea rows={6} value={this.state.runCommand}
+                                    onChange={e => this.setState({runCommand: e.target.value})}
+                                    placeholder='docker run -d --name my-nginx -p 8080:80 -v /data:/data -e TZ=Asia/Shanghai nginx:latest'/>
+                    {this.state.runWarnings.length > 0 && (
+                        <Alert className='mt-2' type='warning' showIcon
+                               message={this.state.runWarnings.join('；')}/>
+                    )}
                 </Modal>
 
                 <Modal title='应用基本信息'
