@@ -6,7 +6,7 @@ Multi-host container management platform with CI/CD. UI is Chinese.
 
 - **Backend:** Spring Boot 4.1.0 + Java 21, Maven → `target/app.jar`（`<finalName>app</finalName>`）
 - **Frontend:** Vite 8 + React 19 + Ant Design 6 + TypeScript 7
-- **Base framework:** `io.github.jiangood:open-admin` 3.1.2（后端 Maven）/ `@jiangood/open-admin` 3.1.2（前端 npm），提供 CRUD、鉴权、菜单
+- **Base framework:** `io.github.jiangood:open-admin` 3.1.4（后端 Maven）/ `@jiangood/open-admin` 3.1.4（前端 npm），提供 CRUD、鉴权、菜单
 - **Docker SDK:** docker-java 3.7.1（TCP 传输 httpclient5）
 - **SSH 远程 docker:** `com.github.mwiede.dockerjava:docker-java-transport-jsch` 1.4
 - **数据库:** 默认内置 H2（文件模式，持久化到 `./data`），也支持外部 MySQL

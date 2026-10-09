@@ -72,6 +72,11 @@ public class AppService extends BaseService<App> {
      */
     @Transactional
     public App saveApp(App input, List<String> updateFields) {
+        // 前端未选择组织机构时会提交空对象 {}，此时 id 为空，需归一为 null，
+        // 否则 Hibernate 会把空对象当作未保存的瞬态实体而报错
+        if (input.getSysOrg() == null || StrUtil.isBlank(input.getSysOrg().getId())) {
+            input.setSysOrg(null);
+        }
         App saved;
         if (StrUtil.isBlank(input.getId())) {
             saved = create(input);
@@ -107,7 +112,7 @@ public class AppService extends BaseService<App> {
             // 镜像
             String image = app.getImageUrl() + ":" + app.getImageTag();
 
-            client = getClient(host);
+            client = getClient(host, app.getImageUrl());
 
 
             log.info("开始拉取镜像 {}", image);
@@ -499,14 +504,56 @@ public class AppService extends BaseService<App> {
     }
 
     /**
-     * 创建主机 docker 客户端（带注册中心认证）。
+     * 创建主机 docker 客户端。
+     * <p>
+     * 仅当镜像来自注册中心（镜像 host 与注册中心地址一致）时才附带注册中心凭据。
+     * docker-java 会把客户端级凭据（registry.url/username/password）用于所有 pull，
+     * 拉取 ghcr.io / Docker Hub 等公共镜像时带上注册中心账号密码会被直接拒绝（401/403）。
      */
-    public DockerClient getClient(Host host) {
+    public DockerClient getClient(Host host, String imageUrl) {
         Registry registry = registryService.getEffective();
-        if (registry != null) { // 通过镜像地址倒推 注册中心
+        if (registry != null && sameRegistry(imageUrl, registry.getUrl())) {
             return dockerManager.getClient(host, registry);
         }
         return dockerManager.getClient(host);
+    }
+
+    /**
+     * 镜像地址的 registry host 是否等于注册中心地址（两者都归一为不含协议、不带路径的 host）。
+     * 镜像首段不含 "." / ":" 且不是 localhost 时视为 Docker Hub，无显式注册中心。
+     */
+    private static boolean sameRegistry(String imageUrl, String registryUrl) {
+        String imageHost = imageHost(imageUrl);
+        return imageHost != null && imageHost.equalsIgnoreCase(registryHost(registryUrl));
+    }
+
+    private static String imageHost(String imageUrl) {
+        if (StrUtil.isBlank(imageUrl)) {
+            return null;
+        }
+        String image = imageUrl.trim();
+        int slash = image.indexOf('/');
+        if (slash <= 0) {
+            return null;
+        }
+        String first = image.substring(0, slash);
+        return (first.contains(".") || first.contains(":") || "localhost".equals(first)) ? first : null;
+    }
+
+    private static String registryHost(String registryUrl) {
+        if (StrUtil.isBlank(registryUrl)) {
+            return null;
+        }
+        String url = registryUrl.trim();
+        int scheme = url.indexOf("://");
+        if (scheme >= 0) {
+            url = url.substring(scheme + 3);
+        }
+        int slash = url.indexOf('/');
+        if (slash >= 0) {
+            url = url.substring(0, slash);
+        }
+        return url;
     }
 
     private void normalizeConfig(App.AppConfig cfg) {
