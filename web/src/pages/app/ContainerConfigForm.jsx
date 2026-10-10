@@ -12,7 +12,7 @@ import {HttpClient} from "@jiangood/open-admin";
  * 传 appId 时读取 admin/app/configMeta（合并已保存映射，详情页用）；
  * 否则按 imageUrl + imageTag 读取 admin/app/configMetaByImage（新建应用 / docker run 用）。
  *
- * 传 twoColumn 时标量字段（网络模式 / 启动命令 / extraHosts）排成两列，表格仍整行；
+ * 传 twoColumn 时网络模式单独一行，启动命令 / extraHosts 排在最后（两列），表格仍整行；
  * 不传则维持单列纵向，详情页保持原样。
  */
 
@@ -207,31 +207,34 @@ export default function ContainerConfigForm({namePrefix, imageUrl, imageTag, app
     const name = f => [...namePrefix, f]
     const strictPorts = !!(meta && meta.strictPorts)
     const strictVolumes = !!(meta && meta.strictVolumes)
+    // 弹窗（twoColumn）里收紧行距，减少多个配置块堆叠的纵向占用；详情页保持默认
+    const itemStyle = twoColumn ? {marginBottom: 8} : undefined
 
     const networkOptions = (!cfg.networkMode || NETWORK_OPTIONS.some(o => o.value === cfg.networkMode))
         ? NETWORK_OPTIONS
         : [...NETWORK_OPTIONS, {label: cfg.networkMode, value: cfg.networkMode}]
 
     const networkItem = (
-        <Form.Item label='网络模式' name={name('networkMode')}>
+        <Form.Item label='网络模式' name={name('networkMode')} style={itemStyle}>
             <Select style={{width: 200}} options={networkOptions}/>
         </Form.Item>
     )
 
     const cmdItem = (
-        <Form.Item label='启动命令' name={name('cmd')}>
+        <Form.Item label='启动命令' name={name('cmd')} style={itemStyle}>
             <Input/>
         </Form.Item>
     )
 
     const extraHostsItem = (
-        <Form.Item label='extraHosts' name={name('extraHosts')} tooltip='域名IP映射,类似dns,hosts文件'>
+        <Form.Item label='extraHosts' name={name('extraHosts')} style={itemStyle}
+                   tooltip='域名IP映射,类似dns,hosts文件'>
             <Input placeholder='域名:IP 域名2:IP2'/>
         </Form.Item>
     )
 
     const portsItem = (!cfg.networkMode || cfg.networkMode === 'bridge') && (
-        <Form.Item label='端口映射' name={name('ports')}
+        <Form.Item label='端口映射' name={name('ports')} style={itemStyle}
                    tooltip={strictPorts ? '端口来自镜像声明，主机端口默认等于容器端口，仅可修改主机端口' : '镜像未声明端口，可自由配置'}>
             <EditTable columns={portsColumns(strictPorts)}
                        canAdd={!strictPorts} canRemove={!strictPorts} extra='暂无端口'/>
@@ -239,7 +242,7 @@ export default function ContainerConfigForm({namePrefix, imageUrl, imageTag, app
     )
 
     const bindsItem = (
-        <Form.Item label='文件映射' name={name('binds')}
+        <Form.Item label='文件映射' name={name('binds')} style={itemStyle}
                    tooltip={strictVolumes ? `卷来自镜像声明，主机路径默认 ${DEFAULT_DATA_ROOT}/应用名/...，仅可修改主机路径` : '镜像未声明卷，可自由配置'}>
             <EditTable columns={bindsColumns(strictVolumes)}
                        canAdd={!strictVolumes} canRemove={!strictVolumes} extra='暂无卷'/>
@@ -247,7 +250,7 @@ export default function ContainerConfigForm({namePrefix, imageUrl, imageTag, app
     )
 
     const envsItem = (
-        <Form.Item label='环境变量' tooltip='每行一个环境变量' name={name('envs')}>
+        <Form.Item label='环境变量' tooltip='每行一个环境变量' name={name('envs')} style={itemStyle}>
             <EditTable columns={envColumns}
                        defaultRow={{name: '', value: ''}}
                        extra='暂无环境变量'/>
@@ -255,7 +258,7 @@ export default function ContainerConfigForm({namePrefix, imageUrl, imageTag, app
     )
 
     const deviceItem = (
-        <Form.Item label='设备请求' name={name('deviceRequests')}
+        <Form.Item label='设备请求' name={name('deviceRequests')} style={itemStyle}
                    tooltip='GPU 等设备透传，对应 docker run --gpus；需目标主机已安装 nvidia-container-toolkit'>
             <EditTable columns={deviceColumns}
                        defaultRow={{driver: 'nvidia', count: -1, capabilities: [['gpu']]}}
@@ -267,13 +270,15 @@ export default function ContainerConfigForm({namePrefix, imageUrl, imageTag, app
         return <>
             <Row gutter={16}>
                 <Col span={12}>{networkItem}</Col>
-                <Col span={12}>{cmdItem}</Col>
-                <Col span={12}>{extraHostsItem}</Col>
             </Row>
             {portsItem}
             {bindsItem}
             {envsItem}
             {deviceItem}
+            <Row gutter={16}>
+                <Col span={12}>{cmdItem}</Col>
+                <Col span={12}>{extraHostsItem}</Col>
+            </Row>
         </>
     }
 

@@ -16,6 +16,21 @@ import {
 import LinkButton from "../../components/LinkButton";
 
 
+/**
+ * 由镜像地址推导应用名：取地址最后一段（镜像名），去掉 tag / digest。
+ * 应用名首字符必须是字母（后端 @ValidateStartWithLetter），因此丢掉开头
+ * 的非字母字符；整段不含字母时返回空串（不自动填，交给用户输入）。
+ */
+function appNameFromImage(imageUrl) {
+    if (!imageUrl) return ''
+    const last = String(imageUrl).trim().split('@')[0].split('/').pop() || ''
+    const cleaned = last.split(':')[0].replace(/[^a-zA-Z0-9_.-]/g, '')
+    const idx = cleaned.search(/[a-zA-Z]/)
+    if (idx < 0) return ''
+    return idx === 0 ? cleaned : cleaned.slice(idx)
+}
+
+
 export default class extends React.Component {
 
 
@@ -161,6 +176,19 @@ export default class extends React.Component {
         this.tagTimer = setTimeout(() => this.loadTags(imageUrl), 300)
     }
 
+    /**
+     * 从镜像仓库选中镜像后：应用名称为空时，用镜像名自动填充。
+     */
+    handleImageSelected = imageUrl => {
+        if (this.formRef.current.getFieldValue('name')) {
+            return
+        }
+        const derived = appNameFromImage(imageUrl)
+        if (derived) {
+            this.formRef.current.setFieldsValue({name: derived})
+        }
+    }
+
     handleImageValuesChange = changedValues => {
         if ('imageUrl' in changedValues) {
             this.onImageChange(changedValues.imageUrl)
@@ -247,6 +275,21 @@ export default class extends React.Component {
                         </Form.Item>
 
                         <Row gutter={16}>
+                            <Col span={16}>
+                                <Form.Item name='imageUrl' label='镜像' required rules={[{required: true}]}
+                                           tooltip='可直接输入任意镜像地址，如 ghcr.io/jiangood/http-tunnel；也可点击右侧按钮从镜像仓库选择'>
+                                    <FieldImageUrl onSelectImage={this.handleImageSelected}/>
+                                </Form.Item>
+                            </Col>
+
+                            <Col span={8}>
+                                <Form.Item name='imageTag' label='版本' required rules={[{required: true}]}
+                                           tooltip='已登记的镜像会列出其版本，也可直接输入版本号'>
+                                    <AutoComplete options={this.state.tagOptions}
+                                                  placeholder='选择或输入版本，如 latest'/>
+                                </Form.Item>
+                            </Col>
+
                             <Col span={12}>
                                 <Form.Item name='name' label='应用名称' required rules={[{required: true}]}>
                                     <Input/>
@@ -256,21 +299,6 @@ export default class extends React.Component {
                             <Col span={12}>
                                 <Form.Item name={['host', 'id']} label='部署主机' required rules={[{required: true}]}>
                                     <FieldRemoteSelect showSearch url="admin/host/options"/>
-                                </Form.Item>
-                            </Col>
-
-                            <Col span={12}>
-                                <Form.Item name='imageUrl' label='镜像' required rules={[{required: true}]}
-                                           tooltip='可直接输入任意镜像地址，如 ghcr.io/jiangood/http-tunnel；也可点击右侧按钮从镜像仓库选择'>
-                                    <FieldImageUrl/>
-                                </Form.Item>
-                            </Col>
-
-                            <Col span={12}>
-                                <Form.Item name='imageTag' label='版本' required rules={[{required: true}]}
-                                           tooltip='已登记的镜像会列出其版本，也可直接输入版本号'>
-                                    <AutoComplete options={this.state.tagOptions}
-                                                  placeholder='选择或输入版本，如 latest'/>
                                 </Form.Item>
                             </Col>
 

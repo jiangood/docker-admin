@@ -9,10 +9,12 @@ menus:
     name: 镜像仓库
     path: /image-repo
     icon: DatabaseOutlined
-    seq: 100
     perms:
       - { name: 查看, code: image-repo:view }
       - { name: 删除, code: image-repo:delete }
+  divider-image-repo:
+    pid: biz
+    type: divider
   project:
     pid: biz
     name: 项目
@@ -24,9 +26,7 @@ menus:
       - {name: 删除, code: project:delete}
       - {name: 构建, code: project:build}
       - {name: Webhook, code: project:webhook}
-  divider-image-repo:
-    pid: biz
-    type: divider
+
   app:
     pid: biz
     name: 应用

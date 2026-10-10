@@ -87,6 +87,7 @@ export default class extends React.Component {
     const canAdd = this.props.canAdd !== false;
     const canRemove = this.props.canRemove !== false;
     const colSpan = columns.length + (canRemove ? 1 : 0);
+    const empty = dataSource.length === 0;
 
     const token = getToken()
     const thStyle = {
@@ -105,17 +106,19 @@ export default class extends React.Component {
 
     return <div>
       <table style={{width: '100%', borderCollapse: 'collapse'}}>
-        <thead>
+        {!empty && <thead>
         <tr>
           {columns.map(c => <th key={c.dataIndex} style={thStyle}>{c.title}</th>)}
           {canRemove && <th style={{...thStyle, width: 48}}></th>}
         </tr>
-        </thead>
+        </thead>}
         <tbody>
-        {dataSource.length === 0 && <tr>
+        {empty && <tr>
           <td colSpan={colSpan}
-              style={{...tdStyle, padding: 'var(--space-5) var(--space-3)', textAlign: 'center', color: token.colorTextSecondary}}>
+              style={{...tdStyle, padding: 'var(--space-2) var(--space-3)', color: token.colorTextSecondary}}>
             <ExclamationCircleOutlined/> {extra || '暂无数据'}
+            {canAdd && <Button type='link' size='small' icon={<PlusOutlined/>}
+                               style={{marginLeft: 8, padding: 0}} onClick={this.add}>添加</Button>}
           </td>
         </tr>}
 
@@ -136,8 +139,8 @@ export default class extends React.Component {
         </tbody>
       </table>
 
-      {canAdd && <Button type='link' icon={<PlusOutlined/>} className='mt-4 mb-2' style={{padding: 0}}
-                         onClick={this.add}>添加</Button>}
+      {canAdd && !empty && <Button type='link' size='small' icon={<PlusOutlined/>} className='mt-1'
+                                   style={{padding: 0}} onClick={this.add}>添加</Button>}
     </div>
 
   }

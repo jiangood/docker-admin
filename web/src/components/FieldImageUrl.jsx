@@ -1,4 +1,4 @@
-import {PictureOutlined} from '@ant-design/icons'
+import {ContainerOutlined} from '@ant-design/icons'
 import {Button, Input, Space, Tooltip} from 'antd'
 import React from 'react'
 
@@ -22,6 +22,8 @@ export default class extends React.Component {
     handleSelect = imageUrl => {
         this.setState({pickerOpen: false})
         this.props.onChange?.(imageUrl)
+        // 供调用方在「从仓库选择」时做联动（如自动填应用名），区别于手工输入
+        this.props.onSelectImage?.(imageUrl)
     }
 
     render() {
@@ -35,7 +37,7 @@ export default class extends React.Component {
                        onChange={this.handleInputChange}/>
                 <Tooltip title='从镜像仓库选择'>
                     <Button disabled={disabled}
-                            icon={<PictureOutlined/>}
+                            icon={<ContainerOutlined/>}
                             onClick={() => this.setState({pickerOpen: true})}/>
                 </Tooltip>
             </Space.Compact>
