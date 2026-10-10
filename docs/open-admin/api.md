@@ -65,7 +65,7 @@ public class DataSyncJob extends BaseJob {
 | 类型 | 路径 | 说明 |
 |------|------|------|
 | Repository | `{实体包去掉 .entity}/repository/{Entity}Repository.java` | 继承 `BaseRepository<Entity, String>` |
-| Service | `{模块包}/service/{Entity}Service.java` | 继承 `BaseService`，含 `@FileField` 时自动生成 claim/unclaim 事务方法 |
+| Service | `{模块包}/service/{Entity}Service.java` | 继承 `BaseService`，含 `@FileField` 时自动生成 confirmTempFiles/discardTempFiles 事务方法 |
 | Controller | `{模块包}/controller/{Entity}Controller.java` | `admin/{module}` 下 `page/info/create/update/delete`，`@HasPermission` + `@Log` |
 | 前端页面 | `web/src/pages/{module}/index.jsx` | `ProTable` + `FormModal`，按字段类型选用 `Field*`/`View*` 组件 |
 | 菜单 | `src/main/resources/application-menu-{module}.yml` | 挂在指定父菜单（默认 `sys`），含读/建/改/删权限 |
@@ -306,6 +306,7 @@ class ReportPage extends React.Component {
 |------|------|
 | `FieldUserSelect` | 系统用户下拉（`/admin/sysUser/options`） |
 | `FieldUserSelectMultiple` | 系统用户多选 |
+| `FieldUserPicker` | 用户选择弹窗（机构树 + 服务端分页多选，`value` 为用户 id 数组，适合同名多、用户量大的场景；默认数据源 `/admin/sysUser/page`、回显 `/admin/sysUser/by-ids`，可用 `requestUrl`/`usersUrl` 覆盖） |
 | `FieldUnitTreeSelect` | 系统单位树选择（`/admin/sysOrg/unit-tree`） |
 | `FieldDeptTreeSelect` | 系统部门树选择（`/admin/sysOrg/dept-tree`） |
 | `FieldOrgTreeSelect` | `FieldDeptTreeSelect` 的别名 |
@@ -323,7 +324,7 @@ class ReportPage extends React.Component {
 - `POST /admin/sysFile/uploadImage` — 图片上传，表单参数 `file`、`thumb`（缩略图）、`isPublic`
 - `GET /admin/sysFile/download/{*objectName}` — 下载
 
-上传文件默认标记为临时，保存业务数据后后端自动确认（详见[临时文件自动清理](config.md#未认领文件自动清理)）。
+上传文件默认标记为临时，保存业务数据后后端自动确认（详见[临时文件自动清理](config.md#临时文件自动清理)）。
 
 前端字段直接存储文件 `objectName`（如 `public/202607/xxx.jpg`），`ViewImage` / `ViewFile` / `FieldUploadFile` 自动拼接 `/file/{objectName}` 展示；上传组件通过 `isPublic` prop 指定是否公开，默认 `true`（私有文件显式传 `isPublic={false}`）：
 

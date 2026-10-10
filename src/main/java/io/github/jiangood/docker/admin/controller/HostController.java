@@ -7,7 +7,6 @@ import io.github.jiangood.docker.admin.service.HostService;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import io.github.jiangood.openadmin.util.dto.AjaxResult;
 import io.github.jiangood.openadmin.util.dto.Option;
-import io.github.jiangood.openadmin.framework.config.RequestBodyKeys;
 import io.github.jiangood.openadmin.framework.data.specification.Spec;
 import io.github.jiangood.openadmin.framework.perm.HasPermission;
 import jakarta.annotation.Resource;
@@ -47,7 +46,7 @@ public class HostController  {
 
     @HasPermission("host:save")
     @PostMapping("save")
-    public AjaxResult save(@RequestBody Host input, RequestBodyKeys updateFields) throws Exception {
+    public AjaxResult save(@RequestBody Host input, @RequestHeader("X-Body-Fields") List<String> updateFields) throws Exception {
         service.saveHost(input, updateFields);
         return AjaxResult.ok().msg("保存成功");
     }

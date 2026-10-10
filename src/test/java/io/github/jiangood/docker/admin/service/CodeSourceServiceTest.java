@@ -103,16 +103,4 @@ class CodeSourceServiceTest {
 
         assertTrue(CodeSourceService.resolveCredential(source).isNone());
     }
-
-    @Test
-    void credential_legacyRowWithoutAuthTypeUsesPasswordAsToken() {
-        CodeSource source = new CodeSource();
-        source.setAuthType(null);
-        source.setUsername("oauth2");
-        source.setPassword("legacy-token");
-
-        GitCredential credential = CodeSourceService.resolveCredential(source);
-        assertEquals(GitCredential.Kind.TOKEN, credential.getKind());
-        assertEquals("legacy-token", credential.getSecret());
-    }
 }

@@ -12,7 +12,6 @@ import io.github.jiangood.docker.admin.service.TunnelService;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import io.github.jiangood.openadmin.util.dto.AjaxResult;
 import io.github.jiangood.openadmin.util.dto.Option;
-import io.github.jiangood.openadmin.framework.config.RequestBodyKeys;
 import io.github.jiangood.openadmin.framework.data.specification.Spec;
 import io.github.jiangood.openadmin.framework.auth.LoginTool;
 import jakarta.annotation.Resource;
@@ -28,6 +27,7 @@ import org.springframework.util.Assert;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -160,7 +160,7 @@ public class AppController {
 
     @HasPermission("app:save")
     @RequestMapping("save")
-    public AjaxResult save(@RequestBody App app, RequestBodyKeys requestBodyKeys) throws Exception {
+    public AjaxResult save(@RequestBody App app, @RequestHeader("X-Body-Fields") List<String> requestBodyKeys) throws Exception {
         // 修改已有应用时校验数据权限（新增不受限）
         if (StrUtil.isNotBlank(app.getId())) {
             assertAppAccess(app.getId());

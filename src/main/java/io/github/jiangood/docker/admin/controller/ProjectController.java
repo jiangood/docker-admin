@@ -10,7 +10,6 @@ import io.github.jiangood.docker.admin.service.ProjectService;
 import io.github.jiangood.docker.base.OrgAccessTool;
 import io.github.jiangood.openadmin.util.dto.AjaxResult;
 import io.github.jiangood.openadmin.util.dto.Option;
-import io.github.jiangood.openadmin.framework.config.RequestBodyKeys;
 import io.github.jiangood.openadmin.framework.data.specification.Spec;
 import io.github.jiangood.openadmin.framework.auth.LoginTool;
 import io.github.jiangood.openadmin.framework.perm.HasPermission;
@@ -70,7 +69,7 @@ public class ProjectController {
 
     @HasPermission("project:save")
     @PostMapping({"save"})
-    public AjaxResult save(@RequestBody Project param, RequestBodyKeys updateFields) throws Exception {
+    public AjaxResult save(@RequestBody Project param, @RequestHeader("X-Body-Fields") List<String> updateFields) throws Exception {
         // 修改已有项目时校验数据权限（新增不受限）
         if (StrUtil.isNotBlank(param.getId())) {
             assertProjectAccess(param.getId());
