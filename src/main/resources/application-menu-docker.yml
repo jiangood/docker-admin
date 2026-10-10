@@ -4,18 +4,6 @@ menus:
     name: 容器平台
     icon: AppstoreOutlined
     seq: 10
-  project:
-    pid: biz
-    name: 项目
-    path: /project
-    icon: ContainerOutlined
-    seq: 150
-    perms:
-      - {name: 查看, code: project:view}
-      - {name: 保存, code: project:save}
-      - {name: 删除, code: project:delete}
-      - {name: 构建, code: project:build}
-      - {name: Webhook, code: project:webhook}
   image-repo:
     pid: biz
     name: 镜像仓库
@@ -23,18 +11,27 @@ menus:
     icon: DatabaseOutlined
     seq: 100
     perms:
-      - {name: 查看, code: image-repo:view}
-      - {name: 删除, code: image-repo:delete}
+      - { name: 查看, code: image-repo:view }
+      - { name: 删除, code: image-repo:delete }
+  project:
+    pid: biz
+    name: 项目
+    path: /project
+    icon: ContainerOutlined
+    perms:
+      - {name: 查看, code: project:view}
+      - {name: 保存, code: project:save}
+      - {name: 删除, code: project:delete}
+      - {name: 构建, code: project:build}
+      - {name: Webhook, code: project:webhook}
   divider-image-repo:
     pid: biz
     type: divider
-    seq: 120
   app:
     pid: biz
     name: 应用
     path: /app
     icon: AppstoreOutlined
-    seq: 200
     perms:
       - {name: 查看, code: app:view}
       - {name: 保存, code: app:save}
@@ -45,18 +42,15 @@ menus:
   divider-app:
     pid: biz
     type: divider
-    seq: 250
   setting:
     pid: biz
     name: 设置
     icon: SettingOutlined
-    seq: 400
   host:
     pid: setting
     name: 主机管理
     path: /host
     icon: DesktopOutlined
-    seq: 450
     perms:
       - {name: 查看, code: host:list}
       - {name: 保存, code: host:save}
@@ -69,7 +63,6 @@ menus:
     name: 注册中心
     path: /registry
     icon: CloudServerOutlined
-    seq: 500
     perms:
       - {name: 查看, code: registry:view}
       - {name: 保存, code: registry:save}
@@ -78,7 +71,6 @@ menus:
     name: 代码源
     path: /code-source
     icon: KeyOutlined
-    seq: 600
     perms:
       - {name: 查看, code: code-source:view}
       - {name: 保存, code: code-source:save}
@@ -87,13 +79,11 @@ menus:
     pid: biz
     name: 辅助工具
     icon: ToolOutlined
-    seq: 700
   setting-sync:
     pid: tool
     name: 镜像同步
     path: /image-sync
     icon: CloudSyncOutlined
-    seq: 100
     perms:
       - {name: 查看, code: image-sync:view}
       - {name: 同步, code: image-sync:sync}
@@ -102,7 +92,6 @@ menus:
     name: 构建测试
     path: /build-test
     icon: BuildOutlined
-    seq: 200
     perms:
       - {name: 查看, code: build-test:view}
       - {name: 构建, code: build-test:build}
@@ -112,7 +101,6 @@ menus:
     name: 隧道管理
     path: /tunnel
     icon: ApiOutlined
-    seq: 300
     perms:
       - {name: 查看, code: tunnel:view}
       - {name: 客户端, code: tunnel:save}
