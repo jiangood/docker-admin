@@ -1,4 +1,4 @@
-import {Alert, AutoComplete, Button, Divider, Form, Input, Modal, Typography} from 'antd';
+import {Alert, AutoComplete, Button, Col, Divider, Form, Input, Modal, Row, Typography} from 'antd';
 import React from 'react';
 import ContainerStatus from "../../components/ContainerStatus";
 import FieldImageUrl from "../../components/FieldImageUrl";
@@ -228,7 +228,7 @@ export default class extends React.Component {
                 <Modal title='新增应用' open={this.state.deployVisible} destroyOnHidden={true}
                        onOk={() => this.formRef.current.submit()}
                        onCancel={() => this.setState({deployVisible: false})}
-                       width={860}
+                       width={960}
                 >
                     <Form
                         layout='horizontal'
@@ -246,39 +246,50 @@ export default class extends React.Component {
                             </Typography.Text>
                         </Form.Item>
 
-                        <Form.Item name='name' label='应用名称' required rules={[{required: true}]}>
-                            <Input/>
-                        </Form.Item>
+                        <Row gutter={16}>
+                            <Col span={12}>
+                                <Form.Item name='name' label='应用名称' required rules={[{required: true}]}>
+                                    <Input/>
+                                </Form.Item>
+                            </Col>
 
-                        <Form.Item name='imageUrl' label='镜像' required rules={[{required: true}]}
-                                   tooltip='可直接输入任意镜像地址，如 ghcr.io/jiangood/http-tunnel；也可点击右侧按钮从镜像仓库选择'>
-                            <FieldImageUrl/>
-                        </Form.Item>
+                            <Col span={12}>
+                                <Form.Item name={['host', 'id']} label='部署主机' required rules={[{required: true}]}>
+                                    <FieldRemoteSelect showSearch url="admin/host/options"/>
+                                </Form.Item>
+                            </Col>
 
+                            <Col span={12}>
+                                <Form.Item name='imageUrl' label='镜像' required rules={[{required: true}]}
+                                           tooltip='可直接输入任意镜像地址，如 ghcr.io/jiangood/http-tunnel；也可点击右侧按钮从镜像仓库选择'>
+                                    <FieldImageUrl/>
+                                </Form.Item>
+                            </Col>
 
-                        <Form.Item name='imageTag' label='版本' required rules={[{required: true}]}
-                                   tooltip='已登记的镜像会列出其版本，也可直接输入版本号'>
-                            <AutoComplete options={this.state.tagOptions}
-                                           placeholder='选择或输入版本，如 latest'/>
-                        </Form.Item>
+                            <Col span={12}>
+                                <Form.Item name='imageTag' label='版本' required rules={[{required: true}]}
+                                           tooltip='已登记的镜像会列出其版本，也可直接输入版本号'>
+                                    <AutoComplete options={this.state.tagOptions}
+                                                  placeholder='选择或输入版本，如 latest'/>
+                                </Form.Item>
+                            </Col>
 
+                            <Col span={12}>
+                                <Form.Item label='所属组织' name={['sysOrg', 'id']}>
+                                    <FieldOrgTreeSelect/>
+                                </Form.Item>
+                            </Col>
 
-                        <Form.Item name={['host', 'id']} label='部署主机' required rules={[{required: true}]}>
-                            <FieldRemoteSelect showSearch url="admin/host/options"/>
-                        </Form.Item>
-
-
-                        <Form.Item label='所属组织' name={['sysOrg', 'id']}>
-                            <FieldOrgTreeSelect/>
-                        </Form.Item>
-
-                        <Form.Item name='remark' label='备注'>
-                            <Input/>
-                        </Form.Item>
+                            <Col span={12}>
+                                <Form.Item name='remark' label='备注'>
+                                    <Input/>
+                                </Form.Item>
+                            </Col>
+                        </Row>
 
                         <Divider titlePlacement='left' plain>容器配置</Divider>
 
-                        <ContainerConfigForm namePrefix={['config']}
+                        <ContainerConfigForm namePrefix={['config']} twoColumn
                                              imageUrl={this.state.imageUrl} imageTag={this.state.imageTag}/>
 
                     </Form>
