@@ -28,7 +28,7 @@ export default class extends React.Component {
         return <Form ref={this.formRef} colon={false} labelCol={{flex: '100px'}} onFinish={this.update}
                      initialValues={{config: app.config}}>
 
-            <ContainerConfigForm namePrefix={['config']} appId={app.id}
+            <ContainerConfigForm namePrefix={['config']} appId={app.id} appName={app.name}
                                  imageUrl={app.imageUrl} imageTag={app.imageTag}/>
 
             <Form.Item label=' '>

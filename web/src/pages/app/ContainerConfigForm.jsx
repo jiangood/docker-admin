@@ -69,11 +69,27 @@ const deviceColumns = [
 ]
 
 /**
+ * 卷的主机路径默认根目录：最终路径为 DEFAULT_DATA_ROOT/应用名/容器路径。
+ */
+const DEFAULT_DATA_ROOT = '/data/docker-volume'
+
+/**
+ * 卷的默认主机路径：/data/docker-volume/<应用名>/<容器路径>。
+ * 应用名为空时不生成默认值（返回空串）。
+ */
+function defaultHostPath(appName, privateVolume) {
+    if (!appName) return ''
+    const sub = String(privateVolume || '').replace(/^\/+/, '')
+    return sub ? `${DEFAULT_DATA_ROOT}/${appName}/${sub}` : `${DEFAULT_DATA_ROOT}/${appName}`
+}
+
+/**
  * 按镜像声明（meta）归一化配置：
  * 严格维度（镜像声明了端口/卷）按声明重建容器侧，仅保留已填的主机侧映射；
+ * 未填的主机侧使用默认值 —— 端口默认等于容器端口，卷默认 DEFAULT_DATA_ROOT/应用名/容器路径。
  * 非严格维度保留用户填写/解析得到的值。
  */
-function normalize(meta, cfg) {
+function normalize(meta, cfg, appName) {
     const next = {...(cfg || {})}
     next.networkMode = next.networkMode || 'bridge'
     next.envs = next.envs || []
@@ -85,7 +101,7 @@ function normalize(meta, cfg) {
             const hit = saved.find(x => x.privatePort === p.privatePort
                 && (x.protocol || 'TCP').toUpperCase() === p.protocol)
             return {
-                publicPort: hit?.publicPort ?? p.publicPort ?? null,
+                publicPort: hit?.publicPort ?? p.publicPort ?? p.privatePort,
                 privatePort: p.privatePort,
                 protocol: p.protocol,
             }
@@ -99,7 +115,7 @@ function normalize(meta, cfg) {
         next.binds = (meta.volumes || []).map(v => {
             const hit = saved.find(x => x.privateVolume === v.privateVolume)
             return {
-                publicVolume: hit?.publicVolume ?? v.publicVolume ?? '',
+                publicVolume: hit?.publicVolume ?? v.publicVolume ?? defaultHostPath(appName, v.privateVolume),
                 privateVolume: v.privateVolume,
                 readOnly: hit?.readOnly ?? v.readOnly ?? false,
             }
@@ -111,11 +127,17 @@ function normalize(meta, cfg) {
     return next
 }
 
-export default function ContainerConfigForm({namePrefix, imageUrl, imageTag, appId, twoColumn}) {
+export default function ContainerConfigForm({namePrefix, imageUrl, imageTag, appId, appName, twoColumn}) {
     const form = Form.useFormInstance()
     const [meta, setMeta] = useState(null)
     const [loading, setLoading] = useState(true)
     const appliedKey = useRef(null)
+    // 上次归一化时使用的应用名，用于应用名后填/变更时更新默认卷主机路径
+    const lastAppNameRef = useRef(null)
+
+    // 应用名：详情页由 prop 传入；新增应用弹窗读取同表单的根字段 name
+    const watchedName = Form.useWatch('name', form)
+    const effectiveAppName = appName ?? watchedName
 
     const cfg = Form.useWatch(namePrefix, form) || {}
 
@@ -146,11 +168,37 @@ export default function ContainerConfigForm({namePrefix, imageUrl, imageTag, app
         const key = appId || `${imageUrl || ''}:${imageTag || ''}`
         if (appliedKey.current === key) return
         appliedKey.current = key
-        const next = normalize(meta, form.getFieldValue(namePrefix))
+        lastAppNameRef.current = effectiveAppName || null
+        const next = normalize(meta, form.getFieldValue(namePrefix), effectiveAppName)
         if (JSON.stringify(next) !== JSON.stringify(form.getFieldValue(namePrefix) || {})) {
             form.setFieldValue(namePrefix, next)
         }
     }, [loading, meta])
+
+    // 应用名后填/变更：把「空白」或「仍是上次自动默认」的卷主机路径更新为新默认，
+    // 用户手改过的值不动。
+    useEffect(() => {
+        if (loading || !effectiveAppName) return
+        const prev = lastAppNameRef.current
+        if (prev === effectiveAppName) return
+        lastAppNameRef.current = effectiveAppName
+        if (!meta || !meta.strictVolumes) return
+        const binds = (form.getFieldValue(namePrefix) || {}).binds
+        if (!binds || !binds.length) return
+        let changed = false
+        const nextBinds = binds.map(b => {
+            if (!b || !b.privateVolume) return b
+            const oldDefault = prev ? defaultHostPath(prev, b.privateVolume) : ''
+            if (!b.publicVolume || (oldDefault && b.publicVolume === oldDefault)) {
+                changed = true
+                return {...b, publicVolume: defaultHostPath(effectiveAppName, b.privateVolume)}
+            }
+            return b
+        })
+        if (changed) {
+            form.setFieldValue([...namePrefix, 'binds'], nextBinds)
+        }
+    }, [effectiveAppName, loading, meta])
 
     if (loading) {
         return <div className='center-box'><Spin/></div>
@@ -184,7 +232,7 @@ export default function ContainerConfigForm({namePrefix, imageUrl, imageTag, app
 
     const portsItem = (!cfg.networkMode || cfg.networkMode === 'bridge') && (
         <Form.Item label='端口映射' name={name('ports')}
-                   tooltip={strictPorts ? '端口来自镜像声明，仅可修改主机端口' : '镜像未声明端口，可自由配置'}>
+                   tooltip={strictPorts ? '端口来自镜像声明，主机端口默认等于容器端口，仅可修改主机端口' : '镜像未声明端口，可自由配置'}>
             <EditTable columns={portsColumns(strictPorts)}
                        canAdd={!strictPorts} canRemove={!strictPorts} extra='暂无端口'/>
         </Form.Item>
@@ -192,7 +240,7 @@ export default function ContainerConfigForm({namePrefix, imageUrl, imageTag, app
 
     const bindsItem = (
         <Form.Item label='文件映射' name={name('binds')}
-                   tooltip={strictVolumes ? '卷来自镜像声明，仅可修改主机路径' : '镜像未声明卷，可自由配置'}>
+                   tooltip={strictVolumes ? `卷来自镜像声明，主机路径默认 ${DEFAULT_DATA_ROOT}/应用名/...，仅可修改主机路径` : '镜像未声明卷，可自由配置'}>
             <EditTable columns={bindsColumns(strictVolumes)}
                        canAdd={!strictVolumes} canRemove={!strictVolumes} extra='暂无卷'/>
         </Form.Item>
