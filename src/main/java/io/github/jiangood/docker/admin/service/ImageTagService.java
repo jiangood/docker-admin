@@ -9,6 +9,7 @@ import com.github.dockerjava.api.model.ExposedPort;
 import io.github.jiangood.docker.admin.dao.ImageTagRepository;
 import io.github.jiangood.docker.admin.entity.ImageTag;
 import io.github.jiangood.docker.admin.util.ImageUrlUtils;
+import io.github.jiangood.docker.admin.util.VersionUtils;
 import io.github.jiangood.openadmin.framework.data.BaseService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -43,18 +44,20 @@ public class ImageTagService extends BaseService<ImageTag> {
         if (StrUtil.isBlank(imageUrl)) {
             return Collections.emptyList();
         }
-        return imageTagRepository.findAllByImageUrl(imageUrl);
+        return imageTagRepository.findAllByImageUrl(imageUrl).stream()
+                .sorted(Comparator.comparing(ImageTag::getTag, VersionUtils.VERSION_DESC))
+                .toList();
     }
 
     /**
-     * 某个镜像仓库的所有版本号（tag），倒序。
+     * 某个镜像仓库的所有版本号（tag），版本倒序（如 v1.10.0 在 v1.9.0 之前，latest 在最后）。
      */
     public List<String> tags(String imageUrl) {
         return listByImageUrl(imageUrl).stream()
                 .map(ImageTag::getTag)
                 .filter(StrUtil::isNotBlank)
                 .distinct()
-                .sorted(Comparator.reverseOrder())
+                .sorted(VersionUtils.VERSION_DESC)
                 .toList();
     }
 

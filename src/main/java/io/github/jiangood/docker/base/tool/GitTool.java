@@ -106,7 +106,7 @@ public class GitTool {
                     tags.add(name.substring("refs/tags/".length()));
                 }
             }
-            Collections.sort(tags);
+            // 顺序由调用方按版本规则处理（见 VersionUtils），这里不排序
             return tags;
         } finally {
             closeQuietly(sshFactory);

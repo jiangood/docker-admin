@@ -25,6 +25,7 @@ import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.entity.Project;
 import io.github.jiangood.docker.admin.entity.Registry;
 import io.github.jiangood.docker.admin.util.ImageUrlUtils;
+import io.github.jiangood.docker.admin.util.VersionUtils;
 import io.github.jiangood.docker.admin.websocket.TaskLogRegistry;
 import io.github.jiangood.docker.sdk.engine.DefaultCallback;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
@@ -175,7 +176,9 @@ public class ProjectService extends BaseService<Project> {
         CodeSource source = codeSourceService.findByGitUrl(project.getGitUrl());
         GitCredential credential = codeSourceService.credential(source);
         try {
-            return GitTool.listRemoteTags(project.getGitUrl(), credential);
+            return GitTool.listRemoteTags(project.getGitUrl(), credential).stream()
+                    .sorted(VersionUtils.VERSION_DESC)
+                    .toList();
         } catch (GitAPIException e) {
             if (source == null) {
                 String host = CodeSourceService.hostKey(project.getGitUrl());
