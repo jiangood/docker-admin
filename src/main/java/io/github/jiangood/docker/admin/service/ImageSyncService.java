@@ -108,7 +108,7 @@ public class ImageSyncService {
                 repo = source.substring(0, lastColon);
             }
 
-            String targetName = StrUtil.isNotBlank(p.getTargetName()) ? StrUtil.trim(p.getTargetName()) : lastSegment(repo);
+            String targetName = lastSegment(repo);
 
             String registryBase = StrUtil.removeSuffix(StrUtil.nullToEmpty(registry.getFullUrl()), "/");
             Assert.hasText(registryBase, "注册中心地址未配置，请先在【设置-镜像注册中心】中配置地址与命名空间");
@@ -255,7 +255,7 @@ public class ImageSyncService {
     }
 
     /**
-     * 源镜像的最后一段作为默认镜像名：docker.io/library/nginx -> nginx。
+     * 源镜像的最后一段作为镜像名：docker.io/library/nginx -> nginx。
      */
     private static String lastSegment(String repo) {
         int index = repo.lastIndexOf('/');

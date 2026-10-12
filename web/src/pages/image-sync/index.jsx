@@ -1,4 +1,4 @@
-import {Alert, AutoComplete, Button, Card, Drawer, Form, Input, Select, Typography} from 'antd'
+import {Alert, AutoComplete, Button, Card, Drawer, Form, Select, Typography} from 'antd'
 import React from 'react'
 import {FileTextOutlined} from '@ant-design/icons'
 import {HttpClient, Page, PermActions} from '@jiangood/open-admin'
@@ -67,7 +67,7 @@ const pushRecent = image => {
 
 /**
  * 镜像同步：选一台网络通畅的主机拉取公共镜像，推送到平台注册中心；
- * 目标主机（可选）再从注册中心拉取并打成不带注册中心前缀的镜像名。
+ * 目标主机（可选）再从注册中心拉取。
  * <p>
  * 注册中心是必经环节，因此只有一个表单。
  */
@@ -123,9 +123,9 @@ export default class extends React.Component {
     }
 
     /**
-     * 目标镜像名：留空则取源镜像的最后一段。
+     * 目标镜像名：取源镜像去掉 tag 后的最后一段。
      */
-    targetNameOf = (sourceImage, targetName) => {
+    targetNameOf = sourceImage => {
         const src = (sourceImage || '').trim()
         if (!src) {
             return ''
@@ -136,7 +136,7 @@ export default class extends React.Component {
         if (lastColon > lastSlash) {
             repo = src.slice(0, lastColon)
         }
-        return (targetName || '').trim() || repo.split('/').pop()
+        return repo.split('/').pop()
     }
 
     /**
@@ -150,11 +150,11 @@ export default class extends React.Component {
     }
 
     /**
-     * 注册中心的目标地址预览（与后端默认命名规则保持一致）。
+     * 目标镜像预览：镜像在平台注册中心上的完整地址（与后端默认命名规则保持一致）。
      */
     calcRegistryPreview = values => {
         const {registry} = this.state
-        const name = this.targetNameOf(values.sourceImage, values.targetName)
+        const name = this.targetNameOf(values.sourceImage)
         if (!name || !registry || !registry.url) {
             this.setState({registryPreview: ''})
             return
@@ -167,7 +167,6 @@ export default class extends React.Component {
         const payload = {
             hostId: values.hostId,
             sourceImage: values.sourceImage,
-            targetName: values.targetName,
             targetHostIds: values.targetHostIds || [],
         }
         this.setState({syncing: true})
@@ -236,21 +235,17 @@ export default class extends React.Component {
                                       filterOption={(input, option) => option.value.toLowerCase().includes(input.toLowerCase())}/>
                     </Form.Item>
 
-                    <Form.Item label='目标镜像名' name='targetName' tooltip='留空则取源镜像的最后一段作为镜像名'>
-                        <Input placeholder='留空自动使用源镜像名'/>
+                    <Form.Item label='执行主机' name='hostId' rules={[{required: true, message: '请选择执行主机'}]}
+                               tooltip='网络通畅、能访问公共镜像仓库的主机，负责拉取源镜像并推送到注册中心'>
+                        <Select options={hostOptions} showSearch optionFilterProp='label'
+                                placeholder='请选择执行主机'/>
                     </Form.Item>
 
                     {registryPreview &&
-                        <Form.Item label='注册中心地址'>
-                            <Input readOnly value={registryPreview}/>
+                        <Form.Item label='目标镜像' tooltip='镜像在平台注册中心上的完整地址，由源镜像自动生成'>
+                            <Typography.Text copyable code>{registryPreview}</Typography.Text>
                         </Form.Item>
                     }
-
-                    <Form.Item label='同步主机' name='hostId' rules={[{required: true, message: '请选择同步主机'}]}
-                               tooltip='网络通畅、能访问公共镜像仓库的主机，负责拉取源镜像并推送到注册中心'>
-                        <Select options={hostOptions} showSearch optionFilterProp='label'
-                                placeholder='请选择同步主机'/>
-                    </Form.Item>
 
                     <Form.Item label='目标主机' name='targetHostIds'
                                dependencies={['hostId']}
@@ -258,12 +253,12 @@ export default class extends React.Component {
                                    validator: (_, value) => {
                                        const hostId = getFieldValue('hostId')
                                        if (hostId && value && value.includes(hostId)) {
-                                           return Promise.reject(new Error('目标主机不能与同步主机相同'))
+                                           return Promise.reject(new Error('目标主机不能与执行主机相同'))
                                        }
                                        return Promise.resolve()
                                    },
                                })]}
-                               tooltip='可选。同步主机把镜像推到注册中心后，这些主机会从注册中心拉取并重新打成上面的目标镜像名；不选则只推送到注册中心'>
+                               tooltip='可选。执行主机把镜像推到注册中心后，这些主机会从注册中心拉取；不选则只推送到注册中心'>
                         <Select mode='multiple' options={hostOptions} showSearch optionFilterProp='label'
                                 allowClear placeholder='留空则只推送到注册中心'/>
                     </Form.Item>

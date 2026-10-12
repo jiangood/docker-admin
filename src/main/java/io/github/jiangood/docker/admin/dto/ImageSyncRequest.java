@@ -28,9 +28,4 @@ public class ImageSyncRequest {
      */
     List<String> targetHostIds;
 
-    /**
-     * 目标镜像名，留空则取源镜像的最后一段。
-     */
-    String targetName;
-
 }
