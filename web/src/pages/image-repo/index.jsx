@@ -1,4 +1,5 @@
 import {Button, Form, Popconfirm, Tag} from 'antd'
+import {CloudSyncOutlined} from '@ant-design/icons'
 import React from 'react'
 
 import {
@@ -11,12 +12,14 @@ import {
 } from "@jiangood/open-admin"
 
 import LinkButton from '../../components/LinkButton'
+import RemoteSyncModal from '../../components/RemoteSyncModal'
 
 
 const SOURCE_LABELS = {
     BUILD: {text: '构建', color: 'green'},
     SYNC: {text: '同步', color: 'blue'},
     IMPORT: {text: '导入', color: 'orange'},
+    REMOTE: {text: '远程', color: 'purple'},
 }
 
 export function sourceTag(source) {
@@ -27,6 +30,7 @@ export function sourceTag(source) {
 export default class extends React.Component {
 
     tableRef = React.createRef()
+    remoteModalRef = React.createRef()
 
     columns = [
         {
@@ -85,6 +89,14 @@ export default class extends React.Component {
         return <Page padding>
             <ProTable
                 actionRef={this.tableRef}
+                toolBarRender={() => [
+                    <PermActions key='remote-sync'>
+                        <Button perm='image-repo:sync' icon={<CloudSyncOutlined/>}
+                                onClick={() => this.remoteModalRef.current.show()}>
+                            从远程同步
+                        </Button>
+                    </PermActions>,
+                ]}
                 searchFormRender={() => (
                     <Form.Item label='组织机构' name='orgId'>
                         <FieldOrgTreeSelect placeholder='全部组织机构'/>
@@ -93,6 +105,8 @@ export default class extends React.Component {
                 request={(params) => HttpClient.get('admin/image-repo/page', params)}
                 columns={this.columns}
             />
+            <RemoteSyncModal ref={this.remoteModalRef}
+                             onSuccess={() => this.tableRef.current.reload()}/>
         </Page>
     }
 }

@@ -1,13 +1,16 @@
-import {Button, Card, Descriptions, Drawer, Popconfirm, Spin, Table, Tabs, Typography} from 'antd'
-import {DownloadOutlined} from '@ant-design/icons'
+import {Button, Card, Descriptions, Drawer, Popconfirm, Space, Spin, Table, Tabs, Typography} from 'antd'
+import {CloudSyncOutlined, DownloadOutlined} from '@ant-design/icons'
 import React from 'react'
 import {HttpClient, Page, PageUtils, PermActions, UrlUtils} from "@jiangood/open-admin"
 import LogView from '../../components/LogView'
+import RemoteSyncModal from '../../components/RemoteSyncModal'
 import {formatBytes} from "../../components/container/utils"
 import {sourceTag} from "./index"
 
 
 export default class extends React.Component {
+
+    remoteModalRef = React.createRef()
 
     state = {
         repo: null,
@@ -99,7 +102,15 @@ export default class extends React.Component {
         }
 
         return <Page padding>
-            <Card className='mb-4' title={repo.imageUrl}>
+            <Card className='mb-4' title={repo.imageUrl}
+                   extra={
+                       <PermActions>
+                           <Button perm='image-repo:sync' icon={<CloudSyncOutlined/>}
+                                   onClick={() => this.remoteModalRef.current.show(repo.imageUrl)}>
+                               从远程同步
+                           </Button>
+                       </PermActions>
+                   }>
                 <Descriptions>
                     <Descriptions.Item label='仓库名'>{repo.name}</Descriptions.Item>
                     <Descriptions.Item label='来源'>{sourceTag(repo.source)}</Descriptions.Item>
@@ -125,6 +136,14 @@ export default class extends React.Component {
                                     render: (v) => <Typography.Text copyable code>{v}</Typography.Text>
                                 },
                                 {title: '来源', dataIndex: 'source', render: (s) => sourceTag(s)},
+                                {
+                                    title: '构建时间', dataIndex: 'buildTime', width: 160,
+                                    render: (v) => v || '-'
+                                },
+                                {
+                                    title: '大小', dataIndex: 'size', width: 100,
+                                    render: (v) => v ? formatBytes(v) : '-'
+                                },
                                 {
                                     title: '声明端口', dataIndex: 'exposedPorts',
                                     render: (list) => (list && list.length) ? list.join(', ') : '-'
@@ -164,6 +183,9 @@ export default class extends React.Component {
                         />
                     },
                 ]}/>
+                <RemoteSyncModal ref={this.remoteModalRef}
+                                 onClose={this.loadRepo}
+                                 onSuccess={this.loadRepo}/>
             </Card>
 
             <Drawer title='导出日志' size={760}

@@ -8,6 +8,7 @@ import com.github.dockerjava.api.model.ContainerConfig;
 import com.github.dockerjava.api.model.ExposedPort;
 import io.github.jiangood.docker.admin.dao.ImageTagRepository;
 import io.github.jiangood.docker.admin.entity.ImageTag;
+import io.github.jiangood.docker.admin.service.registry.RemoteImageMeta;
 import io.github.jiangood.docker.admin.util.ImageUrlUtils;
 import io.github.jiangood.docker.admin.util.VersionUtils;
 import io.github.jiangood.openadmin.framework.data.BaseService;
@@ -22,6 +23,8 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * 镜像标签服务：读取并缓存镜像（Dockerfile）中声明的端口与卷。
@@ -61,6 +64,19 @@ public class ImageTagService extends BaseService<ImageTag> {
                 .toList();
     }
 
+    /**
+     * 某个镜像仓库已登记的版本号集合，用于远程同步时批量判断「已存在」。
+     */
+    public Set<String> tagSet(String imageUrl) {
+        if (StrUtil.isBlank(imageUrl)) {
+            return Collections.emptySet();
+        }
+        return imageTagRepository.findAllByImageUrl(imageUrl).stream()
+                .map(ImageTag::getTag)
+                .filter(StrUtil::isNotBlank)
+                .collect(Collectors.toSet());
+    }
+
     @Transactional
     public void deleteByImageUrl(String imageUrl) {
         if (StrUtil.isNotBlank(imageUrl)) {
@@ -82,6 +98,38 @@ public class ImageTagService extends BaseService<ImageTag> {
         it.setFullUrl(ImageUrlUtils.full(imageUrl, tag));
         if (StrUtil.isNotBlank(source)) {
             it.setSource(source);
+        }
+        return imageTagRepository.save(it);
+    }
+
+    /**
+     * 新增或更新一个远程读取到的 tag，并补齐构建时间、大小、摘要。
+     * <p>
+     * 来源只在原值为空时补成 REMOTE，避免覆盖本地构建/同步产生的来源标记。
+     * 元数据里为空的字段保持原值不变，不用空值冲掉已有数据。
+     */
+    @Transactional
+    public ImageTag upsertRemote(String imageUrl, String tag, RemoteImageMeta meta) {
+        if (StrUtil.isBlank(imageUrl) || StrUtil.isBlank(tag)) {
+            return null;
+        }
+        ImageTag it = imageTagRepository.findByImageUrlAndTag(imageUrl, tag).orElseGet(ImageTag::new);
+        it.setImageUrl(imageUrl);
+        it.setTag(tag);
+        it.setFullUrl(ImageUrlUtils.full(imageUrl, tag));
+        if (StrUtil.isBlank(it.getSource())) {
+            it.setSource("REMOTE");
+        }
+        if (meta != null) {
+            if (meta.buildTime() != null) {
+                it.setBuildTime(meta.buildTime());
+            }
+            if (StrUtil.isNotBlank(meta.digest())) {
+                it.setDigest(meta.digest());
+            }
+            if (meta.size() != null) {
+                it.setSize(meta.size());
+            }
         }
         return imageTagRepository.save(it);
     }

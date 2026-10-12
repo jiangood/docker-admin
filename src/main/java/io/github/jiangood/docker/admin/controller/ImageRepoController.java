@@ -3,12 +3,15 @@ package io.github.jiangood.docker.admin.controller;
 import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
 import io.github.jiangood.docker.admin.dao.AppRepository;
+import io.github.jiangood.docker.admin.dto.RemoteRegistryQuery;
+import io.github.jiangood.docker.admin.dto.RemoteSyncResult;
 import io.github.jiangood.docker.admin.entity.App;
 import io.github.jiangood.docker.admin.entity.ImageRepo;
 import io.github.jiangood.docker.admin.entity.ImageTag;
 import io.github.jiangood.docker.admin.service.ImageExportService;
 import io.github.jiangood.docker.admin.service.ImageRepoService;
 import io.github.jiangood.docker.admin.service.ImageTagService;
+import io.github.jiangood.docker.admin.service.RemoteSyncService;
 import io.github.jiangood.docker.base.OrgAccessTool;
 import io.github.jiangood.openadmin.framework.auth.LoginTool;
 import io.github.jiangood.openadmin.framework.data.specification.Spec;
@@ -23,6 +26,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.util.Assert;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -53,6 +57,9 @@ public class ImageRepoController {
 
     @Resource
     private ImageExportService imageExportService;
+
+    @Resource
+    private RemoteSyncService remoteSyncService;
 
     @HasPermission("image-repo:view")
     @RequestMapping("page")
@@ -143,6 +150,45 @@ public class ImageRepoController {
         ImageRepo repo = assertRepoAccess(id);
         List<ImageTag> tags = imageTagService.listByImageUrl(repo.getImageUrl());
         return AjaxResult.ok().data(tags);
+    }
+
+    // ------------------------------------------------------------------ 远程注册中心
+
+    /**
+     * 尝试列举远程注册中心下的全部仓库。
+     * <p>
+     * 阿里云个人版不开放该接口，此时返回 {@code supported=false} 与说明，前端降级为手工输入镜像地址。
+     */
+    @HasPermission("image-repo:sync")
+    @PostMapping("remote/catalog")
+    public AjaxResult remoteCatalog(@RequestBody RemoteRegistryQuery query) {
+        return AjaxResult.ok().data(remoteSyncService.catalog(query));
+    }
+
+    /**
+     * 预览远程仓库下的版本，不落库、不读镜像元数据。
+     */
+    @HasPermission("image-repo:sync")
+    @PostMapping("remote/preview")
+    public AjaxResult remotePreview(@RequestBody RemoteRegistryQuery query) {
+        return AjaxResult.ok().data(remoteSyncService.preview(query));
+    }
+
+    /**
+     * 把远程仓库与版本同步到本平台（来源标记 REMOTE）。
+     * <p>
+     * 逐仓库逐版本容错，单个失败只记入结果里的 failures，不中断整体同步。
+     */
+    @HasPermission("image-repo:sync")
+    @PostMapping("remote/sync")
+    public AjaxResult remoteSync(@RequestBody RemoteRegistryQuery query) {
+        RemoteSyncResult result = remoteSyncService.sync(query);
+        String msg = "同步完成：新增 " + result.getRepoAdded() + " 个仓库、" + result.getTagAdded()
+                + " 个版本，已存在跳过 " + result.getRepoSkipped() + " 个仓库、" + result.getTagSkipped() + " 个版本";
+        if (result.getMetaFilled() > 0) {
+            msg += "，填充镜像元数据 " + result.getMetaFilled() + " 个";
+        }
+        return AjaxResult.ok().data(result).msg(msg);
     }
 
     /**

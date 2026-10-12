@@ -49,7 +49,7 @@ public class ImageTag extends BaseEntity {
     String fullUrl;
 
     /**
-     * 来源：BUILD（项目构建）/ SYNC（镜像同步）/ IMPORT（导入）。
+     * 来源：BUILD（项目构建）/ SYNC（镜像同步）/ IMPORT（导入）/ REMOTE（远程注册中心）。
      */
     @Remark("来源")
     String source;
@@ -63,6 +63,14 @@ public class ImageTag extends BaseEntity {
      * 镜像大小（字节），可空。
      */
     Long size;
+
+    /**
+     * 镜像构建时间：来自镜像配置（image config）的 created 字段，不是同步时间。
+     * <p>
+     * 远程同步时从 {@code /v2/<name>/blobs/<config.digest>} 读取；本地 inspect 也可填充。
+     */
+    @Remark("构建时间")
+    LocalDateTime buildTime;
 
     /**
      * 来源构建记录 id（BUILD 来源），可空。
