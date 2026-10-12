@@ -129,12 +129,16 @@ public class ImageExportRegistry {
     /**
      * 清理已无价值的登记：文件已不在（下载成功或被 TTL 清扫），
      * 或任务早已结束且超过保留时长。
+     * <p>
+     * 只清理<b>已结束</b>的任务：进行中的任务尚未写出 tar，文件自然不存在，
+     * 若按「文件缺失」一并清掉，会把刚登记、正在导出的任务从登记表里抹掉，
+     * 前端于是既看不到日志也点不出下载（并且能反复点「开始导出」）。
      */
     public void sweep(long maxAgeMillis, Predicate<String> fileMissing) {
         long deadline = System.currentTimeMillis() - maxAgeMillis;
         tasks.values().removeIf(task ->
-                fileMissing.test(task.logId)
-                        || (task.getStatus() != Status.RUNNING && task.getStartTime() < deadline));
+                task.getStatus() != Status.RUNNING
+                        && (fileMissing.test(task.logId) || task.getStartTime() < deadline));
     }
 
 }

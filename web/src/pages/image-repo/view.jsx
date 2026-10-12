@@ -118,7 +118,11 @@ export default class extends React.Component {
     }
 
     startExport = () => {
-        const {drawer} = this.state
+        const {drawer, starting} = this.state
+        // 已经在派发中就不再重复发起，避免同一 tag 被点出多个导出任务
+        if (starting) {
+            return
+        }
         this.setState({starting: true})
         HttpClient.postForm('admin/image-repo/export/start', {
             imageUrl: drawer.imageUrl,
