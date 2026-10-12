@@ -1,4 +1,4 @@
-import {Button, Card, Descriptions, Drawer, Popconfirm, Space, Spin, Table, Tabs, Typography} from 'antd'
+import {Alert, Button, Card, Descriptions, Drawer, Popconfirm, Space, Spin, Table, Tabs, Typography} from 'antd'
 import {CloudSyncOutlined, DownloadOutlined} from '@ant-design/icons'
 import React from 'react'
 import {HttpClient, Page, PageUtils, PermActions, UrlUtils} from "@jiangood/open-admin"
@@ -8,25 +8,35 @@ import {formatBytes} from "../../components/container/utils"
 import {sourceTag} from "./index"
 
 
+/**
+ * 导出状态轮询间隔（毫秒）：只在有任务进行中（或刚点了确定）时才轮询。
+ */
+const POLL_INTERVAL = 3000
+
 export default class extends React.Component {
 
     tagSyncModalRef = React.createRef()
+    pollTimer = null
 
     state = {
         repo: null,
         tags: [],
         apps: [],
-        // 导出：日志抽屉与下载状态
-        exportTag: null,
-        logId: null,
-        logVisible: false,
-        ready: false,
-        readySize: 0,
+        // 后端登记的导出任务，列表行内据此展示下载状态
+        exportTasks: [],
+        // 当前打开的导出抽屉：{imageUrl, tag}
+        drawer: null,
+        // 已点「确定」、等待后端登记任务
+        starting: false,
     }
 
     componentDidMount() {
         this.id = PageUtils.currentParams().id
         this.loadRepo()
+    }
+
+    componentWillUnmount() {
+        this.stopPoll()
     }
 
     loadRepo = () => {
@@ -40,45 +50,124 @@ export default class extends React.Component {
                 HttpClient.get('admin/image-repo/apps', {imageUrl: repo.imageUrl}).then(r => {
                     this.setState({apps: r.data || []})
                 })
+                this.pollTasks()
             }
         })
     }
 
-    exportConfirmTitle = record => {
-        const size = (record.size === null || record.size === undefined || record.size === '')
-            ? null : formatBytes(record.size)
-        return size
-            ? `将从注册中心拉取该镜像（约 ${size}）后导出，大镜像较慢，是否继续？`
-            : '将从注册中心拉取该镜像后导出，大镜像较慢，是否继续？'
+    // ------------------------------------------------------------------ 导出状态
+
+    taskOf = (imageUrl, tag) => {
+        return this.state.exportTasks.find(t => t.imageUrl === imageUrl && t.tag === tag) || null
     }
 
-    exportImage = record => {
+    /** 当前抽屉对应的导出任务。 */
+    get drawerTask() {
+        const {drawer, exportTasks} = this.state
+        if (!drawer) {
+            return null
+        }
+        return exportTasks.find(t => t.imageUrl === drawer.imageUrl && t.tag === drawer.tag) || null
+    }
+
+    /**
+     * 拉取整个仓库的导出状态。有任务在跑（或正在等待登记）时持续轮询，否则停下，
+     * 避免无意义的请求。关闭抽屉、刷新页面回来后依然能拿到状态。
+     */
+    pollTasks = () => {
+        const {repo, drawer} = this.state
+        if (!repo) {
+            return
+        }
+        HttpClient.get('admin/image-repo/export/tasks', {imageUrl: repo.imageUrl}).then(rs => {
+            const exportTasks = rs.data || []
+            const mine = drawer
+                ? exportTasks.find(t => t.imageUrl === drawer.imageUrl && t.tag === drawer.tag)
+                : null
+            // 自己的任务已登记上，就不再用 starting 占位
+            const starting = mine ? false : this.state.starting
+            this.setState({exportTasks, starting})
+
+            const running = exportTasks.some(t => t.status === 'RUNNING')
+            if (running || starting) {
+                this.startPoll()
+            } else {
+                this.stopPoll()
+            }
+        }).catch(() => this.stopPoll())
+    }
+
+    startPoll = () => {
+        if (this.pollTimer) {
+            return
+        }
+        this.pollTimer = setInterval(this.pollTasks, POLL_INTERVAL)
+    }
+
+    stopPoll = () => {
+        if (this.pollTimer) {
+            clearInterval(this.pollTimer)
+            this.pollTimer = null
+        }
+    }
+
+    /** 打开导出抽屉：有任务就看进度日志，没有就给「确定」。 */
+    openExport = record => {
+        this.setState({drawer: {imageUrl: record.imageUrl, tag: record.tag}, starting: false})
+        this.pollTasks()
+    }
+
+    startExport = () => {
+        const {drawer} = this.state
+        this.setState({starting: true})
         HttpClient.postForm('admin/image-repo/export/start', {
-            imageUrl: record.imageUrl,
-            tag: record.tag,
-        }).then(rs => {
+            imageUrl: drawer.imageUrl,
+            tag: drawer.tag,
+        }).then(() => {
+            // 后端已在同步线程登记任务，立刻拉一次，日志随即出现
+            this.pollTasks()
+        }).catch(() => this.setState({starting: false}))
+
+        // 兜底：迟迟看不到任务登记就恢复按钮，避免一直转圈
+        setTimeout(() => this.setState({starting: false}), 15000)
+    }
+
+    /**
+     * 日志推送结束（任务结束或连接断开）：确认一次状态，让「可下载」立刻出现，不等轮询。
+     * 断连时任务可能还没结束，之后由轮询兜底。
+     */
+    onExportFinished = () => {
+        const {drawer, exportTasks} = this.state
+        if (!drawer) {
+            return
+        }
+        HttpClient.get('admin/image-repo/export/status', {imageUrl: drawer.imageUrl, tag: drawer.tag}).then(rs => {
+            const data = rs.data || {}
+            if (!data.ready) {
+                return
+            }
             this.setState({
-                exportTag: record,
-                logId: rs.data,
-                logVisible: true,
-                ready: false,
-                readySize: 0,
+                exportTasks: exportTasks.map(t =>
+                    (t.imageUrl === drawer.imageUrl && t.tag === drawer.tag)
+                        ? {...t, ready: true, size: data.size || 0}
+                        : t),
             })
+        }).catch(() => {
         })
     }
 
     /**
-     * 日志推送结束后（任务结束或断开）查询任务是否产出了可下载的文件。
+     * 手动删除已导出的 tar：不等 120 分钟后的清扫，直接把文件和登记条目清掉。
+     * 删除后关抽屉（条目没了，抽屉会退回「确定，开始导出」的空态）。
      */
-    onExportFinished = () => {
-        const {logId} = this.state
-        if (!logId) {
+    deleteExport = () => {
+        const task = this.drawerTask
+        if (!task) {
             return
         }
-        HttpClient.get('admin/image-repo/export/status', {logId}).then(rs => {
-            const data = rs.data || {}
-            this.setState({ready: !!data.ready, readySize: data.size || 0})
-        }).catch(() => {
+        HttpClient.postForm('admin/image-repo/export/delete', {logId: task.logId}).then(() => {
+            this.setState({drawer: null})
+            this.pollTasks()
         })
     }
 
@@ -86,20 +175,61 @@ export default class extends React.Component {
      * 下载地址：同源普通链接，浏览器直接流式写盘（不走 axios blob，避免大镜像撑爆内存）。
      */
     downloadUrl = () => {
-        const {logId, exportTag} = this.state
+        const task = this.drawerTask
         const params = new URLSearchParams({
-            logId,
-            imageUrl: exportTag?.imageUrl || '',
-            tag: exportTag?.tag || '',
+            logId: task.logId,
+            imageUrl: task.imageUrl,
+            tag: task.tag,
         })
         return UrlUtils.contextPath('/admin/image-repo/export/download') + '?' + params.toString()
     }
 
+    /** 还没有导出任务：说明 + 「确定」开始导出。 */
+    renderExportIdle = (tag, starting) => (
+        <Space direction='vertical' size='middle' style={{width: '100%'}}>
+            <Typography.Paragraph type='secondary'>
+                将从注册中心拉取 <Typography.Text code>{tag?.fullUrl || ''}</Typography.Text> 并打包成 tar。
+                大镜像较慢，开始后下方实时显示日志，打包完成右上角出现「下载」，
+                导出的 tar 可用 <Typography.Text code>docker load -i</Typography.Text> 导入。
+            </Typography.Paragraph>
+            {tag && tag.size
+                ? <Alert type='warning' showIcon
+                         message={`该镜像约 ${formatBytes(tag.size)}，拉取与打包需要一些时间`}/>
+                : null}
+            <Button type='primary' loading={starting} onClick={this.startExport}>确定，开始导出</Button>
+        </Space>
+    )
+
+    /** 已有导出任务：进度 + 日志，成功后右上角下载，失败可重试。 */
+    renderExportRunning = task => (
+        <Space direction='vertical' size='middle' style={{width: '100%'}}>
+            {task.status === 'RUNNING'
+                ? <Alert type='info' showIcon message='正在从注册中心拉取并打包，进度见下方日志'/>
+                : task.status === 'FAILED'
+                    ? <Alert type='error' showIcon message='导出失败，原因见下方日志，可重新导出'/>
+                    : <Alert type='success' showIcon
+                             message='导出完成，点击右上角「下载」保存 tar；下载后临时文件即删除'/>}
+            <LogView key={task.logId}
+                     url={'/admin/ws/image-export-log/' + task.logId}
+                     websocket={true}
+                     height={460}
+                     onClose={this.onExportFinished}/>
+            {task.status === 'FAILED'
+                ? <Button type='primary' loading={this.state.starting} onClick={this.startExport}>重新导出</Button>
+                : null}
+        </Space>
+    )
+
     render() {
-        const {repo, tags, apps} = this.state
+        const {repo, tags, apps, drawer, starting} = this.state
         if (!repo) {
             return <Page padding><Spin/></Page>
         }
+
+        const drawerTag = drawer
+            ? tags.find(t => t.imageUrl === drawer.imageUrl && t.tag === drawer.tag)
+            : null
+        const task = this.drawerTask
 
         return <Page padding>
             <Card className='mb-4' title={repo.imageUrl}
@@ -153,16 +283,29 @@ export default class extends React.Component {
                                     render: (list) => (list && list.length) ? list.join(', ') : '-'
                                 },
                                 {
-                                    title: '操作', width: 90,
-                                    render: (_, record) => (
-                                        <PermActions>
-                                            <Popconfirm perm='image-repo:export'
-                                                        title={this.exportConfirmTitle(record)}
-                                                        onConfirm={() => this.exportImage(record)}>
-                                                <Button size='small'>导出</Button>
-                                            </Popconfirm>
+                                    title: '操作', width: 180,
+                                    render: (_, record) => {
+                                        const t = this.taskOf(record.imageUrl, record.tag)
+                                        const running = !!t && t.status === 'RUNNING'
+                                        return <PermActions>
+                                            <Space size={4}>
+                                                <Button perm='image-repo:export' size='small'
+                                                        loading={running}
+                                                        onClick={() => this.openExport(record)}>
+                                                    {running ? '导出中' : '导出'}
+                                                </Button>
+                                                {t && t.ready
+                                                    ? <Typography.Text type='success' style={{fontSize: 12}}>
+                                                        可下载 {formatBytes(t.size)}
+                                                      </Typography.Text>
+                                                    : t && t.status === 'FAILED'
+                                                        ? <Typography.Text type='danger' style={{fontSize: 12}}>
+                                                            失败
+                                                          </Typography.Text>
+                                                        : null}
+                                            </Space>
                                         </PermActions>
-                                    ),
+                                    },
                                 },
                             ]}
                         />
@@ -188,27 +331,28 @@ export default class extends React.Component {
                                     onSuccess={this.loadRepo}/>
             </Card>
 
-            <Drawer title='导出日志' size={760}
-                    open={this.state.logVisible}
+            <Drawer title={drawer ? `导出 ${drawer.tag}` : '导出'}
+                    size={760}
+                    open={!!drawer}
                     mask={{closable: false}}
-                    onClose={() => this.setState({logVisible: false})}
-                    extra={this.state.ready ? (
-                        <Button type='primary' icon={<DownloadOutlined/>} href={this.downloadUrl()}>
-                            下载{this.state.readySize ? `（${formatBytes(this.state.readySize)}）` : ''}
-                        </Button>
+                    onClose={() => this.setState({drawer: null})}
+                    extra={task && task.ready ? (
+                        <Space>
+                            <Button type='primary' icon={<DownloadOutlined/>} href={this.downloadUrl()}
+                                    onClick={() => this.setState({drawer: null})}>
+                                下载{task.size ? `（${formatBytes(task.size)}）` : ''}
+                            </Button>
+                            <Popconfirm title='确定删除这个已导出的 tar？删除后需要重新导出才能下载'
+                                        onConfirm={this.deleteExport}>
+                                <Button danger>删除</Button>
+                            </Popconfirm>
+                        </Space>
                     ) : null}>
-                <Typography.Paragraph type='secondary'>
-                    正在从注册中心拉取并打包，进度见下方日志。完成后出现「下载」按钮，
-                    导出的 tar 可用 <Typography.Text code>docker load -i</Typography.Text> 导入；下载后临时文件即删除。
-                </Typography.Paragraph>
-                {this.state.logId
-                    ? <LogView key={this.state.logId}
-                               url={'/admin/ws/image-export-log/' + this.state.logId}
-                               websocket={true}
-                               height={460}
-                               onClose={this.onExportFinished}/>
-                    : null}
+                {!drawer ? null : task && (task.status === 'RUNNING' || task.ready || task.status === 'FAILED')
+                    ? this.renderExportRunning(task)
+                    : this.renderExportIdle(drawerTag, starting)}
             </Drawer>
         </Page>
     }
+
 }

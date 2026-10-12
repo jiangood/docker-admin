@@ -1,10 +1,12 @@
 package io.github.jiangood.docker.admin.service;
 
 import cn.hutool.core.io.FileUtil;
+import cn.hutool.core.util.StrUtil;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.command.InspectImageResponse;
-import com.github.dockerjava.api.exception.NotFoundException;
 import com.github.dockerjava.api.model.PullResponseItem;
+import io.github.jiangood.docker.admin.dto.ImageExportTaskView;
+import io.github.jiangood.docker.admin.entity.ImageTag;
 import io.github.jiangood.docker.admin.websocket.ImageExportLogHandshakeInterceptor;
 import io.github.jiangood.docker.admin.websocket.TaskLogRegistry;
 import io.github.jiangood.docker.sdk.engine.DefaultCallback;
@@ -23,6 +25,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 镜像导出：从注册中心把镜像拉到本机 docker，再以 {@code docker save} 的 docker-archive 格式
@@ -30,10 +34,19 @@ import java.nio.file.Files;
  * <p>
  * 整个过程是后台任务：慢的阶段（拉取、打包）不占用 HTTP 请求，进度写入
  * {@code /data/logs/{logId}.log}，前端通过 {@code /admin/ws/image-export-log/{logId}} 实时查看。
- * 打包完成后本机镜像会被清理；临时 tar 在下载完成后删除，超时未下载的由定时任务清扫。
+ * 临时 tar 在下载完成后删除，超时未下载的在后续导出时被清扫。
+ * <p>
+ * 导出拉进来的本机镜像<b>保留不删</b>：同一个 tag 再导出可直接复用，也给应用部署留了现成的镜像。
+ * 磁盘占用交回既有策略——{@code CleanImageJob} 会 prune 长期未使用的镜像（前提是本机已登记为主机）。
  * <p>
  * 拉取复用 {@link AppService#getClient}：仅当镜像地址属于注册中心时才附带凭据，
  * 拉取公共镜像不会误带注册中心账号密码。
+ * <p>
+ * 若本机已有该镜像且摘要与登记一致（见 {@link #knownDigest}），跳过拉取直接打包：
+ * 内容相同，结果与重新拉取完全一样，省掉一次注册中心往返，也让离线主机能导出已有镜像。
+ * <p>
+ * 任务由调用方（控制器）在 {@link ImageExportRegistry} 登记后启动，本类只在结束时更新状态，
+ * 以便列表页展示「导出中 / 可下载 / 失败」。
  */
 @Slf4j
 @Service
@@ -50,16 +63,28 @@ public class ImageExportService {
      */
     private static final int TTL_MINUTES = 120;
 
+    /**
+     * 导出目录容量上限：已占用这么多就拒绝新的导出，提示用户手动清理，
+     * 避免悄悄把磁盘写满（tar 是下载即删的临时文件，本不该无上限堆积）。
+     */
+    private static final long MAX_DIR_BYTES = 50L * 1024 * 1024 * 1024;
+
     /** 打包阶段每写入多少字节上报一次进度。 */
     private static final long PROGRESS_STEP_BYTES = 10L * 1024 * 1024;
 
     private final AppService appService;
+
+    private final ImageExportRegistry exportRegistry;
+
+    private final ImageTagService imageTagService;
 
     @Resource
     TaskLogRegistry taskLogRegistry;
 
     /**
      * 后台导出镜像。异常只写进导出日志（前端在日志里可见），不向上抛。
+     * <p>
+     * 任务已由 {@link ImageExportRegistry} 登记，这里只负责结束时更新状态。
      */
     @Async
     public void export(String logId, String imageUrl, String tag) {
@@ -68,15 +93,12 @@ public class ImageExportService {
 
         String fullUrl = imageUrl + ":" + tag;
         DockerClient client = null;
-        // 拉取前若探测失败，保守按「本来就有」处理，避免误删宿主机原有镜像
-        boolean existedBefore = true;
-        // 只有本次真的拉取成功，才需要导出后清理
-        boolean pulled = false;
         File target = null;
         boolean success = false;
         try {
             File dir = exportDir();
             Assert.state(dir.isDirectory() || dir.mkdirs(), "导出目录不可用: " + dir.getAbsolutePath());
+            // 控制器派发前已在 assertDirCapacity 里回收过一次，这里是任务侧兜底，幂等
             sweepExpired(dir);
 
             target = new File(dir, logId + ".tar");
@@ -85,15 +107,29 @@ public class ImageExportService {
             log.info("开始导出镜像 {}", fullUrl);
 
             client = appService.getClient(null, imageUrl);
-            existedBefore = exists(client, fullUrl);
-            if (existedBefore) {
-                log.info("本机已存在该镜像");
+
+            // 探测本机镜像，顺带取回它的摘要（配置摘要，等于镜像 ID），用于判断能否跳过拉取。
+            // 不存在与探测失败都归为「摘要未知」，本次老实拉取，绝不做没有把握的跳过。
+            String localDigest = null;
+            try {
+                localDigest = client.inspectImageCmd(fullUrl).exec().getId();
+            } catch (Exception e) {
+                log.debug("探测本机镜像 {} 失败：{}", fullUrl, e.getMessage());
             }
 
-            log.info("从注册中心拉取镜像…");
-            pull(client, imageUrl, tag, fullUrl);
-            pulled = true;
-            log.info("拉取完成");
+            String knownDigest = knownDigest(imageUrl, tag);
+            if (StrUtil.isNotBlank(localDigest) && StrUtil.isNotBlank(knownDigest) && knownDigest.equals(localDigest)) {
+                // 摘要一致即内容一致（配置摘要覆盖了 rootfs 各层的 diff_id），
+                // docker save 的结果与重新拉取完全相同，省掉一次注册中心往返
+                log.info("本机已存在该镜像且摘要一致，跳过拉取");
+            } else {
+                if (StrUtil.isNotBlank(localDigest)) {
+                    log.info("本机已存在该镜像，但摘要与登记不一致，仍从注册中心拉取");
+                }
+                log.info("从注册中心拉取镜像…");
+                pull(client, imageUrl, tag, fullUrl);
+                log.info("拉取完成");
+            }
 
             log.info("生成归档（docker save，过程中仅上报字节数，无准确总量）…");
             long size = save(client, fullUrl, target);
@@ -109,12 +145,12 @@ public class ImageExportService {
             if (!success && target != null) {
                 FileUtil.del(target);
             }
-            if (pulled && !existedBefore && client != null) {
-                removeQuietly(client, fullUrl);
-            }
             IOUtils.closeQuietly(client);
             MDC.remove("logFileId");
             taskLogRegistry.finish(logId);
+            exportRegistry.finish(logId, success
+                    ? ImageExportRegistry.Status.SUCCESS
+                    : ImageExportRegistry.Status.FAILED);
         }
     }
 
@@ -142,6 +178,94 @@ public class ImageExportService {
 
     public void delete(String logId) {
         FileUtil.del(fileOf(logId));
+    }
+
+    /**
+     * 下载成功或手动删除后清理：删临时文件，同时移除登记表条目，前端轮询会随之收起下载状态。
+     */
+    public void deleteAndUnregister(String logId) {
+        // logId 同时是文件名，必须走白名单校验，防止目录穿越
+        Assert.state(isValidLogId(logId), "非法的导出任务标识");
+        delete(logId);
+        ImageExportRegistry.Task task = exportRegistry.getByLogId(logId);
+        if (task != null) {
+            exportRegistry.remove(task.getImageUrl(), task.getTag());
+        }
+    }
+
+    // ------------------------------------------------------------------ 容量
+
+    /**
+     * 导出目录容量校验：先回收过期的，再看是否已超上限，超了直接拒绝本次导出。
+     * <p>
+     * 由控制器在派发任务前（请求线程）调用，让用户点「确定」时就拿到失败原因，
+     * 而不是等后台任务跑起来才在日志里报错。超限时只提示、不自动删——
+     * 删哪个由用户决定（导出抽屉右上角的「删除」）。
+     */
+    public void assertDirCapacity() {
+        File dir = exportDir();
+        // 先腾掉过期文件，否则会出现「本来能清出来却仍被拒」的憋屈情况
+        sweepExpired(dir);
+        long used = tarBytes(dir);
+        Assert.state(used < MAX_DIR_BYTES,
+                "导出目录已占用 " + FileUtil.readableFileSize(used)
+                        + "，超过上限 " + FileUtil.readableFileSize(MAX_DIR_BYTES)
+                        + "，请手动删除已导出的 tar 后再试");
+    }
+
+    /**
+     * 导出目录里所有 tar 的总字节数。
+     */
+    private static long tarBytes(File dir) {
+        File[] files = dir.listFiles((d, name) -> name.endsWith(".tar"));
+        if (files == null) {
+            return 0L;
+        }
+        long sum = 0L;
+        for (File f : files) {
+            sum += f.length();
+        }
+        return sum;
+    }
+
+    // ------------------------------------------------------------------ 状态查询
+
+    /**
+     * 前端展示用的导出状态：登记信息 + 归档是否就绪、多大。
+     */
+    public ImageExportTaskView taskView(ImageExportRegistry.Task task) {
+        if (task == null) {
+            return null;
+        }
+        ImageExportTaskView view = new ImageExportTaskView();
+        view.setImageUrl(task.getImageUrl());
+        view.setTag(task.getTag());
+        view.setLogId(task.getLogId());
+        view.setStatus(task.getStatus().name());
+        view.setStartTime(task.getStartTime());
+        boolean ready = isReady(task.getLogId());
+        view.setReady(ready);
+        view.setSize(ready ? sizeOf(task.getLogId()) : 0L);
+        return view;
+    }
+
+    public ImageExportTaskView taskView(String imageUrl, String tag) {
+        return taskView(exportRegistry.get(imageUrl, tag));
+    }
+
+    public ImageExportTaskView taskViewByLogId(String logId) {
+        return taskView(exportRegistry.getByLogId(logId));
+    }
+
+    /**
+     * 某镜像仓库下所有 tag 的导出状态，列表页一次拿全。
+     */
+    public List<ImageExportTaskView> taskViews(String imageUrl) {
+        List<ImageExportTaskView> list = new ArrayList<>();
+        for (ImageExportRegistry.Task task : exportRegistry.list(imageUrl)) {
+            list.add(taskView(task));
+        }
+        return list;
     }
 
     /**
@@ -187,27 +311,17 @@ public class ImageExportService {
     }
 
     /**
-     * 探测本机是否已存在该镜像。探测失败时保守返回 true（宁可不清、不可误删）。
+     * 该 tag 已登记的镜像摘要（配置摘要，等于镜像 ID）：远程同步与本机构建后都会写入。
+     * <p>
+     * 拿它和本机镜像摘要比对即可判断「本机这份是不是注册中心那一份」，从而跳过拉取。
+     * <b>但这是上次同步时记下的值</b>：若镜像在别处重新推送过同名 tag，这里会过期，
+     * 按旧摘要跳过就可能导出旧内容。所以只在值存在时才跳过（缺失一律老实拉取），
+     * 且这份取舍适合 tag 不可变的场景（v1.2.3）；若担心 latest 之类的可变 tag 被别处覆盖，
+     * 就别用这里，改为向注册中心发一次 manifest 查询拿权威摘要（成本与 docker pull 的
+     * 版本比对几乎相同，省不下什么）。
      */
-    private boolean exists(DockerClient client, String fullUrl) {
-        try {
-            client.inspectImageCmd(fullUrl).exec();
-            return true;
-        } catch (NotFoundException e) {
-            return false;
-        } catch (Exception e) {
-            log.warn("探测本机镜像失败，按已存在处理 {}: {}", fullUrl, e.getMessage());
-            return true;
-        }
-    }
-
-    private void removeQuietly(DockerClient client, String fullUrl) {
-        try {
-            client.removeImageCmd(fullUrl).exec();
-            log.info("已清理本机镜像 {}", fullUrl);
-        } catch (Exception e) {
-            log.warn("清理本机镜像失败 {}: {}", fullUrl, e.getMessage());
-        }
+    private String knownDigest(String imageUrl, String tag) {
+        return imageTagService.find(imageUrl, tag).map(ImageTag::getDigest).orElse(null);
     }
 
     private long inspectSize(DockerClient client, String fullUrl) {
@@ -234,6 +348,8 @@ public class ImageExportService {
                 log.debug("清理过期导出文件 {}", f.getName());
             }
         }
+        // 登记表同步瘦身：文件已不在的条目没有保留价值
+        exportRegistry.sweep(TTL_MINUTES * 60_000L, logId -> !new File(dir, logId + ".tar").exists());
     }
 
     private static File exportDir() {

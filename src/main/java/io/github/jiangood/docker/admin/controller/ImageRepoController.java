@@ -3,11 +3,13 @@ package io.github.jiangood.docker.admin.controller;
 import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
 import io.github.jiangood.docker.admin.dao.AppRepository;
+import io.github.jiangood.docker.admin.dto.ImageExportTaskView;
 import io.github.jiangood.docker.admin.dto.RemoteRegistryQuery;
 import io.github.jiangood.docker.admin.dto.RemoteSyncResult;
 import io.github.jiangood.docker.admin.entity.App;
 import io.github.jiangood.docker.admin.entity.ImageRepo;
 import io.github.jiangood.docker.admin.entity.ImageTag;
+import io.github.jiangood.docker.admin.service.ImageExportRegistry;
 import io.github.jiangood.docker.admin.service.ImageExportService;
 import io.github.jiangood.docker.admin.service.ImageRepoService;
 import io.github.jiangood.docker.admin.service.ImageTagService;
@@ -57,6 +59,9 @@ public class ImageRepoController {
 
     @Resource
     private ImageExportService imageExportService;
+
+    @Resource
+    private ImageExportRegistry imageExportRegistry;
 
     @Resource
     private RemoteSyncService remoteSyncService;
@@ -209,6 +214,10 @@ public class ImageRepoController {
      * 导出镜像：后台从注册中心拉取并打包到临时目录，立即返回 logId。
      * <p>
      * 进度通过 {@code /admin/ws/image-export-log/{logId}} 实时查看；完成后用 {@code export/download} 下载。
+     * <p>
+     * 任务先在当前线程登记 {@link ImageExportRegistry}，前端列表页轮询立即可见「导出中」。
+     * <p>
+     * 目录容量超限时在派发任务前就失败（见 {@code assertDirCapacity}），前端点「确定」即收到提示。
      */
     @HasPermission("image-repo:export")
     @PostMapping("export/start")
@@ -216,29 +225,48 @@ public class ImageRepoController {
         Assert.hasText(imageUrl, "镜像地址不能为空");
         Assert.hasText(tag, "镜像版本不能为空");
         assertRepoAccessible(imageUrl);
+        imageExportService.assertDirCapacity();
 
         String logId = "export-" + RandomUtil.randomString(16);
+        imageExportRegistry.register(logId, imageUrl, tag);
         imageExportService.export(logId, imageUrl, tag);
         return AjaxResult.ok().data(logId).msg("导出已开始");
     }
 
     /**
+     * 某镜像仓库下所有 tag 的导出状态（列表页逐行展示下载状态、按需轮询）。
+     */
+    @HasPermission("image-repo:view")
+    @RequestMapping("export/tasks")
+    public AjaxResult exportTasks(String imageUrl) {
+        Assert.hasText(imageUrl, "镜像地址不能为空");
+        assertRepoAccessible(imageUrl);
+        return AjaxResult.ok().data(imageExportService.taskViews(imageUrl));
+    }
+
+    /**
      * 导出任务是否已就绪（打包完成、文件可下载）。
+     * <p>
+     * logId 与 imageUrl + tag 两种定位方式都支持，前者用于日志结束时的一次性确认。
      */
     @HasPermission("image-repo:export")
     @RequestMapping("export/status")
-    public AjaxResult exportStatus(String logId) {
-        boolean ready = imageExportService.isReady(logId);
+    public AjaxResult exportStatus(String logId, String imageUrl, String tag) {
+        ImageExportTaskView view = StrUtil.isNotBlank(logId)
+                ? imageExportService.taskViewByLogId(logId)
+                : imageExportService.taskView(imageUrl, tag);
+
         Map<String, Object> data = new LinkedHashMap<>();
+        boolean ready = view != null && view.isReady();
         data.put("ready", ready);
-        data.put("size", ready ? imageExportService.sizeOf(logId) : 0L);
+        data.put("size", ready ? view.getSize() : 0L);
         return AjaxResult.ok().data(data);
     }
 
     /**
      * 下载已导出的 tar（docker save 归档，可用 {@code docker load} 导入）。
      * <p>
-     * 下载成功后删除临时文件；失败则保留以便重试（超时未下载的由清扫兜底）。
+     * 下载成功后删除临时文件并取消登记；失败则保留以便重试（超时未下载的由清扫兜底）。
      */
     @HasPermission("image-repo:export")
     @RequestMapping("export/download")
@@ -258,9 +286,21 @@ public class ImageRepoController {
             ok = true;
         } finally {
             if (ok) {
-                imageExportService.delete(logId);
+                imageExportService.deleteAndUnregister(logId);
             }
         }
+    }
+
+    /**
+     * 删除已导出的 tar（连同登记条目），给用户手动腾磁盘的入口。
+     * <p>
+     * 顺带覆盖两种清理：不想等 120 分钟后的清扫，或导出完就不需要了。
+     */
+    @HasPermission("image-repo:export")
+    @PostMapping("export/delete")
+    public AjaxResult exportDelete(String logId) {
+        imageExportService.deleteAndUnregister(logId);
+        return AjaxResult.ok().msg("已删除");
     }
 
     private void assertRepoAccessible(String imageUrl) {
