@@ -37,7 +37,7 @@ public class ImageRepo extends BaseEntity {
     String name;
 
     /**
-     * 来源：BUILD（项目构建）/ SYNC（镜像同步）/ IMPORT（导入）。
+     * 来源：BUILD（项目构建）/ SYNC（镜像同步）/ REMOTE（从系统配置的注册中心补录）。
      */
     @Remark("来源")
     String source;

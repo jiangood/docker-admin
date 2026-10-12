@@ -155,40 +155,54 @@ public class ImageRepoController {
     // ------------------------------------------------------------------ 远程注册中心
 
     /**
-     * 尝试列举远程注册中心下的全部仓库。
+     * 尝试列举系统已配置的注册中心下可补录的仓库，并标出哪些已经补录过（列表页用）。
      * <p>
      * 阿里云个人版不开放该接口，此时返回 {@code supported=false} 与说明，前端降级为手工输入镜像地址。
      */
     @HasPermission("image-repo:sync")
     @PostMapping("remote/catalog")
-    public AjaxResult remoteCatalog(@RequestBody RemoteRegistryQuery query) {
+    public AjaxResult remoteCatalog(@RequestBody(required = false) RemoteRegistryQuery query) {
         return AjaxResult.ok().data(remoteSyncService.catalog(query));
     }
 
     /**
-     * 预览远程仓库下的版本，不落库、不读镜像元数据。
-     */
-    @HasPermission("image-repo:sync")
-    @PostMapping("remote/preview")
-    public AjaxResult remotePreview(@RequestBody RemoteRegistryQuery query) {
-        return AjaxResult.ok().data(remoteSyncService.preview(query));
-    }
-
-    /**
-     * 把远程仓库与版本同步到本平台（来源标记 REMOTE）。
+     * 补录镜像仓库（列表页）：把选中的仓库连同其版本写入本平台（来源标记 REMOTE）。
      * <p>
-     * 逐仓库逐版本容错，单个失败只记入结果里的 failures，不中断整体同步。
+     * 逐仓库逐版本容错，单个失败只记入结果里的 failures，不中断整体补录。
      */
     @HasPermission("image-repo:sync")
     @PostMapping("remote/sync")
     public AjaxResult remoteSync(@RequestBody RemoteRegistryQuery query) {
         RemoteSyncResult result = remoteSyncService.sync(query);
-        String msg = "同步完成：新增 " + result.getRepoAdded() + " 个仓库、" + result.getTagAdded()
-                + " 个版本，已存在跳过 " + result.getRepoSkipped() + " 个仓库、" + result.getTagSkipped() + " 个版本";
-        if (result.getMetaFilled() > 0) {
-            msg += "，填充镜像元数据 " + result.getMetaFilled() + " 个";
+        return AjaxResult.ok().data(result).msg(syncMsg(result, true));
+    }
+
+    /**
+     * 同步单个仓库的版本（详情页「同步标签」）。
+     * <p>
+     * 只补该仓库下新增的版本，不新建仓库；注册中心与凭据取系统里配置生效的那一个。
+     */
+    @HasPermission("image-repo:sync")
+    @PostMapping("remote/tags")
+    public AjaxResult remoteTags(String id, Boolean withMeta) {
+        ImageRepo repo = assertRepoAccess(id);
+        RemoteSyncResult result = remoteSyncService.syncTags(repo.getImageUrl(),
+                withMeta == null || withMeta, 100);
+        return AjaxResult.ok().data(result).msg(syncMsg(result, false));
+    }
+
+    private static String syncMsg(RemoteSyncResult result, boolean withRepo) {
+        StringBuilder msg = new StringBuilder("完成：");
+        if (withRepo) {
+            msg.append("新增 ").append(result.getRepoAdded()).append(" 个仓库、")
+                    .append("跳过已存在 ").append(result.getRepoSkipped()).append(" 个仓库，");
         }
-        return AjaxResult.ok().data(result).msg(msg);
+        msg.append("新增 ").append(result.getTagAdded()).append(" 个版本、")
+                .append("跳过已存在 ").append(result.getTagSkipped()).append(" 个版本");
+        if (result.getMetaFilled() > 0) {
+            msg.append("，填充镜像元数据 ").append(result.getMetaFilled()).append(" 个");
+        }
+        return msg.toString();
     }
 
     /**

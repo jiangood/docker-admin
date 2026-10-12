@@ -5,38 +5,24 @@ import lombok.Data;
 import java.util.List;
 
 /**
- * 远程注册中心查询参数。
+ * 从系统已配置的镜像注册中心补录时的查询参数。
  * <p>
- * 凭据只在本次请求里使用，不落库。
+ * 注册中心地址、命名空间、账号密码一律取「系统设置 → 镜像注册中心」里已保存的那一条，
+ * 不接受调用方传入——既避免每次都重复输入凭据，也顺带消除了凭据落库的可能。
  */
 @Data
 public class RemoteRegistryQuery {
 
     /**
-     * 注册中心地址，如 {@code registry.cn-hangzhou.aliyuncs.com}、{@code https://harbor.example.com}。
-     * 省略协议时按 https 处理。
-     */
-    private String url;
-
-    /**
-     * 命名空间。阿里云个人版即账号 UID；留空表示不过滤。
-     */
-    private String namespace;
-
-    private String username;
-
-    private String password;
-
-    /**
-     * 要处理的镜像仓库地址列表，可同时写相对路径（{@code ztcn/nginx}）
-     * 和完整地址（{@code registry.cn-hangzhou.aliyuncs.com/ztcn/nginx}）。
+     * 要导入的镜像仓库地址列表，可写相对路径（{@code ztcn/nginx}）或完整地址
+     * （{@code registry.cn-hangzhou.aliyuncs.com/ztcn/nginx}）。
      * <p>
-     * 为空时由 {@link #catalogOnly} 的发现结果填充。
+     * 为空时按注册中心列举出的全部仓库处理。
      */
     private List<String> imageUrls;
 
     /**
-     * 是否读取镜像元数据（构建时间、大小、摘要）。每个版本需额外 2 次请求，预览阶段固定不读。
+     * 是否读取镜像元数据（构建时间、大小、摘要）。每个版本需额外 2 次请求，版本多的仓库会明显变慢。
      */
     private boolean withMeta = true;
 

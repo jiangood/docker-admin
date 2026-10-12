@@ -13,7 +13,7 @@ menus:
       - { name: 查看, code: image-repo:view }
       - { name: 导出, code: image-repo:export }
       - { name: 删除, code: image-repo:delete }
-      - { name: 同步, code: image-repo:sync }
+      - { name: 补录, code: image-repo:sync }
   divider-image-repo:
     pid: biz
     type: divider

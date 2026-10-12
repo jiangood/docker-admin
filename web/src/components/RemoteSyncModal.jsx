@@ -1,11 +1,12 @@
-import {Alert, Button, Form, Input, Modal, Space, Switch, Table, Tag, Typography} from 'antd'
+import {Alert, Button, Descriptions, Form, Input, Modal, Space, Switch, Table, Tag, Typography} from 'antd'
 import React from 'react'
 import {HttpClient} from '@jiangood/open-admin'
 
 /**
- * 远程注册中心同步弹窗。
+ * 补录镜像仓库（镜像仓库列表页）。
+ * 作用是把注册中心里已有的仓库补录到本平台：连接地址与凭据一律取
+ * 「系统设置 → 镜像注册中心」里已保存的那一条，这里只负责列出仓库、勾选要补录的。
  *
- * 走标准 Docker Registry V2 协议，凭据只在本次请求内使用、不落库。
  * 注册中心是否开放仓库列举（/v2/_catalog）由后端探测：阿里云个人版不开放，
  * 此时自动降级为手工填写镜像地址。
  */
@@ -15,21 +16,24 @@ export default class RemoteSyncModal extends React.Component {
         open: false,
         loading: false,
         catalogLoading: false,
-        previewLoading: false,
-        catalogTip: null,
-        groups: [],
+        // 后端返回 {supported, repos, existing, registry, message}
+        supported: null,
+        registry: null,
+        repos: [],
+        existing: [],
+        selected: [],
+        tip: null,
         result: null,
     }
 
     formRef = React.createRef()
 
-    /** 打开弹窗；initialImageUrl 用于从镜像仓库详情页唤起时预填地址。 */
-    show = (initialImageUrl) => {
-        this.setState({open: true, groups: [], result: null, catalogTip: null})
-        this.formRef.current?.resetFields()
-        if (initialImageUrl) {
-            this.formRef.current?.setFieldsValue({imageUrls: initialImageUrl})
-        }
+    /** 打开弹窗 */
+    show = () => {
+        this.setState({
+            open: true, supported: null, repos: [], existing: [], selected: [],
+            tip: null, result: null,
+        })
     }
 
     cancel = () => {
@@ -37,32 +41,33 @@ export default class RemoteSyncModal extends React.Component {
         this.props.onClose?.()
     }
 
-    /** 后端返回 {supported, repos, message} */
+    /** 从系统配置的注册中心列举可补录的仓库 */
     catalog = () => {
         this.setState({catalogLoading: true})
-        HttpClient.post('admin/image-repo/remote/catalog', this.payload())
+        HttpClient.post('admin/image-repo/remote/catalog', {})
             .then(rs => {
                 const data = rs.data || {}
-                if (data.supported) {
-                    this.formRef.current?.setFieldsValue({imageUrls: (data.repos || []).join('\n')})
-                    this.setState({catalogTip: {type: 'success', text: data.message || `共发现 ${(data.repos || []).length} 个仓库，已填入下方`}})
-                } else {
-                    this.setState({catalogTip: {type: 'warning', text: data.message}})
-                }
+                this.setState({
+                    supported: data.supported !== false,
+                    registry: data.registry || null,
+                    repos: data.repos || [],
+                    existing: data.existing || [],
+                    selected: [],
+                    tip: data.supported === false
+                        ? {type: 'warning', text: data.message}
+                        : (data.message ? {type: 'success', text: data.message} : null),
+                })
             })
             .catch(() => {
-                this.setState({catalogTip: {type: 'error', text: '列举失败，请检查注册中心地址与账号密码'}})
+                this.setState({tip: {type: 'error', text: '列举失败，请检查「镜像注册中心」里的地址与账号密码'}})
             })
             .finally(() => this.setState({catalogLoading: false}))
     }
 
-    preview = () => {
-        this.setState({previewLoading: true, groups: [], result: null})
-        HttpClient.post('admin/image-repo/remote/preview', this.payload({withMeta: false}))
-            .then(rs => {
-                this.setState({groups: rs.data || []})
-            })
-            .finally(() => this.setState({previewLoading: false}))
+    /** 勾选全部尚未导入的仓库 */
+    selectAllNew = () => {
+        const {repos, existing} = this.state
+        this.setState({selected: repos.filter(r => !existing.includes(r))})
     }
 
     sync = () => {
@@ -75,97 +80,100 @@ export default class RemoteSyncModal extends React.Component {
             .finally(() => this.setState({loading: false}))
     }
 
-    /** 收集表单值，imageUrls 按行拆成数组，空行丢弃。 */
-    payload = (override) => {
+    /** 勾选的仓库 + 手工填写的地址，去重后提交 */
+    payload = () => {
         const values = this.formRef.current?.getFieldsValue() || {}
-        const imageUrls = (values.imageUrls || '')
+        const manual = (values.imageUrls || '')
             .split('\n')
             .map(v => v.trim())
             .filter(Boolean)
         return {
-            url: (values.url || '').trim(),
-            namespace: (values.namespace || '').trim(),
-            username: (values.username || '').trim(),
-            password: values.password || '',
-            imageUrls,
+            imageUrls: [...new Set([...this.state.selected, ...manual])],
             withMeta: values.withMeta !== false,
-            ...override,
         }
-    }
-
-    /** 同一仓库的连续行合并单元格 */
-    rowSpanOf = (data, index, field) => {
-        const value = data[index][field]
-        let count = 1
-        while (index + count < data.length && data[index + count][field] === value) {
-            count++
-        }
-        return count
     }
 
     render() {
-        const {open, loading, catalogLoading, previewLoading, catalogTip, groups, result} = this.state
-        const flat = groups.flatMap(g => (g.tags || []).map(t => ({...t, groupError: g.error})))
+        const {open, loading, catalogLoading, supported, registry, repos, existing, selected, tip, result} = this.state
+        const manualOnly = supported === false
+        const count = this.payload().imageUrls.length
 
         return <Modal open={open}
-                     width={920}
-                     title='从远程注册中心同步'
+                     width={760}
+                     title='补录镜像仓库'
                      onCancel={this.cancel}
                      destroyOnHidden
                      footer={[
                          <Button key='cancel' onClick={this.cancel}>取消</Button>,
-                         <Button key='preview' loading={previewLoading} onClick={this.preview}>预览版本</Button>,
                          <Button key='sync' type='primary' loading={loading} onClick={this.sync}
-                                 disabled={!groups.length}>确认同步</Button>,
+                                 disabled={!count}>
+                             确认补录{count ? `（${count} 个仓库）` : ''}
+                         </Button>,
                      ]}>
-            <Form ref={this.formRef}
-                  layout='vertical'
-                  initialValues={{withMeta: true}}
-                  onFinish={() => this.preview()}>
-                <Space size={16} style={{display: 'flex'}} align='start'>
-                    <Form.Item name='url' label='注册中心地址' required
-                               style={{flex: 1, minWidth: 260}}
-                               rules={[{required: true, message: '请填写注册中心地址'}]}>
-                        <Input placeholder='registry.cn-hangzhou.aliyuncs.com 或 https://harbor.example.com'/>
-                    </Form.Item>
-                    <Form.Item name='namespace' label='命名空间' style={{flex: 1, minWidth: 160}}
-                               extra='阿里云个人版为账号 UID'>
-                        <Input placeholder='选填'/>
-                    </Form.Item>
-                </Space>
-                <Space size={16} style={{display: 'flex'}} align='start'>
-                    <Form.Item name='username' label='账号' style={{flex: 1, minWidth: 160}}>
-                        <Input placeholder='选填，公共仓库可留空'/>
-                    </Form.Item>
-                    <Form.Item name='password' label='密码' style={{flex: 1, minWidth: 160}}>
-                        <Input.Password placeholder='选填'/>
-                    </Form.Item>
-                </Space>
+            <Form ref={this.formRef} layout='vertical' initialValues={{withMeta: true}}>
+                <Alert style={{marginBottom: 12}} type='info' showIcon
+                       message='补录使用「系统设置 → 镜像注册中心」里已保存的地址与凭据，无需再次输入'/>
 
-                <Form.Item label='镜像地址' required
-                           extra={<>每行一个，可写相对路径（ztcn/nginx）或完整地址；点「自动列举」可批量填入。
-                               凭据只用于本次请求，不会保存。</>}>
-                    <Input.TextArea rows={4} placeholder='ztcn/camera-vision-search'/>
-                </Form.Item>
+                {registry
+                    ? <Descriptions size='small' column={3} bordered style={{marginBottom: 12}}>
+                        <Descriptions.Item label='注册中心'>{registry.url}</Descriptions.Item>
+                        <Descriptions.Item label='命名空间'>{registry.namespace || '（不过滤）'}</Descriptions.Item>
+                        <Descriptions.Item label='账号'>{registry.username || '（匿名）'}</Descriptions.Item>
+                    </Descriptions>
+                    : null}
 
-                <Space align='center' style={{marginBottom: 8}}>
-                    <Button loading={catalogLoading} onClick={this.catalog}>自动列举仓库</Button>
+                <Space align='center' wrap style={{marginBottom: 8}}>
+                    <Button loading={catalogLoading} onClick={this.catalog}>
+                        {manualOnly ? '重新尝试列举' : '读取远程仓库'}
+                    </Button>
+                    {repos.length
+                        ? <Button type='link' size='small' onClick={this.selectAllNew}>选择全部未补录</Button>
+                        : null}
                     <Form.Item name='withMeta' valuePropName='checked' noStyle>
-                        <Switch checkedChildren='同时读取镜像元数据' unCheckedChildren='仅同步版本号'/>
+                        <Switch checkedChildren='同时读取镜像元数据' unCheckedChildren='仅补录版本号'/>
                     </Form.Item>
                     <Typography.Text type='secondary' style={{fontSize: 12}}>
                         读取元数据可得到构建时间与大小，每个版本需额外 2 次请求
                     </Typography.Text>
                 </Space>
+
+                {tip
+                    ? <Alert style={{marginBottom: 12}} type={tip.type} message={tip.text} showIcon/>
+                    : null}
+
+                {repos.length
+                    ? <Table size='small'
+                             rowKey='repo'
+                             pagination={false}
+                             scroll={{y: 300}}
+                             dataSource={repos.map(r => ({repo: r, imported: existing.includes(r)}))}
+                             rowSelection={{
+                                 selectedRowKeys: selected,
+                                 onChange: keys => this.setState({selected: keys}),
+                             }}
+                             columns={[
+                                 {title: '仓库', dataIndex: 'repo'},
+                                 {
+                                     title: '状态', dataIndex: 'imported', width: 100,
+                                     render: imported => imported
+                                         ? <Tag>已补录</Tag> : <Tag color='green'>未补录</Tag>,
+                                 },
+                             ]}
+                       />
+                    : null}
+
+                <Form.Item style={{marginTop: 12, marginBottom: 0}}
+                           label={manualOnly ? '镜像地址' : '手工指定镜像地址（可选）'}
+                           extra={<>每行一个，可写相对路径（ztcn/nginx）或完整地址。{manualOnly
+                               ? '该注册中心不支持自动列举，请手工填写要补录的镜像地址。'
+                               : ''}</>}>
+                    <Input.TextArea rows={3} placeholder='ztcn/camera-vision-search'/>
+                </Form.Item>
             </Form>
 
-            {catalogTip
-                ? <Alert style={{marginBottom: 12}} type={catalogTip.type} message={catalogTip.text} showIcon/>
-                : null}
-
             {result
-                ? <Alert style={{marginBottom: 12}} type='success' showIcon
-                         message={`同步完成：新增 ${result.repoAdded} 个仓库、${result.tagAdded} 个版本`
+                ? <Alert style={{marginTop: 12}} type='success' showIcon
+                         message={`已补录：新增 ${result.repoAdded} 个仓库、${result.tagAdded} 个版本`
                                  + `，跳过已存在 ${result.repoSkipped} 个仓库、${result.tagSkipped} 个版本`
                                  + (result.metaFilled ? `，填充元数据 ${result.metaFilled} 个` : '')}
                          description={result.failures?.length
@@ -173,36 +181,6 @@ export default class RemoteSyncModal extends React.Component {
                              : null}
                   />
                 : null}
-
-            {flat.length
-                ? <Table size='small'
-                         rowKey={(r, i) => r.imageUrl + '|' + r.tag}
-                         pagination={false}
-                         scroll={{y: 320}}
-                         dataSource={flat}
-                         columns={[
-                             {
-                                 title: '仓库', dataIndex: 'imageUrl', width: 280,
-                                 onCell: (record, index) => ({rowSpan: this.rowSpanOf(flat, index, 'imageUrl')}),
-                                 render: (v, r, index) => (index === 0 || flat[index - 1].imageUrl !== v)
-                                     ? <Typography.Text strong copyable>{v}</Typography.Text> : null,
-                             },
-                             {title: '版本', dataIndex: 'tag', width: 160},
-                             {
-                                 title: '状态', dataIndex: 'exists', width: 90,
-                                 render: (exists, r) => r.groupError
-                                     ? <Tag color='red'>读取失败</Tag>
-                                     : (exists ? <Tag>已存在</Tag> : <Tag color='green'>新增</Tag>),
-                             },
-                         ]}
-                  />
-                : null}
-
-            {groups.filter(g => g.error).map(g =>
-                <Typography.Paragraph key={g.imageUrl} type='danger' style={{marginTop: 8}}>
-                    {g.imageUrl}：{g.error}
-                </Typography.Paragraph>
-            )}
         </Modal>
     }
 

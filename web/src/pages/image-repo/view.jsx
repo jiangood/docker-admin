@@ -3,14 +3,14 @@ import {CloudSyncOutlined, DownloadOutlined} from '@ant-design/icons'
 import React from 'react'
 import {HttpClient, Page, PageUtils, PermActions, UrlUtils} from "@jiangood/open-admin"
 import LogView from '../../components/LogView'
-import RemoteSyncModal from '../../components/RemoteSyncModal'
+import RemoteTagSyncModal from '../../components/RemoteTagSyncModal'
 import {formatBytes} from "../../components/container/utils"
 import {sourceTag} from "./index"
 
 
 export default class extends React.Component {
 
-    remoteModalRef = React.createRef()
+    tagSyncModalRef = React.createRef()
 
     state = {
         repo: null,
@@ -106,8 +106,8 @@ export default class extends React.Component {
                    extra={
                        <PermActions>
                            <Button perm='image-repo:sync' icon={<CloudSyncOutlined/>}
-                                   onClick={() => this.remoteModalRef.current.show(repo.imageUrl)}>
-                               从远程同步
+                                   onClick={() => this.tagSyncModalRef.current.show(repo, tags.length)}>
+                               同步标签
                            </Button>
                        </PermActions>
                    }>
@@ -183,9 +183,9 @@ export default class extends React.Component {
                         />
                     },
                 ]}/>
-                <RemoteSyncModal ref={this.remoteModalRef}
-                                 onClose={this.loadRepo}
-                                 onSuccess={this.loadRepo}/>
+                <RemoteTagSyncModal ref={this.tagSyncModalRef}
+                                    onClose={this.loadRepo}
+                                    onSuccess={this.loadRepo}/>
             </Card>
 
             <Drawer title='导出日志' size={760}

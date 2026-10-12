@@ -93,7 +93,7 @@ export default class extends React.Component {
                     <PermActions key='remote-sync'>
                         <Button perm='image-repo:sync' icon={<CloudSyncOutlined/>}
                                 onClick={() => this.remoteModalRef.current.show()}>
-                            从远程同步
+                            补录镜像仓库
                         </Button>
                     </PermActions>,
                 ]}
