@@ -1,6 +1,5 @@
 package io.github.jiangood.docker.admin.controller;
 
-import cn.hutool.core.util.StrUtil;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.dto.ContainerDetailVo;
 import io.github.jiangood.docker.admin.dto.ContainerFileVo;
@@ -18,8 +17,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.io.IOException;
 import java.io.OutputStream;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 @RestController
@@ -81,7 +78,7 @@ public class ContainerController {
         Host host = requireHost(hostId);
         Assert.hasText(containerId, "containerId 不能为空");
         Assert.hasText(path, "path 不能为空");
-        prepareDownload(response, fileName(path), "application/octet-stream");
+        DownloadTool.prepareDownload(response, DownloadTool.fileName(path), "application/octet-stream");
         try (OutputStream out = response.getOutputStream()) {
             containerService.downloadFile(host, containerId, path, out);
             out.flush();
@@ -95,7 +92,7 @@ public class ContainerController {
         Host host = requireHost(hostId);
         Assert.hasText(containerId, "containerId 不能为空");
         Assert.hasText(path, "path 不能为空");
-        prepareDownload(response, fileName(path) + ".tar", "application/x-tar");
+        DownloadTool.prepareDownload(response, DownloadTool.fileName(path) + ".tar", "application/x-tar");
         try (OutputStream out = response.getOutputStream()) {
             containerService.downloadDirectory(host, containerId, path, out);
             out.flush();
@@ -139,21 +136,5 @@ public class ContainerController {
         Host host = hostService.findById(hostId).orElse(null);
         Assert.notNull(host, "主机不存在");
         return host;
-    }
-
-    private static void prepareDownload(HttpServletResponse response, String fileName, String contentType) {
-        response.setContentType(contentType);
-        String encoded = URLEncoder.encode(fileName, StandardCharsets.UTF_8).replace("+", "%20");
-        response.setHeader("Content-Disposition", "attachment; filename*=UTF-8''" + encoded);
-    }
-
-    private static String fileName(String path) {
-        if (StrUtil.isBlank(path)) {
-            return "download";
-        }
-        String p = path.endsWith("/") ? path.substring(0, path.length() - 1) : path;
-        int idx = p.lastIndexOf('/');
-        String name = idx >= 0 ? p.substring(idx + 1) : p;
-        return StrUtil.blankToDefault(name, "download");
     }
 }

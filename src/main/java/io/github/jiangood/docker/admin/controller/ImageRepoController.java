@@ -1,10 +1,12 @@
 package io.github.jiangood.docker.admin.controller;
 
+import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
 import io.github.jiangood.docker.admin.dao.AppRepository;
 import io.github.jiangood.docker.admin.entity.App;
 import io.github.jiangood.docker.admin.entity.ImageRepo;
 import io.github.jiangood.docker.admin.entity.ImageTag;
+import io.github.jiangood.docker.admin.service.ImageExportService;
 import io.github.jiangood.docker.admin.service.ImageRepoService;
 import io.github.jiangood.docker.admin.service.ImageTagService;
 import io.github.jiangood.docker.base.OrgAccessTool;
@@ -14,15 +16,24 @@ import io.github.jiangood.openadmin.framework.perm.HasPermission;
 import io.github.jiangood.openadmin.util.dto.AjaxResult;
 import io.github.jiangood.openadmin.util.dto.Option;
 import jakarta.annotation.Resource;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.util.Assert;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.file.Files;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 镜像仓库：registry.url/namespace/name 形式的镜像仓库及其标签。
@@ -39,6 +50,9 @@ public class ImageRepoController {
 
     @Resource
     private AppRepository appRepository;
+
+    @Resource
+    private ImageExportService imageExportService;
 
     @HasPermission("image-repo:view")
     @RequestMapping("page")
@@ -129,6 +143,90 @@ public class ImageRepoController {
         ImageRepo repo = assertRepoAccess(id);
         List<ImageTag> tags = imageTagService.listByImageUrl(repo.getImageUrl());
         return AjaxResult.ok().data(tags);
+    }
+
+    /**
+     * 导出镜像：后台从注册中心拉取并打包到临时目录，立即返回 logId。
+     * <p>
+     * 进度通过 {@code /admin/ws/image-export-log/{logId}} 实时查看；完成后用 {@code export/download} 下载。
+     */
+    @HasPermission("image-repo:export")
+    @PostMapping("export/start")
+    public AjaxResult exportStart(String imageUrl, String tag) {
+        Assert.hasText(imageUrl, "镜像地址不能为空");
+        Assert.hasText(tag, "镜像版本不能为空");
+        assertRepoAccessible(imageUrl);
+
+        String logId = "export-" + RandomUtil.randomString(16);
+        imageExportService.export(logId, imageUrl, tag);
+        return AjaxResult.ok().data(logId).msg("导出已开始");
+    }
+
+    /**
+     * 导出任务是否已就绪（打包完成、文件可下载）。
+     */
+    @HasPermission("image-repo:export")
+    @RequestMapping("export/status")
+    public AjaxResult exportStatus(String logId) {
+        boolean ready = imageExportService.isReady(logId);
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("ready", ready);
+        data.put("size", ready ? imageExportService.sizeOf(logId) : 0L);
+        return AjaxResult.ok().data(data);
+    }
+
+    /**
+     * 下载已导出的 tar（docker save 归档，可用 {@code docker load} 导入）。
+     * <p>
+     * 下载成功后删除临时文件；失败则保留以便重试（超时未下载的由清扫兜底）。
+     */
+    @HasPermission("image-repo:export")
+    @RequestMapping("export/download")
+    public void exportDownload(String logId, String imageUrl, String tag, HttpServletResponse response) throws IOException {
+        // isReady 内部先校验 logId 白名单（防目录穿越），再判断任务是否已结束、文件是否存在
+        Assert.state(imageExportService.isReady(logId), "导出尚未完成或文件已过期，请稍后重试");
+        File file = imageExportService.fileOf(logId);
+
+        DownloadTool.prepareDownload(response, tarName(imageUrl, tag), "application/x-tar");
+        boolean ok = false;
+        try {
+            try (InputStream in = Files.newInputStream(file.toPath());
+                 OutputStream out = response.getOutputStream()) {
+                in.transferTo(out);
+                out.flush();
+            }
+            ok = true;
+        } finally {
+            if (ok) {
+                imageExportService.delete(logId);
+            }
+        }
+    }
+
+    private void assertRepoAccessible(String imageUrl) {
+        ImageRepo repo = service.findByImageUrl(imageUrl);
+        Assert.notNull(repo, "镜像仓库不存在");
+        OrgAccessTool.assertAccess(repo.getSysOrg());
+    }
+
+    /**
+     * 导出文件名：镜像名最后一段 + 版本，如 app-v1.tar。
+     */
+    private static String tarName(String imageUrl, String tag) {
+        String name = imageRepoName(imageUrl);
+        return name + "-" + tag + ".tar";
+    }
+
+    private static String imageRepoName(String imageUrl) {
+        if (StrUtil.isBlank(imageUrl)) {
+            return "image";
+        }
+        String name = imageUrl.trim();
+        int idx = name.lastIndexOf('/');
+        if (idx >= 0 && idx < name.length() - 1) {
+            name = name.substring(idx + 1);
+        }
+        return StrUtil.blankToDefault(name, "image");
     }
 
     @HasPermission("image-repo:delete")

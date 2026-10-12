@@ -11,6 +11,7 @@ menus:
     icon: DatabaseOutlined
     perms:
       - { name: 查看, code: image-repo:view }
+      - { name: 导出, code: image-repo:export }
       - { name: 删除, code: image-repo:delete }
   divider-image-repo:
     pid: biz

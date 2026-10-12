@@ -1,6 +1,9 @@
-import {Card, Descriptions, Spin, Table, Tabs, Typography} from 'antd'
+import {Button, Card, Descriptions, Drawer, Popconfirm, Spin, Table, Tabs, Typography} from 'antd'
+import {DownloadOutlined} from '@ant-design/icons'
 import React from 'react'
-import {HttpClient, Page, PageUtils} from "@jiangood/open-admin"
+import {HttpClient, Page, PageUtils, PermActions, UrlUtils} from "@jiangood/open-admin"
+import LogView from '../../components/LogView'
+import {formatBytes} from "../../components/container/utils"
 import {sourceTag} from "./index"
 
 
@@ -10,6 +13,12 @@ export default class extends React.Component {
         repo: null,
         tags: [],
         apps: [],
+        // 导出：日志抽屉与下载状态
+        exportTag: null,
+        logId: null,
+        logVisible: false,
+        ready: false,
+        readySize: 0,
     }
 
     componentDidMount() {
@@ -30,6 +39,57 @@ export default class extends React.Component {
                 })
             }
         })
+    }
+
+    exportConfirmTitle = record => {
+        const size = (record.size === null || record.size === undefined || record.size === '')
+            ? null : formatBytes(record.size)
+        return size
+            ? `将从注册中心拉取该镜像（约 ${size}）后导出，大镜像较慢，是否继续？`
+            : '将从注册中心拉取该镜像后导出，大镜像较慢，是否继续？'
+    }
+
+    exportImage = record => {
+        HttpClient.postForm('admin/image-repo/export/start', {
+            imageUrl: record.imageUrl,
+            tag: record.tag,
+        }).then(rs => {
+            this.setState({
+                exportTag: record,
+                logId: rs.data,
+                logVisible: true,
+                ready: false,
+                readySize: 0,
+            })
+        })
+    }
+
+    /**
+     * 日志推送结束后（任务结束或断开）查询任务是否产出了可下载的文件。
+     */
+    onExportFinished = () => {
+        const {logId} = this.state
+        if (!logId) {
+            return
+        }
+        HttpClient.get('admin/image-repo/export/status', {logId}).then(rs => {
+            const data = rs.data || {}
+            this.setState({ready: !!data.ready, readySize: data.size || 0})
+        }).catch(() => {
+        })
+    }
+
+    /**
+     * 下载地址：同源普通链接，浏览器直接流式写盘（不走 axios blob，避免大镜像撑爆内存）。
+     */
+    downloadUrl = () => {
+        const {logId, exportTag} = this.state
+        const params = new URLSearchParams({
+            logId,
+            imageUrl: exportTag?.imageUrl || '',
+            tag: exportTag?.tag || '',
+        })
+        return UrlUtils.contextPath('/admin/image-repo/export/download') + '?' + params.toString()
     }
 
     render() {
@@ -73,6 +133,18 @@ export default class extends React.Component {
                                     title: '声明卷', dataIndex: 'volumes',
                                     render: (list) => (list && list.length) ? list.join(', ') : '-'
                                 },
+                                {
+                                    title: '操作', width: 90,
+                                    render: (_, record) => (
+                                        <PermActions>
+                                            <Popconfirm perm='image-repo:export'
+                                                        title={this.exportConfirmTitle(record)}
+                                                        onConfirm={() => this.exportImage(record)}>
+                                                <Button size='small'>导出</Button>
+                                            </Popconfirm>
+                                        </PermActions>
+                                    ),
+                                },
                             ]}
                         />
                     },
@@ -93,6 +165,28 @@ export default class extends React.Component {
                     },
                 ]}/>
             </Card>
+
+            <Drawer title='导出日志' size={760}
+                    open={this.state.logVisible}
+                    mask={{closable: false}}
+                    onClose={() => this.setState({logVisible: false})}
+                    extra={this.state.ready ? (
+                        <Button type='primary' icon={<DownloadOutlined/>} href={this.downloadUrl()}>
+                            下载{this.state.readySize ? `（${formatBytes(this.state.readySize)}）` : ''}
+                        </Button>
+                    ) : null}>
+                <Typography.Paragraph type='secondary'>
+                    正在从注册中心拉取并打包，进度见下方日志。完成后出现「下载」按钮，
+                    导出的 tar 可用 <Typography.Text code>docker load -i</Typography.Text> 导入；下载后临时文件即删除。
+                </Typography.Paragraph>
+                {this.state.logId
+                    ? <LogView key={this.state.logId}
+                               url={'/admin/ws/image-export-log/' + this.state.logId}
+                               websocket={true}
+                               height={460}
+                               onClose={this.onExportFinished}/>
+                    : null}
+            </Drawer>
         </Page>
     }
 }
