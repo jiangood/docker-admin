@@ -12,6 +12,7 @@ import com.github.mwiede.dockerjava.jsch.JschDockerHttpClient;
 import com.jcraft.jsch.UserInfo;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.entity.Registry;
+import io.github.jiangood.docker.base.LogNames;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -21,7 +22,7 @@ import java.util.Hashtable;
 import java.util.Map;
 
 @Service
-@Slf4j
+@Slf4j(topic = LogNames.TASK)
 public class DockerClientManager {
 
     private static final Duration CONNECTION_TIMEOUT = Duration.ofSeconds(10);

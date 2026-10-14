@@ -4,6 +4,7 @@ import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.StrUtil;
 import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.model.ResponseItem;
+import io.github.jiangood.docker.base.LogNames;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 
@@ -11,7 +12,7 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.util.concurrent.CountDownLatch;
 
-@Slf4j
+@Slf4j(topic = LogNames.TASK)
 public class DefaultCallback<T extends ResponseItem> implements ResultCallback<T> {
 
     private static final String TAB = "    ";

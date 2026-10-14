@@ -10,6 +10,7 @@ import io.github.jiangood.docker.admin.dto.BuildTestRequest;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.entity.Registry;
 import io.github.jiangood.docker.admin.websocket.TaskLogRegistry;
+import io.github.jiangood.docker.base.LogNames;
 import io.github.jiangood.docker.base.tool.GitCredential;
 import io.github.jiangood.docker.base.tool.GitTool;
 import io.github.jiangood.docker.sdk.engine.DefaultCallback;
@@ -35,7 +36,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * <p>
  * 不落库、不推送；构建过程写入 {@code /data/logs/{logId}.log}，前端通过 WebSocket 实时查看。
  */
-@Slf4j
+@Slf4j(topic = LogNames.TASK)
 @Service
 public class BuildTestService {
 

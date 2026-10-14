@@ -9,6 +9,7 @@ import io.github.jiangood.docker.admin.dto.ImageExportTaskView;
 import io.github.jiangood.docker.admin.entity.ImageTag;
 import io.github.jiangood.docker.admin.websocket.ImageExportLogHandshakeInterceptor;
 import io.github.jiangood.docker.admin.websocket.TaskLogRegistry;
+import io.github.jiangood.docker.base.LogNames;
 import io.github.jiangood.docker.sdk.engine.DefaultCallback;
 import jakarta.annotation.Resource;
 import lombok.RequiredArgsConstructor;
@@ -48,7 +49,7 @@ import java.util.List;
  * 任务由调用方（控制器）在 {@link ImageExportRegistry} 登记后启动，本类只在结束时更新状态，
  * 以便列表页展示「导出中 / 可下载 / 失败」。
  */
-@Slf4j
+@Slf4j(topic = LogNames.TASK)
 @Service
 @RequiredArgsConstructor
 public class ImageExportService {

@@ -12,6 +12,7 @@ import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.command.BuildImageCmd;
 import com.github.dockerjava.api.command.PushImageCmd;
 import com.github.dockerjava.api.model.BuildResponseItem;
+import io.github.jiangood.docker.base.LogNames;
 import io.github.jiangood.docker.base.tool.GitCredential;
 import io.github.jiangood.docker.base.tool.GitTool;
 import io.github.jiangood.docker.admin.BuildSuccessEvent;
@@ -58,7 +59,7 @@ import java.util.regex.Pattern;
 
 
 @Service
-@Slf4j
+@Slf4j(topic = LogNames.TASK)
 @RequiredArgsConstructor
 public class ProjectService extends BaseService<Project> {
 

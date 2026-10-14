@@ -22,22 +22,12 @@
 
 
 
-    <logger name="io.github.jiangood.docker.admin.service.ImageService">
-        <appender-ref ref="docker-log-appender" />
-    </logger>
-    <logger name="io.github.jiangood.docker.admin.service.AppService">
-        <appender-ref ref="docker-log-appender" />
-    </logger>
-    <logger name="io.github.jiangood.docker.admin.service.ImageSyncService">
-        <appender-ref ref="docker-log-appender" />
-    </logger>
-    <logger name="io.github.jiangood.docker.admin.service.ImageExportService">
-        <appender-ref ref="docker-log-appender" />
-    </logger>
-    <logger name="io.github.jiangood.docker.admin.service.BuildTestService">
-        <appender-ref ref="docker-log-appender" />
-    </logger>
-    <logger name="io.github.jiangood.docker.sdk">
+    <!-- 后台任务日志（构建、部署、构建测试、镜像同步/导出）。
+         需要在前端日志弹窗里实时展示的日志，都通过固定 logger 名 "task-log"（见 LogNames.TASK）输出，
+         这里按 MDC 中的 logFileId 分流到 ${LOG_PATH}/{logId}.log，前端 WebSocket 再实时 tail 该文件。
+         任务之间的区分完全靠 MDC，日志文件内也不打印 logger 名，因此无需按类/包区分：
+         固定的 logger 名让包结构调整不会影响任务日志。 -->
+    <logger name="task-log">
         <appender-ref ref="docker-log-appender" />
     </logger>
 

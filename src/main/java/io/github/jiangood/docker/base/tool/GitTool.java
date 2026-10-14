@@ -4,6 +4,7 @@ import cn.hutool.core.date.DateUtil;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
+import io.github.jiangood.docker.base.LogNames;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -41,7 +42,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
-@Slf4j
+@Slf4j(topic = LogNames.TASK)
 public class GitTool {
 
     @AllArgsConstructor
