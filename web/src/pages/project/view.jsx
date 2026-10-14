@@ -292,10 +292,8 @@ export default class extends React.Component {
         children: <div className='project-build-history'>
           <ProTable
             actionRef={this.actionRef}
-            toolBarRender={() => (
-              <div className='row-end'>
-                <Button onClick={this.cleanError}>清理失败记录</Button>
-              </div>
+            toolBarRightRender={() => (
+              <Button onClick={this.cleanError}>清理失败记录</Button>
             )}
             request={(params) => {
               params.projectId = project.id
