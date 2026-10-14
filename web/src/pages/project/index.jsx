@@ -184,7 +184,8 @@ export default class extends React.Component {
                     </Form.Item>
 
                     <Form.Item label='dockerfile' name='dockerfile' rules={[{required: true}]}
-                               initialValue='Dockerfile'>
+                               initialValue='Dockerfile'
+                               help='相对代码仓库根目录的路径，可位于子目录，如 docker/Dockerfile'>
                         <Input/>
                     </Form.Item>
                     <Form.Item label='构建参数' name='buildArg' help='格式: key=value&key2=value2'>

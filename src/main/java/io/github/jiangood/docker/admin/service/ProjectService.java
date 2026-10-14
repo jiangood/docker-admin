@@ -366,10 +366,16 @@ public class ProjectService extends BaseService<Project> {
             File dockerfileFile = new File(buildDir, dockerfile);
             log.info("dockerfile绝对路径: {}", dockerfileFile.getAbsolutePath());
             log.info("是否拉取基础镜像:{}", p.isPull());
+            Assert.state(dockerfileFile.isFile(), "构建上下文 " + buildDir.getAbsolutePath()
+                    + " 下未找到 Dockerfile： " + dockerfile + "，请检查项目配置的 dockerfile 路径");
 
 
             log.info("构建命令执行中...");
-            BuildImageCmd buildImageCmd = client.buildImageCmd(buildDir)
+            // 不能用 buildImageCmd(File)：该重载在构造时强制要求上下文根目录下存在名为 Dockerfile 的文件，
+            // 而 Dockerfile 常位于子目录（如 docker/Dockerfile），此时会直接抛
+            // IllegalArgumentException: Dockerfile does not exist。这里手动指定上下文与 Dockerfile。
+            BuildImageCmd buildImageCmd = client.buildImageCmd()
+                    .withBaseDirectory(buildDir)
                     // 删除构建产生的容器
                     .withForcerm(true)
                     .withPull(p.isPull())
@@ -433,11 +439,6 @@ public class ProjectService extends BaseService<Project> {
             log.info("构建阶段结束");
         } catch (Exception e) {
             log.info("异常 {} {}", e.getClass().getName(), e.getMessage());
-
-
-            if (e instanceof IllegalArgumentException && e.getMessage() != null && e.getMessage().contains("Dockerfile does not exist")) {
-                log.info("请确保项目下至少有一个Dockerfile文件，不论是否指定其他Dockerfile");
-            }
             log.error("构建失败", e);
 
             buildLog.setSuccess(false);
