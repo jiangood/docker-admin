@@ -89,14 +89,14 @@ export default class extends React.Component {
         return <Page padding>
             <ProTable
                 actionRef={this.tableRef}
-                toolBarRender={() => [
-                    <PermActions key='remote-sync'>
+                toolBarRightRender={() => (
+                    <PermActions>
                         <Button perm='image-repo:sync' icon={<CloudSyncOutlined/>}
                                 onClick={() => this.remoteModalRef.current.show()}>
                             补录镜像仓库
                         </Button>
-                    </PermActions>,
-                ]}
+                    </PermActions>
+                )}
                 searchFormRender={() => (
                     <Form.Item label='组织机构' name='orgId'>
                         <FieldOrgTreeSelect placeholder='全部组织机构'/>

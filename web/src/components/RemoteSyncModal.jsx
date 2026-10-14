@@ -9,6 +9,8 @@ import {HttpClient} from '@jiangood/open-admin'
  *
  * 注册中心是否开放仓库列举（/v2/_catalog）由后端探测：阿里云个人版不开放，
  * 此时自动降级为手工填写镜像地址。
+ *
+ * 一次只能补录一个仓库：远程列表用单选，手工填写也只有一个地址，两者互斥。
  */
 export default class RemoteSyncModal extends React.Component {
 
@@ -21,7 +23,8 @@ export default class RemoteSyncModal extends React.Component {
         registry: null,
         repos: [],
         existing: [],
-        selected: [],
+        // 一次只能补录一个仓库，这里存被选中的仓库名（未选为 null）
+        selected: null,
         tip: null,
         result: null,
     }
@@ -31,7 +34,7 @@ export default class RemoteSyncModal extends React.Component {
     /** 打开弹窗 */
     show = () => {
         this.setState({
-            open: true, supported: null, repos: [], existing: [], selected: [],
+            open: true, supported: null, repos: [], existing: [], selected: null,
             tip: null, result: null,
         })
     }
@@ -52,7 +55,7 @@ export default class RemoteSyncModal extends React.Component {
                     registry: data.registry || null,
                     repos: data.repos || [],
                     existing: data.existing || [],
-                    selected: [],
+                    selected: null,
                     tip: data.supported === false
                         ? {type: 'warning', text: data.message}
                         : (data.message ? {type: 'success', text: data.message} : null),
@@ -64,10 +67,10 @@ export default class RemoteSyncModal extends React.Component {
             .finally(() => this.setState({catalogLoading: false}))
     }
 
-    /** 勾选全部尚未导入的仓库 */
-    selectAllNew = () => {
-        const {repos, existing} = this.state
-        this.setState({selected: repos.filter(r => !existing.includes(r))})
+    /** 选中一个待补录的仓库；同时清掉手工填写的地址（一次只能补录一个） */
+    selectRepo = repo => {
+        this.formRef.current?.setFieldValue('imageUrl', undefined)
+        this.setState({selected: repo || null})
     }
 
     sync = () => {
@@ -80,15 +83,13 @@ export default class RemoteSyncModal extends React.Component {
             .finally(() => this.setState({loading: false}))
     }
 
-    /** 勾选的仓库 + 手工填写的地址，去重后提交 */
+    /** 单个仓库地址：远程列表选中的一项，或手工填写的一个地址，两者互斥 */
     payload = () => {
         const values = this.formRef.current?.getFieldsValue() || {}
-        const manual = (values.imageUrls || '')
-            .split('\n')
-            .map(v => v.trim())
-            .filter(Boolean)
+        const manual = (values.imageUrl || '').trim()
+        const imageUrls = [...new Set([this.state.selected, manual].filter(Boolean))]
         return {
-            imageUrls: [...new Set([...this.state.selected, ...manual])],
+            imageUrls,
             withMeta: values.withMeta !== false,
         }
     }
@@ -106,13 +107,20 @@ export default class RemoteSyncModal extends React.Component {
                      footer={[
                          <Button key='cancel' onClick={this.cancel}>取消</Button>,
                          <Button key='sync' type='primary' loading={loading} onClick={this.sync}
-                                 disabled={!count}>
-                             确认补录{count ? `（${count} 个仓库）` : ''}
+                                 disabled={count !== 1}>
+                             确认补录
                          </Button>,
                      ]}>
-            <Form ref={this.formRef} layout='vertical' initialValues={{withMeta: true}}>
+            <Form ref={this.formRef} layout='vertical' initialValues={{withMeta: true}}
+                  onValuesChange={changed => {
+                      // 手工填写地址时，取消远程列表里的选中，保证一次只补录一个
+                      if (typeof changed.imageUrl === 'string' && changed.imageUrl.trim()) {
+                          this.setState({selected: null})
+                      }
+                  }}>
                 <Alert style={{marginBottom: 12}} type='info' showIcon
-                       message='补录使用「系统设置 → 镜像注册中心」里已保存的地址与凭据，无需再次输入'/>
+                       message='一次只能补录一个仓库：勾选下方远程列表中的一项，或手工填写一个镜像地址'
+                       description='地址与凭据取「系统设置 → 镜像注册中心」里已保存的那一条，无需再次输入'/>
 
                 {registry
                     ? <Descriptions size='small' column={3} bordered style={{marginBottom: 12}}>
@@ -126,9 +134,6 @@ export default class RemoteSyncModal extends React.Component {
                     <Button loading={catalogLoading} onClick={this.catalog}>
                         {manualOnly ? '重新尝试列举' : '读取远程仓库'}
                     </Button>
-                    {repos.length
-                        ? <Button type='link' size='small' onClick={this.selectAllNew}>选择全部未补录</Button>
-                        : null}
                     <Form.Item name='withMeta' valuePropName='checked' noStyle>
                         <Switch checkedChildren='同时读取镜像元数据' unCheckedChildren='仅补录版本号'/>
                     </Form.Item>
@@ -148,8 +153,9 @@ export default class RemoteSyncModal extends React.Component {
                              scroll={{y: 300}}
                              dataSource={repos.map(r => ({repo: r, imported: existing.includes(r)}))}
                              rowSelection={{
-                                 selectedRowKeys: selected,
-                                 onChange: keys => this.setState({selected: keys}),
+                                 type: 'radio',
+                                 selectedRowKeys: selected ? [selected] : [],
+                                 onChange: keys => this.selectRepo(keys[0]),
                              }}
                              columns={[
                                  {title: '仓库', dataIndex: 'repo'},
@@ -163,11 +169,12 @@ export default class RemoteSyncModal extends React.Component {
                     : null}
 
                 <Form.Item style={{marginTop: 12, marginBottom: 0}}
+                           name='imageUrl'
                            label={manualOnly ? '镜像地址' : '手工指定镜像地址（可选）'}
-                           extra={<>每行一个，可写相对路径（ztcn/nginx）或完整地址。{manualOnly
+                           extra={<>一次只能补录一个仓库，这里填写一个地址即可；可写相对路径（ztcn/nginx）或完整地址。{manualOnly
                                ? '该注册中心不支持自动列举，请手工填写要补录的镜像地址。'
                                : ''}</>}>
-                    <Input.TextArea rows={3} placeholder='ztcn/camera-vision-search'/>
+                    <Input allowClear placeholder='ztcn/camera-vision-search'/>
                 </Form.Item>
             </Form>
 
