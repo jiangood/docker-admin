@@ -9,13 +9,13 @@ import io.github.jiangood.docker.admin.dto.ImageExportTaskView;
 import io.github.jiangood.docker.admin.entity.ImageTag;
 import io.github.jiangood.docker.admin.websocket.ImageExportLogHandshakeInterceptor;
 import io.github.jiangood.docker.admin.websocket.TaskLogRegistry;
-import io.github.jiangood.docker.base.LogNames;
+import io.github.jiangood.docker.base.FileLog;
 import io.github.jiangood.docker.sdk.engine.DefaultCallback;
 import jakarta.annotation.Resource;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
-import org.slf4j.MDC;
+import org.slf4j.Logger;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.util.Assert;
@@ -49,10 +49,12 @@ import java.util.List;
  * 任务由调用方（控制器）在 {@link ImageExportRegistry} 登记后启动，本类只在结束时更新状态，
  * 以便列表页展示「导出中 / 可下载 / 失败」。
  */
-@Slf4j(topic = LogNames.TASK)
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class ImageExportService {
+
+    private static final Logger fileLog = FileLog.logger();
 
     /**
      * 临时 tar 目录（系统临时目录下，数据不重要、用完即弃）。
@@ -90,7 +92,7 @@ public class ImageExportService {
     @Async
     public void export(String logId, String imageUrl, String tag) {
         taskLogRegistry.start(logId);
-        MDC.put("logFileId", logId);
+        FileLog.bind(logId);
 
         String fullUrl = imageUrl + ":" + tag;
         DockerClient client = null;
@@ -105,7 +107,7 @@ public class ImageExportService {
             target = new File(dir, logId + ".tar");
             Assert.state(!target.exists(), "导出文件已存在，请重试");
 
-            log.info("开始导出镜像 {}", fullUrl);
+            fileLog.info("开始导出镜像 {}", fullUrl);
 
             client = appService.getClient(null, imageUrl);
 
@@ -115,39 +117,39 @@ public class ImageExportService {
             try {
                 localDigest = client.inspectImageCmd(fullUrl).exec().getId();
             } catch (Exception e) {
-                log.debug("探测本机镜像 {} 失败：{}", fullUrl, e.getMessage());
+                fileLog.debug("探测本机镜像 {} 失败：{}", fullUrl, e.getMessage());
             }
 
             String knownDigest = knownDigest(imageUrl, tag);
             if (StrUtil.isNotBlank(localDigest) && StrUtil.isNotBlank(knownDigest) && knownDigest.equals(localDigest)) {
                 // 摘要一致即内容一致（配置摘要覆盖了 rootfs 各层的 diff_id），
                 // docker save 的结果与重新拉取完全相同，省掉一次注册中心往返
-                log.info("本机已存在该镜像且摘要一致，跳过拉取");
+                fileLog.info("本机已存在该镜像且摘要一致，跳过拉取");
             } else {
                 if (StrUtil.isNotBlank(localDigest)) {
-                    log.info("本机已存在该镜像，但摘要与登记不一致，仍从注册中心拉取");
+                    fileLog.info("本机已存在该镜像，但摘要与登记不一致，仍从注册中心拉取");
                 }
-                log.info("从注册中心拉取镜像…");
+                fileLog.info("从注册中心拉取镜像…");
                 pull(client, imageUrl, tag, fullUrl);
-                log.info("拉取完成");
+                fileLog.info("拉取完成");
             }
 
-            log.info("生成归档（docker save，过程中仅上报字节数，无准确总量）…");
+            fileLog.info("生成归档（docker save，过程中仅上报字节数，无准确总量）…");
             long size = save(client, fullUrl, target);
-            log.info("归档完成：{}（{}）", target.getName(), FileUtil.readableFileSize(size));
+            fileLog.info("归档完成：{}（{}）", target.getName(), FileUtil.readableFileSize(size));
 
             success = true;
-            log.info("导出完成，可以下载了");
+            fileLog.info("导出完成，可以下载了");
         } catch (Exception e) {
             // 进度日志面向用户，只给一行可读信息；堆栈留给后端排查
-            log.error("镜像导出失败: {}", e.getMessage());
-            log.debug("镜像导出失败详情", e);
+            fileLog.error("镜像导出失败: {}", e.getMessage());
+            fileLog.debug("镜像导出失败详情", e);
         } finally {
             if (!success && target != null) {
                 FileUtil.del(target);
             }
             IOUtils.closeQuietly(client);
-            MDC.remove("logFileId");
+            FileLog.unbind();
             taskLogRegistry.finish(logId);
             exportRegistry.finish(logId, success
                     ? ImageExportRegistry.Status.SUCCESS
@@ -284,7 +286,7 @@ public class ImageExportService {
             // 空 tag 会被 Docker 理解为「拉取该仓库全部 tag」。
             client.pullImageCmd(imageUrl)
                     .withTag(tag)
-                    .exec(new DefaultCallback<PullResponseItem>(MDC.get("logFileId")))
+                    .exec(new DefaultCallback<PullResponseItem>(FileLog.currentLogId()))
                     .awaitCompletion();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

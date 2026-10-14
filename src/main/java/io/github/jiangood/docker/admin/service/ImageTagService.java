@@ -11,9 +11,10 @@ import io.github.jiangood.docker.admin.entity.ImageTag;
 import io.github.jiangood.docker.admin.service.registry.RemoteImageMeta;
 import io.github.jiangood.docker.admin.util.ImageUrlUtils;
 import io.github.jiangood.docker.admin.util.VersionUtils;
+import io.github.jiangood.docker.base.FileLog;
 import io.github.jiangood.openadmin.framework.data.BaseService;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,10 +30,11 @@ import java.util.stream.Collectors;
 /**
  * 镜像标签服务：读取并缓存镜像（Dockerfile）中声明的端口与卷。
  */
-@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ImageTagService extends BaseService<ImageTag> {
+
+    private static final Logger fileLog = FileLog.logger();
 
     private final ImageTagRepository imageTagRepository;
 
@@ -148,16 +150,16 @@ public class ImageTagService extends BaseService<ImageTag> {
         try {
             response = client.inspectImageCmd(fullName).exec();
         } catch (NotFoundException e) {
-            log.info("本地不存在镜像 {}，无法读取声明", fullName);
+            fileLog.info("本地不存在镜像 {}，无法读取声明", fullName);
             return null;
         } catch (Exception e) {
-            log.warn("读取镜像声明失败 {}: {}", fullName, e.getMessage());
+            fileLog.warn("读取镜像声明失败 {}: {}", fullName, e.getMessage());
             return null;
         }
 
         List<String> ports = parsePorts(response.getConfig());
         List<String> volumes = parseVolumes(response.getConfig());
-        log.info("镜像 {} 声明端口 {}，卷 {}", fullName, ports, volumes);
+        fileLog.info("镜像 {} 声明端口 {}，卷 {}", fullName, ports, volumes);
 
         ImageTag it = imageTagRepository.findByImageUrlAndTag(imageUrl, tag).orElseGet(ImageTag::new);
         it.setImageUrl(imageUrl);

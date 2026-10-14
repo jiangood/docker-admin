@@ -4,10 +4,9 @@ import cn.hutool.core.date.DateUtil;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
-import io.github.jiangood.docker.base.LogNames;
+import io.github.jiangood.docker.base.FileLog;
 import lombok.AllArgsConstructor;
 import lombok.Data;
-import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.apache.sshd.common.config.keys.KeyUtils;
 import org.eclipse.jgit.api.CloneCommand;
@@ -29,6 +28,7 @@ import org.eclipse.jgit.transport.sshd.IdentityPasswordProvider;
 import org.eclipse.jgit.transport.sshd.ServerKeyDatabase;
 import org.eclipse.jgit.transport.sshd.SshdSessionFactory;
 import org.eclipse.jgit.transport.sshd.SshdSessionFactoryBuilder;
+import org.slf4j.Logger;
 
 import java.io.File;
 import java.io.IOException;
@@ -42,8 +42,9 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
-@Slf4j(topic = LogNames.TASK)
 public class GitTool {
+
+    private static final Logger fileLog = FileLog.logger();
 
     @AllArgsConstructor
     @Data
@@ -83,7 +84,7 @@ public class GitTool {
         @Override
         public boolean accept(String connectAddress, InetSocketAddress remoteAddress, PublicKey serverKey,
                 Configuration config, org.eclipse.jgit.transport.CredentialsProvider provider) {
-            log.warn("未校验 SSH 主机密钥，直接信任 {}：{}", connectAddress, KeyUtils.getFingerPrint(serverKey));
+            fileLog.warn("未校验 SSH 主机密钥，直接信任 {}：{}", connectAddress, KeyUtils.getFingerPrint(serverKey));
             return true;
         }
     };
@@ -173,7 +174,7 @@ public class GitTool {
             FileUtil.writeUtf8String(content, file);
 
             if (git.status().call().isClean()) {
-                log.info("{} 内容与仓库一致，无需提交", path);
+                fileLog.info("{} 内容与仓库一致，无需提交", path);
                 return null;
             }
 
@@ -185,7 +186,7 @@ public class GitTool {
                     .setAuthor(identity)
                     .setCommitter(identity)
                     .call();
-            log.info("已提交 {}：{}", commit.getName(), commit.getShortMessage());
+            fileLog.info("已提交 {}：{}", commit.getName(), commit.getShortMessage());
 
             PushCommand pushCommand = git.push()
                     .setRemote("origin")
@@ -194,7 +195,7 @@ public class GitTool {
             applyCredential(pushCommand, url, credential, sshFactory);
             assertPushed(pushCommand.call());
 
-            log.info("已推送到 {} 分支 {}", url, targetBranch);
+            fileLog.info("已推送到 {} 分支 {}", url, targetBranch);
             return commit.getName().substring(0, 8);
         } finally {
             closeQuietly(sshFactory);
@@ -212,8 +213,8 @@ public class GitTool {
         long start = System.currentTimeMillis();
 
 
-        log.info("工作目录为 {}", workDir.getAbsolutePath());
-        log.info("克隆代码 {}", url);
+        fileLog.info("工作目录为 {}", workDir.getAbsolutePath());
+        fileLog.info("克隆代码 {}", url);
 
         FileUtil.del(workDir);
 
@@ -235,13 +236,13 @@ public class GitTool {
             RevCommit next = logResult.iterator().next();
 
             String submitMessage = next.getFullMessage();
-            log.info("代码日志：{}", submitMessage);
+            fileLog.info("代码日志：{}", submitMessage);
 
 
             git.close();
-            log.info("代码获取完毕, 共 {} M", FileUtil.readableFileSize(FileUtils.sizeOfDirectory(workDir)));
+            fileLog.info("代码获取完毕, 共 {} M", FileUtil.readableFileSize(FileUtils.sizeOfDirectory(workDir)));
 
-            log.info("耗时：{} 秒", (System.currentTimeMillis() - start) / 1000);
+            fileLog.info("耗时：{} 秒", (System.currentTimeMillis() - start) / 1000);
 
 
             return new CloneResult(workDir, submitMessage.trim(), LocalDateTime.ofInstant(Instant.ofEpochMilli(next.getCommitTime() * 1000L), ZoneId.systemDefault()));
@@ -345,7 +346,7 @@ public class GitTool {
         try {
             factory.close();
         } catch (Exception e) {
-            log.warn("关闭 SSH 会话工厂失败：{}", e.getMessage());
+            fileLog.warn("关闭 SSH 会话工厂失败：{}", e.getMessage());
         }
         if (sshDir != null) {
             FileUtil.del(sshDir);

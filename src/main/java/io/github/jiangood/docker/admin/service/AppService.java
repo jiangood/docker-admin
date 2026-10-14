@@ -20,7 +20,7 @@ import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.entity.ImageTag;
 import io.github.jiangood.docker.admin.entity.Project;
 import io.github.jiangood.docker.admin.entity.Registry;
-import io.github.jiangood.docker.base.LogNames;
+import io.github.jiangood.docker.base.FileLog;
 import io.github.jiangood.docker.sdk.engine.DefaultCallback;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import io.github.jiangood.openadmin.framework.data.BaseService;
@@ -30,7 +30,7 @@ import jakarta.annotation.Resource;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
-import org.slf4j.MDC;
+import org.slf4j.Logger;
 import org.springframework.beans.BeanUtils;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
@@ -43,9 +43,11 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
-@Slf4j(topic = LogNames.TASK)
+@Slf4j
 @RequiredArgsConstructor
 public class AppService extends BaseService<App> {
+
+    private static final Logger fileLog = FileLog.logger();
 
     Set<String> deployingList = ConcurrentHashMap.newKeySet();
 
@@ -105,7 +107,7 @@ public class AppService extends BaseService<App> {
         DeployLog deployLog = null;
         boolean success = false;
         try {
-            MDC.put("logFileId", app.getId());
+            FileLog.bind(app.getId());
 
             // 修改更新时间
             app.setUpdateTime(LocalDateTime.now());
@@ -117,7 +119,7 @@ public class AppService extends BaseService<App> {
             deployLog.setAppName(app.getName());
 
             deployLog = deployLogRepository.save(deployLog);
-            log.info("部署阶段开始");
+            fileLog.info("部署阶段开始");
             Host host = app.getHost();
 
             // 镜像
@@ -127,14 +129,14 @@ public class AppService extends BaseService<App> {
 
 
             if (!forcePull && imageExists(client, image)) {
-                log.info("本地已存在镜像 {}，跳过拉取（如需更新请勾选强制拉取）", image);
+                fileLog.info("本地已存在镜像 {}，跳过拉取（如需更新请勾选强制拉取）", image);
             } else {
-                log.info("开始拉取镜像 {}", image);
+                fileLog.info("开始拉取镜像 {}", image);
                 client.pullImageCmd(image).exec(new DefaultCallback<>(app.getId())).awaitCompletion();
             }
 
 
-            log.info("开始部署镜像 {}", image);
+            fileLog.info("开始部署镜像 {}", image);
             App.AppConfig cfg = app.getConfig();
 
             // 仅当镜像来自镜像表（平台构建/已知）且声明非空时，对应维度才严格限制
@@ -153,12 +155,12 @@ public class AppService extends BaseService<App> {
 
 
             for (Container container : containers) {
-                log.info("容器状态 {}", container.getState());
+                fileLog.info("容器状态 {}", container.getState());
                 if (container.getState().equals("running")) {
-                    log.info("停止容器{}", container.getNames());
+                    fileLog.info("停止容器{}", container.getNames());
                     client.stopContainerCmd(container.getId()).exec();
                 }
-                log.info("删除容器{}", container.getNames());
+                fileLog.info("删除容器{}", container.getNames());
                 client.removeContainerCmd(container.getId()).exec();
             }
 
@@ -236,7 +238,7 @@ public class AppService extends BaseService<App> {
                                         ? r.getCapabilities() : List.of(List.of("gpu"))))
                         .toList();
                 hostConfig.withDeviceRequests(deviceRequests);
-                log.info("设备请求 {}", deviceRequests);
+                fileLog.info("设备请求 {}", deviceRequests);
             }
 
 
@@ -244,7 +246,7 @@ public class AppService extends BaseService<App> {
             String hosts = cfg.getExtraHosts();
             if (StrUtil.isNotBlank(hosts)) {
                 List<String> list = StrUtil.splitTrim(hosts, " ");
-                log.info("hosts={}", list);
+                fileLog.info("hosts={}", list);
                 hostConfig.withExtraHosts(list.toArray(new String[list.size()]));
             }
 
@@ -257,7 +259,7 @@ public class AppService extends BaseService<App> {
             hostConfig.withLogConfig(logConfig);
 
 
-            log.info("主机配置{}", hostConfig.getBinds());
+            fileLog.info("主机配置{}", hostConfig.getBinds());
             CreateContainerCmd containerCmd = client.createContainerCmd(image);
             containerCmd
                     .withName(app.getName())
@@ -276,20 +278,18 @@ public class AppService extends BaseService<App> {
             CreateContainerResponse response = containerCmd.exec();
 
 
-            log.info("创建容器{}", response);
+            fileLog.info("创建容器{}", response);
 
             String containerId = response.getId();
 
             client.startContainerCmd(containerId).exec();
 
 
-            log.info("启动容器");
-            log.info("部署阶段结束");
+            fileLog.info("启动容器");
+            fileLog.info("部署阶段结束");
             success = true;
         } catch (Exception e) {
-            log.info("--------------------------------------------------");
-            log.info("部署失败:" + e.getClass().getName() + "=>" + e.getMessage());
-            log.info("--------------------------------------------------", e);
+            fileLog.error("部署失败", e);
         } finally {
             if (deployLog != null) {
                 deployLog.setSuccess(success);
@@ -298,7 +298,7 @@ public class AppService extends BaseService<App> {
             }
             IOUtils.closeQuietly(client);
             deployingList.remove(app.getId());
-            MDC.remove("logFileId");
+            FileLog.unbind();
         }
 
     }
@@ -313,7 +313,7 @@ public class AppService extends BaseService<App> {
         } catch (NotFoundException e) {
             return false;
         } catch (Exception e) {
-            log.warn("查询本地镜像失败，将执行拉取: {}", image, e);
+            fileLog.warn("查询本地镜像失败，将执行拉取: {}", image, e);
             return false;
         }
     }
@@ -751,7 +751,7 @@ public class AppService extends BaseService<App> {
 
     @EventListener
     public void onBuildSuccess(BuildSuccessEvent event) {
-        log.info("构建成功，开始检测关联应用");
+        fileLog.info("构建成功，开始检测关联应用");
         BuildLog buildLog = event.getBuildLog();
 
         Project project = projectService.findById(buildLog.getProjectId()).orElse(null);

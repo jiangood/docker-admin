@@ -12,7 +12,7 @@ import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.command.BuildImageCmd;
 import com.github.dockerjava.api.command.PushImageCmd;
 import com.github.dockerjava.api.model.BuildResponseItem;
-import io.github.jiangood.docker.base.LogNames;
+import io.github.jiangood.docker.base.FileLog;
 import io.github.jiangood.docker.base.tool.GitCredential;
 import io.github.jiangood.docker.base.tool.GitTool;
 import io.github.jiangood.docker.admin.BuildSuccessEvent;
@@ -39,7 +39,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
 import org.eclipse.jgit.api.errors.GitAPIException;
-import org.slf4j.MDC;
+import org.slf4j.Logger;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -59,9 +59,11 @@ import java.util.regex.Pattern;
 
 
 @Service
-@Slf4j(topic = LogNames.TASK)
+@Slf4j
 @RequiredArgsConstructor
 public class ProjectService extends BaseService<Project> {
+
+    private static final Logger fileLog = FileLog.logger();
 
     private final ProjectRepository projectRepository;
 
@@ -313,26 +315,26 @@ public class ProjectService extends BaseService<Project> {
 
 
         DockerClient client = null;
-        MDC.put("logFileId", logId);
+        FileLog.bind(logId);
         try {
 
-            log.info("开始构建镜像任务, 项目：{}， 仓库：{}， tag：{}", project.getName(), project.getGitUrl(), tag);
+            fileLog.info("开始构建镜像任务, 项目：{}， 仓库：{}， tag：{}", project.getName(), project.getGitUrl(), tag);
 
             Host host = hostService.findById(p.getBuildHostId()).orElse(null);
 
             Assert.notNull(host, "无构建主机");
-            log.info("构建主机信息... 名称：{}, host:{}", host.getName(), host.getDockerHost());
+            fileLog.info("构建主机信息... 名称：{}, host:{}", host.getName(), host.getDockerHost());
 
             GitTool.CloneResult cloneResult = gitClone(project, tag);
             File workDir = cloneResult.getDir();
-            log.info("代码下载完毕 " + workDir);
-            log.info("代码提交信息: {}", cloneResult.getCodeMessage());
+            fileLog.info("代码下载完毕 " + workDir);
+            fileLog.info("代码提交信息: {}", cloneResult.getCodeMessage());
             Date commitTime = Date.from(cloneResult.getCommitTime().atZone(ZoneId.systemDefault()).toInstant());
-            log.info("代码提交时间: {}, {}前", DateUtil.formatDateTime(commitTime), DateUtil.formatBetween(commitTime, new Date(), BetweenFormatter.Level.MINUTE));
-            log.info("代码文件大小: {}", DataSizeUtil.format(FileUtil.size(workDir)));
+            fileLog.info("代码提交时间: {}, {}前", DateUtil.formatDateTime(commitTime), DateUtil.formatBetween(commitTime, new Date(), BetweenFormatter.Level.MINUTE));
+            fileLog.info("代码文件大小: {}", DataSizeUtil.format(FileUtil.size(workDir)));
 
 
-            log.info("dockerfile {},  内容如下", dockerfile);
+            fileLog.info("dockerfile {},  内容如下", dockerfile);
 
 
             buildLog.setBuildHostName(host.getName());
@@ -342,7 +344,7 @@ public class ProjectService extends BaseService<Project> {
 
             Registry registry = registryService.getEffective();
             Assert.notNull(registry, "未配置镜像注册中心，请先在【设置-镜像注册中心】中配置");
-            log.info("注册中心：{}", registry.getFullUrl());
+            fileLog.info("注册中心：{}", registry.getFullUrl());
             client = dockerService.getClient(host, registry);
 
 
@@ -350,27 +352,27 @@ public class ProjectService extends BaseService<Project> {
 
             String imageTag = ImageUrlUtils.full(imageUrl, tag);
 
-            log.info("目标镜像： {}", imageTag);
+            fileLog.info("目标镜像： {}", imageTag);
             Assert.state(!StrUtil.containsBlank(imageUrl), "镜像路径不能包含空格");
 
 
             buildLog.setImageUrl(imageUrl);
             File buildDir = new File(workDir, context);
 
-            log.info("向docker发送构建指令");
+            fileLog.info("向docker发送构建指令");
             DefaultCallback<BuildResponseItem> buildCallback = new DefaultCallback<>(logId);
             buildThreadMap.put(logId, buildCallback);
 
-            log.info("是否拉取基础镜像 withPull {}", p.isPull());
-            log.info("是否使用缓存 {}", p.isUseCache());
+            fileLog.info("是否拉取基础镜像 withPull {}", p.isPull());
+            fileLog.info("是否使用缓存 {}", p.isUseCache());
             File dockerfileFile = new File(buildDir, dockerfile);
-            log.info("dockerfile绝对路径: {}", dockerfileFile.getAbsolutePath());
-            log.info("是否拉取基础镜像:{}", p.isPull());
+            fileLog.info("dockerfile绝对路径: {}", dockerfileFile.getAbsolutePath());
+            fileLog.info("是否拉取基础镜像:{}", p.isPull());
             Assert.state(dockerfileFile.isFile(), "构建上下文 " + buildDir.getAbsolutePath()
                     + " 下未找到 Dockerfile： " + dockerfile + "，请检查项目配置的 dockerfile 路径");
 
 
-            log.info("构建命令执行中...");
+            fileLog.info("构建命令执行中...");
             // 不能用 buildImageCmd(File)：该重载在构造时强制要求上下文根目录下存在名为 Dockerfile 的文件，
             // 而 Dockerfile 常位于子目录（如 docker/Dockerfile），此时会直接抛
             // IllegalArgumentException: Dockerfile does not exist。这里手动指定上下文与 Dockerfile。
@@ -388,37 +390,37 @@ public class ProjectService extends BaseService<Project> {
             if (StrUtil.isNotEmpty(project.getBuildArg())) {
                 Map<String, String> buildArgsMap = UriComponentsBuilder.newInstance().query(project.getBuildArg()).build().getQueryParams().toSingleValueMap();
                 for (Map.Entry<String, String> e : buildArgsMap.entrySet()) {
-                    log.info("构建参数: {}={}", e.getKey(), e.getValue());
+                    fileLog.info("构建参数: {}={}", e.getKey(), e.getValue());
                     buildImageCmd.withBuildArg(e.getKey(), e.getValue());
                 }
             }
 
 
             buildImageCmd.exec(buildCallback).awaitCompletion();
-            log.info("构建命令执行完毕");
+            fileLog.info("构建命令执行完毕");
 
 
             // 判断是构建被中途取消，如手动取消，重复构建取消
             if (!buildThreadMap.containsKey(logId)) {
-                log.info("构建被取消");
-                MDC.remove("logFileId");
+                fileLog.info("构建被取消");
+                FileLog.unbind();
                 return;
             }
-            log.info("镜像构建结束 ");
+            fileLog.info("镜像构建结束 ");
             buildThreadMap.remove(logId);
 
             // 推送
-            log.info("推送镜像 {}", imageTag);
+            fileLog.info("推送镜像 {}", imageTag);
             PushImageCmd pushImageCmd = client.pushImageCmd(imageTag);
             pushImageCmd.exec(new DefaultCallback<>(logId)).awaitCompletion();
-            log.info("推送镜像结束 {}", imageTag);
+            fileLog.info("推送镜像结束 {}", imageTag);
 
             // 登记镜像仓库与标签，并记录镜像声明的端口与卷
             try {
                 imageRepoService.upsert(imageUrl, project.getName(), "BUILD", registry.getId(), project.getSysOrg());
                 imageTagService.inspect(client, imageTag, imageUrl, tag, buildLog.getId(), "BUILD");
             } catch (Exception e) {
-                log.warn("登记镜像失败: {}", e.getMessage());
+                fileLog.warn("登记镜像失败: {}", e.getMessage());
             }
 
 
@@ -426,7 +428,7 @@ public class ProjectService extends BaseService<Project> {
             buildLog.setCompleteTime(LocalDateTime.now());
             buildLog.setTimeSpend(Duration.between(buildLog.getCreateTime(), buildLog.getCompleteTime()).toMillis());
             buildLog = buildLogService.save(buildLog);
-            log.info("已更新构建日志{}", buildLog);
+            fileLog.info("已更新构建日志{}", buildLog);
 
 
             BuildSuccessEvent event = new BuildSuccessEvent(this);
@@ -434,12 +436,12 @@ public class ProjectService extends BaseService<Project> {
             event.setTag(tag);
 
             applicationEventPublisher.publishEvent(event);
-            log.info("抛出构建事件 {}", event.getBuildLog().getProjectName());
+            fileLog.info("抛出构建事件 {}", event.getBuildLog().getProjectName());
 
-            log.info("构建阶段结束");
+            fileLog.info("构建阶段结束");
         } catch (Exception e) {
-            log.info("异常 {} {}", e.getClass().getName(), e.getMessage());
-            log.error("构建失败", e);
+            fileLog.info("异常 {} {}", e.getClass().getName(), e.getMessage());
+            fileLog.error("构建失败", e);
 
             buildLog.setSuccess(false);
             buildLog.setCompleteTime(LocalDateTime.now());
@@ -447,7 +449,7 @@ public class ProjectService extends BaseService<Project> {
             buildLogService.save(buildLog);
         } finally {
             IOUtils.closeQuietly(client);
-            MDC.remove("logFileId");
+            FileLog.unbind();
             taskLogRegistry.finish(logId);
         }
     }
@@ -455,7 +457,7 @@ public class ProjectService extends BaseService<Project> {
     private GitTool.CloneResult gitClone(Project project, String tag) throws GitAPIException {
         GitCredential credential = codeSourceService.credentialByGitUrl(project.getGitUrl());
 
-        log.info("代码下载中...");
+        fileLog.info("代码下载中...");
         return GitTool.clone(project.getGitUrl(), credential, tag);
     }
 

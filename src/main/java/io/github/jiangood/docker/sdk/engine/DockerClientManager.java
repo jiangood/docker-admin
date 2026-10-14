@@ -12,8 +12,8 @@ import com.github.mwiede.dockerjava.jsch.JschDockerHttpClient;
 import com.jcraft.jsch.UserInfo;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.entity.Registry;
-import io.github.jiangood.docker.base.LogNames;
-import lombok.extern.slf4j.Slf4j;
+import io.github.jiangood.docker.base.FileLog;
+import org.slf4j.Logger;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -22,8 +22,9 @@ import java.util.Hashtable;
 import java.util.Map;
 
 @Service
-@Slf4j(topic = LogNames.TASK)
 public class DockerClientManager {
+
+    private static final Logger fileLog = FileLog.logger();
 
     private static final Duration CONNECTION_TIMEOUT = Duration.ofSeconds(10);
     private static final Duration RESPONSE_TIMEOUT = Duration.ofSeconds(3600);
@@ -121,7 +122,7 @@ public class DockerClientManager {
 
             return DockerClientImpl.getInstance(config, httpClient);
         } catch (Exception e) {
-            log.error("SSH 连接 docker 主机失败: {}@{}:{}", user, sshHost, port, e);
+            fileLog.error("SSH 连接 docker 主机失败: {}@{}:{}", user, sshHost, port, e);
             throw new RuntimeException("SSH 连接 docker 主机失败: " + e.getMessage(), e);
         }
     }
@@ -202,7 +203,7 @@ public class DockerClientManager {
 
         @Override
         public void showMessage(String message) {
-            log.debug("SSH: {}", message);
+            fileLog.debug("SSH: {}", message);
         }
     }
 

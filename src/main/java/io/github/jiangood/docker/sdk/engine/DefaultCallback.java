@@ -4,16 +4,16 @@ import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.StrUtil;
 import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.model.ResponseItem;
-import io.github.jiangood.docker.base.LogNames;
-import lombok.extern.slf4j.Slf4j;
-import org.slf4j.MDC;
+import io.github.jiangood.docker.base.FileLog;
+import org.slf4j.Logger;
 
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.concurrent.CountDownLatch;
 
-@Slf4j(topic = LogNames.TASK)
 public class DefaultCallback<T extends ResponseItem> implements ResultCallback<T> {
+
+    private static final Logger fileLog = FileLog.logger();
 
     private static final String TAB = "    ";
 
@@ -41,7 +41,7 @@ public class DefaultCallback<T extends ResponseItem> implements ResultCallback<T
         this.stream = stream;
         this.closed = false;
 
-        MDC.put("logFileId", this.logFileId);
+        FileLog.bind(this.logFileId);
     }
 
     @Override
@@ -49,7 +49,7 @@ public class DefaultCallback<T extends ResponseItem> implements ResultCallback<T
         if (item.isErrorIndicated()) {
             ResponseItem.ErrorDetail errorDetail = item.getErrorDetail();
             String message = errorDetail != null ? errorDetail.getMessage() : item.getError();
-            log.error("{}异常 {}", TAB, message);
+            fileLog.error("{}异常 {}", TAB, message);
             throw new IllegalStateException(message);
         }
 
@@ -67,14 +67,14 @@ public class DefaultCallback<T extends ResponseItem> implements ResultCallback<T
         if (item.getStatus() != null) {
             String progress = formatProgress(item.getProgressDetail());
             if (progress.isEmpty()) {
-                log.info("{}{}", TAB, item.getStatus());
+                fileLog.info("{}{}", TAB, item.getStatus());
             } else {
-                log.info("{}{} {}", TAB, item.getStatus(), progress);
+                fileLog.info("{}{} {}", TAB, item.getStatus(), progress);
             }
             return;
         }
 
-        log.info("{}{}", TAB, item);
+        fileLog.info("{}{}", TAB, item);
     }
 
     @Override
@@ -93,7 +93,7 @@ public class DefaultCallback<T extends ResponseItem> implements ResultCallback<T
         } catch (IOException e) {
             throw new RuntimeException(e);
         } finally {
-            MDC.remove("logFileId");
+            FileLog.unbind();
         }
     }
 
@@ -105,7 +105,7 @@ public class DefaultCallback<T extends ResponseItem> implements ResultCallback<T
         } catch (IOException e) {
             throw new RuntimeException(e);
         } finally {
-            MDC.remove("logFileId");
+            FileLog.unbind();
         }
     }
 
@@ -133,7 +133,7 @@ public class DefaultCallback<T extends ResponseItem> implements ResultCallback<T
             try {
                 close();
             } catch (IOException e) {
-                log.debug("Failed to close", e);
+                fileLog.debug("Failed to close", e);
             }
         }
     }
@@ -173,9 +173,9 @@ public class DefaultCallback<T extends ResponseItem> implements ResultCallback<T
                 continue;
             }
             if (line.startsWith("Step ")) {
-                log.info(line);
+                fileLog.info(line);
             } else {
-                log.info("{}{}", TAB, line);
+                fileLog.info("{}{}", TAB, line);
             }
         }
     }
