@@ -5,12 +5,29 @@ import lombok.Data;
 @Data
 public class BuildRequest {
 
+    /** 按版本 tag 构建（默认）。 */
+    public static final String REF_TYPE_TAG = "TAG";
+
+    /** 按分支最新代码构建。 */
+    public static final String REF_TYPE_BRANCH = "BRANCH";
+
     String projectId;
 
     /**
-     * 构建用的 git tag，同时作为镜像版本号（如 v1.0.1）。
+     * 构建来源类型：{@link #REF_TYPE_TAG}（默认）或 {@link #REF_TYPE_BRANCH}。
+     */
+    String refType = REF_TYPE_TAG;
+
+    /**
+     * 版本 tag，同时作为镜像版本号（如 v1.0.1）；仅 {@code refType=TAG} 时使用。
      */
     String tag;
+
+    /**
+     * 分支名；仅 {@code refType=BRANCH} 时使用，克隆该分支最新代码，
+     * 镜像版本号由「分支名 + 提交短 id」生成（见 ProjectService#buildBranchImageTag）。
+     */
+    String branch;
 
     String context = "/";
     String dockerfile = "Dockerfile";

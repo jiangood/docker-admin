@@ -32,9 +32,14 @@ public class BuildLog extends BaseEntity {
     String imageUrl;
 
     /**
-     * 构建用的 git tag，同时作为镜像版本号（如 v1.0.1）。
+     * 镜像版本号：tag 构建即所选 tag（如 v1.0.1）；分支构建为「分支名 + 提交短 id」。
      */
     String tag;
+
+    /**
+     * 分支构建时使用的分支名；tag 构建时为空。用于构建历史展示与失败重试。
+     */
+    String branch;
 
     LocalDateTime completeTime;
 

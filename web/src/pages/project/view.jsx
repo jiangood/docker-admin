@@ -1,6 +1,6 @@
 import {
   Alert, Button, Card, Descriptions, Form,
-  Modal, Select, Space, Spin, Switch, Table, Tabs, Tag, Tooltip, Typography
+  Modal, Segmented, Select, Space, Spin, Switch, Table, Tabs, Tag, Tooltip, Typography
 } from 'antd';
 import React from 'react';
 import {
@@ -33,6 +33,9 @@ export default class extends React.Component {
     showTrigger: false,
     logRow: null,
     tagOptions: [],
+    branchOptions: [],
+    // 构建来源：TAG（版本 tag）/ BRANCH（分支最新代码）
+    refType: 'TAG',
     versions: [],
     apps: [],
     webhookLoading: false
@@ -76,11 +79,19 @@ export default class extends React.Component {
   }
 
   retry = row => {
-    HttpClient.get("admin/project/build", {
+    const params = {
       projectId: row.projectId,
-      tag: row.tag,
       buildHostId: row.buildHostId
-    }).then(rs => {
+    }
+    if (row.branch) {
+      // 分支构建重试：重新拉取该分支最新代码
+      params.refType = 'BRANCH'
+      params.branch = row.branch
+    } else {
+      params.refType = 'TAG'
+      params.tag = row.tag
+    }
+    HttpClient.get("admin/project/build", params).then(rs => {
       this.reload()
     })
   }
@@ -103,11 +114,15 @@ export default class extends React.Component {
     HttpClient.get('admin/project/tags', {projectId: this.id}).then(rs => {
       this.setState({tagOptions: rs.data || []})
     })
-    this.setState({showTrigger: true})
+    HttpClient.get('admin/project/branches', {projectId: this.id}).then(rs => {
+      this.setState({branchOptions: rs.data || []})
+    })
+    this.setState({showTrigger: true, refType: 'TAG'})
   }
 
   submitTrigger = (values) => {
-    HttpClient.get("admin/project/build", values).then(rs => {
+    const params = {...values, refType: this.state.refType}
+    HttpClient.get("admin/project/build", params).then(rs => {
       this.setState({showTrigger: false})
       this.actionRef.current.reload()
     })
@@ -138,6 +153,13 @@ export default class extends React.Component {
       .finally(() => this.setState({webhookLoading: false}))
   }
 
+  toggleBranchBuild = (checked) => {
+    this.setState({webhookLoading: true})
+    HttpClient.get('admin/project/setWebhookBranch', {id: this.state.project.id, enabled: checked})
+      .then(() => this.loadProject())
+      .finally(() => this.setState({webhookLoading: false}))
+  }
+
   webhookUrl = () => {
     const token = this.state.project?.webhookToken
     if (!token) return ''
@@ -157,7 +179,12 @@ export default class extends React.Component {
       }
     },
     {
-      title: 'tag',
+      title: '来源',
+      dataIndex: 'branch',
+      render: (branch) => branch ? '分支 ' + branch : 'tag'
+    },
+    {
+      title: '镜像版本',
       dataIndex: 'tag',
     },
     {
@@ -221,7 +248,7 @@ export default class extends React.Component {
       return <Page padding><Spin/></Page>
     }
 
-    const {project, showTrigger, logRow, tagOptions} = this.state;
+    const {project, showTrigger, logRow, tagOptions, branchOptions, refType} = this.state;
 
     return (<Page padding>
 
@@ -258,10 +285,27 @@ export default class extends React.Component {
           preserve={false}>
           <Form.Item name="projectId" hidden>
           </Form.Item>
-          <Form.Item name="tag" label="构建 tag" rules={[{required: true, message: '请选择 tag'}]}
-                     help="只支持 vX.Y.Z 形式的版本 tag">
-            <Select options={tagOptions} showSearch placeholder='请选择远程 tag'/>
+          <Form.Item label="构建来源">
+            <Segmented
+              value={refType}
+              options={[
+                {label: '版本 tag', value: 'TAG'},
+                {label: '分支', value: 'BRANCH'}
+              ]}
+              onChange={v => this.setState({refType: v})}
+            />
           </Form.Item>
+          {refType === 'BRANCH' ? (
+            <Form.Item name="branch" label="构建分支" rules={[{required: true, message: '请选择分支'}]}
+                       help="使用该分支最新代码构建，镜像版本为「分支名 + 提交 id」">
+              <Select options={branchOptions} showSearch placeholder='请选择远程分支'/>
+            </Form.Item>
+          ) : (
+            <Form.Item name="tag" label="构建 tag" rules={[{required: true, message: '请选择 tag'}]}
+                       help="只支持 vX.Y.Z 形式的版本 tag">
+              <Select options={tagOptions} showSearch placeholder='请选择远程 tag'/>
+            </Form.Item>
+          )}
 
           <div className='row-end'>
             <Button type='primary' htmlType="submit">确定</Button>
@@ -338,8 +382,8 @@ export default class extends React.Component {
             type='info'
             showIcon
             className='mb-4'
-            title='推送 tag 自动构建'
-            description='向下面的地址推送形如 vX.Y.Z 的 tag，即可使用系统默认构建节点自动构建对应版本。'
+            title='推送 tag / 分支自动构建'
+            description='推送形如 vX.Y.Z 的 tag 会构建对应版本；开启「分支推送构建」后，推送任意分支会构建该分支最新代码（镜像版本为「分支名 + 提交 id」并更新 latest）。均使用系统默认构建节点。'
           />
           <Descriptions column={1} size='small' bordered>
             <Descriptions.Item label='自动配置'>
@@ -352,6 +396,19 @@ export default class extends React.Component {
                 <Typography.Text type='secondary'>
                   开启后在当前代码仓库（GitLab）自动创建上面的 Webhook 地址；关闭时自动删除。
                   需在【设置-代码源】中配置 GitLab 类型与访问令牌（api 权限）。
+                </Typography.Text>
+              </Space>
+            </Descriptions.Item>
+            <Descriptions.Item label='分支推送构建'>
+              <Space wrap>
+                <Switch
+                  checked={!!project.webhookBranch}
+                  loading={webhookLoading}
+                  onChange={this.toggleBranchBuild}
+                />
+                <Typography.Text type='secondary'>
+                  开启后，推送任意分支（含 tag push 之外的分支提交）都会构建该分支最新代码并更新 latest；
+                  tag push 始终构建，不受此开关影响。
                 </Typography.Text>
               </Space>
             </Descriptions.Item>

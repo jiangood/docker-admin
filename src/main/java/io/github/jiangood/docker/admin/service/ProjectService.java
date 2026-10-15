@@ -193,6 +193,77 @@ public class ProjectService extends BaseService<Project> {
     }
 
     /**
+     * 拉取项目对应远程仓库的分支列表（main / master / develop 优先，其余按名称）。
+     */
+    public List<String> listRemoteBranches(Project project) {
+        CodeSource source = codeSourceService.findByGitUrl(project.getGitUrl());
+        GitCredential credential = codeSourceService.credential(source);
+        try {
+            return GitTool.listRemoteBranches(project.getGitUrl(), credential).stream()
+                    .sorted(BRANCH_ORDER)
+                    .toList();
+        } catch (GitAPIException e) {
+            if (source == null) {
+                String host = CodeSourceService.hostKey(project.getGitUrl());
+                throw new BusinessException("获取远程分支失败：未找到与主机 " + host
+                        + " 匹配的代码源，请在【设置-代码源】配置访问方式与凭据", e);
+            }
+            throw new BusinessException("获取远程分支失败：" + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 分支排序：常见主开发分支在前，其余按名称升序，方便下拉默认选中。
+     */
+    private static final Comparator<String> BRANCH_ORDER = Comparator
+            .comparingInt(ProjectService::branchPriority)
+            .thenComparing(Comparator.naturalOrder());
+
+    private static int branchPriority(String branch) {
+        if ("main".equals(branch)) {
+            return 0;
+        }
+        if ("master".equals(branch)) {
+            return 1;
+        }
+        if ("develop".equals(branch) || "dev".equals(branch)) {
+            return 2;
+        }
+        return 3;
+    }
+
+    /**
+     * Docker tag 允许的最大长度。
+     */
+    private static final int DOCKER_TAG_MAX_LENGTH = 128;
+
+    /**
+     * 每次构建成功后统一追加推送的版本号。
+     */
+    private static final String LATEST_TAG = "latest";
+
+    /**
+     * 分支构建的镜像版本号：分支名（非法字符替换为 -）+ 提交短 id，如 {@code feature-x-1a2b3c4d}。
+     * <p>
+     * Docker tag 不允许 {@code /} 等字符，这里做替换并按长度上限截断，保证可推送。
+     */
+    static String buildBranchImageTag(String branch, String commitId) {
+        String name = StrUtil.nullToEmpty(branch).trim()
+                .replaceAll("[^A-Za-z0-9_.-]", "-")
+                .replaceAll("^[-.]+", "")
+                .replaceAll("[-.]+$", "");
+        if (StrUtil.isBlank(name)) {
+            name = "branch";
+        }
+        String suffix = StrUtil.isBlank(commitId) ? "" : "-" + commitId;
+        int maxNameLength = DOCKER_TAG_MAX_LENGTH - suffix.length();
+        if (name.length() > maxNameLength) {
+            name = name.substring(0, maxNameLength);
+        }
+        return name + suffix;
+    }
+
+    /**
      * 解析构建节点 id：未指定时使用系统默认 runner。
      */
     public String resolveBuildHostId(String buildHostId) {
@@ -233,6 +304,41 @@ public class ProjectService extends BaseService<Project> {
         Project project = projectRepository.findByWebhookToken(token);
         Assert.notNull(project, "无效的 webhook token");
         buildByTag(project, tag);
+    }
+
+    /**
+     * 用指定分支触发构建（Webhook 使用，构建节点取系统默认 runner）。
+     */
+    public void buildByBranch(Project project, String branch) {
+        Assert.hasText(branch, "分支不能为空");
+        Host runner = hostService.getDefaultDockerRunner();
+        Assert.notNull(runner, "未配置构建节点（runner），请先在【主机】中设置");
+
+        BuildRequest req = new BuildRequest();
+        req.setProjectId(project.getId());
+        req.setRefType(BuildRequest.REF_TYPE_BRANCH);
+        req.setBranch(branch);
+        req.setDockerfile(project.getDockerfile());
+        req.setBuildHostId(runner.getId());
+        try {
+            buildImage(req);
+        } catch (IOException e) {
+            throw new BusinessException("触发构建失败：" + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Webhook 入口：按 token 找到项目并触发分支构建；项目未开启「分支推送自动构建」时忽略。
+     */
+    public void triggerBranchByToken(String token, String branch) {
+        Assert.hasText(branch, "未从 Webhook 请求中解析到分支");
+        Project project = projectRepository.findByWebhookToken(token);
+        Assert.notNull(project, "无效的 webhook token");
+        if (!Boolean.TRUE.equals(project.getWebhookBranch())) {
+            log.info("项目 {} 未开启分支推送自动构建，忽略分支 {} 的推送", project.getName(), branch);
+            return;
+        }
+        buildByBranch(project, branch);
     }
 
     /**
@@ -302,13 +408,19 @@ public class ProjectService extends BaseService<Project> {
         String context = p.getContext();
         String dockerfile = p.getDockerfile();
 
+        // 分支构建：克隆分支最新代码，镜像版本号由「分支名 + 提交短 id」生成
+        boolean branchBuild = BuildRequest.REF_TYPE_BRANCH.equals(p.getRefType())
+                && StrUtil.isNotBlank(p.getBranch());
+        String branch = branchBuild ? p.getBranch().trim() : null;
+        String cloneRef = branchBuild ? branch : tag;
 
         Project project = projectRepository.findById(projectId).orElse(null);
         BuildLog buildLog = new BuildLog();
         buildLog.setProjectId(project.getId());
         buildLog.setProjectName(project.getName());
         buildLog.setDockerfile(project.getDockerfile());
-        buildLog.setTag(tag);
+        buildLog.setTag(branchBuild ? branch : tag);
+        buildLog.setBranch(branch);
         buildLog = buildLogService.saveLog(buildLog);
         String logId = buildLog.getId();
         taskLogRegistry.start(logId);
@@ -319,20 +431,26 @@ public class ProjectService extends BaseService<Project> {
         FileLog.bind(logId);
         try {
 
-            fileLog.info("开始构建镜像任务, 项目：{}， 仓库：{}， tag：{}", project.getName(), project.getGitUrl(), tag);
+            fileLog.info("开始构建镜像任务, 项目：{}， 仓库：{}， 来源：{}", project.getName(), project.getGitUrl(),
+                    branchBuild ? "分支 " + branch : "tag " + tag);
 
             Host host = hostService.findById(p.getBuildHostId()).orElse(null);
 
             Assert.notNull(host, "无构建主机");
             fileLog.info("构建主机信息... 名称：{}, host:{}", host.getName(), host.getDockerHost());
 
-            GitTool.CloneResult cloneResult = gitClone(project, tag);
+            GitTool.CloneResult cloneResult = gitClone(project, cloneRef);
             workDir = cloneResult.getDir();
             fileLog.info("代码下载完毕 " + workDir);
             fileLog.info("代码提交信息: {}", cloneResult.getCodeMessage());
             Date commitTime = Date.from(cloneResult.getCommitTime().atZone(ZoneId.systemDefault()).toInstant());
             fileLog.info("代码提交时间: {}, {}前", DateUtil.formatDateTime(commitTime), DateUtil.formatBetween(commitTime, new Date(), BetweenFormatter.Level.MINUTE));
             fileLog.info("代码文件大小: {}", DataSizeUtil.format(FileUtil.size(workDir)));
+
+            // 镜像版本号：tag 构建用所选 tag，分支构建用「分支名 + 提交短 id」
+            String versionTag = branchBuild ? buildBranchImageTag(branch, cloneResult.getCommitId()) : tag;
+            fileLog.info("镜像版本号：{}", versionTag);
+            buildLog.setTag(versionTag);
 
 
             fileLog.info("dockerfile {},  内容如下", dockerfile);
@@ -351,7 +469,9 @@ public class ProjectService extends BaseService<Project> {
 
             String imageUrl = ImageUrlUtils.repoUrl(registry, project.getName());
 
-            String imageTag = ImageUrlUtils.full(imageUrl, tag);
+            String imageTag = ImageUrlUtils.full(imageUrl, versionTag);
+            // 构建成功后统一追加的 latest 版本
+            String latestImageTag = ImageUrlUtils.full(imageUrl, LATEST_TAG);
 
             fileLog.info("目标镜像： {}", imageTag);
             Assert.state(!StrUtil.containsBlank(imageUrl), "镜像路径不能包含空格");
@@ -383,7 +503,8 @@ public class ProjectService extends BaseService<Project> {
                     .withForcerm(true)
                     .withPull(p.isPull())
                     .withNetworkMode("host")
-                    .withTags(Collections.singleton(imageTag))
+                    // 一次构建同时打上版本号与 latest，随后一起推送
+                    .withTags(new LinkedHashSet<>(List.of(imageTag, latestImageTag)))
                     .withNoCache(!p.isUseCache())
                     .withDockerfile(dockerfileFile);
 
@@ -410,16 +531,22 @@ public class ProjectService extends BaseService<Project> {
             fileLog.info("镜像构建结束 ");
             buildThreadMap.remove(logId);
 
-            // 推送
+            // 推送版本号与 latest
             fileLog.info("推送镜像 {}", imageTag);
             PushImageCmd pushImageCmd = client.pushImageCmd(imageTag);
             pushImageCmd.exec(new DefaultCallback<>(logId)).awaitCompletion();
             fileLog.info("推送镜像结束 {}", imageTag);
 
-            // 登记镜像仓库与标签，并记录镜像声明的端口与卷
+            fileLog.info("推送镜像 {}", latestImageTag);
+            pushImageCmd = client.pushImageCmd(latestImageTag);
+            pushImageCmd.exec(new DefaultCallback<>(logId)).awaitCompletion();
+            fileLog.info("推送镜像结束 {}", latestImageTag);
+
+            // 登记镜像仓库与标签，并记录镜像声明的端口与卷（版本号与 latest 各登记一条）
             try {
                 imageRepoService.upsert(imageUrl, project.getName(), "BUILD", registry.getId(), project.getSysOrg());
-                imageTagService.inspect(client, imageTag, imageUrl, tag, buildLog.getId(), "BUILD");
+                imageTagService.inspect(client, imageTag, imageUrl, versionTag, buildLog.getId(), "BUILD");
+                imageTagService.inspect(client, latestImageTag, imageUrl, LATEST_TAG, buildLog.getId(), "BUILD");
             } catch (Exception e) {
                 fileLog.warn("登记镜像失败: {}", e.getMessage());
             }
@@ -434,7 +561,7 @@ public class ProjectService extends BaseService<Project> {
 
             BuildSuccessEvent event = new BuildSuccessEvent(this);
             event.setBuildLog(buildLog);
-            event.setTag(tag);
+            event.setTag(versionTag);
 
             applicationEventPublisher.publishEvent(event);
             fileLog.info("抛出构建事件 {}", event.getBuildLog().getProjectName());
@@ -471,11 +598,11 @@ public class ProjectService extends BaseService<Project> {
         }
     }
 
-    private GitTool.CloneResult gitClone(Project project, String tag) throws GitAPIException {
+    private GitTool.CloneResult gitClone(Project project, String ref) throws GitAPIException {
         GitCredential credential = codeSourceService.credentialByGitUrl(project.getGitUrl());
 
         fileLog.info("代码下载中...");
-        return GitTool.clone(project.getGitUrl(), credential, tag);
+        return GitTool.clone(project.getGitUrl(), credential, ref);
     }
 
 

@@ -66,6 +66,9 @@ public class Project extends BaseEntity {
     @Remark("代码仓库侧 Webhook ID")
     String webhookHookId;
 
+    @Remark("分支推送自动构建")
+    Boolean webhookBranch;
+
 
     String remark;
 

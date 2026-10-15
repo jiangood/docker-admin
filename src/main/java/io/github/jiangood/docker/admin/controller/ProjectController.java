@@ -116,7 +116,12 @@ public class ProjectController {
     public AjaxResult build(BuildRequest buildRequest, @RequestParam String projectId, String buildHostId) throws IOException {
         Project project = assertProjectAccess(projectId);
         service.checkBuildImage();
-        Assert.isTrue(ProjectService.isValidTag(buildRequest.getTag()), "tag 格式不正确，需形如 v1.0.1");
+
+        if (BuildRequest.REF_TYPE_BRANCH.equals(buildRequest.getRefType())) {
+            Assert.hasText(buildRequest.getBranch(), "请选择要构建的分支");
+        } else {
+            Assert.isTrue(ProjectService.isValidTag(buildRequest.getTag()), "tag 格式不正确，需形如 v1.0.1");
+        }
 
         // 更新最近时间,方便排序
         project.setUpdateTime(LocalDateTime.now());
@@ -142,6 +147,33 @@ public class ProjectController {
                 .map(t -> new Option(t, t))
                 .toList();
         return AjaxResult.ok().data(options);
+    }
+
+    /**
+     * 远程分支列表（供分支构建选择）。
+     */
+    @HasPermission("project:view")
+    @RequestMapping("branches")
+    public AjaxResult branches(String projectId) {
+        Project project = assertProjectAccess(projectId);
+        List<Option> options = service.listRemoteBranches(project).stream()
+                .map(b -> new Option(b, b))
+                .toList();
+        return AjaxResult.ok().data(options);
+    }
+
+    /**
+     * 开启/关闭「分支推送自动构建」。开启后，推送任意分支都会触发该分支最新代码的构建。
+     */
+    @HasPermission("project:webhook")
+    @RequestMapping("setWebhookBranch")
+    public AjaxResult setWebhookBranch(String id, Boolean enabled) {
+        Project project = assertProjectAccess(id);
+        project.setWebhookBranch(Boolean.TRUE.equals(enabled));
+        service.save(project);
+        return AjaxResult.ok()
+                .msg(Boolean.TRUE.equals(enabled) ? "已开启分支推送构建" : "已关闭分支推送构建")
+                .data(project.getWebhookBranch());
     }
 
     /**

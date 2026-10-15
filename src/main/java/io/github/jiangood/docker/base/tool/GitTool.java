@@ -53,6 +53,9 @@ public class GitTool {
         String codeMessage;
 
         LocalDateTime commitTime;
+
+        /** 克隆到的提交短 id（8 位）；分支构建据此生成镜像 tag。 */
+        String commitId;
     }
 
     /** GitLab 等平台使用访问令牌时，用户名可填任意非空值，统一使用 oauth2。 */
@@ -113,6 +116,32 @@ public class GitTool {
             }
             // 顺序由调用方按版本规则处理（见 VersionUtils），这里不排序
             return tags;
+        } finally {
+            closeQuietly(sshFactory);
+        }
+    }
+
+    /**
+     * 列出远程仓库的所有分支（不含 tag）。
+     */
+    public static List<String> listRemoteBranches(String url, GitCredential credential) throws GitAPIException {
+        LsRemoteCommand cmd = Git.lsRemoteRepository()
+                .setRemote(url)
+                .setHeads(true)
+                .setTags(false);
+
+        SshdSessionFactory sshFactory = applyCredential(cmd, url, credential);
+        try {
+            Collection<Ref> refs = cmd.call();
+            List<String> branches = new ArrayList<>();
+            for (Ref ref : refs) {
+                String name = ref.getName();
+                if (name.startsWith("refs/heads/")) {
+                    branches.add(name.substring("refs/heads/".length()));
+                }
+            }
+            // 顺序由调用方处理（main/master 优先），这里不排序
+            return branches;
         } finally {
             closeQuietly(sshFactory);
         }
@@ -239,6 +268,7 @@ public class GitTool {
             String submitMessage = next.getFullMessage();
             fileLog.info("代码日志：{}", submitMessage);
 
+            String commitId = next.getName().substring(0, 8);
 
             git.close();
             fileLog.info("代码获取完毕, 共 {} M", FileUtil.readableFileSize(FileUtils.sizeOfDirectory(workDir)));
@@ -246,7 +276,7 @@ public class GitTool {
             fileLog.info("耗时：{} 秒", (System.currentTimeMillis() - start) / 1000);
 
 
-            return new CloneResult(workDir, submitMessage.trim(), LocalDateTime.ofInstant(Instant.ofEpochMilli(next.getCommitTime() * 1000L), ZoneId.systemDefault()));
+            return new CloneResult(workDir, submitMessage.trim(), LocalDateTime.ofInstant(Instant.ofEpochMilli(next.getCommitTime() * 1000L), ZoneId.systemDefault()), commitId);
         } finally {
             closeQuietly(sshFactory);
         }
