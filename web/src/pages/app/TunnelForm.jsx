@@ -1,4 +1,4 @@
-import {Button, Descriptions, Form, Input, message, Select, Space, Spin, Switch, Typography} from 'antd';
+import {Button, Card, Col, Descriptions, Divider, Form, Input, message, Row, Select, Space, Spin, Switch, Typography} from 'antd';
 import React from 'react';
 import {HttpClient, PermActions} from '@jiangood/open-admin';
 
@@ -26,11 +26,15 @@ export default class extends React.Component {
     load = () => {
         HttpClient.get('admin/app/tunnelMeta', {id: this.props.app.id}).then(rs => {
             const meta = rs.data || {}
+            // 进入页面时应用若尚未选择客户端，默认选中第一个可用的（没有可用的则取第一个），省去手动选择
+            const clients = meta.clients || []
+            const fallback = clients.find(c => c.configured) || clients[0]
+            const clientId = meta.clientId != null ? meta.clientId : (fallback ? fallback.id : undefined)
             this.setState({
                 meta,
                 enabled: !!meta.enabled,
                 prefix: meta.prefix || '',
-                clientId: meta.clientId,
+                clientId,
                 port: meta.port,
                 loading: false,
             })
@@ -83,57 +87,67 @@ export default class extends React.Component {
         const fullDomain = this.fullDomain()
         const canEnable = !!client && client.configured && !!client.domain && ports.length > 0
 
-        return <>
-            <Form colon={false} labelCol={{flex: '100px'}} style={{maxWidth: 720}}>
-                <Form.Item label='隧道客户端'
-                           tooltip='选择一个已登记的客户端，平台通过它的管理 API 下发隧道'>
-                    <Select style={{width: 360}} value={this.state.clientId} options={clientOptions}
-                            placeholder='选择隧道客户端'
-                            onChange={v => this.setState({clientId: v})}
-                            disabled={enabled}/>
-                </Form.Item>
+        return <Row gutter={[24, 24]} align='top'>
+            {/* 左：隧道配置 */}
+            <Col flex='auto' style={{minWidth: 0, maxWidth: 640}}>
+                <Form colon={false} labelCol={{flex: '100px'}}>
+                    <Form.Item label='隧道客户端'
+                               tooltip='选择一个已登记的客户端，平台通过它的管理 API 下发隧道'>
+                        <Select style={{width: '100%'}} value={this.state.clientId} options={clientOptions}
+                                placeholder='选择隧道客户端'
+                                onChange={v => this.setState({clientId: v})}
+                                disabled={enabled}/>
+                    </Form.Item>
 
-                <Form.Item label='开启隧道'>
-                    <Space>
-                        <Switch checked={enabled} loading={saving}
-                                onChange={v => this.save(v)}
-                                disabled={!enabled && !canEnable}/>
+                    <Form.Item label='域名前缀' tooltip={'完整域名 = 前缀 + "." + 客户端域名'}>
+                        <Input style={{width: 240}} value={prefix} placeholder='默认取应用名称'
+                               onChange={e => this.setState({prefix: e.target.value})}
+                               disabled={!enabled}/>
+                        <Typography.Text type='secondary' style={{marginLeft: 8}}>.{client && client.domain ? client.domain : '域名'}</Typography.Text>
+                    </Form.Item>
+
+                    <Form.Item label='应用端口' tooltip='应用映射到主机侧、由客户端转发访问的端口'>
+                        <Select style={{width: 280}} value={port} options={ports}
+                                placeholder='选择要暴露的端口' disabled={!enabled}
+                                onChange={v => this.setState({port: v})}/>
+                    </Form.Item>
+
+                    <Form.Item label=' '>
+                        <PermActions>
+                            <Button perm='app:tunnel' type='primary' loading={saving}
+                                    disabled={!enabled || !canEnable}
+                                    onClick={() => this.save(true)}>保存</Button>
+                        </PermActions>
+                    </Form.Item>
+                </Form>
+            </Col>
+
+            {/* 右：开启开关 + 运行状态 */}
+            <Col flex='360px'>
+                <Card size='small' title='隧道状态'>
+                    <Space orientation='vertical' style={{width: '100%'}}>
+                        <Space>
+                            <Switch checked={enabled} loading={saving}
+                                    onChange={v => this.save(v)}
+                                    disabled={!enabled && !canEnable}/>
+                            <Typography.Text>开启隧道</Typography.Text>
+                        </Space>
                         <Typography.Text type='secondary'>
                             通过 http-tunnel 把该应用暴露到公网域名（客户端：{client ? client.name : '未选择'}）
                         </Typography.Text>
                     </Space>
-                </Form.Item>
-
-                <Form.Item label='域名前缀' tooltip={'完整域名 = 前缀 + "." + 客户端域名'}>
-                    <Input style={{width: 240}} value={prefix} placeholder='默认取应用名称'
-                           onChange={e => this.setState({prefix: e.target.value})}
-                           disabled={!enabled}/>
-                    <Typography.Text type='secondary' style={{marginLeft: 8}}>.{client && client.domain ? client.domain : '域名'}</Typography.Text>
-                </Form.Item>
-
-                <Form.Item label='应用端口' tooltip='应用映射到主机侧、由客户端转发访问的端口'>
-                    <Select style={{width: 280}} value={port} options={ports}
-                            placeholder='选择要暴露的端口' disabled={!enabled}
-                            onChange={v => this.setState({port: v})}/>
-                </Form.Item>
-
-                <Form.Item label=' '>
-                    <PermActions>
-                        <Button perm='app:tunnel' type='primary' loading={saving}
-                                disabled={!enabled || !canEnable}
-                                onClick={() => this.save(true)}>保存</Button>
-                    </PermActions>
-                </Form.Item>
-            </Form>
-
-            <Descriptions size='small' column={1} style={{maxWidth: 720}}>
-                <Descriptions.Item label='运行主机'>{meta.hostName || '-'}</Descriptions.Item>
-                <Descriptions.Item label='隧道客户端'>{client ? client.name : '-'}</Descriptions.Item>
-                <Descriptions.Item label='完整域名'>{enabled ? (fullDomain || '-') : '-'}</Descriptions.Item>
-                <Descriptions.Item label='访问地址'>
-                    {enabled && meta.url ? <a href={meta.url} target='_blank' rel='noreferrer'>{meta.url}</a> : '-'}
-                </Descriptions.Item>
-            </Descriptions>
-        </>
+                    <Divider style={{margin: '12px 0'}}/>
+                    <Descriptions size='small' column={1}>
+                        <Descriptions.Item label='运行主机'>{meta.hostName || '-'}</Descriptions.Item>
+                        <Descriptions.Item label='隧道客户端'>{client ? client.name : '-'}</Descriptions.Item>
+                        <Descriptions.Item label='完整域名'>{enabled ? (fullDomain || '-') : '-'}</Descriptions.Item>
+                        <Descriptions.Item label='访问地址'>
+                            {enabled && meta.url ?
+                                <a href={meta.url} target='_blank' rel='noreferrer'>{meta.url}</a> : '-'}
+                        </Descriptions.Item>
+                    </Descriptions>
+                </Card>
+            </Col>
+        </Row>
     }
 }
