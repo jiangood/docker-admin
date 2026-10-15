@@ -122,8 +122,7 @@ public class HostController  {
     /**
      * 删除镜像。{@code image} 为 {@code repo:tag} 时删除单个标签，为镜像 ID 时删除整个镜像。
      * <p>
-     * 404 / 409 在此就地转换：本类的兜底 {@code @ExceptionHandler(Exception.class)}
-     * 会把异常统一吞成「连接容器引擎失败」，无法给出有效提示。
+     * 404 / 409 在此就地转换：交由全局处理器只能得到笼统提示，这里给出更具体的说明。
      */
     @HasPermission("host:image")
     @RequestMapping("removeImage")
@@ -172,13 +171,6 @@ public class HostController  {
         Host host = service.findById(id).orElse(null);
         org.springframework.util.Assert.notNull(host, "主机不存在");
         return host;
-    }
-
-
-    @ExceptionHandler(Exception.class)
-    public AjaxResult exception(Exception e){
-        log.error(e.getMessage());
-        return AjaxResult.err("连接容器引擎失败");
     }
 
 }

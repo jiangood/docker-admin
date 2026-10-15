@@ -1,6 +1,7 @@
 package io.github.jiangood.docker.admin.service;
 
 import com.github.dockerjava.api.DockerClient;
+import com.github.dockerjava.api.exception.DockerException;
 import com.github.dockerjava.api.model.Image;
 import com.github.dockerjava.api.model.Info;
 import com.github.dockerjava.api.model.PruneResponse;
@@ -10,6 +11,7 @@ import io.github.jiangood.docker.admin.dto.HostImageVo;
 import io.github.jiangood.docker.admin.dto.HostInfoVo;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
+import io.github.jiangood.openadmin.util.BusinessException;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
@@ -19,6 +21,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.function.Function;
 
 /**
  * 主机级 Docker 查询：镜像列表、引擎信息。
@@ -45,8 +48,7 @@ public class HostDockerService {
     }
 
     public List<HostImageVo> listImages(Host host) {
-        DockerClient client = dockerClientManager.getClient(host);
-        try {
+        return withClient(host, client -> {
             List<Image> images = client.listImagesCmd().withShowAll(true).exec();
             List<HostImageVo> result = new ArrayList<>(images.size());
             for (Image img : images) {
@@ -73,9 +75,7 @@ public class HostDockerService {
             }
             result.sort((a, b) -> Long.compare(nvl(b.getCreated()), nvl(a.getCreated())));
             return result;
-        } finally {
-            IOUtils.closeQuietly(client);
-        }
+        });
     }
 
     /**
@@ -84,37 +84,27 @@ public class HostDockerService {
      * 不使用 force：镜像被容器占用时由 Docker 返回 409，交由上层转换为可读提示。
      */
     public void removeImage(Host host, String image) {
-        DockerClient client = dockerClientManager.getClient(host);
-        try {
+        withClient(host, client -> {
             client.removeImageCmd(image).withNoPrune(false).exec();
-        } finally {
-            IOUtils.closeQuietly(client);
-        }
+            return null;
+        });
     }
 
     /**
      * 清理悬空（无标签）镜像，返回回收的字节数。
      */
     public long pruneImages(Host host) {
-        DockerClient client = dockerClientManager.getClient(host);
-        try {
+        return withClient(host, client -> {
             PruneResponse response = client.pruneCmd(PruneType.IMAGES)
                     .withDangling(true)
                     .exec();
             Long reclaimed = response.getSpaceReclaimed();
             return reclaimed == null ? 0L : reclaimed;
-        } finally {
-            IOUtils.closeQuietly(client);
-        }
+        });
     }
 
     public HostInfoVo info(Host host) {
-        DockerClient client = dockerClientManager.getClient(host);
-        try {
-            return info(client, host);
-        } finally {
-            IOUtils.closeQuietly(client);
-        }
+        return withClient(host, client -> info(client, host));
     }
 
     /**
@@ -149,6 +139,40 @@ public class HostDockerService {
         vo.setContainersTotal(info.getContainers());
         vo.setImages(info.getImages());
         return vo;
+    }
+
+    /**
+     * 取客户端执行一次 docker 调用，调用方无需关心关闭。
+     * <p>
+     * 传输层失败（主机不可达、SSH 不通等）docker-java 会抛普通 {@link RuntimeException}，
+     * 这里统一转成可读提示「连接容器引擎失败」；docker-java 自身的 {@link DockerException}
+     * （如 404/409）原样抛出，由上层或全局处理器给出更具体的说明。
+     */
+    private <T> T withClient(Host host, Function<DockerClient, T> action) {
+        DockerClient client = null;
+        try {
+            client = dockerClientManager.getClient(host);
+            return action.apply(client);
+        } catch (DockerException e) {
+            throw e;
+        } catch (Exception e) {
+            log.warn("连接容器引擎失败：{}", e.toString());
+            throw new BusinessException("连接容器引擎失败：" + rootMessage(e));
+        } finally {
+            IOUtils.closeQuietly(client);
+        }
+    }
+
+    /**
+     * 取最内层原因的消息，避免 docker-java 包装后带上冗长的类名前缀。
+     */
+    private static String rootMessage(Throwable e) {
+        Throwable t = e;
+        while (t.getCause() != null) {
+            t = t.getCause();
+        }
+        String msg = t.getMessage();
+        return msg == null || msg.isBlank() ? t.getClass().getSimpleName() : msg;
     }
 
     private static long nvl(Long v) {
