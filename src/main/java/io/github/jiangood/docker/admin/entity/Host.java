@@ -49,9 +49,12 @@ public class Host extends BaseEntity {
     /**
      * 主机 IP 地址：隧道客户端转发目标使用。
      * 目标地址 = 该 IP + 应用映射到主机侧的端口，需为隧道客户端所在机器可访问的地址。
+     * <p>
+     * 不加 {@code @NotNull}：Hibernate 会把 Bean Validation 的 not-null 落到 DDL 上，
+     * 给已有数据的表新增 NOT NULL 列会失败（H2 会拒绝复制含 NULL 的行），导致列建不出来。
+     * 必填在 {@code HostService#saveHost} 与前端表单校验。
      */
     @Remark("IP地址")
-    @NotNull
     String ip;
 
     @Remark("构建节点")
