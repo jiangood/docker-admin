@@ -215,6 +215,12 @@ export default class extends React.Component {
         }
         if (result.name) {
             values.name = result.name
+        } else if (!this.formRef.current.getFieldValue('name')) {
+            // 命令里没有 --name 时，按镜像名推导（与选择镜像回填保持一致）
+            const derived = appNameFromImage(result.imageUrl)
+            if (derived) {
+                values.name = derived
+            }
         }
         this.formRef.current.setFieldsValue(values)
         this.loadTags(result.imageUrl)
