@@ -205,7 +205,7 @@ public class AppController {
         assertAppAccess(id);
         service.updateAppVersion(id, version, Boolean.TRUE.equals(forcePull));
 
-        return AjaxResult.ok().msg("更新指定已发布");
+        return AjaxResult.ok().msg("部署指令已发送，请前往「部署日志」查看进度");
     }
 
 
@@ -319,7 +319,7 @@ public class AppController {
         assertAppAccess(param.getAppId());
         App app = service.migrateApp(param.getAppId(), param.getHostId());
 
-        return AjaxResult.ok().msg("迁移成功").data(app);
+        return AjaxResult.ok().msg("迁移成功，正在目标主机重新部署").data(app);
     }
 
 

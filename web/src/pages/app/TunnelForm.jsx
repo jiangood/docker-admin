@@ -1,4 +1,4 @@
-import {Button, Col, Descriptions, Divider, Form, Input, message, Row, Select, Space, Spin, Switch, Tag, Typography} from 'antd';
+import {Button, Col, Descriptions, Divider, Form, Input, Row, Select, Space, Spin, Switch, Tag, Typography} from 'antd';
 import React from 'react';
 import {HttpClient, PermActions} from '@jiangood/open-admin';
 
@@ -67,8 +67,7 @@ export default class extends React.Component {
             + '&clientId=' + encodeURIComponent(this.state.clientId || '')
             + '&prefix=' + encodeURIComponent(this.state.prefix || '')
             + '&port=' + encodeURIComponent(this.state.port == null ? '' : this.state.port))
-            .then(rs => {
-                message.success(rs.msg || '已保存')
+            .then(() => {
                 this.load()
                 this.props.onChange && this.props.onChange()
             }).finally(() => this.setState({saving: false}))

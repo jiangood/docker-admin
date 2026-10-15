@@ -1,4 +1,4 @@
-import {Alert, Button, Card, Form, Input, message, Modal, Space, Table, Tabs, Tag, Tooltip, Typography} from 'antd';
+import {Alert, Button, Card, Form, Input, Modal, Space, Table, Tabs, Tag, Tooltip, Typography} from 'antd';
 import {PlusOutlined, ReloadOutlined} from '@ant-design/icons';
 import React from 'react';
 import {HttpClient, Page, PermActions} from '@jiangood/open-admin';
@@ -84,8 +84,7 @@ export default class extends React.Component {
                 domain: values.domain,
                 token: values.token,
                 remark: values.remark,
-            }).then(rs => {
-                message.success(rs.msg || '保存成功')
+            }).then(() => {
                 this.setState({clientModal: false})
                 this.refreshAll()
             }).finally(() => this.setState({clientSaving: false}))
@@ -95,7 +94,6 @@ export default class extends React.Component {
     testClient = row => {
         this.setState({testingId: row.id})
         HttpClient.get('admin/tunnel/testClient', {id: row.id})
-            .then(rs => message.success(rs.msg || '连接成功'))
             .finally(() => this.setState({testingId: null}))
     }
 
@@ -107,7 +105,6 @@ export default class extends React.Component {
             okButtonProps: {danger: true},
             cancelText: '取消',
             onOk: () => HttpClient.post('admin/tunnel/deleteClient?id=' + encodeURIComponent(row.id)).then(() => {
-                message.success('已删除')
                 this.refreshAll()
             }),
         })

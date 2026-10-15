@@ -170,7 +170,6 @@ export default class extends React.Component {
                 forcePull: values.forcePull
             }).then(() => {
                 this.setState({deployVisible: false, activeTab: 'log'})
-                message.success('部署指令已发送，请前往「部署日志」查看进度')
                 this.refresh()
             }).finally(() => {
                 hide()

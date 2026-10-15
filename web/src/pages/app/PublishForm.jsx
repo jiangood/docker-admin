@@ -68,8 +68,7 @@ export default class extends React.Component {
         HttpClient.post('admin/app/migrateApp', {
             appId: this.id,
             hostId: values.hostId
-        }).then(rs => {
-            message.success('迁移成功，正在目标主机重新部署')
+        }).then(() => {
             // 应用记录仍在，仅主机变化，刷新当前页即可
             this.props.onChange && this.props.onChange()
         }).finally(hide)
