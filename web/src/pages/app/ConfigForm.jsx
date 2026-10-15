@@ -12,8 +12,9 @@ export default class extends React.Component {
     update = (values) => {
         const config = values.config
         const hide = message.loading("修改配置中…", 0)
-        HttpClient.post('admin/app/updateConfig?id=' + this.props.app.id, config).then(rs => {
-            this.props.onChange(rs.data)
+        HttpClient.post('admin/app/updateConfig?id=' + this.props.app.id, config).then(() => {
+            // 保存后会自动重启（重新部署），让父级进入部署观察
+            this.props.onChange({redeploy: true})
         }).finally(hide)
     }
 

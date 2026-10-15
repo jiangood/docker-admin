@@ -23,21 +23,32 @@ export default class extends React.Component {
         this.load()
     }
 
-    load = () => {
+    /**
+     * 拉取隧道元数据。
+     * @param preserveSelection 保存后刷新时为 true：只更新「运行信息」等服务端字段，
+     *                          保留用户在界面上的客户端 / 前缀 / 端口选择，避免被默认规则重置
+     */
+    load = (preserveSelection = false) => {
         HttpClient.get('admin/app/tunnelMeta', {id: this.props.app.id}).then(rs => {
             const meta = rs.data || {}
+            const prev = this.state
             // 进入页面时应用若尚未选择客户端，默认选中第一个可用的（没有可用的则取第一个），省去手动选择
             const clients = meta.clients || []
             const fallback = clients.find(c => c.configured) || clients[0]
-            const clientId = meta.clientId != null ? meta.clientId : (fallback ? fallback.id : undefined)
+            const clientId = preserveSelection
+                ? prev.clientId
+                : (meta.clientId != null ? meta.clientId : (fallback ? fallback.id : undefined))
             // 进入页面时应用若尚未选择端口，默认选中第一个 TCP 端口
             const firstTcp = (meta.ports || [])
                 .find(p => String(p.protocol || 'TCP').toUpperCase() === 'TCP')
-            const port = meta.port != null ? meta.port : (firstTcp ? firstTcp.privatePort : undefined)
+            const port = preserveSelection
+                ? prev.port
+                : (meta.port != null ? meta.port : (firstTcp ? firstTcp.privatePort : undefined))
+            const prefix = preserveSelection ? prev.prefix : (meta.prefix || '')
             this.setState({
                 meta,
                 enabled: !!meta.enabled,
-                prefix: meta.prefix || '',
+                prefix,
                 clientId,
                 port,
                 loading: false,
@@ -68,8 +79,8 @@ export default class extends React.Component {
             + '&prefix=' + encodeURIComponent(this.state.prefix || '')
             + '&port=' + encodeURIComponent(this.state.port == null ? '' : this.state.port))
             .then(() => {
-                this.load()
-                this.props.onChange && this.props.onChange()
+                // 隧道不影响容器，不通知父级刷新；只重拉运行信息，保留当前选择
+                this.load(true)
             }).finally(() => this.setState({saving: false}))
     }
 

@@ -30,6 +30,13 @@ export default class extends React.Component {
         this.load()
     }
 
+    componentDidUpdate(prevProps) {
+        // 上层不再靠卸载重建本组件（避免整块骨架屏），容器漂移（如重新部署换了容器）时自行重新拉取
+        if (prevProps.containerId !== this.props.containerId) {
+            this.load()
+        }
+    }
+
     load = () => {
         const {hostId, containerId, appId} = this.props
         const request = appId

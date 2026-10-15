@@ -12,7 +12,6 @@ import {
     message,
     Modal,
     Row,
-    Skeleton,
     Space,
     Spin,
     Tabs,
@@ -35,10 +34,13 @@ import {stateColor, stateLabel} from "../../components/container/utils";
 const Item = Descriptions.Item
 
 /**
- * 修改动作后，用骨架屏占位、等待重新显示的毫秒数。
- * 容器重启 / 部署下发是异步的，稍等几秒再让子标签重新挂载，才能看到最新状态与日志。
+ * 等待「部署中」状态出现的最长时间（毫秒）。部署下发是异步的，@Async 任务登记 deploying 有延迟；
+ * 触发部署后按 1s 轮询，观察到 deploying 后持续轮询直到它结束，始终没观察到则到此超时收尾。
  */
-const TAB_REFRESH_DELAY = 3000
+const DEPLOY_PROBE_TIMEOUT = 10000
+
+/** 详情页各标签的 key，刷新令牌按此逐项递增 */
+const TAB_KEYS = ['log', 'container', 'config', 'tunnel', 'publish']
 
 export default class extends React.Component {
 
@@ -67,8 +69,8 @@ export default class extends React.Component {
         deployLoading: false,
         deploySubmitting: false,
 
-        // 修改后为 true：隐藏 Tabs 改用骨架屏占位，重新显示时子组件会重新挂载并拉取数据
-        tabsLoading: false,
+        // 各标签的刷新令牌：对应值 +1 只让该标签重挂载并重新拉取数据，其他标签不受影响
+        tabTokens: {log: 0, container: 0, config: 0, tunnel: 0, publish: 0},
     }
 
     deployFormRef = React.createRef()
@@ -83,7 +85,7 @@ export default class extends React.Component {
 
     componentWillUnmount() {
         this._mounted = false;
-        clearTimeout(this.refreshTimer)
+        clearTimeout(this.pollTimer)
     }
 
 
@@ -93,20 +95,57 @@ export default class extends React.Component {
         })
     }
 
-    loadContainer = () => {
-        console.log('loadContainer')
-        this.setState({containerLoading: true})
+    /**
+     * 拉取容器状态。
+     * @param silent 静默轮询：不显示「检测中…」，避免部署轮询期间顶部状态每秒闪烁
+     */
+    loadContainer = (silent = false) => {
+        if (!this._mounted) {
+            return
+        }
+        if (!silent) {
+            this.setState({containerLoading: true})
+        }
         return HttpClient.get("admin/app/container", {id: this.id}).then(rs => {
+            if (!this._mounted) {
+                return
+            }
             const container = rs.data;
             this.setState({container})
 
-            if (container.state === 'deploying' && this._mounted) {
-                setTimeout(() => this.loadContainer(), 1000)
+            const deploying = container.state === 'deploying'
+
+            // 默认仅在「部署中」时继续轮询
+            let keepPolling = deploying
+            const watch = this.deployWatch
+            if (watch) {
+                if (deploying) {
+                    watch.seenDeploying = true
+                } else if (watch.seenDeploying) {
+                    // 部署已结束：刷新部署日志与容器标签，展示最终状态
+                    this.deployWatch = null
+                    this.bumpTokens(['log', 'container'])
+                    keepPolling = false
+                } else if (Date.now() - watch.startedAt > DEPLOY_PROBE_TIMEOUT) {
+                    // 兜底：始终没观察到 deploying（部署极快已结束，或已失败），不再空转轮询
+                    this.deployWatch = null
+                    this.bumpTokens(['log', 'container'])
+                    keepPolling = false
+                } else {
+                    // @Async 任务登记 deploying 有延迟，继续探
+                    keepPolling = true
+                }
             }
 
+            clearTimeout(this.pollTimer)
+            if (keepPolling) {
+                this.pollTimer = setTimeout(() => this.loadContainer(true), 1000)
+            }
         }).catch(() => {
         }).finally(() => {
-            this.setState({containerLoading: false})
+            if (this._mounted && !silent) {
+                this.setState({containerLoading: false})
+            }
         })
     }
 
@@ -115,33 +154,38 @@ export default class extends React.Component {
     };
 
     /**
-     * 刷新统一入口：隐藏 Tabs 显示骨架屏，重新拉取数据后让 Tabs 重新显示
-     * （Tabs 被卸载再挂载，容器配置、发布、容器、部署日志等子标签会重新拉取最新数据）。
-     * @param delay 骨架屏停留毫秒数；修改动作默认延迟几秒等容器重启 / 部署生效，手动刷新传 0 立即刷新。
+     * 只让指定标签重挂载并重新拉取数据，其余标签保持原样（不再整块骨架屏遮挡）。
      */
-    refresh = (delay = TAB_REFRESH_DELAY) => {
-        clearTimeout(this.refreshTimer)
-        this.setState({tabsLoading: true})
-        if (delay > 0) {
-            // 修改动作：先立即刷新一次顶部应用 / 容器信息
-            this.reload()
-        }
-        this.refreshTimer = setTimeout(() => {
-            if (!this._mounted) {
-                return
-            }
-            this.reload().catch(() => {
-            }).finally(() => {
-                if (this._mounted) {
-                    this.setState({tabsLoading: false})
-                }
-            })
-        }, delay)
+    bumpTokens = (keys) => {
+        this.setState(s => {
+            const tabTokens = {...s.tabTokens}
+            keys.forEach(k => tabTokens[k] = (tabTokens[k] || 0) + 1)
+            return {tabTokens}
+        })
     }
 
-    // 子标签组件通过 onChange 回调通知父级「发生了修改」，忽略其可能传入的业务数据
-    handleChanged = () => {
-        this.refresh()
+    /**
+     * 子标签通知「配置已修改」。只有真正影响容器 / 部署的操作才需要刷新；
+     * 修改隧道、自动发布开关这类纯配置改动不回调父级，避免无谓刷新。
+     * @param redeploy 是否触发了重新部署；true 时进入部署观察，部署结束后再刷新日志与容器标签
+     * @param tabs     需要立即重挂载的标签 key；不传则不动任何标签
+     */
+    handleChanged = ({redeploy = false, tabs} = {}) => {
+        if (redeploy) {
+            this.deployWatch = {seenDeploying: false, startedAt: Date.now()}
+        }
+        this.reload().catch(() => {
+        })
+        if (tabs && tabs.length > 0) {
+            this.bumpTokens(tabs)
+        }
+    }
+
+    /** 手动刷新：重拉顶部信息并让所有标签重新拉取（不遮挡内容） */
+    manualRefresh = () => {
+        this.reload().catch(() => {
+        })
+        this.bumpTokens(TAB_KEYS)
     }
 
 
@@ -159,9 +203,7 @@ export default class extends React.Component {
 
     submitDeploy = () => {
         this.deployFormRef.current.validateFields().then(values => {
-            const {container} = this.state
-            container.state = 'deploying'
-            this.setState({container, deploySubmitting: true})
+            this.setState({deploySubmitting: true})
 
             const hide = message.loading('部署中…', 0)
             HttpClient.get('admin/app/updateVersion', {
@@ -170,7 +212,7 @@ export default class extends React.Component {
                 forcePull: values.forcePull
             }).then(() => {
                 this.setState({deployVisible: false, activeTab: 'log'})
-                this.refresh()
+                this.handleChanged({redeploy: true})
             }).finally(() => {
                 hide()
                 this.setState({deploySubmitting: false})
@@ -180,7 +222,9 @@ export default class extends React.Component {
     start = () => {
         this.setState({starting: true})
         HttpClient.post('admin/app/start/' + this.state.app.id).then(() => {
-            this.refresh()
+            this.reload().catch(() => {
+            })
+            this.bumpTokens(['container'])
         }).finally(() => {
             this.setState({starting: false})
         })
@@ -188,7 +232,9 @@ export default class extends React.Component {
     stop = () => {
         this.setState({stopping: true})
         HttpClient.post('admin/app/stop/' + this.state.app.id).then(() => {
-            this.refresh()
+            this.reload().catch(() => {
+            })
+            this.bumpTokens(['container'])
         }).finally(() => {
             this.setState({stopping: false})
         })
@@ -226,7 +272,6 @@ export default class extends React.Component {
         HttpClient.post("admin/app/rename", {appId, newName}).then(rs => {
 
             this.setState({app: rs.data, showEditName: false})
-            this.refresh()
         }).finally(hide)
     }
 
@@ -271,9 +316,7 @@ export default class extends React.Component {
 
 
             <Card className='mt-4'>
-                {this.state.tabsLoading
-                    ? <Skeleton active paragraph={{rows: 8}}/>
-                    : this.renderTabs()}
+                {this.renderTabs()}
             </Card>
 
             <Modal title='重新部署'
@@ -302,7 +345,7 @@ export default class extends React.Component {
     }
 
     renderTabs = () => {
-        const {app, container} = this.state
+        const {app, container, tabTokens} = this.state
 
 
         let publishLogUrl = '/admin/sys/log/' + app.id;
@@ -310,32 +353,34 @@ export default class extends React.Component {
             {
                 key: 'log',
                 label: '部署日志',
-                children: <LogView url={publishLogUrl} websocket={false}/>
+                children: <LogView key={'log-' + tabTokens.log} url={publishLogUrl} websocket={false}/>
             },
             {
                 key: 'container',
                 label: '容器',
                 children: container && container.id
-                    ? <ContainerDetail hostId={app.host?.id} containerId={container.id} appId={app.id}
+                    ? <ContainerDetail key={'container-' + tabTokens.container}
+                                       hostId={app.host?.id} containerId={container.id} appId={app.id}
                                        height={520} onClose={this.reload}/>
                     : <Alert type='info' showIcon title='容器未部署'/>
             },
             {
                 key: 'config',
                 label: '容器配置',
-                children: <ConfigForm app={app} onChange={this.handleChanged}/>
+                children: <ConfigForm key={'config-' + tabTokens.config} app={app} onChange={this.handleChanged}/>
             },
 
             {
                 key: 'tunnel',
                 label: '隧道',
-                children: <TunnelForm app={app} onChange={this.handleChanged}/>
+                children: <TunnelForm key={'tunnel-' + tabTokens.tunnel} app={app} onChange={this.handleChanged}/>
             },
 
             {
                 key: 'publish',
                 label: '发布',
-                children: <PublishForm appId={app.id} onChange={this.handleChanged}/>
+                children: <PublishForm key={'publish-' + tabTokens.publish} appId={app.id}
+                                       onChange={this.handleChanged}/>
             },
             {
                 key: 'setting',
@@ -385,7 +430,7 @@ export default class extends React.Component {
                      tabBarExtraContent={{
                          right: <Tooltip title='刷新'>
                              <Button type='text' size='small' icon={<ReloadOutlined/>}
-                                     onClick={() => this.refresh(0)}/>
+                                     onClick={this.manualRefresh}/>
                          </Tooltip>
                      }}></Tabs>
     }

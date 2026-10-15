@@ -33,15 +33,17 @@ export default class extends React.Component {
     }
 
     setAutoDeploy = (autoDeploy) => {
-        HttpClient.get("admin/app/autoDeploy", {id: this.id, autoDeploy}).then(rs => {
-            this.props.onChange()
+        // 自动发布开关不影响容器，不通知父级刷新；保持开关自身状态即可
+        HttpClient.get("admin/app/autoDeploy", {id: this.id, autoDeploy}).then(() => {
+            this.setState(s => ({app: {...s.app, autoDeploy}}))
         })
     }
 
 
     updateVersion = (values) => {
         HttpClient.get("admin/app/updateVersion", {id: this.id, version: values.version}).then(rs => {
-            this.props.onChange()
+            // 版本变化会影响容器配置元数据（镜像声明的端口 / 卷），一并刷新
+            this.props.onChange({redeploy: true, tabs: ['config']})
         })
     }
     copyApp = (values) => {
@@ -69,8 +71,8 @@ export default class extends React.Component {
             appId: this.id,
             hostId: values.hostId
         }).then(() => {
-            // 应用记录仍在，仅主机变化，刷新当前页即可
-            this.props.onChange && this.props.onChange()
+            // 应用记录仍在，仅主机变化：重新部署后，容器配置（绑定路径）与隧道目标主机都要跟着刷新
+            this.props.onChange({redeploy: true, tabs: ['config', 'tunnel']})
         }).finally(hide)
     }
 
