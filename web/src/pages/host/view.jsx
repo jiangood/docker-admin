@@ -242,6 +242,12 @@ export default class extends React.Component {
                                   {key: 'name', label: '名称', children: host?.name || '-'},
                                   {key: 'ip', label: 'IP地址', children: host?.ip || '-'},
                                   {key: 'conn', label: '连接方式', children: connectionLabel(host?.connectionType)},
+                                  {
+                                      key: 'auth', label: '认证头',
+                                      children: host?.connectionType === 'tcp'
+                                          ? (host?.authConfigured ? '已配置' : '未配置')
+                                          : '-'
+                                  },
                                   {key: 'endpoint', label: '连接地址', children: endpointOf(host), span: 2},
                                   {key: 'version', label: 'Docker 版本', children: info?.dockerVersion || '-'},
                                   {key: 'api', label: 'API 版本', children: info?.apiVersion || '-'},

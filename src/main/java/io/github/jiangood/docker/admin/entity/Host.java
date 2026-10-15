@@ -79,6 +79,18 @@ public class Host extends BaseEntity {
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     String sshPassword;
 
+    /**
+     * 认证头：配合 docker-api-auth 等带认证的 Docker 代理使用，统一作为
+     * {@code Authorization} 头发送。可只填 token（保存时自动补 {@code Bearer } 前缀），
+     * 也可填完整值（如 {@code Bearer xxx}）。
+     * <p>
+     * 同 {@link #sshPassword}：不回传前端，编辑时留空表示沿用原值。
+     */
+    @ToString.Exclude
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
+    @Remark("认证头")
+    String authHeader;
+
     @PrePersist
     public void prePersist() {
         if (isRunner == null) {
@@ -95,5 +107,15 @@ public class Host extends BaseEntity {
     @JsonIgnore
     public boolean isSsh() {
         return TYPE_SSH.equalsIgnoreCase(connectionType);
+    }
+
+    /**
+     * 是否已配置认证头。
+     * <p>
+     * {@link #authHeader} 本身以 WRITE_ONLY 回传前端的值为空，这里用一个派生布尔量
+     * 供详情页展示「已配置 / 未配置」，不泄露明文。
+     */
+    public boolean isAuthConfigured() {
+        return authHeader != null && !authHeader.isBlank();
     }
 }

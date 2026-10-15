@@ -228,11 +228,20 @@ export default class extends React.Component {
                                 </>
                             }
                             if (type === 'tcp') {
-                                return <Form.Item label='主机地址' name='dockerHost' rules={[{required: true}]}
-                                                  tooltip={<div style={{width: 420}}>只填 IP 或主机名即可，默认端口
-                                                      2375。<br/>如需指定端口可写 192.168.1.2:2376。</div>}>
-                                    <Input placeholder='192.168.1.2（默认端口 2375）'/>
-                                </Form.Item>
+                                return <>
+                                    <Form.Item label='主机地址' name='dockerHost' rules={[{required: true}]}
+                                               tooltip={<div style={{width: 420}}>只填 IP 或主机名即可，默认端口
+                                                   2375。<br/>如需指定端口可写 192.168.1.2:2376。</div>}>
+                                        <Input placeholder='192.168.1.2（默认端口 2375）'/>
+                                    </Form.Item>
+                                    <Form.Item label='认证头' name='authHeader'
+                                               tooltip={<div style={{width: 460}}>配合 docker-api-auth
+                                                   等带认证的 Docker 代理，统一作为 <b>Authorization</b> 头发送。<br/>
+                                                   只填 token 会自动补 Bearer 前缀；编辑时留空表示不修改。</div>}>
+                                        <Input.Password autoComplete='new-password'
+                                                        placeholder='留空则不带认证头，如 your-token'/>
+                                    </Form.Item>
+                                </>
                             }
                             return <Form.Item label='Socket 路径' name='dockerHost'
                                               tooltip={<div style={{width: 460}}>{LOCAL_TIP}</div>}>

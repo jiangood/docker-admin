@@ -254,6 +254,12 @@ public class DockerClientManager {
                         .responseTimeout(RESPONSE_TIMEOUT)
                         .build();
 
+        // 配合 docker-api-auth 等带认证的 Docker 代理：为其注入 Authorization 头（为空则行为不变）
+        String authHeader = host == null ? null : host.getAuthHeader();
+        if (StrUtil.isNotBlank(authHeader)) {
+            httpClient = new AuthHeaderDockerHttpClient(httpClient, "Authorization", authHeader);
+        }
+
         return DockerClientImpl.getInstance(config, httpClient);
     }
 

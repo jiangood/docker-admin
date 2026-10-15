@@ -45,10 +45,24 @@ public class HostService extends BaseService<Host> {
         normalize(input);
         Assert.hasText(input.getIp(), "请填写主机 IP 地址");
         fillSshPassword(input);
+        fillAuthHeader(input);
         if (StrUtil.isBlank(input.getId())) {
             return create(input);
         }
         return update(input, updateFields);
+    }
+
+    /**
+     * 认证头不回传前端，编辑时留空表示沿用原值。
+     */
+    public void fillAuthHeader(Host input) {
+        if (input == null || StrUtil.isNotBlank(input.getAuthHeader()) || StrUtil.isBlank(input.getId())) {
+            return;
+        }
+        Host old = findById(input.getId()).orElse(null);
+        if (old != null) {
+            input.setAuthHeader(old.getAuthHeader());
+        }
     }
 
     /**
@@ -77,6 +91,7 @@ public class HostService extends BaseService<Host> {
             return;
         }
         host.setIp(StrUtil.trim(host.getIp()));
+        host.setAuthHeader(normalizeAuthHeader(host.getAuthHeader()));
         String dockerHost = StrUtil.trim(host.getDockerHost());
         String type = StrUtil.trim(host.getConnectionType());
 
@@ -108,6 +123,21 @@ public class HostService extends BaseService<Host> {
         } else {
             host.setDockerHost(dockerHost);
         }
+    }
+
+    /**
+     * 认证头归一化：留空保持为空（不注入请求头）；只填 token 时自动补
+     * {@code Bearer } 前缀，已带 scheme（含空格）的原样保留。
+     */
+    private String normalizeAuthHeader(String authHeader) {
+        String value = StrUtil.trim(authHeader);
+        if (StrUtil.isBlank(value)) {
+            return null;
+        }
+        if (!StrUtil.contains(value, " ")) {
+            return "Bearer " + value;
+        }
+        return value;
     }
 
     /**
