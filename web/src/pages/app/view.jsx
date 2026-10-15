@@ -12,6 +12,7 @@ import {
     message,
     Modal,
     Row,
+    Skeleton,
     Space,
     Spin,
     Tabs,
@@ -30,6 +31,12 @@ import LinkButton from "../../components/LinkButton";
 import {stateColor, stateLabel} from "../../components/container/utils";
 
 const Item = Descriptions.Item
+
+/**
+ * 修改动作后，用骨架屏占位、等待重新显示的毫秒数。
+ * 容器重启 / 部署下发是异步的，稍等几秒再让子标签重新挂载，才能看到最新状态与日志。
+ */
+const TAB_REFRESH_DELAY = 3000
 
 export default class extends React.Component {
 
@@ -57,6 +64,9 @@ export default class extends React.Component {
 
         deployLoading: false,
         deploySubmitting: false,
+
+        // 修改后为 true：隐藏 Tabs 改用骨架屏占位，重新显示时子组件会重新挂载并拉取数据
+        tabsLoading: false,
     }
 
     deployFormRef = React.createRef()
@@ -71,11 +81,12 @@ export default class extends React.Component {
 
     componentWillUnmount() {
         this._mounted = false;
+        clearTimeout(this.refreshTimer)
     }
 
 
-    loadApp() {
-        HttpClient.get('admin/app/get', {id: this.id}).then(rs => {
+    loadApp = () => {
+        return HttpClient.get('admin/app/get', {id: this.id}).then(rs => {
             this.setState({app: rs.data, loading: false});
         })
     }
@@ -83,7 +94,7 @@ export default class extends React.Component {
     loadContainer = () => {
         console.log('loadContainer')
         this.setState({containerLoading: true})
-        HttpClient.get("admin/app/container", {id: this.id}).then(rs => {
+        return HttpClient.get("admin/app/container", {id: this.id}).then(rs => {
             const container = rs.data;
             this.setState({container})
 
@@ -98,9 +109,36 @@ export default class extends React.Component {
     }
 
     reload = () => {
-        this.loadApp();
-        this.loadContainer()
+        return Promise.all([this.loadApp(), this.loadContainer()])
     };
+
+    /**
+     * 任意修改动作后的统一刷新：
+     * 1. 立即刷新一次顶部应用 / 容器信息；
+     * 2. 隐藏 Tabs 显示骨架屏，延迟几秒后重新拉取数据并让 Tabs 重新显示
+     *    （Tabs 被卸载再挂载，容器配置、发布、容器、部署日志等子标签会重新拉取最新数据）。
+     */
+    refresh = () => {
+        this.reload()
+        clearTimeout(this.refreshTimer)
+        this.setState({tabsLoading: true})
+        this.refreshTimer = setTimeout(() => {
+            if (!this._mounted) {
+                return
+            }
+            this.reload().catch(() => {
+            }).finally(() => {
+                if (this._mounted) {
+                    this.setState({tabsLoading: false})
+                }
+            })
+        }, TAB_REFRESH_DELAY)
+    }
+
+    // 子标签组件通过 onChange 回调通知父级「发生了修改」，忽略其可能传入的业务数据
+    handleChanged = () => {
+        this.refresh()
+    }
 
 
     openDeploy = () => {
@@ -129,8 +167,7 @@ export default class extends React.Component {
             }).then(() => {
                 this.setState({deployVisible: false, activeTab: 'log'})
                 message.success('部署指令已发送，请前往「部署日志」查看进度')
-                this.loadApp()
-                this.loadContainer()
+                this.refresh()
             }).finally(() => {
                 hide()
                 this.setState({deploySubmitting: false})
@@ -140,7 +177,7 @@ export default class extends React.Component {
     start = () => {
         this.setState({starting: true})
         HttpClient.post('admin/app/start/' + this.state.app.id).then(() => {
-            this.loadContainer()
+            this.refresh()
         }).finally(() => {
             this.setState({starting: false})
         })
@@ -148,7 +185,7 @@ export default class extends React.Component {
     stop = () => {
         this.setState({stopping: true})
         HttpClient.post('admin/app/stop/' + this.state.app.id).then(() => {
-            this.loadContainer()
+            this.refresh()
         }).finally(() => {
             this.setState({stopping: false})
         })
@@ -186,6 +223,7 @@ export default class extends React.Component {
         HttpClient.post("admin/app/rename", {appId, newName}).then(rs => {
 
             this.setState({app: rs.data, showEditName: false})
+            this.refresh()
         }).finally(hide)
     }
 
@@ -230,7 +268,9 @@ export default class extends React.Component {
 
 
             <Card className='mt-4'>
-                {this.renderTabs()}
+                {this.state.tabsLoading
+                    ? <Skeleton active paragraph={{rows: 8}}/>
+                    : this.renderTabs()}
             </Card>
 
             <Modal title='重新部署'
@@ -280,19 +320,19 @@ export default class extends React.Component {
             {
                 key: 'config',
                 label: '容器配置',
-                children: <ConfigForm app={app} onChange={this.reload}/>
+                children: <ConfigForm app={app} onChange={this.handleChanged}/>
             },
 
             {
                 key: 'tunnel',
                 label: '隧道',
-                children: <TunnelForm app={app} onChange={this.reload}/>
+                children: <TunnelForm app={app} onChange={this.handleChanged}/>
             },
 
             {
                 key: 'publish',
                 label: '发布',
-                children: <PublishForm appId={app.id} onChange={this.reload}/>
+                children: <PublishForm appId={app.id} onChange={this.handleChanged}/>
             },
             {
                 key: 'setting',
