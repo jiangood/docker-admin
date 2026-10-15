@@ -1,6 +1,6 @@
 import React from "react";
 import {AutoComplete, Button, Divider, Form, Input, message, Modal, Skeleton, Switch, Typography} from "antd";
-import {EventBus, FieldRemoteSelect, HttpClient, PageUtils, PermActions} from "@jiangood/open-admin";
+import {FieldRemoteSelect, HttpClient, PageUtils, PermActions} from "@jiangood/open-admin";
 
 /**
  * 发布标签页
@@ -67,28 +67,11 @@ export default class extends React.Component {
         const hide = message.loading('迁移中..', 0)
         HttpClient.post('admin/app/migrateApp', {
             appId: this.id,
-            hostId: values.hostId,
-            name: values.name
+            hostId: values.hostId
         }).then(rs => {
-            const newAppId = rs.data.id;
-            Modal.confirm({
-                icon: null,
-                title: '迁移完成',
-                content: '原应用已删除，是否打开迁移后的应用？不打开将关闭当前页。',
-                okText: '打开',
-                cancelText: '关闭',
-                onOk() {
-                    // 先打开新应用，再关闭原（已删除的）应用标签页。
-                    // 顺序不能反：原标签页处于激活态时关闭会触发一次延迟跳转，覆盖新标签页。
-                    const oldUrl = PageUtils.currentUrl()
-                    PageUtils.open('/app/view?id=' + newAppId, '应用-' + rs.data.name)
-                    EventBus.emit('closePage', oldUrl)
-                },
-                onCancel() {
-                    // 原应用已删除，留在原页无意义，关闭当前标签页
-                    PageUtils.closeCurrent()
-                }
-            })
+            message.success('迁移成功，正在目标主机重新部署')
+            // 应用记录仍在，仅主机变化，刷新当前页即可
+            this.props.onChange && this.props.onChange()
         }).finally(hide)
     }
 
@@ -108,14 +91,6 @@ export default class extends React.Component {
 
     validateCopyName = (_, value) => {
         return value ? this.checkNameUnique(value) : Promise.resolve()
-    }
-
-    validateMigrateName = (_, value) => {
-        // 留空沿用原名，或与当前应用同名（迁移会删除原应用）时不校验
-        if (!value || value === this.state.app.name) {
-            return Promise.resolve()
-        }
-        return this.checkNameUnique(value)
     }
 
 
@@ -198,17 +173,9 @@ export default class extends React.Component {
             <div style={rowStyle}>
                 <div>
                     <div>迁移应用</div>
-                    <Typography.Text type='secondary'>迁移到其他主机，完成后删除当前应用；隧道需在新应用上重新配置</Typography.Text>
+                    <Typography.Text type='secondary'>在原主机停止并移除容器，切换到目标主机后重新部署</Typography.Text>
                 </div>
                 <Form onFinish={this.migrateApp} layout='inline'>
-                    <Form.Item name='name' style={{marginBottom: 0}} validateTrigger='onBlur'
-                               rules={[
-                                   {pattern: /^[A-Za-z]/, message: '必须以字母开头'},
-                                   {validator: this.validateMigrateName},
-                               ]}>
-                        <Input style={{width: 200}} placeholder={'默认沿用原名 ' + app.name}/>
-                    </Form.Item>
-
                     <Form.Item name='hostId' style={{marginBottom: 0}} rules={[{required: true}]}>
                         <FieldRemoteSelect url='admin/host/options' placeholder='请选择目标主机' style={{width: 300}}/>
                     </Form.Item>

@@ -311,20 +311,20 @@ public class AppController {
 
 
     /**
-     * 迁移应用：在目标主机创建副本并删除原应用。
+     * 迁移应用：在原主机停止并移除容器，切换到目标主机后重新部署。
      */
     @HasPermission("app:migrate")
     @RequestMapping("migrateApp")
     public AjaxResult migrateApp(@RequestBody @Validated MoveParam param) {
         assertAppAccess(param.getAppId());
-        App app = service.migrateApp(param.getAppId(), param.getHostId(), param.getName());
+        App app = service.migrateApp(param.getAppId(), param.getHostId());
 
         return AjaxResult.ok().msg("迁移成功").data(app);
     }
 
 
     /**
-     * 校验应用名称是否已被占用（复制/迁移应用时前端先行校验）。
+     * 校验应用名称是否已被占用（复制应用时前端先行校验）。
      */
     @HasPermission("app:view")
     @RequestMapping("existsName")
