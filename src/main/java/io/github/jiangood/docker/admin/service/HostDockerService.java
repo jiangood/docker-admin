@@ -13,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -24,8 +25,22 @@ import java.util.List;
 @Service
 public class HostDockerService {
 
+    /**
+     * 「测试连接」的兜底超时。正常情况下 SSH 预检已经给出明确结论，
+     * 这里只兜住传输层的异常情况（见 {@link DockerClientManager#callWithTimeout}）。
+     */
+    private static final Duration TEST_TIMEOUT = Duration.ofSeconds(15);
+
     @Resource
     private DockerClientManager dockerClientManager;
+
+    /**
+     * 测试主机 docker 连通性，返回远端 docker 版本号。
+     */
+    public String dockerVersion(Host host) {
+        dockerClientManager.checkSshDocker(host);
+        return dockerClientManager.callWithTimeout(host, TEST_TIMEOUT, client -> client.versionCmd().exec().getVersion());
+    }
 
     public List<HostImageVo> listImages(Host host) {
         DockerClient client = dockerClientManager.getClient(host);

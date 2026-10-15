@@ -1,10 +1,7 @@
 package io.github.jiangood.docker.admin.controller;
 
-import com.github.dockerjava.api.DockerClient;
-import com.github.dockerjava.api.model.Version;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.service.HostService;
-import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import io.github.jiangood.openadmin.util.dto.AjaxResult;
 import io.github.jiangood.openadmin.util.dto.Option;
 import io.github.jiangood.openadmin.framework.data.specification.Spec;
@@ -32,9 +29,6 @@ public class HostController  {
     @Resource
     private io.github.jiangood.docker.admin.service.HostDockerService hostDockerService;
 
-    @Resource
-    private DockerClientManager dockerClientManager;
-
     @HasPermission("host:list")
     @RequestMapping("page")
     public AjaxResult page(Host request, @PageableDefault(direction = Sort.Direction.DESC, sort = "updateTime") Pageable pageable) throws Exception {
@@ -59,9 +53,9 @@ public class HostController  {
     public AjaxResult test(@RequestBody Host input) {
         service.normalize(input);
         service.fillSshPassword(input);
-        try (DockerClient client = dockerClientManager.createClient(input, null)) {
-            Version version = client.versionCmd().exec();
-            return AjaxResult.ok().msg("连接成功，Docker 版本：" + version.getVersion());
+        try {
+            String version = hostDockerService.dockerVersion(input);
+            return AjaxResult.ok().msg("连接成功，Docker 版本：" + version);
         } catch (Exception e) {
             log.error("测试主机连接失败", e);
             return AjaxResult.err("连接失败：" + e.getMessage());

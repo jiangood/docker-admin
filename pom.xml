@@ -46,6 +46,12 @@
         -->
         <docker-java-jsch.version>1.4</docker-java-jsch.version>
 
+        <!--
+          JSch：docker-java-transport-jsch 的传递依赖，这里显式声明是因为「测试连接」的 SSH 预检直接使用它。
+          版本必须与传输层传递引入的一致（1.4 对应 2.27.7），否则会引入两套 JSch 类。
+        -->
+        <jsch.version>2.27.7</jsch.version>
+
         <jgit.version>7.8.0.202609011348-r</jgit.version>
     </properties>
 
@@ -75,6 +81,11 @@
                 <groupId>com.github.mwiede.dockerjava</groupId>
                 <artifactId>docker-java-transport-jsch</artifactId>
                 <version>${docker-java-jsch.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.mwiede</groupId>
+                <artifactId>jsch</artifactId>
+                <version>${jsch.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.eclipse.jgit</groupId>
@@ -141,6 +152,12 @@
         <dependency>
             <groupId>com.github.mwiede.dockerjava</groupId>
             <artifactId>docker-java-transport-jsch</artifactId>
+        </dependency>
+
+        <!-- 主机「测试连接」的 SSH 预检：先判断远端有没有 docker、daemon 是否可达 -->
+        <dependency>
+            <groupId>com.github.mwiede</groupId>
+            <artifactId>jsch</artifactId>
         </dependency>
 
 
