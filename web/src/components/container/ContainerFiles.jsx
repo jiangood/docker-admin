@@ -72,7 +72,7 @@ export default class extends React.Component {
     breadcrumbItems = () => {
         const {path} = this.state
         const parts = (path || '/').split('/').filter(Boolean)
-        const items = [{title: <LinkButton onClick={() => this.load('/')}>/</LinkButton>}]
+        const items = [{title: <a style={{cursor: 'pointer'}} onClick={() => this.load('/')}>/</a>}]
         let acc = ''
         parts.forEach((p, i) => {
             acc += '/' + p
@@ -80,7 +80,7 @@ export default class extends React.Component {
             items.push({
                 title: i === parts.length - 1
                     ? <span>{p}</span>
-                    : <LinkButton onClick={() => this.load(target)}>{p}</LinkButton>
+                    : <a style={{cursor: 'pointer'}} onClick={() => this.load(target)}>{p}</a>
             })
         })
         return items
@@ -131,11 +131,15 @@ export default class extends React.Component {
         ]
 
         return <>
-            <Space className='mb-3' wrap>
+            <div className='mb-3'
+                 style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                         gap: 'var(--space-4)', flexWrap: 'wrap'}}>
                 <Breadcrumb items={this.breadcrumbItems()}/>
-                <Button size='small' icon={<ReloadOutlined/>} onClick={this.refresh}>刷新</Button>
-                <Typography.Text type='secondary'>路径：{path}</Typography.Text>
-            </Space>
+                <Space size={8}>
+                    <Button size='small' icon={<ReloadOutlined/>} onClick={this.refresh}>刷新</Button>
+                    <Typography.Text type='secondary'>路径：{path}</Typography.Text>
+                </Space>
+            </div>
 
             {error ? <Alert type='error' showIcon title={error}/> :
                 <Spin spinning={loading}>
