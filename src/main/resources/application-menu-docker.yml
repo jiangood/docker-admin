@@ -4,19 +4,6 @@ menus:
     name: 容器平台
     icon: AppstoreOutlined
     seq: 10
-  image-repo:
-    pid: biz
-    name: 镜像仓库
-    path: /image-repo
-    icon: DatabaseOutlined
-    perms:
-      - { name: 查看, code: image-repo:view }
-      - { name: 导出, code: image-repo:export }
-      - { name: 删除, code: image-repo:delete }
-      - { name: 补录, code: image-repo:sync }
-  divider-image-repo:
-    pid: biz
-    type: divider
   project:
     pid: biz
     name: 项目
@@ -42,6 +29,19 @@ menus:
       - {name: 部署, code: app:deploy}
       - {name: 隧道, code: app:tunnel}
   divider-app:
+    pid: biz
+    type: divider
+  image-repo:
+    pid: biz
+    name: 镜像仓库
+    path: /image-repo
+    icon: DatabaseOutlined
+    perms:
+      - { name: 查看, code: image-repo:view }
+      - { name: 导出, code: image-repo:export }
+      - { name: 删除, code: image-repo:delete }
+      - { name: 补录, code: image-repo:sync }
+  divider-image-repo:
     pid: biz
     type: divider
   setting:
