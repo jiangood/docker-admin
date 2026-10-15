@@ -111,34 +111,44 @@ public class HostDockerService {
     public HostInfoVo info(Host host) {
         DockerClient client = dockerClientManager.getClient(host);
         try {
-            HostInfoVo vo = new HostInfoVo();
-            vo.setName(host == null ? null : host.getName());
-            vo.setConnectionType(host == null ? null : host.getConnectionType());
-            vo.setEndpoint(host == null ? null : host.getDockerHost());
-
-            Version version = client.versionCmd().exec();
-            vo.setDockerVersion(version.getVersion());
-            vo.setApiVersion(version.getApiVersion());
-            vo.setMinApiVersion(version.getMinAPIVersion());
-            vo.setArch(version.getArch());
-            vo.setKernelVersion(version.getKernelVersion());
-
-            Info info = client.infoCmd().exec();
-            vo.setOs(info.getOperatingSystem());
-            vo.setArch(info.getArchitecture() != null ? info.getArchitecture() : vo.getArch());
-            vo.setServerName(info.getName());
-            vo.setLoggingDriver(info.getLoggingDriver());
-            vo.setCgroupDriver(info.getCGroupDriver());
-            vo.setMemory(info.getMemTotal());
-            vo.setCpus(info.getNCPU());
-            vo.setContainersRunning(info.getContainersRunning());
-            vo.setContainersStopped(info.getContainersStopped());
-            vo.setContainersTotal(info.getContainers());
-            vo.setImages(info.getImages());
-            return vo;
+            return info(client, host);
         } finally {
             IOUtils.closeQuietly(client);
         }
+    }
+
+    /**
+     * 用已建立的客户端读取引擎信息，<b>不负责关闭客户端</b>。
+     * <p>
+     * 供需要自行控制超时与客户端生命周期的调用方使用（如首页汇总的
+     * {@link io.github.jiangood.docker.sdk.engine.DockerClientManager#callWithTimeout}）。
+     */
+    public HostInfoVo info(DockerClient client, Host host) {
+        HostInfoVo vo = new HostInfoVo();
+        vo.setName(host == null ? null : host.getName());
+        vo.setConnectionType(host == null ? null : host.getConnectionType());
+        vo.setEndpoint(host == null ? null : host.getDockerHost());
+
+        Version version = client.versionCmd().exec();
+        vo.setDockerVersion(version.getVersion());
+        vo.setApiVersion(version.getApiVersion());
+        vo.setMinApiVersion(version.getMinAPIVersion());
+        vo.setArch(version.getArch());
+        vo.setKernelVersion(version.getKernelVersion());
+
+        Info info = client.infoCmd().exec();
+        vo.setOs(info.getOperatingSystem());
+        vo.setArch(info.getArchitecture() != null ? info.getArchitecture() : vo.getArch());
+        vo.setServerName(info.getName());
+        vo.setLoggingDriver(info.getLoggingDriver());
+        vo.setCgroupDriver(info.getCGroupDriver());
+        vo.setMemory(info.getMemTotal());
+        vo.setCpus(info.getNCPU());
+        vo.setContainersRunning(info.getContainersRunning());
+        vo.setContainersStopped(info.getContainersStopped());
+        vo.setContainersTotal(info.getContainers());
+        vo.setImages(info.getImages());
+        return vo;
     }
 
     private static long nvl(Long v) {

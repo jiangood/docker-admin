@@ -3,6 +3,7 @@ package io.github.jiangood.docker.admin.controller;
 import io.github.jiangood.docker.admin.entity.BuildLog;
 import io.github.jiangood.docker.admin.entity.Project;
 import io.github.jiangood.docker.admin.service.BuildLogService;
+import io.github.jiangood.docker.admin.service.HostSummaryService;
 import io.github.jiangood.docker.admin.service.ProjectService;
 import io.github.jiangood.openadmin.framework.auth.LoginTool;
 import io.github.jiangood.openadmin.framework.data.specification.Spec;
@@ -14,6 +15,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Duration;
@@ -29,6 +31,22 @@ public class HomeController {
 
     @Resource
     ProjectService projectService;
+
+    @Resource
+    HostSummaryService hostSummaryService;
+
+    /**
+     * 首页「主机资源汇总」看板。参考 Rancher 首页：全局概览 + 逐主机明细。
+     * <p>
+     * 需要 {@code host:list}：没有主机查看权限的用户首页不展示该看板，前端据此隐藏。
+     *
+     * @param refresh 为 true 时忽略 30 秒缓存强制重新汇总
+     */
+    @HasPermission("host:list")
+    @RequestMapping("hostSummary")
+    public AjaxResult hostSummary(@RequestParam(defaultValue = "false") boolean refresh) {
+        return AjaxResult.ok().data(hostSummaryService.summary(refresh));
+    }
 
     @HasPermission("app:view")
     @RequestMapping("buildingPage")
