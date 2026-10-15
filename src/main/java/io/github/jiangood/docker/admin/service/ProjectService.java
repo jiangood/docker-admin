@@ -315,6 +315,7 @@ public class ProjectService extends BaseService<Project> {
 
 
         DockerClient client = null;
+        File workDir = null;
         FileLog.bind(logId);
         try {
 
@@ -326,7 +327,7 @@ public class ProjectService extends BaseService<Project> {
             fileLog.info("构建主机信息... 名称：{}, host:{}", host.getName(), host.getDockerHost());
 
             GitTool.CloneResult cloneResult = gitClone(project, tag);
-            File workDir = cloneResult.getDir();
+            workDir = cloneResult.getDir();
             fileLog.info("代码下载完毕 " + workDir);
             fileLog.info("代码提交信息: {}", cloneResult.getCodeMessage());
             Date commitTime = Date.from(cloneResult.getCommitTime().atZone(ZoneId.systemDefault()).toInstant());
@@ -449,8 +450,24 @@ public class ProjectService extends BaseService<Project> {
             buildLogService.save(buildLog);
         } finally {
             IOUtils.closeQuietly(client);
+            // 构建上下文已完整传给 Docker（成功、失败、取消都会走到这里），代码目录用后即删，
+            // 否则多次构建后历史克隆会一直堆积；进程被强杀等异常退出留下的目录由 CleanGitCodeJob 兜底。
+            deleteWorkDir(workDir);
             FileLog.unbind();
             taskLogRegistry.finish(logId);
+        }
+    }
+
+    /** 删除本次构建的代码目录，并记入构建日志。 */
+    private void deleteWorkDir(File workDir) {
+        if (workDir == null || !workDir.exists()) {
+            return;
+        }
+        long size = FileUtil.size(workDir);
+        if (FileUtil.del(workDir)) {
+            fileLog.info("已删除代码目录 {}（{}）", workDir.getAbsolutePath(), FileUtil.readableFileSize(size));
+        } else {
+            fileLog.warn("删除代码目录失败 {}", workDir.getAbsolutePath());
         }
     }
 

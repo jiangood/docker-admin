@@ -66,10 +66,13 @@ public class GitTool {
     private static final String DEFAULT_COMMIT_MESSAGE = "chore: 更新 Dockerfile";
 
     /**
-     * 代码克隆根目录，每次克隆在其下按 仓库名/时间戳 新建工作目录。
-     * 目录不会随构建结束自动删除，由 {@code CleanGitCodeJob} 定时清理。
+     * 代码克隆根目录，每次克隆在其下按 仓库名/时间戳-uuid 新建工作目录。
+     * <p>
+     * 放在系统临时目录（容器内即 /tmp），不占用持久化的 /data：正常构建结束后目录会被
+     * {@code ProjectService#buildImageJob} 立即删除，容器重建时残留也随之消失；
+     * 进程异常退出留下的目录由 {@code CleanGitCodeJob} 定时兜底清理。
      */
-    public static final String CLONE_BASE_DIR = "/data/gitcode";
+    public static final String CLONE_BASE_DIR = new File(FileUtil.getTmpDir(), "gitcode").getAbsolutePath();
 
     /**
      * 接受任意 SSH 主机密钥：代码源可配置的是私钥而非 known_hosts，
@@ -208,16 +211,14 @@ public class GitTool {
         String dirName = url.substring(url.lastIndexOf("/") + 1);
         dirName = dirName.replace(".git", "");
 
-        File workDir = new File(CLONE_BASE_DIR, dirName + "/" + DateUtil.date().toString("yyyyMMddHHmmss"));
+        File workDir = new File(CLONE_BASE_DIR,
+                dirName + "/" + DateUtil.date().toString("yyyyMMddHHmmss") + "-" + IdUtil.fastSimpleUUID());
 
         long start = System.currentTimeMillis();
 
 
         fileLog.info("工作目录为 {}", workDir.getAbsolutePath());
         fileLog.info("克隆代码 {}", url);
-
-        FileUtil.del(workDir);
-
 
         CloneCommand cloneCommand = Git.cloneRepository()
                 .setCloneSubmodules(true)

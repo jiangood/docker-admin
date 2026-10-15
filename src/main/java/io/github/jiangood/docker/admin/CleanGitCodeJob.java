@@ -15,18 +15,20 @@ import java.io.File;
 /**
  * 清理代码克隆根目录 {@link GitTool#CLONE_BASE_DIR} 下的历史工作目录。
  * <p>
- * 每次构建都会新建 {@code /data/gitcode/<仓库名>/<时间戳>} 目录，构建结束后不自动删除，
- * 需定时清理以免磁盘占满。仅删除最后修改时间超过保留天数的目录，正在构建的目录不受影响。
+ * 克隆目录位于系统临时目录（容器内 /tmp），正常构建结束即被删除（见
+ * {@code ProjectService#buildImageJob}），本任务只作为兜底：进程被强杀、容器异常退出等
+ * 未走到删除逻辑时，清理这里残留的目录，避免磁盘占满。仅删除最后修改时间超过保留天数的目录，
+ * 正在构建的目录不受影响。
  */
 @Component
 @JobDescription(label = "清理代码目录", params = {
-        @FieldDescription(name = "retainDays", label = "保留天数", required = true, defaultValue = "7",
+        @FieldDescription(name = "retainDays", label = "保留天数", required = true, defaultValue = "1",
                 placeholder = "最后修改时间超过该天数的代码目录将被删除")
 })
 public class CleanGitCodeJob extends BaseJob {
 
     /** 保留天数，任务参数未配置时的默认值。 */
-    private static final int DEFAULT_RETAIN_DAYS = 7;
+    private static final int DEFAULT_RETAIN_DAYS = 1;
 
     private static final long ONE_DAY_MILLIS = 24L * 60 * 60 * 1000;
 
