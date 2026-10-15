@@ -27,13 +27,17 @@ import java.util.Objects;
  * 隧道（http-tunnel）：平台通过每个客户端自身的隧道管理 API（{@code --api-port}）维护隧道。
  * <p>
  * http-tunnel v0.12.0 起，隧道配置在客户端侧：服务端不再读配置文件，客户端把
- * 「域名 → 目标地址」写在自己的 {@code client.toml} 里。平台的改动由客户端本地校验并落盘，
+ * 隧道（{@code name}/{@code domain}/{@code local_addr}）写在自己的 {@code client.toml} 里。
+ * 平台的改动由客户端本地校验并落盘，
  * 不再需要先连上服务端，因此不存在「未连接到服务端」的 503，也不会因域名重名被拒（重复域名以
  * 后连接的控制通道为准，运行期 last-wins）。客户端所在目录需可写，否则落盘失败会返回 500。
  * <p>
  * 客户端进程运行在各业务主机上，平台只保存其名称、令牌、API 地址与域名，不部署容器、不生成配置。
  * 应用在详情页「隧道」标签里显式选择客户端，完整域名 = 域名前缀 + "." + 客户端域名；
  * 目标地址在客户端主机上解析（{@code 127.0.0.1:<主机端口>}）。
+ * <p>
+ * 自 http-tunnel v0.13.0 起，隧道以 {@code name} 为标识，平台用「应用 id」作 name、完整域名作 domain：
+ * 增删改都按 name 定位，改前缀 / 换客户端都能稳定命中，不必再从旧前缀反推旧域名。
  */
 @Service
 @Slf4j
@@ -133,12 +137,12 @@ public class TunnelService {
                 JsonNode arr = api.listTunnels(c);
                 if (arr != null && arr.isArray()) {
                     for (JsonNode t : arr) {
-                        String domain = text(t, "name");
-                        if (StrUtil.isNotBlank(domain)) {
+                        String name = text(t, "name");
+                        if (StrUtil.isNotBlank(name)) {
                             try {
-                                api.deleteTunnel(c, domain);
+                                api.deleteTunnel(c, name);
                             } catch (Exception e) {
-                                log.warn("删除客户端 {} 的隧道 {} 失败：{}", c.getName(), domain, e.getMessage());
+                                log.warn("删除客户端 {} 的隧道 {} 失败：{}", c.getName(), name, e.getMessage());
                             }
                         }
                     }
@@ -182,9 +186,10 @@ public class TunnelService {
     // ------------------------------------------------------------------ 隧道
 
     /**
-     * 全部隧道（逐个客户端调用其管理 API 聚合：域名 → 目标地址）。
+     * 全部隧道（逐个客户端调用其管理 API 聚合：名称、域名 → 目标地址）。
      * <p>
-     * 隧道由应用详情页的「隧道」标签维护，这里只提供只读列表。
+     * 隧道由应用详情页的「隧道」标签维护，这里只提供只读列表。平台下发的 name 即应用 id，
+     * 因此能反查出应用名称，便于识别每条隧道属于哪个应用。
      */
     public List<Map<String, Object>> listTunnels() {
         List<Map<String, Object>> list = new ArrayList<>();
@@ -198,9 +203,13 @@ public class TunnelService {
                     continue;
                 }
                 for (JsonNode t : arr) {
-                    String domain = text(t, "name");
+                    String name = text(t, "name");
+                    String domain = text(t, "domain");
                     Map<String, Object> item = new LinkedHashMap<>();
                     item.put("client", c.getName());
+                    item.put("name", name);
+                    item.put("appName", name == null ? null
+                            : appRepository.findById(name).map(App::getName).orElse(null));
                     item.put("domain", domain);
                     item.put("localAddr", text(t, "local_addr"));
                     item.put("url", domainUrl(domain));
@@ -214,13 +223,14 @@ public class TunnelService {
     }
 
     /**
-     * 新增 / 修改隧道（PUT 幂等）。域名在服务端全局唯一。
+     * 新增 / 修改隧道（PUT 幂等）。按 name 定位，domain 为对外域名。
      */
-    public void putTunnel(TunnelClient client, String domain, String localAddr) {
+    public void putTunnel(TunnelClient client, String name, String domain, String localAddr) {
         Assert.notNull(client, "缺少客户端");
         Assert.isTrue(client.configured(), "客户端「" + client.getName() + "」未配置 API 地址或令牌");
+        Assert.hasText(name, "缺少隧道名称");
         Assert.hasText(localAddr, "请填写目标地址");
-        api.putTunnel(client, normalizeDomain(domain), StrUtil.trim(localAddr));
+        api.putTunnel(client, name.trim(), normalizeDomain(domain), StrUtil.trim(localAddr));
     }
 
     // ------------------------------------------------------------------ 应用隧道
@@ -270,8 +280,8 @@ public class TunnelService {
     }
 
     /**
-     * 应用隧道开关：开启时按 域名前缀 + 所选客户端域名 拼出完整域名并写入客户端，
-     * 关闭、换客户端或改前缀时清理旧映射。
+     * 应用隧道开关：开启时按 域名前缀 + 所选客户端域名 拼出完整域名，
+     * 以「应用 id」为隧道名写入客户端；关闭、换客户端或改前缀时清理旧映射。
      */
     @Transactional
     public App saveAppTunnel(String appId, boolean enabled, String clientId, String prefix, Integer port) {
@@ -288,7 +298,7 @@ public class TunnelService {
             String fullDomain = normalizeDomain(p + "." + client.getDomain());
 
             cleanupApplied(app, client, fullDomain);
-            api.putTunnel(client, fullDomain, forwardHost(app) + ":" + hostPort);
+            api.putTunnel(client, app.getId(), fullDomain, forwardHost(app) + ":" + hostPort);
 
             app.setTunnelEnabled(true);
             app.setTunnelPrefix(p);
@@ -303,30 +313,25 @@ public class TunnelService {
     }
 
     /**
-     * 清理应用上一次下发到客户端的隧道映射。
-     * 换客户端时删除旧客户端的映射；同一客户端改前缀时删除旧域名；域名未变则跳过（PUT 幂等覆盖）。
+     * 清理应用上一次下发到客户端的隧道。
+     * <p>
+     * 隧道以应用 id 为名，直接按名删除即可；同一客户端、同一域名时跳过（PUT 幂等覆盖，避免打断在途请求）。
      */
     private void cleanupApplied(App app, TunnelClient target, String newDomain) {
         if (!Boolean.TRUE.equals(app.getTunnelEnabled())) {
             return;
         }
         TunnelClient old = app.getTunnelClient();
-        String oldDomain = appliedDomain(app, old);
-        if (oldDomain == null) {
+        if (old == null || !old.configured()) {
             return;
         }
-        boolean sameClient = target != null && old != null && StrUtil.equals(target.getId(), old.getId());
-        boolean sameDomain = newDomain != null && oldDomain.equalsIgnoreCase(newDomain);
+        String oldDomain = appliedDomain(app, old);
+        boolean sameClient = target != null && StrUtil.equals(target.getId(), old.getId());
+        boolean sameDomain = newDomain != null && oldDomain != null && oldDomain.equalsIgnoreCase(newDomain);
         if (sameClient && sameDomain) {
             return;
         }
-        if (old != null && old.configured()) {
-            try {
-                api.deleteTunnel(old, oldDomain);
-            } catch (Exception e) {
-                log.warn("清理应用 {} 的隧道 {} 失败：{}", app.getName(), oldDomain, e.getMessage());
-            }
-        }
+        deleteTunnelQuietly(old, app.getId());
     }
 
     /**
@@ -336,14 +341,24 @@ public class TunnelService {
         if (app == null || !Boolean.TRUE.equals(app.getTunnelEnabled())) {
             return;
         }
+        TunnelClient client = app.getTunnelClient();
+        if (client == null || !client.configured()) {
+            return;
+        }
+        deleteTunnelQuietly(client, app.getId());
+    }
+
+    /**
+     * 尽力删除客户端上的隧道（按 name），失败只记日志。name 为空时跳过。
+     */
+    private void deleteTunnelQuietly(TunnelClient client, String name) {
+        if (StrUtil.isBlank(name)) {
+            return;
+        }
         try {
-            TunnelClient client = app.getTunnelClient();
-            String old = appliedDomain(app, client);
-            if (old != null && client != null && client.configured()) {
-                api.deleteTunnel(client, old);
-            }
+            api.deleteTunnel(client, name);
         } catch (Exception e) {
-            log.warn("删除应用 {} 的隧道失败：{}", app.getName(), e.getMessage());
+            log.warn("删除客户端 {} 的隧道 {} 失败：{}", client.getName(), name, e.getMessage());
         }
     }
 

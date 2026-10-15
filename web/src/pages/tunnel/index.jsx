@@ -190,6 +190,12 @@ export default class extends React.Component {
             title: '访问地址', dataIndex: 'url',
             render: v => v ? <a href={v} target='_blank' rel='noreferrer'>{v}</a> : '-'
         },
+        {
+            title: '名称', dataIndex: 'name',
+            render: (v, row) => row.appName
+                ? <Tooltip title={v}>{row.appName}</Tooltip>
+                : (v ? <Typography.Text type='secondary'>{v}</Typography.Text> : '-')
+        },
         {title: '域名', dataIndex: 'domain'},
         {title: '客户端', dataIndex: 'client', render: v => v || '-'},
         {title: '目标地址', dataIndex: 'localAddr', render: v => v || '-'},

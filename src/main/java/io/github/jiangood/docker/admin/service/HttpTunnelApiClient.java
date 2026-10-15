@@ -26,14 +26,17 @@ import java.util.Map;
  * <pre>
  *   GET    /api/status
  *   GET    /api/tunnels
- *   PUT    /api/tunnels/{domain}   body: {"local_addr":"host:port"}
- *   DELETE /api/tunnels/{domain}
+ *   PUT    /api/tunnels/{name}    body: {"domain":"host","local_addr":"host:port"}
+ *   DELETE /api/tunnels/{name}
  * </pre>
  * 认证方式为请求头 {@code Authorization: Bearer <客户端令牌>}；错误体为 {@code {"error":"..."}}。
  * <p>
- * 自 http-tunnel v0.12.0 起，隧道配置在客户端侧：改动由客户端本地校验并写回其
- * {@code client.toml}，不依赖隧道服务端，因此不会返回 503（未连接到服务端），
- * 但客户端所在目录不可写时会返回 500。
+ * 自 http-tunnel v0.13.0 起，隧道以 {@code name} 为标识（平台用应用 id），{@code domain} 只作为
+ * 对外域名（服务端按 Host 路由）。因此增删改都按 {@code name} 定位，改前缀/换客户端都能稳定命中，
+ * 不会再删错或留下孤儿隧道；{@code GET /api/tunnels} 同时返回 {@code name} 与 {@code domain}。
+ * <p>
+ * 隧道配置在客户端侧：改动由客户端本地校验并写回其 {@code client.toml}，不依赖隧道服务端，
+ * 因此不会返回 503（未连接到服务端），但客户端所在目录不可写时会返回 500。
  */
 @Slf4j
 @Service
@@ -53,14 +56,15 @@ public class HttpTunnelApiClient {
         return request(client, "GET", "/api/tunnels", null, false);
     }
 
-    public JsonNode putTunnel(TunnelClient client, String domain, String localAddr) {
+    public JsonNode putTunnel(TunnelClient client, String name, String domain, String localAddr) {
         Map<String, Object> body = new LinkedHashMap<>();
+        body.put("domain", domain);
         body.put("local_addr", localAddr);
-        return request(client, "PUT", "/api/tunnels/" + encode(domain), body, false);
+        return request(client, "PUT", "/api/tunnels/" + encode(name), body, false);
     }
 
-    public void deleteTunnel(TunnelClient client, String domain) {
-        request(client, "DELETE", "/api/tunnels/" + encode(domain), null, true);
+    public void deleteTunnel(TunnelClient client, String name) {
+        request(client, "DELETE", "/api/tunnels/" + encode(name), null, true);
     }
 
     // ------------------------------------------------------------------ 内部
