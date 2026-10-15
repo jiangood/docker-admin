@@ -418,6 +418,7 @@ public class AppService extends BaseService<App> {
         // 远程删除应用
         App app = appRepository.findById(id).orElse(null);
         assertTunnelClosed(app, "删除");
+        // 隧道必然已关闭，这里仅作兜底（防止历史数据里已关闭但客户端仍残留映射）
         tunnelService.removeAppTunnel(app);
         deleteContainer(app);
 
@@ -425,11 +426,14 @@ public class AppService extends BaseService<App> {
     }
 
     /**
-     * 强制删除应用数据：先尽力清理隧道再删库，用于容器已不可达、无法正常删除的兜底场景。
+     * 强制删除应用数据：用于容器已不可达、无法正常删除的兜底场景。
+     * 与正常删除一样要求隧道已关闭——关闭隧道只依赖隧道客户端、不依赖 docker 主机，不会让用户卡住。
      */
     @Transactional
     public void forceDeleteApp(String id) {
         App app = appRepository.findById(id).orElse(null);
+        assertTunnelClosed(app, "删除");
+        // 隧道必然已关闭，这里仅作兜底（防止历史数据里已关闭但客户端仍残留映射）
         tunnelService.removeAppTunnel(app);
         deleteById(id);
     }
