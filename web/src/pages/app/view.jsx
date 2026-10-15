@@ -49,6 +49,14 @@ export default class extends React.Component {
 
         deployVisible: false,
         versionOptions: [],
+
+        activeTab: 'log',
+
+        stopping: false,
+        starting: false,
+
+        deployLoading: false,
+        deploySubmitting: false,
     }
 
     deployFormRef = React.createRef()
@@ -96,11 +104,14 @@ export default class extends React.Component {
 
 
     openDeploy = () => {
+        this.setState({deployLoading: true})
         HttpClient.get('admin/app/versions', {id: this.state.app.id}).then(rs => {
             this.setState({
                 versionOptions: rs.data || [],
                 deployVisible: true
             })
+        }).finally(() => {
+            this.setState({deployLoading: false})
         })
     }
 
@@ -108,7 +119,7 @@ export default class extends React.Component {
         this.deployFormRef.current.validateFields().then(values => {
             const {container} = this.state
             container.state = 'deploying'
-            this.setState({container})
+            this.setState({container, deploySubmitting: true})
 
             const hide = message.loading('部署中…', 0)
             HttpClient.get('admin/app/updateVersion', {
@@ -116,21 +127,30 @@ export default class extends React.Component {
                 version: values.version,
                 forcePull: values.forcePull
             }).then(() => {
-                this.setState({deployVisible: false})
-                message.success('部署指令已发送，异步执行中…')
+                this.setState({deployVisible: false, activeTab: 'log'})
+                message.success('部署指令已发送，请前往「部署日志」查看进度')
                 this.loadApp()
                 this.loadContainer()
-            }).finally(hide)
+            }).finally(() => {
+                hide()
+                this.setState({deploySubmitting: false})
+            })
         })
     }
     start = () => {
+        this.setState({starting: true})
         HttpClient.post('admin/app/start/' + this.state.app.id).then(() => {
             this.loadContainer()
+        }).finally(() => {
+            this.setState({starting: false})
         })
     }
     stop = () => {
+        this.setState({stopping: true})
         HttpClient.post('admin/app/stop/' + this.state.app.id).then(() => {
             this.loadContainer()
+        }).finally(() => {
+            this.setState({stopping: false})
         })
     }
 
@@ -170,7 +190,7 @@ export default class extends React.Component {
     }
 
     render() {
-        const {container, app, loading, containerLoading} = this.state;
+        const {container, app, loading, containerLoading, stopping, starting, deployLoading, deploySubmitting} = this.state;
 
         if (loading) {
             return <Page padding><Spin/></Page>
@@ -181,9 +201,9 @@ export default class extends React.Component {
         return (<Page padding>
             
             <Card title={app.name} extra={<Space>
-                <Button disabled={state !== 'exited'} onClick={this.start}>启动</Button>
-                <Button disabled={state !== 'running'} onClick={this.stop}>停止</Button>
-                <Button onClick={this.openDeploy} loading={state === 'deploying'} type="primary">重新部署</Button>
+                <Button disabled={state !== 'exited'} loading={starting} onClick={this.start}>启动</Button>
+                <Button disabled={state !== 'running'} loading={stopping} onClick={this.stop}>停止</Button>
+                <Button onClick={this.openDeploy} loading={state === 'deploying' || deployLoading} type="primary">重新部署</Button>
             </Space>}>
 
 
@@ -216,6 +236,7 @@ export default class extends React.Component {
             <Modal title='重新部署'
                    open={this.state.deployVisible}
                    onOk={this.submitDeploy}
+                   confirmLoading={deploySubmitting}
                    onCancel={() => this.setState({deployVisible: false})}
                    destroyOnHidden>
                 <Form ref={this.deployFormRef} layout='vertical'
@@ -244,8 +265,8 @@ export default class extends React.Component {
         let publishLogUrl = '/admin/sys/log/' + app.id;
         const items = [
             {
-                key: '1',
-                label: '发布日志',
+                key: 'log',
+                label: '部署日志',
                 children: <LogView url={publishLogUrl} websocket={false}/>
             },
             {
@@ -316,7 +337,8 @@ export default class extends React.Component {
         ]
 
 
-        return <Tabs items={items}></Tabs>
+        return <Tabs items={items} activeKey={this.state.activeTab}
+                     onChange={activeTab => this.setState({activeTab})}></Tabs>
     }
 
 }
