@@ -1,6 +1,7 @@
-import {Button, Card, Descriptions, Empty, Modal, Result, Spin, Table, Tabs, Tag, Typography} from 'antd'
+import {Button, Card, Descriptions, Empty, Input, Modal, Popconfirm, Result, Space, Spin, Table, Tabs, Tag, Typography} from 'antd'
 import React from 'react'
-import {HttpClient, Page, PageUtils} from "@jiangood/open-admin"
+import {DeleteOutlined, ReloadOutlined} from '@ant-design/icons'
+import {HttpClient, Page, PageUtils, PermUtils} from "@jiangood/open-admin"
 import ContainerDetail from "../../components/container/ContainerDetail"
 import LinkButton from "../../components/LinkButton"
 import {formatBytes, formatTime, stateColor, stateLabel} from "../../components/container/utils"
@@ -43,6 +44,7 @@ export default class extends React.Component {
 
         images: [],
         imagesLoading: false,
+        imageKeyword: '',
 
         detail: {open: false, containerId: null, name: ''},
         activeTab: 'containers',
@@ -89,6 +91,24 @@ export default class extends React.Component {
             .finally(() => this.setState({imagesLoading: false}))
     }
 
+    /**
+     * 删除镜像：image 为 repo:tag 时删除单个标签，为镜像 ID 时删除整个镜像。
+     */
+    removeImage = image => {
+        const id = this.state.id
+        HttpClient.post('admin/host/removeImage', null, {id, image})
+            .then(() => this.loadImages(id))
+    }
+
+    pruneImages = () => {
+        const id = this.state.id
+        HttpClient.post('admin/host/pruneImages', null, {id})
+            .then(() => {
+                this.loadImages(id)
+                this.loadInfo(id)
+            })
+    }
+
     openContainer = record => {
         this.setState({detail: {open: true, containerId: record.id, name: record.name}})
     }
@@ -102,7 +122,7 @@ export default class extends React.Component {
 
     render() {
         const {host, hostLoading, info, infoError, containers, containersLoading,
-            images, imagesLoading, detail, activeTab} = this.state
+            images, imagesLoading, imageKeyword, detail, activeTab} = this.state
 
         if (hostLoading) {
             return <Page padding><Spin/></Page>
@@ -138,18 +158,57 @@ export default class extends React.Component {
             },
         ]
 
+        const canImage = PermUtils.hasPermission('host:image')
+        const keyword = imageKeyword.trim().toLowerCase()
+        const filteredImages = !keyword ? images : images.filter(img =>
+            (img.repoTags || []).some(t => t.toLowerCase().includes(keyword)) ||
+            (img.idShort || '').toLowerCase().includes(keyword))
+
         const imageColumns = [
             {
                 title: '仓库 / 标签', dataIndex: 'repoTags',
-                render: (tags, record) => (tags && tags.length)
-                    ? tags.map(t => <div key={t}>{t}</div>)
-                    : <Tag>无标签</Tag>
+                render: (tags, record) => {
+                    if (!tags || !tags.length) {
+                        return <Space size={4}>
+                            <Tag>无标签</Tag>
+                            {canImage &&
+                                <Popconfirm title='确定删除该镜像？删除后不可恢复'
+                                            onConfirm={() => this.removeImage(record.id)}>
+                                    <Button type='link' size='small' danger icon={<DeleteOutlined/>}/>
+                                </Popconfirm>}
+                        </Space>
+                    }
+                    return tags.map(t => <div key={t} style={{display: 'flex', alignItems: 'center', gap: 4}}>
+                        <span style={{flex: 1, wordBreak: 'break-all'}}>{t}</span>
+                        {canImage &&
+                            <Popconfirm
+                                title={tags.length === 1
+                                    ? `确定删除镜像 ${t}？这是最后一个标签，将删除整个镜像`
+                                    : `确定删除标签 ${t}？`}
+                                onConfirm={() => this.removeImage(t)}>
+                                <Button type='link' size='small' danger icon={<DeleteOutlined/>}/>
+                            </Popconfirm>}
+                    </div>)
+                }
             },
             {title: '镜像ID', dataIndex: 'idShort', width: 160},
             {title: '大小', dataIndex: 'size', width: 120, render: v => formatBytes(v)},
             {title: '创建时间', dataIndex: 'created', width: 170, render: v => formatTime(v)},
             {title: '容器数', dataIndex: 'containers', width: 90, render: v => v ?? '-'},
         ]
+
+        const imageToolbar = <div className='mb-3' style={{display: 'flex', alignItems: 'center', gap: 8}}>
+            <Input allowClear placeholder='搜索仓库 / 标签 / 镜像ID'
+                   style={{width: 280}}
+                   value={imageKeyword}
+                   onChange={e => this.setState({imageKeyword: e.target.value})}/>
+            <Button icon={<ReloadOutlined/>} onClick={() => this.loadImages(this.state.id)}>刷新</Button>
+            {canImage &&
+                <Popconfirm title='清理悬空（无标签）镜像？正在被使用的镜像不会被清理'
+                            onConfirm={this.pruneImages}>
+                    <Button danger>清理悬空镜像</Button>
+                </Popconfirm>}
+        </div>
 
         const items = [
             {
@@ -164,10 +223,13 @@ export default class extends React.Component {
             {
                 key: 'images',
                 label: `镜像 (${images.length})`,
-                children: <Table rowKey='id' size='small' loading={imagesLoading}
-                                 dataSource={images} columns={imageColumns}
-                                 pagination={{pageSize: 20, showSizeChanger: true}}
-                                 locale={{emptyText: <Empty description='暂无镜像'/>}}/>
+                children: <>
+                    {imageToolbar}
+                    <Table rowKey='id' size='small' loading={imagesLoading}
+                           dataSource={filteredImages} columns={imageColumns}
+                           pagination={{pageSize: 20, showSizeChanger: true}}
+                           locale={{emptyText: <Empty description={keyword ? '无匹配镜像' : '暂无镜像'}/>}}/>
+                </>
             },
         ]
 

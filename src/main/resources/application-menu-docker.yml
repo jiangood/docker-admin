@@ -60,6 +60,7 @@ menus:
       - {name: 容器控制台, code: container:exec}
       - {name: 容器文件, code: container:file}
       - {name: 容器操作, code: container:operate}
+      - {name: 镜像操作, code: host:image}
   setting-registry:
     pid: setting
     name: 注册中心

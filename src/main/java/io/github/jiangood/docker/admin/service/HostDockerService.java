@@ -3,6 +3,8 @@ package io.github.jiangood.docker.admin.service;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.model.Image;
 import com.github.dockerjava.api.model.Info;
+import com.github.dockerjava.api.model.PruneResponse;
+import com.github.dockerjava.api.model.PruneType;
 import com.github.dockerjava.api.model.Version;
 import io.github.jiangood.docker.admin.dto.HostImageVo;
 import io.github.jiangood.docker.admin.dto.HostInfoVo;
@@ -71,6 +73,36 @@ public class HostDockerService {
             }
             result.sort((a, b) -> Long.compare(nvl(b.getCreated()), nvl(a.getCreated())));
             return result;
+        } finally {
+            IOUtils.closeQuietly(client);
+        }
+    }
+
+    /**
+     * 删除镜像。入参为 {@code repo:tag} 时只删除该标签，为镜像 ID 时删除整个镜像。
+     * <p>
+     * 不使用 force：镜像被容器占用时由 Docker 返回 409，交由上层转换为可读提示。
+     */
+    public void removeImage(Host host, String image) {
+        DockerClient client = dockerClientManager.getClient(host);
+        try {
+            client.removeImageCmd(image).withNoPrune(false).exec();
+        } finally {
+            IOUtils.closeQuietly(client);
+        }
+    }
+
+    /**
+     * 清理悬空（无标签）镜像，返回回收的字节数。
+     */
+    public long pruneImages(Host host) {
+        DockerClient client = dockerClientManager.getClient(host);
+        try {
+            PruneResponse response = client.pruneCmd(PruneType.IMAGES)
+                    .withDangling(true)
+                    .exec();
+            Long reclaimed = response.getSpaceReclaimed();
+            return reclaimed == null ? 0L : reclaimed;
         } finally {
             IOUtils.closeQuietly(client);
         }

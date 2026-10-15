@@ -1,5 +1,7 @@
 package io.github.jiangood.docker.admin.controller;
 
+import com.github.dockerjava.api.exception.ConflictException;
+import com.github.dockerjava.api.exception.NotFoundException;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.service.HostService;
 import io.github.jiangood.openadmin.util.dto.AjaxResult;
@@ -115,6 +117,54 @@ public class HostController  {
     public AjaxResult images(String id) {
         Host host = requireHost(id);
         return AjaxResult.ok().data(hostDockerService.listImages(host));
+    }
+
+    /**
+     * 删除镜像。{@code image} 为 {@code repo:tag} 时删除单个标签，为镜像 ID 时删除整个镜像。
+     * <p>
+     * 404 / 409 在此就地转换：本类的兜底 {@code @ExceptionHandler(Exception.class)}
+     * 会把异常统一吞成「连接容器引擎失败」，无法给出有效提示。
+     */
+    @HasPermission("host:image")
+    @RequestMapping("removeImage")
+    public AjaxResult removeImage(String id, String image) {
+        Host host = requireHost(id);
+        org.springframework.util.Assert.hasText(image, "image 不能为空");
+        try {
+            hostDockerService.removeImage(host, image);
+            return AjaxResult.ok().msg("删除成功");
+        } catch (ConflictException e) {
+            log.warn("镜像被占用，删除失败：{}", image);
+            return AjaxResult.err("该镜像被容器占用，无法删除");
+        } catch (NotFoundException e) {
+            log.warn("镜像不存在：{}", image);
+            return AjaxResult.err("镜像不存在");
+        }
+    }
+
+    /**
+     * 清理悬空（无标签）镜像，返回回收的字节数。
+     */
+    @HasPermission("host:image")
+    @RequestMapping("pruneImages")
+    public AjaxResult pruneImages(String id) {
+        Host host = requireHost(id);
+        long reclaimed = hostDockerService.pruneImages(host);
+        return AjaxResult.ok().msg("已清理悬空镜像，回收空间 " + formatBytes(reclaimed)).data(reclaimed);
+    }
+
+    private static String formatBytes(long bytes) {
+        if (bytes < 1024) {
+            return bytes + " B";
+        }
+        String[] units = {"KB", "MB", "GB", "TB"};
+        double value = bytes;
+        int unit = -1;
+        do {
+            value /= 1024;
+            unit++;
+        } while (value >= 1024 && unit < units.length - 1);
+        return String.format("%.1f %s", value, units[unit]);
     }
 
     private Host requireHost(String id) {
