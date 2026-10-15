@@ -166,16 +166,20 @@ export default class extends React.Component {
 
     /**
      * 子标签通知「配置已修改」。只有真正影响容器 / 部署的操作才需要刷新；
-     * 修改隧道、自动发布开关这类纯配置改动不回调父级，避免无谓刷新。
+     * 修改隧道、自动发布开关这类纯配置改动不重拉容器。
      * @param redeploy 是否触发了重新部署；true 时进入部署观察，部署结束后再刷新日志与容器标签
      * @param tabs     需要立即重挂载的标签 key；不传则不动任何标签
+     * @param appOnly  只重拉顶部应用记录（如隧道开关），不碰容器状态，避免顶部「检测中…」闪动
      */
-    handleChanged = ({redeploy = false, tabs} = {}) => {
+    handleChanged = ({redeploy = false, tabs, appOnly = false} = {}) => {
         if (redeploy) {
             this.deployWatch = {seenDeploying: false, startedAt: Date.now()}
+            this.reload().catch(() => {
+            })
+        } else if (appOnly) {
+            this.loadApp().catch(() => {
+            })
         }
-        this.reload().catch(() => {
-        })
         if (tabs && tabs.length > 0) {
             this.bumpTokens(tabs)
         }
@@ -187,6 +191,19 @@ export default class extends React.Component {
         })
         this.bumpTokens(TAB_KEYS)
     }
+
+    openTunnelTab = () => {
+        this.setState({activeTab: 'tunnel'})
+    }
+
+    /**
+     * 隧道开启时的提示条：名称、容器配置、迁移、删除等变更都要求先关闭隧道。
+     */
+    renderTunnelHint = () => (
+        <Alert type='info' showIcon className='mb-3'
+               title='该应用已开启隧道，修改名称 / 容器配置、迁移或删除前需先关闭隧道'
+               action={<LinkButton onClick={this.openTunnelTab}>去关闭隧道</LinkButton>}/>
+    )
 
 
     openDeploy = () => {
@@ -242,14 +259,23 @@ export default class extends React.Component {
 
     handleDelete = () => {
         const id = this.state.app.id
+        if (this.state.app.tunnelEnabled) {
+            message.warning('该应用已开启隧道，请先在「隧道」标签关闭后再删除')
+            this.setState({activeTab: 'tunnel'})
+            return
+        }
         const hide = message.loading('删除中…',0)
         HttpClient.get("admin/app/delete", {id}).then(rs => {
             hide();
 
             history.push('/app')
 
-        }).catch(rs => {
+        }).catch(e => {
             hide();
+            // 后端隧道校验（业务码 409）：错误提示已由 HttpClient 弹出，不再走「强制删除数据」兜底
+            if (e && e.code === 409) {
+                return
+            }
             Modal.confirm({
                 title: '删除失败',
                 content: '是否强制删除数据',
@@ -267,6 +293,11 @@ export default class extends React.Component {
 
     rename = () => {
         let appId = this.state.app.id;
+        if (this.state.app.tunnelEnabled) {
+            message.warning('该应用已开启隧道，请先在「隧道」标签关闭后再修改名称')
+            this.openTunnelTab()
+            return
+        }
         let {newName} = this.state;
         const hide = message.loading('指令发送中…')
         HttpClient.post("admin/app/rename", {appId, newName}).then(rs => {
@@ -367,7 +398,8 @@ export default class extends React.Component {
             {
                 key: 'config',
                 label: '容器配置',
-                children: <ConfigForm key={'config-' + tabTokens.config} app={app} onChange={this.handleChanged}/>
+                children: <ConfigForm key={'config-' + tabTokens.config} app={app} onChange={this.handleChanged}
+                                      onOpenTunnel={this.openTunnelTab}/>
             },
 
             {
@@ -380,12 +412,14 @@ export default class extends React.Component {
                 key: 'publish',
                 label: '发布',
                 children: <PublishForm key={'publish-' + tabTokens.publish} appId={app.id}
-                                       onChange={this.handleChanged}/>
+                                       tunnelEnabled={!!app.tunnelEnabled}
+                                       onChange={this.handleChanged} onOpenTunnel={this.openTunnelTab}/>
             },
             {
                 key: 'setting',
                 label: "设置",
                 children: <>
+                    {app.tunnelEnabled && this.renderTunnelHint()}
                     <Row wrap={false}>
                         <Col flex="100px">名称</Col>
                         <Col flex="auto">

@@ -79,8 +79,10 @@ export default class extends React.Component {
             + '&prefix=' + encodeURIComponent(this.state.prefix || '')
             + '&port=' + encodeURIComponent(this.state.port == null ? '' : this.state.port))
             .then(() => {
-                // 隧道不影响容器，不通知父级刷新；只重拉运行信息，保留当前选择
+                // 隧道不影响容器，不重拉容器；只刷新运行信息并让父级更新应用记录
+                // （tunnelEnabled 变了，名称 / 配置 / 迁移 / 删除的拦截提示要跟着更新）
                 this.load(true)
+                this.props.onChange && this.props.onChange({appOnly: true})
             }).finally(() => this.setState({saving: false}))
     }
 

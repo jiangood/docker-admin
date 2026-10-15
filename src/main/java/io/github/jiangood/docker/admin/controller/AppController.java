@@ -14,6 +14,7 @@ import io.github.jiangood.openadmin.util.dto.AjaxResult;
 import io.github.jiangood.openadmin.util.dto.Option;
 import io.github.jiangood.openadmin.framework.data.specification.Spec;
 import io.github.jiangood.openadmin.framework.auth.LoginTool;
+import io.github.jiangood.openadmin.util.BusinessException;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.constraints.NotNull;
@@ -229,12 +230,15 @@ public class AppController {
     public AjaxResult delete(String id, Boolean force) {
         assertAppAccess(id);
         if (force != null && force) {
-            service.deleteById(id);
+            service.forceDeleteApp(id);
             return AjaxResult.ok().msg("强制删除数据成功");
         }
 
         try {
             service.deleteApp(id);
+        } catch (BusinessException e) {
+            // 业务校验失败（如隧道未关闭）：原样返回原因，前端据此不走「强制删除数据」兜底
+            throw e;
         } catch (Exception e) {
             log.error("删除应用失败", e);
 
