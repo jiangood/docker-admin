@@ -116,10 +116,7 @@ export default class extends React.Component {
                     {header}
                     <div style={{flex: 1, overflow: 'auto'}}>
                         <ContainerInfo detail={detail}/>
-                        <div className='mt-4'>
-                            <div className='mb-2' style={{fontWeight: 600}}>配置</div>
-                            <ContainerConfig detail={detail}/>
-                        </div>
+                        <ContainerConfig detail={detail}/>
                     </div>
                 </div>
             },

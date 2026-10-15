@@ -85,3 +85,27 @@
     overflow: auto;
     font-size: var(--font-size-sm);
 }
+
+/* 容器概览分区标题：统一字号与间距，右侧插槽放数量 / 复制等操作 */
+.container-section-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    margin-top: var(--space-5);
+    margin-bottom: var(--space-3);
+}
+
+.container-section-title-text {
+    font-size: var(--font-size);
+    font-weight: 600;
+}
+
+/* 环境变量 / 标签等等宽长文本面板：带边框与限高，跟随主题色 */
+.container-code-panel {
+    max-height: 240px;
+    padding: var(--space-3) var(--space-4);
+    background: var(--oa-color-fill, #f5f5f5);
+    border: 1px solid var(--oa-color-border, #e8e8e8);
+    border-radius: var(--oa-border-radius, 6px);
+}
