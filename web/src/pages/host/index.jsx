@@ -51,6 +51,12 @@ export default class extends React.Component {
         },
 
         {
+            title: 'IP地址',
+            dataIndex: 'ip',
+            render: v => v || '-',
+        },
+
+        {
             title: '构建节点',
             dataIndex: 'isRunner',
             valueType: 'boolean',
@@ -188,6 +194,10 @@ export default class extends React.Component {
 
                     <Form.Item label='名称' name='name' rules={[{required: true}]}>
                         <Input/>
+                    </Form.Item>
+                    <Form.Item label='IP地址' name='ip' rules={[{required: true, message: '请填写主机 IP 地址'}]}
+                               tooltip='隧道转发目标：目标地址 = 该 IP + 应用映射到主机侧的端口，需隧道客户端所在机器可访问'>
+                        <Input placeholder='192.168.1.10'/>
                     </Form.Item>
                     <Form.Item label='构建节点' name='isRunner' rules={[{required: true}]}>
                         <FieldBoolean/>

@@ -262,6 +262,7 @@ public class TunnelService {
         data.put("fullDomain", fullDomain);
         data.put("url", fullDomain == null ? null : domainUrl(fullDomain));
         data.put("hostName", host == null ? null : host.getName());
+        data.put("targetHost", forwardHost(app));
         data.put("port", app.getTunnelPort());
         data.put("ports", portOptions(app));
         data.put("clients", clients);
@@ -287,7 +288,7 @@ public class TunnelService {
             String fullDomain = normalizeDomain(p + "." + client.getDomain());
 
             cleanupApplied(app, client, fullDomain);
-            api.putTunnel(client, fullDomain, "127.0.0.1:" + hostPort);
+            api.putTunnel(client, fullDomain, forwardHost(app) + ":" + hostPort);
 
             app.setTunnelEnabled(true);
             app.setTunnelPrefix(p);
@@ -356,6 +357,16 @@ public class TunnelService {
             return null;
         }
         return normalizeDomain(app.getTunnelPrefix() + "." + client.getDomain());
+    }
+
+    /**
+     * 隧道转发的目标主机：取应用所在主机的 IP，隧道客户端按「该 IP + 主机端口」转发。
+     * 主机未填 IP 时回退 {@code 127.0.0.1}（仅当客户端与应用同机时可用）。
+     */
+    private static String forwardHost(App app) {
+        Host host = app.getHost();
+        String ip = host == null ? null : StrUtil.trimToNull(host.getIp());
+        return ip != null ? ip : "127.0.0.1";
     }
 
     /**

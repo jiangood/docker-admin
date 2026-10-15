@@ -240,6 +240,7 @@ export default class extends React.Component {
                 <Descriptions size='small' column={2}
                               items={[
                                   {key: 'name', label: '名称', children: host?.name || '-'},
+                                  {key: 'ip', label: 'IP地址', children: host?.ip || '-'},
                                   {key: 'conn', label: '连接方式', children: connectionLabel(host?.connectionType)},
                                   {key: 'endpoint', label: '连接地址', children: endpointOf(host), span: 2},
                                   {key: 'version', label: 'Docker 版本', children: info?.dockerVersion || '-'},

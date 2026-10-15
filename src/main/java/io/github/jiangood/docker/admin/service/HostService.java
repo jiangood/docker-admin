@@ -10,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.Assert;
 
 import java.net.URI;
 import java.util.List;
@@ -42,6 +43,7 @@ public class HostService extends BaseService<Host> {
     @Transactional
     public Host saveHost(Host input, List<String> updateFields) {
         normalize(input);
+        Assert.hasText(input.getIp(), "请填写主机 IP 地址");
         fillSshPassword(input);
         if (StrUtil.isBlank(input.getId())) {
             return create(input);
@@ -74,6 +76,7 @@ public class HostService extends BaseService<Host> {
         if (host == null) {
             return;
         }
+        host.setIp(StrUtil.trim(host.getIp()));
         String dockerHost = StrUtil.trim(host.getDockerHost());
         String type = StrUtil.trim(host.getConnectionType());
 

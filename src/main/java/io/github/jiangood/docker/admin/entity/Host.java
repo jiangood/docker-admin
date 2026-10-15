@@ -46,6 +46,14 @@ public class Host extends BaseEntity {
     @Column(unique = true)
     String name;
 
+    /**
+     * 主机 IP 地址：隧道客户端转发目标使用。
+     * 目标地址 = 该 IP + 应用映射到主机侧的端口，需为隧道客户端所在机器可访问的地址。
+     */
+    @Remark("IP地址")
+    @NotNull
+    String ip;
+
     @Remark("构建节点")
     Boolean isRunner;
 

@@ -83,9 +83,14 @@ export default class extends React.Component {
             label: c.name + (c.domain ? '（' + c.domain + '）' : '（未配置域名）'),
             disabled: !c.configured,
         }))
-        const ports = (meta.ports || []).map(p => ({label: p.label, value: p.privatePort}))
+        const rawPorts = meta.ports || []
+        const ports = rawPorts.map(p => ({label: p.label, value: p.privatePort}))
         const fullDomain = this.fullDomain()
         const canEnable = !!client && client.configured && !!client.domain && ports.length > 0
+        // 隧道目标地址 = 应用所在主机 IP + 映射到主机侧的端口（后端下发值，便于现场核对）
+        const selectedPort = rawPorts.find(p => p.privatePort === port)
+        const targetAddr = (enabled && meta.targetHost && selectedPort && selectedPort.hostPort != null)
+            ? meta.targetHost + ':' + selectedPort.hostPort : null
 
         return <Row gutter={[24, 24]} align='top'>
             {/* 左：隧道配置 */}
@@ -141,6 +146,7 @@ export default class extends React.Component {
                         <Descriptions.Item label='运行主机'>{meta.hostName || '-'}</Descriptions.Item>
                         <Descriptions.Item label='隧道客户端'>{client ? client.name : '-'}</Descriptions.Item>
                         <Descriptions.Item label='完整域名'>{enabled ? (fullDomain || '-') : '-'}</Descriptions.Item>
+                        <Descriptions.Item label='目标地址'>{targetAddr || '-'}</Descriptions.Item>
                         <Descriptions.Item label='访问地址'>
                             {enabled && meta.url ?
                                 <a href={meta.url} target='_blank' rel='noreferrer'>{meta.url}</a> : '-'}
