@@ -29,8 +29,11 @@ import java.util.Map;
  *   PUT    /api/tunnels/{domain}   body: {"local_addr":"host:port"}
  *   DELETE /api/tunnels/{domain}
  * </pre>
- * 认证方式为请求头 {@code Authorization: Bearer <客户端令牌>}；
- * 客户端会把改动转发给服务端（服务端才是唯一事实来源），验证并落盘后再推送给客户端。
+ * 认证方式为请求头 {@code Authorization: Bearer <客户端令牌>}；错误体为 {@code {"error":"..."}}。
+ * <p>
+ * 自 http-tunnel v0.12.0 起，隧道配置在客户端侧：改动由客户端本地校验并写回其
+ * {@code client.toml}，不依赖隧道服务端，因此不会返回 503（未连接到服务端），
+ * 但客户端所在目录不可写时会返回 500。
  */
 @Slf4j
 @Service
@@ -97,9 +100,6 @@ public class HttpTunnelApiClient {
         }
         if (status == 401 || status == 403) {
             throw new BusinessException("隧道客户端「" + client.getName() + "」认证失败，请检查令牌");
-        }
-        if (status == 503) {
-            throw new BusinessException("隧道客户端「" + client.getName() + "」未连接到服务端");
         }
         if (status < 200 || status >= 300) {
             throw new BusinessException("隧道客户端「" + client.getName() + "」返回 " + status + "："

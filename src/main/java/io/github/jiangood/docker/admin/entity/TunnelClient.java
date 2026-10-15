@@ -12,12 +12,13 @@ import lombok.ToString;
 import lombok.experimental.FieldNameConstants;
 
 /**
- * 隧道客户端：一个 http-tunnel client 进程。
+ * 隧道客户端：一个 http-tunnel 客户端进程。
  * <p>
  * 客户端进程由各业务主机自行运行：
- * {@code http-tunnel client --remote <服务端> --name <名> --token <令牌> --api-port <管理端口>}。
- * 平台不部署、不生成配置文件，只通过客户端自身的隧道管理 API（{@code --api-port}）维护其隧道
- * （域名 → 目标地址）。
+ * {@code http-tunnel --remote <服务端> --name <名> --token <令牌> --api-port <管理端口>}。
+ * 自 http-tunnel v0.12.0 起，服务端不再读配置文件，隧道（域名 → 目标地址）由客户端保存在其
+ * {@code client.toml} 里；平台的每次改动都会写回该文件，因此客户端所在目录需可写。
+ * 平台不部署进程、不生成配置文件，只通过客户端自身的隧道管理 API（{@code --api-port}）维护其隧道。
  * <p>
  * 应用在详情页「隧道」标签里显式选择本表的客户端，完整域名 = 域名前缀 + "." + 客户端域名，
  * 因此应用不需要关心客户端运行在哪台主机上。

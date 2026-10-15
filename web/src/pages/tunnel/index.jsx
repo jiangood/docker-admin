@@ -7,7 +7,7 @@ import {HttpClient, Page, PermActions} from '@jiangood/open-admin';
  * 隧道（http-tunnel）：平台作为 http-tunnel 客户端管理 API 的前端，
  * 登记客户端（名称 + 令牌 + API 地址 + 域名）并只读展示隧道（域名 → 目标地址）。
  * 隧道由应用详情页的「隧道」标签创建与删除，应用在那里显式选择客户端。
- * 客户端进程由用户自行部署（http-tunnel client ... --api-port），平台不做部署、不生成配置。
+ * 客户端进程由用户自行部署（http-tunnel --remote ... --name ... --token ... --api-port ...），平台不做部署、不生成配置。
  */
 export default class extends React.Component {
 
@@ -117,24 +117,29 @@ export default class extends React.Component {
         if (!row.configured) {
             return <Tag>未配置</Tag>
         }
-        if (row.connected === true) {
-            return <Tag color='green'>在线</Tag>
+        if (!row.reachable) {
+            return (
+                <Tooltip title={row.statusError || '无法连接客户端 API'}>
+                    <Tag color='orange'>不可达</Tag>
+                </Tooltip>
+            )
         }
-        if (row.connected === false) {
-            return <Tag color='red'>未连接</Tag>
+        // 管理 API 可达即在线；有隧道但都没连上隧道服务端时给出提示
+        if (row.tunnelCount > 0 && row.connected === false) {
+            return (
+                <Tooltip title='客户端在线，但当前没有隧道连接到隧道服务端'>
+                    <Tag color='orange'>隧道未连</Tag>
+                </Tooltip>
+            )
         }
-        return (
-            <Tooltip title={row.statusError || '无法连接客户端 API'}>
-                <Tag color='orange'>不可达</Tag>
-            </Tooltip>
-        )
+        return <Tag color='green'>在线</Tag>
     }
 
     clientColumns = [
         {title: '客户端名称', dataIndex: 'name'},
         {title: 'API 地址', dataIndex: 'apiUrl', render: v => v || '-'},
         {title: '域名', dataIndex: 'domain', render: v => v || '-'},
-        {title: '状态', dataIndex: 'connected', width: 100, render: (_, row) => this.renderClientStatus(row)},
+        {title: '状态', dataIndex: 'reachable', width: 100, render: (_, row) => this.renderClientStatus(row)},
         {title: '隧道数', dataIndex: 'tunnelCount', width: 90, render: v => v == null ? '-' : v},
         {title: '令牌', dataIndex: 'tokenMasked', width: 90, render: v => v || '-'},
         {title: '备注', dataIndex: 'remark', render: v => v || '-'},
@@ -174,7 +179,7 @@ export default class extends React.Component {
                        pagination={false}/>
 
                 <Typography.Text type='secondary' className='mt-2' style={{display: 'block'}}>
-                    客户端需以 <code>--api-port</code> 启动管理 API；API 地址形如 http://主机:2336，令牌与客户端 <code>--token</code> 一致。
+                    客户端需以 <code>--api-port</code> 启动管理 API；API 地址形如 http://主机:2336，令牌与客户端 <code>--token</code> 一致；客户端所在目录需可写（隧道改动会写回其 client.toml）。
                 </Typography.Text>
             </div>
         )
@@ -206,7 +211,7 @@ export default class extends React.Component {
                        pagination={false}/>
 
                 <Typography.Text type='secondary' className='mt-2' style={{display: 'block'}}>
-                    域名需解析到隧道服务端 IP；服务端按 Host 头路由，重名域名会被拒绝。
+                    域名需解析到隧道服务端 IP；服务端按 Host 头路由。同一域名同一时刻只服务一个隧道，重复域名以后连接的一方为准。
                 </Typography.Text>
             </div>
         )
@@ -224,8 +229,8 @@ export default class extends React.Component {
             <Card className='page-card'>
                 <Alert type='info' showIcon className='mb-3'
                        title='服务端与客户端都由你自行部署'
-                       description={'平台只登记客户端并通过其管理 API 维护隧道；改动会由客户端转发给服务端，'
-                           + '验证后落盘 server.toml 并推送给在线客户端。'}/>
+                       description={'平台只登记客户端并通过其管理 API 维护隧道；改动由客户端本地校验并写回 client.toml，'
+                           + '无需先连接隧道服务端。'}/>
                 <Tabs items={items} activeKey={activeTab} onChange={key => this.setState({activeTab: key})}/>
             </Card>
 

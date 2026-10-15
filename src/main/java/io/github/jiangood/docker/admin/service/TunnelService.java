@@ -26,6 +26,11 @@ import java.util.Objects;
 /**
  * 隧道（http-tunnel）：平台通过每个客户端自身的隧道管理 API（{@code --api-port}）维护隧道。
  * <p>
+ * http-tunnel v0.12.0 起，隧道配置在客户端侧：服务端不再读配置文件，客户端把
+ * 「域名 → 目标地址」写在自己的 {@code client.toml} 里。平台的改动由客户端本地校验并落盘，
+ * 不再需要先连上服务端，因此不存在「未连接到服务端」的 503，也不会因域名重名被拒（重复域名以
+ * 后连接的控制通道为准，运行期 last-wins）。客户端所在目录需可写，否则落盘失败会返回 500。
+ * <p>
  * 客户端进程运行在各业务主机上，平台只保存其名称、令牌、API 地址与域名，不部署容器、不生成配置。
  * 应用在详情页「隧道」标签里显式选择客户端，完整域名 = 域名前缀 + "." + 客户端域名；
  * 目标地址在客户端主机上解析（{@code 127.0.0.1:<主机端口>}）。
@@ -75,6 +80,10 @@ public class TunnelService {
                 statusError = e.getMessage();
             }
         }
+        // 在线以「客户端管理 API 可达」为准：请求成功即说明客户端进程在运行。
+        // http-tunnel 的 connected 表示「至少有一条隧道已连上隧道服务端」，
+        // 客户端 0 隧道时恒为 false，所以只作为补充信息（见「状态」列的渲染）。
+        item.put("reachable", status != null);
         item.put("connected", status == null ? null : status.path("connected").asBoolean(false));
         item.put("tunnelCount", status == null ? null : status.path("tunnels").asInt(0));
         item.put("statusError", statusError);
