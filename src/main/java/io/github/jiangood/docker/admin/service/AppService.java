@@ -798,23 +798,98 @@ public class AppService extends BaseService<App> {
     }
 
 
-    public App copyApp(String appId, String hostId) {
+    /**
+     * 复制应用到指定主机。
+     *
+     * @param name 新应用名称；为空时自动生成（原名 + _copy）
+     */
+    public App copyApp(String appId, String hostId, String name) {
+        App app = requireApp(appId);
+        Host host = requireHost(hostId);
+
+        String newName = StrUtil.isBlank(name) ? buildCopyName(app.getName()) : name.trim();
+        assertNameAvailable(newName, null);
+
+        return appRepository.save(buildCopiedApp(app, newName, host));
+    }
+
+    /**
+     * 迁移应用到指定主机：在目标主机创建一份副本，随后删除原应用（容器 + 隧道 + 记录）。
+     * 名称留空时沿用原名。
+     */
+    public App migrateApp(String appId, String hostId, String name) {
+        App app = requireApp(appId);
+        Host host = requireHost(hostId);
+        Assert.isTrue(!host.getId().equals(app.getHost().getId()), "目标主机与当前主机相同，无需迁移");
+
+        String newName = StrUtil.isBlank(name) ? app.getName() : name.trim();
+        // 迁移会删除原应用，因此允许沿用原名
+        assertNameAvailable(newName, app.getName());
+
+        // 通过代理调用，保证 deleteApp 的事务生效、@Async 部署生效
+        AppService $this = SpringUtil.getBean(getClass());
+        App newApp = buildCopiedApp(app, newName, host);
+
+        if (!newName.equals(app.getName())) {
+            // 名称不冲突：先建新应用再删旧应用，中途失败也不丢数据
+            App saved = appRepository.save(newApp);
+            $this.deleteApp(appId);
+            $this.deploy(saved);
+            return saved;
+        }
+
+        // 沿用原名：必须先把旧应用删除并提交，再插入新记录，否则触发名称唯一约束
+        $this.deleteApp(appId);
+        App saved = appRepository.save(newApp);
+        $this.deploy(saved);
+        return saved;
+    }
+
+    /**
+     * 应用名称是否已被占用（供前端复制/迁移应用时先行校验）。
+     */
+    public boolean existsByName(String name) {
+        return StrUtil.isNotBlank(name) && appRepository.existsByName(name.trim());
+    }
+
+    private App requireApp(String appId) {
         App app = appRepository.findById(appId).orElse(null);
         Assert.notNull(app, "应用不存在");
+        return app;
+    }
+
+    private Host requireHost(String hostId) {
         Host host = hostRepository.findById(hostId).orElse(null);
         Assert.notNull(host, "主机不存在");
+        return host;
+    }
 
+    /**
+     * 校验名称可用：字母开头，且未被占用。
+     *
+     * @param sameAsName 迁移时传入当前应用名，允许沿用（原应用随后会被删除）；复制时传 null
+     */
+    private void assertNameAvailable(String newName, String sameAsName) {
+        Assert.isTrue(StrUtil.isNotBlank(newName) && Character.isLetter(newName.charAt(0)), "应用名称必须以字母开头");
+        if (sameAsName != null && newName.equals(sameAsName)) {
+            return;
+        }
+        Assert.isTrue(!appRepository.existsByName(newName), "应用名称已存在：" + newName);
+    }
+
+    /**
+     * 依据原应用构造副本（不复制 id/name/host 及审计字段）。
+     */
+    private App buildCopiedApp(App app, String newName, Host host) {
         App newApp = new App();
-        // 不复制 id/name/host 及审计字段
         BeanUtils.copyProperties(app, newApp, "id", "name", "host", "createUser", "createTime",
                 "updateUser", "updateTime", "logUrl", "config");
-        newApp.setName(buildCopyName(app.getName()));
+        newApp.setName(newName);
         newApp.setHost(host);
         if (app.getConfig() != null) {
             newApp.setConfig(JsonTool.jsonToBean(JsonTool.toJsonQuietly(app.getConfig()), App.AppConfig.class));
         }
-
-        return appRepository.save(newApp);
+        return newApp;
     }
 
     private String buildCopyName(String name) {

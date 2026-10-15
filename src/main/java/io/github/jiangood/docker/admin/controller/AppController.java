@@ -304,9 +304,32 @@ public class AppController {
     @RequestMapping("copyApp")
     public AjaxResult copyApp(@RequestBody @Validated MoveParam param) {
         assertAppAccess(param.getAppId());
-        App app = service.copyApp(param.getAppId(), param.getHostId());
+        App app = service.copyApp(param.getAppId(), param.getHostId(), param.getName());
 
         return AjaxResult.ok().msg("复制成功").data(app);
+    }
+
+
+    /**
+     * 迁移应用：在目标主机创建副本并删除原应用。
+     */
+    @HasPermission("app:migrate")
+    @RequestMapping("migrateApp")
+    public AjaxResult migrateApp(@RequestBody @Validated MoveParam param) {
+        assertAppAccess(param.getAppId());
+        App app = service.migrateApp(param.getAppId(), param.getHostId(), param.getName());
+
+        return AjaxResult.ok().msg("迁移成功").data(app);
+    }
+
+
+    /**
+     * 校验应用名称是否已被占用（复制/迁移应用时前端先行校验）。
+     */
+    @HasPermission("app:view")
+    @RequestMapping("existsName")
+    public AjaxResult existsName(String name) {
+        return AjaxResult.ok().data(service.existsByName(name));
     }
 
 
@@ -337,6 +360,11 @@ public class AppController {
 
         @NotNull
         String hostId;
+
+        /**
+         * 新应用名称；为空时后端自动生成
+         */
+        String name;
 
     }
 }

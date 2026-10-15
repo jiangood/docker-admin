@@ -28,6 +28,7 @@ menus:
       - {name: 删除, code: app:delete}
       - {name: 部署, code: app:deploy}
       - {name: 隧道, code: app:tunnel}
+      - {name: 迁移, code: app:migrate}
   divider-app:
     pid: biz
     type: divider
