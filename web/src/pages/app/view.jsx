@@ -16,9 +16,11 @@ import {
     Space,
     Spin,
     Tabs,
-    Tag
+    Tag,
+    Tooltip
 } from 'antd';
 import React from 'react';
+import {ReloadOutlined} from "@ant-design/icons";
 import ConfigForm from "./ConfigForm";
 import TunnelForm from "./TunnelForm";
 import {history} from "@jiangood/open-admin";
@@ -113,15 +115,17 @@ export default class extends React.Component {
     };
 
     /**
-     * 任意修改动作后的统一刷新：
-     * 1. 立即刷新一次顶部应用 / 容器信息；
-     * 2. 隐藏 Tabs 显示骨架屏，延迟几秒后重新拉取数据并让 Tabs 重新显示
-     *    （Tabs 被卸载再挂载，容器配置、发布、容器、部署日志等子标签会重新拉取最新数据）。
+     * 刷新统一入口：隐藏 Tabs 显示骨架屏，重新拉取数据后让 Tabs 重新显示
+     * （Tabs 被卸载再挂载，容器配置、发布、容器、部署日志等子标签会重新拉取最新数据）。
+     * @param delay 骨架屏停留毫秒数；修改动作默认延迟几秒等容器重启 / 部署生效，手动刷新传 0 立即刷新。
      */
-    refresh = () => {
-        this.reload()
+    refresh = (delay = TAB_REFRESH_DELAY) => {
         clearTimeout(this.refreshTimer)
         this.setState({tabsLoading: true})
+        if (delay > 0) {
+            // 修改动作：先立即刷新一次顶部应用 / 容器信息
+            this.reload()
+        }
         this.refreshTimer = setTimeout(() => {
             if (!this._mounted) {
                 return
@@ -132,7 +136,7 @@ export default class extends React.Component {
                     this.setState({tabsLoading: false})
                 }
             })
-        }, TAB_REFRESH_DELAY)
+        }, delay)
     }
 
     // 子标签组件通过 onChange 回调通知父级「发生了修改」，忽略其可能传入的业务数据
@@ -378,7 +382,13 @@ export default class extends React.Component {
 
 
         return <Tabs items={items} activeKey={this.state.activeTab}
-                     onChange={activeTab => this.setState({activeTab})}></Tabs>
+                     onChange={activeTab => this.setState({activeTab})}
+                     tabBarExtraContent={{
+                         right: <Tooltip title='刷新'>
+                             <Button type='text' size='small' icon={<ReloadOutlined/>}
+                                     onClick={() => this.refresh(0)}/>
+                         </Tooltip>
+                     }}></Tabs>
     }
 
 }
