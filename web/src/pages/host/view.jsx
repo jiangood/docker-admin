@@ -17,6 +17,18 @@ function connectionLabel(host) {
     return label
 }
 
+/** 自定义请求头展示：名称为空就是不发送，不臆造默认名称 */
+function headerLabel(host) {
+    if (!host || host.connectionType !== 'tcp') {
+        return '-'
+    }
+    const name = host.headerName
+    if (!name) {
+        return host.headerConfigured ? '未设置名称（不会发送）' : '未配置'
+    }
+    return `${name} ${host.headerConfigured ? '已配置' : '未配置'}`
+}
+
 function endpointOf(host) {
     if (!host) {
         return '-'
@@ -247,12 +259,7 @@ export default class extends React.Component {
                                   {key: 'name', label: '名称', children: host?.name || '-'},
                                   {key: 'ip', label: 'IP地址', children: host?.ip || '-'},
                                   {key: 'conn', label: '连接方式', children: connectionLabel(host)},
-                                  {
-                                      key: 'header', label: '自定义请求头',
-                                      children: host?.connectionType === 'tcp'
-                                          ? `${host?.headerName || 'Authorization'} ${host?.headerConfigured ? '已配置' : '未配置'}`
-                                          : '-'
-                                  },
+                                  {key: 'header', label: '自定义请求头', children: headerLabel(host)},
                                   {key: 'endpoint', label: '连接地址', children: endpointOf(host), span: 2},
                                   {key: 'version', label: 'Docker 版本', children: info?.dockerVersion || '-'},
                                   {key: 'api', label: 'API 版本', children: info?.apiVersion || '-'},

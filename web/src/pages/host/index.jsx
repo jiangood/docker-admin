@@ -160,7 +160,6 @@ export default class extends React.Component {
                 sshPort: 22,
                 tcpProtocol: 'http',
                 tcpPort: DEFAULT_TCP_PORT,
-                headerName: 'Authorization',
             }
         })
     }
@@ -172,8 +171,6 @@ export default class extends React.Component {
             connectionType: type,
             sshPort: record.sshPort || 22,
             sshUser: record.sshUser || 'root',
-            // 老数据没有请求头名称（列可能是 NULL），回显默认值
-            headerName: record.headerName || 'Authorization',
         }
         if (type === 'tcp') {
             // 远程 TCP 拆成协议 + 主机 + 端口编辑（保存时再拼回 dockerHost）
@@ -321,18 +318,27 @@ export default class extends React.Component {
                                         <InputNumber style={{width: '100%'}} min={1} max={65535}
                                                      placeholder='留空则不指定端口'/>
                                     </Form.Item>
-                                    <Form.Item label='自定义请求头' name='headerName' initialValue='Authorization'
+                                    <Form.Item label='自定义请求头' name='headerName'
+                                               rules={[({getFieldValue}) => ({
+                                                   validator(_, value) {
+                                                       if (!value && getFieldValue('headerValue')) {
+                                                           return Promise.reject(new Error('填了请求头值就必须填名称，否则不会发送'))
+                                                       }
+                                                       return Promise.resolve()
+                                                   }
+                                               })]}
                                                tooltip={<div style={{width: 460}}>代理要求的请求头名称（header name），
-                                                   默认 <b>Authorization</b>（docker-api-auth）；http-tunnel
-                                                   等隧道代理填它约定的自定义 key。</div>}>
-                                        <Input placeholder='Authorization'/>
+                                                   如 docker-api-auth 是 <b>Authorization</b>、http-tunnel
+                                                   是它约定的自定义 key。<br/><b>留空则不发送该请求头</b>，不会替你补
+                                                   Authorization。</div>}>
+                                        <Input allowClear placeholder='如 Authorization，留空则不发送'/>
                                     </Form.Item>
                                     <Form.Item label='请求头值' name='headerValue'
-                                               tooltip={<div style={{width: 460}}>名称为 <b>Authorization</b>
-                                                   时只填 token 会自动补 Bearer 前缀，其它名称原样发送。<br/>
+                                               tooltip={<div style={{width: 460}}>照原样发送，不自动加任何前缀——
+                                                   需要 <b>Bearer</b> 请自己写进值里（如 Bearer abc123）。<br/>
                                                    编辑时留空表示不修改。</div>}>
                                         <Input.Password autoComplete='new-password'
-                                                        placeholder='留空则不带请求头，如 your-token'/>
+                                                        placeholder='留空则不发送该请求头'/>
                                     </Form.Item>
                                 </>
                             }

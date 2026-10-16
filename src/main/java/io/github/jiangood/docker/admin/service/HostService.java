@@ -91,8 +91,9 @@ public class HostService extends BaseService<Host> {
             return;
         }
         host.setIp(StrUtil.trim(host.getIp()));
-        host.setHeaderName(normalizeHeaderName(host.getHeaderName()));
-        host.setHeaderValue(normalizeHeaderValue(host.getHeaderName(), host.getHeaderValue()));
+        // 自定义请求头：原样保留，空就是空（名称为空则不发送请求头）
+        host.setHeaderName(StrUtil.trimToNull(host.getHeaderName()));
+        host.setHeaderValue(StrUtil.trimToNull(host.getHeaderValue()));
         String dockerHost = StrUtil.trim(host.getDockerHost());
         String type = StrUtil.trim(host.getConnectionType());
 
@@ -124,30 +125,6 @@ public class HostService extends BaseService<Host> {
         } else {
             host.setDockerHost(dockerHost);
         }
-    }
-
-    /**
-     * 自定义请求头名称归一化：留空回落默认的 {@code Authorization}。
-     */
-    private String normalizeHeaderName(String headerName) {
-        return StrUtil.isBlank(headerName) ? Host.DEFAULT_HEADER_NAME : StrUtil.trim(headerName);
-    }
-
-    /**
-     * 自定义请求头值归一化：留空保持为空（不注入请求头）。
-     * <p>
-     * {@code Bearer} 前缀是 {@code Authorization} 的约定，只在该名称下自动补；
-     * 自定义头（如 http-tunnel 的 key）原样发送。
-     */
-    private String normalizeHeaderValue(String headerName, String headerValue) {
-        String value = StrUtil.trim(headerValue);
-        if (StrUtil.isBlank(value)) {
-            return null;
-        }
-        if (!Host.DEFAULT_HEADER_NAME.equalsIgnoreCase(headerName) || StrUtil.contains(value, " ")) {
-            return value;
-        }
-        return "Bearer " + value;
     }
 
     /**

@@ -48,11 +48,6 @@ public class Host extends BaseEntity {
      */
     public static final String HTTPS_PREFIX = "https://";
 
-    /**
-     * 默认请求头名称：docker-api-auth 等代理约定的自定义请求头名。
-     */
-    public static final String DEFAULT_HEADER_NAME = "Authorization";
-
     @Remark("名称")
     @NotNull
     @Column(unique = true)
@@ -92,21 +87,22 @@ public class Host extends BaseEntity {
     String sshPassword;
 
     /**
-     * 自定义请求头名称：代理要求的头名（header name），如 docker-api-auth 的
-     * {@code Authorization}、http-tunnel 约定的自定义 key。留空表示用
-     * {@link #DEFAULT_HEADER_NAME}，默认值由使用方（建连 / 前端）补齐。
+     * 自定义请求头名称：代理要求的头名（header name），如 docker-api-auth 用
+     * {@code Authorization}、http-tunnel 用它约定的自定义 key。
+     * <p>
+     * <b>空就是空</b>：名称为空则该请求头不会发送（也不会替用户补 {@code Authorization}）。
+     * 值也原样发送，需要 {@code Bearer} 前缀请自己写在值里。
      * <p>
      * <b>切勿给本字段加「空值返回默认值」的 getter</b>：主机列表用
      * {@code Spec#addExample} 做查询，Spring Data 的 Example 是按 getter 取值的，
-     * getter 只要返回非空，列表查询就会被无条件加上 {@code header_name like '%Authorization%'}，
-     * 把历史数据（该列为 NULL）全部过滤掉。
+     * getter 只要返回非空，列表查询就会被无条件加上 {@code header_name like '%xxx%'}，
+     * 把该列为 NULL 的历史数据全部过滤掉。
      */
     @Remark("自定义请求头")
     String headerName;
 
     /**
-     * 自定义请求头的值：{@link #headerName} 对应的值。名称为 {@code Authorization} 时可只填
-     * token（保存时自动补 {@code Bearer } 前缀），其它名称原样发送。
+     * 自定义请求头的值：{@link #headerName} 对应的值，照原样发送（不自动补 {@code Bearer}）。
      * <p>
      * 同 {@link #sshPassword}：不回传前端，编辑时留空表示沿用原值。
      */
