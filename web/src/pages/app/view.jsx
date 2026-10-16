@@ -66,6 +66,8 @@ export default class extends React.Component {
         stopping: false,
         starting: false,
 
+        deleting: false,
+
         deployLoading: false,
         deploySubmitting: false,
 
@@ -283,14 +285,12 @@ export default class extends React.Component {
             this.setState({activeTab: 'tunnel'})
             return
         }
-        const hide = message.loading('删除中…',0)
+        this.setState({deleting: true})
         HttpClient.get("admin/app/delete", {id}).then(rs => {
-            hide();
-
             history.push('/app')
 
         }).catch(e => {
-            hide();
+            this.setState({deleting: false})
             // 后端隧道校验（业务码 409）：错误提示已由 HttpClient 弹出，不再走「强制删除数据」兜底
             if (e && e.code === 409) {
                 return
@@ -301,8 +301,11 @@ export default class extends React.Component {
                 okText: '强制删除数据',
                 cancelText: '取消',
                 onOk: () => {
-                    HttpClient.get("admin/app/delete", {id, force: true}).then(rs => {
+                    this.setState({deleting: true})
+                    return HttpClient.get("admin/app/delete", {id, force: true}).then(rs => {
                         history.push('/app')
+                    }).catch(() => {
+                        this.setState({deleting: false})
                     })
                 }
             })
@@ -478,7 +481,8 @@ export default class extends React.Component {
                                     title="请注意，删除应用将清除该应用的所有数据，且该操作不能被恢复，您确定要删除吗?"
                                     type="warning"
                                 ></Alert>
-                                <Button danger type="primary" onClick={this.handleDelete}>删除应用</Button>
+                                <Button danger type="primary" loading={this.state.deleting}
+                                        onClick={this.handleDelete}>删除应用</Button>
                             </Space>
                         </Col>
                     </Row>
