@@ -13,6 +13,9 @@ import java.util.List;
 @Data
 public class RemoteRegistryQuery {
 
+    /** 源注册中心 ID；为空时使用系统默认注册中心。 */
+    private String registryId;
+
     /**
      * 要导入的镜像仓库地址列表，可写相对路径（{@code ztcn/nginx}）或完整地址
      * （{@code registry.cn-hangzhou.aliyuncs.com/ztcn/nginx}）。
