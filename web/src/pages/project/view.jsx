@@ -37,8 +37,8 @@ export default class extends React.Component {
     logRow: null,
     tagOptions: [],
     branchOptions: [],
-    // 构建来源：TAG（版本 tag）/ BRANCH（分支最新代码）
-    refType: 'TAG',
+    // 构建来源：BRANCH（分支最新代码）/ TAG（tag），默认从分支构建
+    refType: 'BRANCH',
     versions: [],
     apps: [],
     webhookLoading: false,
@@ -129,7 +129,7 @@ export default class extends React.Component {
       this.setState({branchOptions: options})
       this.selectDefault('branch', options)
     })
-    this.setState({showTrigger: true, refType: 'TAG'})
+    this.setState({showTrigger: true, refType: 'BRANCH'})
   }
 
   // 默认选中第一个选项；用户已选择时不再覆盖
@@ -334,8 +334,8 @@ export default class extends React.Component {
             <Segmented
               value={refType}
               options={[
-                {label: '版本 tag', value: 'TAG'},
-                {label: '分支', value: 'BRANCH'}
+                {label: '分支', value: 'BRANCH'},
+                {label: 'tag', value: 'TAG'}
               ]}
               onChange={v => this.setState({refType: v})}
             />
@@ -347,7 +347,7 @@ export default class extends React.Component {
             </Form.Item>
           ) : (
             <Form.Item name="tag" label="构建 tag" rules={[{required: true, message: '请选择 tag'}]}
-                       help="只支持 vX.Y.Z 形式的版本 tag">
+                       help="只支持 vX.Y.Z 形式的 tag">
               <Select options={tagOptions} showSearch placeholder='请选择远程 tag'/>
             </Form.Item>
           )}
