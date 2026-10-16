@@ -93,8 +93,13 @@ public class Host extends BaseEntity {
 
     /**
      * 自定义请求头名称：代理要求的头名（header name），如 docker-api-auth 的
-     * {@code Authorization}、http-tunnel 约定的自定义 key。留空按
-     * {@link #DEFAULT_HEADER_NAME} 处理。
+     * {@code Authorization}、http-tunnel 约定的自定义 key。留空表示用
+     * {@link #DEFAULT_HEADER_NAME}，默认值由使用方（建连 / 前端）补齐。
+     * <p>
+     * <b>切勿给本字段加「空值返回默认值」的 getter</b>：主机列表用
+     * {@code Spec#addExample} 做查询，Spring Data 的 Example 是按 getter 取值的，
+     * getter 只要返回非空，列表查询就会被无条件加上 {@code header_name like '%Authorization%'}，
+     * 把历史数据（该列为 NULL）全部过滤掉。
      */
     @Remark("自定义请求头")
     String headerName;
@@ -137,12 +142,5 @@ public class Host extends BaseEntity {
      */
     public boolean isHeaderConfigured() {
         return headerValue != null && !headerValue.isBlank();
-    }
-
-    /**
-     * 请求头名称，未配置时回落到 {@link #DEFAULT_HEADER_NAME}（前端回显、建立连接都用它）。
-     */
-    public String getHeaderName() {
-        return headerName == null || headerName.isBlank() ? DEFAULT_HEADER_NAME : headerName.trim();
     }
 }

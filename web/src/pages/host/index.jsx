@@ -172,6 +172,8 @@ export default class extends React.Component {
             connectionType: type,
             sshPort: record.sshPort || 22,
             sshUser: record.sshUser || 'root',
+            // 老数据没有请求头名称（列可能是 NULL），回显默认值
+            headerName: record.headerName || 'Authorization',
         }
         if (type === 'tcp') {
             // 远程 TCP 拆成协议 + 主机 + 端口编辑（保存时再拼回 dockerHost）

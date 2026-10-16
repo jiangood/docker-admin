@@ -268,7 +268,8 @@ public class DockerClientManager {
         // 配合 docker-api-auth / http-tunnel 等代理：注入用户配置的请求头（为空则行为不变）
         String headerValue = host == null ? null : host.getHeaderValue();
         if (StrUtil.isNotBlank(headerValue)) {
-            httpClient = new CustomHeaderDockerHttpClient(httpClient, host.getHeaderName(), headerValue);
+            String headerName = StrUtil.blankToDefault(host.getHeaderName(), Host.DEFAULT_HEADER_NAME);
+            httpClient = new CustomHeaderDockerHttpClient(httpClient, headerName, headerValue);
         }
 
         return DockerClientImpl.getInstance(config, httpClient);
