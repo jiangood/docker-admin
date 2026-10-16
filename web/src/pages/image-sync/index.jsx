@@ -202,7 +202,7 @@ export default class extends React.Component {
 
     render() {
         const {registry, registryOptions, hostOptions, registryPreview, logId, logVisible, syncing} = this.state
-        const registryConfigured = !!(registry && registry.url)
+        const registryConfigured = registryOptions.length > 0
         const formProps = {labelCol: {flex: '100px'}, preserve: false}
 
         return <Page padding>
