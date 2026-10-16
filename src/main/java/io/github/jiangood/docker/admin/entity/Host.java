@@ -33,13 +33,25 @@ public class Host extends BaseEntity {
      */
     public static final String TYPE_LOCAL = "local";
     /**
-     * 连接方式：远程 TCP 端口（tcp://ip:2375）
+     * 连接方式：远程 TCP 端口（tcp://ip[:port]，端口可省，省略时按 80/443 访问；
+     * dockerHost 用 {@link #HTTPS_PREFIX} 开头则表示走 TLS）
      */
     public static final String TYPE_TCP = "tcp";
     /**
      * 连接方式：SSH 登录后通过 docker system dial-stdio 连接
      */
     public static final String TYPE_SSH = "ssh";
+
+    /**
+     * 远程 TCP 的 TLS 标记：dockerHost 以该前缀开头表示走 https
+     * （传输层只认 tcp://，TLS 由 {@code DockerClientManager} 另注入 SSLConfig 实现）。
+     */
+    public static final String HTTPS_PREFIX = "https://";
+
+    /**
+     * 默认请求头名称：docker-api-auth 等代理约定的自定义请求头名。
+     */
+    public static final String DEFAULT_HEADER_NAME = "Authorization";
 
     @Remark("名称")
     @NotNull
@@ -80,16 +92,24 @@ public class Host extends BaseEntity {
     String sshPassword;
 
     /**
-     * 认证头：配合 docker-api-auth 等带认证的 Docker 代理使用，统一作为
-     * {@code Authorization} 头发送。可只填 token（保存时自动补 {@code Bearer } 前缀），
-     * 也可填完整值（如 {@code Bearer xxx}）。
+     * 自定义请求头名称：代理要求的头名（header name），如 docker-api-auth 的
+     * {@code Authorization}、http-tunnel 约定的自定义 key。留空按
+     * {@link #DEFAULT_HEADER_NAME} 处理。
+     */
+    @Remark("自定义请求头")
+    String headerName;
+
+    /**
+     * 自定义请求头的值：{@link #headerName} 对应的值。名称为 {@code Authorization} 时可只填
+     * token（保存时自动补 {@code Bearer } 前缀），其它名称原样发送。
      * <p>
      * 同 {@link #sshPassword}：不回传前端，编辑时留空表示沿用原值。
      */
     @ToString.Exclude
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
-    @Remark("认证头")
-    String authHeader;
+    @Column(name = "auth_header")
+    @Remark("请求头值")
+    String headerValue;
 
     @PrePersist
     public void prePersist() {
@@ -110,12 +130,19 @@ public class Host extends BaseEntity {
     }
 
     /**
-     * 是否已配置认证头。
+     * 是否已配置请求头值。
      * <p>
-     * {@link #authHeader} 本身以 WRITE_ONLY 回传前端的值为空，这里用一个派生布尔量
+     * {@link #headerValue} 本身以 WRITE_ONLY 回传前端的值为空，这里用一个派生布尔量
      * 供详情页展示「已配置 / 未配置」，不泄露明文。
      */
-    public boolean isAuthConfigured() {
-        return authHeader != null && !authHeader.isBlank();
+    public boolean isHeaderConfigured() {
+        return headerValue != null && !headerValue.isBlank();
+    }
+
+    /**
+     * 请求头名称，未配置时回落到 {@link #DEFAULT_HEADER_NAME}（前端回显、建立连接都用它）。
+     */
+    public String getHeaderName() {
+        return headerName == null || headerName.isBlank() ? DEFAULT_HEADER_NAME : headerName.trim();
     }
 }

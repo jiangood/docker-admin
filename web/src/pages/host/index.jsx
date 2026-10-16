@@ -14,6 +14,20 @@ const CONNECTION_TYPES = [
 const LOCAL_TIP = '留空则使用平台本机 Docker：Linux 为 unix:///var/run/docker.sock，Windows 为 tcp://localhost:2375。'
     + '如需 rootless 等自定义路径，可在此填写 socket 路径。'
 
+const DEFAULT_TCP_PORT = 2375
+
+const PROTOCOLS = [
+    {value: 'http', label: 'HTTP'},
+    {value: 'https', label: 'HTTPS'},
+]
+
+/** 各协议的常见端口，切换协议时自动跟着换 */
+const PROTOCOL_PORTS = {http: DEFAULT_TCP_PORT, https: 443}
+
+function isHttps(record) {
+    return /^https:\/\//i.test((record && record.dockerHost) || '')
+}
+
 function connectionTypeLabel(v) {
     const item = CONNECTION_TYPES.find(i => i.value === (v || 'local'))
     return item ? item.label : '本机'
@@ -28,6 +42,41 @@ function endpointOf(record) {
         return record.dockerHost || '本机（默认）'
     }
     return record.dockerHost
+}
+
+/**
+ * 远程 TCP 地址拆成协议、主机、端口，供表单分开编辑。
+ * 后端规范化后 dockerHost 形如 tcp://192.168.1.2:2375 或 https://docker.example.com；
+ * 不带端口（域名直连）时端口为空。
+ */
+function splitTcpHost(dockerHost) {
+    const raw = (dockerHost || '').trim()
+    const tcpProtocol = /^https:\/\//i.test(raw) ? 'https' : 'http'
+    const authority = raw.replace(/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//, '')
+    const matched = /^(.*):(\d+)$/.exec(authority)
+    if (matched) {
+        return {tcpProtocol, tcpHost: matched[1], tcpPort: Number(matched[2])}
+    }
+    // 没写端口就留空：保存时不补端口，传输层按 http/https 默认端口（80/443）访问
+    return {tcpProtocol, tcpHost: authority, tcpPort: null}
+}
+
+/**
+ * 提交前把协议 + 主机 + 端口拼回 dockerHost，并清掉 TCP 专用字段（实体没有这几列）。
+ * https 前缀是后端识别 TLS 的标记。
+ */
+function buildPayload(values) {
+    const payload = {...values}
+    if ((payload.connectionType || 'local') === 'tcp') {
+        const host = (payload.tcpHost || '').trim()
+        const port = payload.tcpPort
+        const prefix = payload.tcpProtocol === 'https' ? 'https://' : ''
+        payload.dockerHost = prefix + host + (port ? `:${port}` : '')
+    }
+    delete payload.tcpHost
+    delete payload.tcpPort
+    delete payload.tcpProtocol
+    return payload
 }
 
 
@@ -69,7 +118,7 @@ export default class extends React.Component {
         {
             title: '连接方式',
             dataIndex: 'connectionType',
-            render: connectionTypeLabel
+            render: (v, record) => isHttps(record) ? '远程 TCP(HTTPS)' : connectionTypeLabel(v)
         },
 
 
@@ -103,30 +152,53 @@ export default class extends React.Component {
     ]
 
     handleAdd = () => {
-        this.setState({formOpen: true, formValues: {connectionType: 'local', isRunner: false, sshPort: 22}})
-    }
-
-    handleEdit = record => {
-        const type = record.connectionType || 'local'
-        // 远程 TCP 只展示 IP/主机（保存时后端再补 tcp:// 与默认端口）
-        const dockerHost = type === 'tcp' && record.dockerHost
-            ? record.dockerHost.replace(/^tcp:\/\//i, '')
-            : record.dockerHost
         this.setState({
             formOpen: true,
             formValues: {
-                ...record,
-                dockerHost,
-                connectionType: type,
-                sshPort: record.sshPort || 22,
-                sshUser: record.sshUser || 'root',
+                connectionType: 'local',
+                isRunner: false,
+                sshPort: 22,
+                tcpProtocol: 'http',
+                tcpPort: DEFAULT_TCP_PORT,
+                headerName: 'Authorization',
             }
         })
     }
 
+    handleEdit = record => {
+        const type = record.connectionType || 'local'
+        const formValues = {
+            ...record,
+            connectionType: type,
+            sshPort: record.sshPort || 22,
+            sshUser: record.sshUser || 'root',
+        }
+        if (type === 'tcp') {
+            // 远程 TCP 拆成协议 + 主机 + 端口编辑（保存时再拼回 dockerHost）
+            Object.assign(formValues, splitTcpHost(record.dockerHost))
+            delete formValues.dockerHost
+        }
+        this.setState({formOpen: true, formValues})
+    }
+
+    /**
+     * 切换 HTTP/HTTPS 时，把「上一个协议的默认端口」跟着换成新协议的默认端口；
+     * 用户自己填过（或刻意清空）的端口不动。
+     */
+    handleProtocolChange = changed => {
+        const protocol = changed.tcpProtocol
+        if (!protocol || !this.formRef.current) {
+            return
+        }
+        const other = protocol === 'https' ? 'http' : 'https'
+        if (this.formRef.current.getFieldValue('tcpPort') === PROTOCOL_PORTS[other]) {
+            this.formRef.current.setFieldValue('tcpPort', PROTOCOL_PORTS[protocol])
+        }
+    }
+
 
     onFinish = values => {
-        HttpClient.post('admin/host/save', values).then(rs => {
+        HttpClient.post('admin/host/save', buildPayload(values)).then(rs => {
             this.setState({formOpen: false})
             this.tableRef.current.reload()
         })
@@ -136,7 +208,7 @@ export default class extends React.Component {
     handleTest = () => {
         this.formRef.current.validateFields().then(values => {
             this.setState({testing: true})
-            HttpClient.post('admin/host/test', values)
+            HttpClient.post('admin/host/test', buildPayload(values))
                 .catch(() => {
                 })
                 .finally(() => this.setState({testing: false}))
@@ -189,6 +261,7 @@ export default class extends React.Component {
 
                 <Form ref={this.formRef} labelCol={{flex: '100px'}}
                       initialValues={this.state.formValues}
+                      onValuesChange={this.handleProtocolChange}
                       onFinish={this.onFinish}>
                     <Form.Item name='id' noStyle></Form.Item>
 
@@ -229,17 +302,35 @@ export default class extends React.Component {
                             }
                             if (type === 'tcp') {
                                 return <>
-                                    <Form.Item label='主机地址' name='dockerHost' rules={[{required: true}]}
-                                               tooltip={<div style={{width: 420}}>只填 IP 或主机名即可，默认端口
-                                                   2375。<br/>如需指定端口可写 192.168.1.2:2376。</div>}>
-                                        <Input placeholder='192.168.1.2（默认端口 2375）'/>
+                                    <Form.Item label='协议' name='tcpProtocol' initialValue='http'
+                                               tooltip={<div style={{width: 460}}>HTTP 走明文；HTTPS 会加密传输，
+                                                   但<b>不校验证书与主机名</b>（自签证书、证书里没填域名的 Docker API
+                                                   网关用这个）。</div>}>
+                                        <Select options={PROTOCOLS}/>
                                     </Form.Item>
-                                    <Form.Item label='认证头' name='authHeader'
-                                               tooltip={<div style={{width: 460}}>配合 docker-api-auth
-                                                   等带认证的 Docker 代理，统一作为 <b>Authorization</b> 头发送。<br/>
-                                                   只填 token 会自动补 Bearer 前缀；编辑时留空表示不修改。</div>}>
+                                    <Form.Item label='主机地址' name='tcpHost' rules={[{required: true}]}
+                                               tooltip='Docker 所在机器的 IP 或域名，端口在下一项单独填写'>
+                                        <Input placeholder='192.168.1.2 或 docker.example.com'/>
+                                    </Form.Item>
+                                    <Form.Item label='端口' name='tcpPort' initialValue={DEFAULT_TCP_PORT}
+                                               tooltip={<div style={{width: 460}}>Docker daemon 监听端口，默认
+                                                   2375（HTTPS 常见 443）。<br/>留空表示不指定端口，适用于由反向代理
+                                                   直接暴露的域名（按 http/https 默认端口 80/443 访问）。</div>}>
+                                        <InputNumber style={{width: '100%'}} min={1} max={65535}
+                                                     placeholder='留空则不指定端口'/>
+                                    </Form.Item>
+                                    <Form.Item label='自定义请求头' name='headerName' initialValue='Authorization'
+                                               tooltip={<div style={{width: 460}}>代理要求的请求头名称（header name），
+                                                   默认 <b>Authorization</b>（docker-api-auth）；http-tunnel
+                                                   等隧道代理填它约定的自定义 key。</div>}>
+                                        <Input placeholder='Authorization'/>
+                                    </Form.Item>
+                                    <Form.Item label='请求头值' name='headerValue'
+                                               tooltip={<div style={{width: 460}}>名称为 <b>Authorization</b>
+                                                   时只填 token 会自动补 Bearer 前缀，其它名称原样发送。<br/>
+                                                   编辑时留空表示不修改。</div>}>
                                         <Input.Password autoComplete='new-password'
-                                                        placeholder='留空则不带认证头，如 your-token'/>
+                                                        placeholder='留空则不带请求头，如 your-token'/>
                                     </Form.Item>
                                 </>
                             }

@@ -8,8 +8,13 @@ import {formatBytes, formatTime, stateColor, stateLabel} from "../../components/
 
 const CONNECTION_LABELS = {local: '本机', tcp: '远程 TCP', ssh: 'SSH'}
 
-function connectionLabel(type) {
-    return CONNECTION_LABELS[type] || CONNECTION_LABELS[(type || '').toLowerCase()] || type || '-'
+function connectionLabel(host) {
+    const type = host && host.connectionType
+    const label = CONNECTION_LABELS[type] || CONNECTION_LABELS[(type || '').toLowerCase()] || type || '-'
+    if (type === 'tcp' && /^https:\/\//i.test((host && host.dockerHost) || '')) {
+        return '远程 TCP(HTTPS)'
+    }
+    return label
 }
 
 function endpointOf(host) {
@@ -241,11 +246,11 @@ export default class extends React.Component {
                               items={[
                                   {key: 'name', label: '名称', children: host?.name || '-'},
                                   {key: 'ip', label: 'IP地址', children: host?.ip || '-'},
-                                  {key: 'conn', label: '连接方式', children: connectionLabel(host?.connectionType)},
+                                  {key: 'conn', label: '连接方式', children: connectionLabel(host)},
                                   {
-                                      key: 'auth', label: '认证头',
+                                      key: 'header', label: '自定义请求头',
                                       children: host?.connectionType === 'tcp'
-                                          ? (host?.authConfigured ? '已配置' : '未配置')
+                                          ? `${host?.headerName || 'Authorization'} ${host?.headerConfigured ? '已配置' : '未配置'}`
                                           : '-'
                                   },
                                   {key: 'endpoint', label: '连接地址', children: endpointOf(host), span: 2},

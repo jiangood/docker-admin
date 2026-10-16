@@ -240,8 +240,19 @@ public class DockerClientManager {
             dockerHost = host.getDockerHost();
         }
 
+        // 连接配置里的 https:// 前缀表示走 TLS。
+        // docker-java 传输层只认 unix/npipe/tcp 三种 scheme，https 与否由「是否传 SSLConfig」决定，
+        // 所以这里把 scheme 换回 tcp:// 并另外注入 TLS 配置（见 LenientSslConfig 的说明）。
+        boolean tls = StrUtil.startWithIgnoreCase(dockerHost, Host.HTTPS_PREFIX);
+        if (tls) {
+            dockerHost = "tcp://" + StrUtil.removePrefixIgnoreCase(dockerHost, Host.HTTPS_PREFIX);
+        }
+
         DefaultDockerClientConfig.Builder builder = DefaultDockerClientConfig.createDefaultConfigBuilder()
                 .withDockerHost(dockerHost);
+        if (tls) {
+            builder.withCustomSslConfig(new LenientSslConfig());
+        }
         fillRegistry(builder, registry);
 
         DockerClientConfig config = builder.build();
@@ -254,10 +265,10 @@ public class DockerClientManager {
                         .responseTimeout(RESPONSE_TIMEOUT)
                         .build();
 
-        // 配合 docker-api-auth 等带认证的 Docker 代理：为其注入 Authorization 头（为空则行为不变）
-        String authHeader = host == null ? null : host.getAuthHeader();
-        if (StrUtil.isNotBlank(authHeader)) {
-            httpClient = new AuthHeaderDockerHttpClient(httpClient, "Authorization", authHeader);
+        // 配合 docker-api-auth / http-tunnel 等代理：注入用户配置的请求头（为空则行为不变）
+        String headerValue = host == null ? null : host.getHeaderValue();
+        if (StrUtil.isNotBlank(headerValue)) {
+            httpClient = new CustomHeaderDockerHttpClient(httpClient, host.getHeaderName(), headerValue);
         }
 
         return DockerClientImpl.getInstance(config, httpClient);

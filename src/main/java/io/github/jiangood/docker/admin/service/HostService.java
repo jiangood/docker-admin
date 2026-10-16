@@ -45,7 +45,7 @@ public class HostService extends BaseService<Host> {
         normalize(input);
         Assert.hasText(input.getIp(), "请填写主机 IP 地址");
         fillSshPassword(input);
-        fillAuthHeader(input);
+        fillHeaderValue(input);
         if (StrUtil.isBlank(input.getId())) {
             return create(input);
         }
@@ -53,15 +53,15 @@ public class HostService extends BaseService<Host> {
     }
 
     /**
-     * 认证头不回传前端，编辑时留空表示沿用原值。
+     * 请求头值不回传前端，编辑时留空表示沿用原值。
      */
-    public void fillAuthHeader(Host input) {
-        if (input == null || StrUtil.isNotBlank(input.getAuthHeader()) || StrUtil.isBlank(input.getId())) {
+    public void fillHeaderValue(Host input) {
+        if (input == null || StrUtil.isNotBlank(input.getHeaderValue()) || StrUtil.isBlank(input.getId())) {
             return;
         }
         Host old = findById(input.getId()).orElse(null);
         if (old != null) {
-            input.setAuthHeader(old.getAuthHeader());
+            input.setHeaderValue(old.getHeaderValue());
         }
     }
 
@@ -91,7 +91,8 @@ public class HostService extends BaseService<Host> {
             return;
         }
         host.setIp(StrUtil.trim(host.getIp()));
-        host.setAuthHeader(normalizeAuthHeader(host.getAuthHeader()));
+        host.setHeaderName(normalizeHeaderName(host.getHeaderName()));
+        host.setHeaderValue(normalizeHeaderValue(host.getHeaderName(), host.getHeaderValue()));
         String dockerHost = StrUtil.trim(host.getDockerHost());
         String type = StrUtil.trim(host.getConnectionType());
 
@@ -126,39 +127,56 @@ public class HostService extends BaseService<Host> {
     }
 
     /**
-     * 认证头归一化：留空保持为空（不注入请求头）；只填 token 时自动补
-     * {@code Bearer } 前缀，已带 scheme（含空格）的原样保留。
+     * 自定义请求头名称归一化：留空回落默认的 {@code Authorization}。
      */
-    private String normalizeAuthHeader(String authHeader) {
-        String value = StrUtil.trim(authHeader);
-        if (StrUtil.isBlank(value)) {
-            return null;
-        }
-        if (!StrUtil.contains(value, " ")) {
-            return "Bearer " + value;
-        }
-        return value;
+    private String normalizeHeaderName(String headerName) {
+        return StrUtil.isBlank(headerName) ? Host.DEFAULT_HEADER_NAME : StrUtil.trim(headerName);
     }
 
     /**
-     * 远程 TCP 地址补全：允许只填 IP/主机名，自动补 tcp:// 与默认端口 2375。
-     * 已带端口或完整协议头的原样保留。
+     * 自定义请求头值归一化：留空保持为空（不注入请求头）。
+     * <p>
+     * {@code Bearer} 前缀是 {@code Authorization} 的约定，只在该名称下自动补；
+     * 自定义头（如 http-tunnel 的 key）原样发送。
+     */
+    private String normalizeHeaderValue(String headerName, String headerValue) {
+        String value = StrUtil.trim(headerValue);
+        if (StrUtil.isBlank(value)) {
+            return null;
+        }
+        if (!Host.DEFAULT_HEADER_NAME.equalsIgnoreCase(headerName) || StrUtil.contains(value, " ")) {
+            return value;
+        }
+        return "Bearer " + value;
+    }
+
+    /**
+     * 远程 TCP 地址补全：允许只填 IP/主机名，自动补 tcp:// 前缀（{@code https://} 原样保留，表示走 TLS）。
+     * <p>
+     * <b>不补默认端口</b>：端口留空即保持无端口，传输层会按 http/https 默认端口（80/443）访问，
+     * 便于直接指向由反向代理暴露的域名；需要 2375 请在连接配置里显式填写。
+     * <p>
+     * 路径会被丢掉：{@code https://host/info} 也按 {@code https://host} 处理。
      */
     private String normalizeTcpHost(String dockerHost) {
-        String value = StrUtil.contains(dockerHost, "://") ? dockerHost : "tcp://" + dockerHost;
+        String raw = StrUtil.trim(dockerHost);
+        boolean https = StrUtil.startWithIgnoreCase(raw, Host.HTTPS_PREFIX);
+        String prefix = https ? Host.HTTPS_PREFIX : "tcp://";
+        String authority = raw;
+        int schemeEnd = authority.indexOf("://");
+        if (schemeEnd >= 0) {
+            authority = authority.substring(schemeEnd + 3);
+        }
         try {
-            URI uri = URI.create(value);
+            URI uri = URI.create("tcp://" + authority);
             String host = uri.getHost();
             if (StrUtil.isNotBlank(host)) {
-                if (uri.getPort() < 0) {
-                    return "tcp://" + host + ":2375";
-                }
-                return "tcp://" + host + ":" + uri.getPort();
+                return uri.getPort() < 0 ? prefix + host : prefix + host + ":" + uri.getPort();
             }
         } catch (Exception e) {
             log.warn("dockerHost 解析失败，按原值使用: {}", dockerHost);
         }
-        return value;
+        return prefix + authority;
     }
 
 }
