@@ -172,6 +172,7 @@ export default class extends React.Component {
         const payload = {
             hostId: values.hostId,
             sourceImage: values.sourceImage,
+            sourceRegistryId: values.sourceRegistryId,
             targetRegistryId: values.targetRegistryId,
             targetHostIds: values.targetHostIds || [],
         }
@@ -234,6 +235,13 @@ export default class extends React.Component {
                       initialValues={{targetHostIds: []}}
                       onValuesChange={(_, values) => this.calcRegistryPreview(values)}
                       onFinish={this.submit}>
+
+                    <Form.Item label='源镜像认证' name='sourceRegistryId'
+                               tooltip='源镜像为私有镜像时，选择对应注册中心以使用其凭据；源镜像地址仍需填写完整'>
+                        <Select allowClear showSearch optionFilterProp='label'
+                                options={registryOptions.map(r => ({value: r.id, label: r.url + '/' + r.namespace}))}
+                                placeholder='公共镜像无需选择'/>
+                    </Form.Item>
 
                     <Form.Item label='目标注册中心' name='targetRegistryId'
                                tooltip='默认使用系统配置中的注册中心；可在此为本次同步单独指定目标'>
