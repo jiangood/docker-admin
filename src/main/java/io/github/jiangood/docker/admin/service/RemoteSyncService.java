@@ -103,7 +103,8 @@ public class RemoteSyncService {
     /**
      * 导入镜像仓库：把选中的仓库连同其版本 upsert 进本平台。
      */
-    public RemoteSyncResult sync(RemoteRegistryQuery query) {        Registry registry = requireRegistry();
+    public RemoteSyncResult sync(RemoteRegistryQuery query) {
+        Registry registry = requireRegistry(query == null ? null : query.getRegistryId());
         RemoteSyncResult result = new RemoteSyncResult();
         for (RepoGroup group : groups(registry, query, query.isWithMeta())) {
             persistRepo(registry, group, result);
