@@ -45,24 +45,10 @@ public class HostService extends BaseService<Host> {
         normalize(input);
         Assert.hasText(input.getIp(), "请填写主机 IP 地址");
         fillSshPassword(input);
-        fillHeaderValue(input);
         if (StrUtil.isBlank(input.getId())) {
             return create(input);
         }
         return update(input, updateFields);
-    }
-
-    /**
-     * 请求头值不回传前端，编辑时留空表示沿用原值。
-     */
-    public void fillHeaderValue(Host input) {
-        if (input == null || StrUtil.isNotBlank(input.getHeaderValue()) || StrUtil.isBlank(input.getId())) {
-            return;
-        }
-        Host old = findById(input.getId()).orElse(null);
-        if (old != null) {
-            input.setHeaderValue(old.getHeaderValue());
-        }
     }
 
     /**

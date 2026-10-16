@@ -1,5 +1,5 @@
 import {PlusOutlined} from '@ant-design/icons'
-import {Button, Form, Input, InputNumber, Modal, Popconfirm, Select} from 'antd'
+import {Button, Form, Input, InputNumber, Modal, Popconfirm, Segmented, Select} from 'antd'
 import React from 'react'
 
 import {PermActions, FieldBoolean, HttpClient, Page, PageUtils, ProTable} from "@jiangood/open-admin"
@@ -20,9 +20,6 @@ const PROTOCOLS = [
     {value: 'http', label: 'HTTP'},
     {value: 'https', label: 'HTTPS'},
 ]
-
-/** 各协议的常见端口，切换协议时自动跟着换 */
-const PROTOCOL_PORTS = {http: DEFAULT_TCP_PORT, https: 443}
 
 function isHttps(record) {
     return /^https:\/\//i.test((record && record.dockerHost) || '')
@@ -45,33 +42,41 @@ function endpointOf(record) {
 }
 
 /**
- * 远程 TCP 地址拆成协议、主机、端口，供表单分开编辑。
- * 后端规范化后 dockerHost 形如 tcp://192.168.1.2:2375 或 https://docker.example.com；
- * 不带端口（域名直连）时端口为空。
+ * 解析远程 TCP 地址：主机、端口、是否 https。
+ * 后端规范化后 dockerHost 形如 tcp://192.168.1.2:2375 或 https://docker.example.com。
  */
-function splitTcpHost(dockerHost) {
-    const raw = (dockerHost || '').trim()
-    const tcpProtocol = /^https:\/\//i.test(raw) ? 'https' : 'http'
-    const authority = raw.replace(/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//, '')
+function parseTcpHost(dockerHost) {
+    const text = (dockerHost || '').trim()
+    const https = /^https:\/\//i.test(text)
+    // 去掉协议前缀与路径（粘整条 URL 也能用，如 https://host:443/info）
+    const authority = text.replace(/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//, '').split('/')[0]
     const matched = /^(.*):(\d+)$/.exec(authority)
-    if (matched) {
-        return {tcpProtocol, tcpHost: matched[1], tcpPort: Number(matched[2])}
+    return {
+        https,
+        host: matched ? matched[1] : authority,
+        port: matched ? Number(matched[2]) : null,
     }
-    // 没写端口就留空：保存时不补端口，传输层按 http/https 默认端口（80/443）访问
-    return {tcpProtocol, tcpHost: authority, tcpPort: null}
 }
 
 /**
- * 提交前把协议 + 主机 + 端口拼回 dockerHost，并清掉 TCP 专用字段（实体没有这几列）。
- * https 前缀是后端识别 TLS 的标记。
+ * 编辑回显：协议 + 主机 + 端口拆到各控件（保存时再拼回 dockerHost）。
+ */
+function splitTcpHost(dockerHost) {
+    const {https, host, port} = parseTcpHost(dockerHost)
+    return {tcpProtocol: https ? 'https' : 'http', tcpHost: host, tcpPort: port}
+}
+
+/**
+ * 提交前把协议 + 主机 + 端口拼回 dockerHost，并清掉表单专用字段（实体没有这几列）。
+ * https:// 前缀是后端识别 TLS 的标记；端口以「端口」框为准，框里空着就用地址里写的。
  */
 function buildPayload(values) {
     const payload = {...values}
     if ((payload.connectionType || 'local') === 'tcp') {
-        const host = (payload.tcpHost || '').trim()
-        const port = payload.tcpPort
-        const prefix = payload.tcpProtocol === 'https' ? 'https://' : ''
-        payload.dockerHost = prefix + host + (port ? `:${port}` : '')
+        const parsed = parseTcpHost(payload.tcpHost)
+        const https = payload.tcpProtocol === 'https' || parsed.https
+        const port = payload.tcpPort || parsed.port
+        payload.dockerHost = (https ? 'https://' : '') + parsed.host + (port ? `:${port}` : '')
     }
     delete payload.tcpHost
     delete payload.tcpPort
@@ -164,6 +169,27 @@ export default class extends React.Component {
         })
     }
 
+    /**
+     * 地址框失焦时做一次整理：粘进来的 `https://host:443` 会被拆成
+     * 主机 = host、协议 = HTTPS、端口 = 443，所见即所得，不留隐藏前缀。
+     */
+    handleHostBlur = e => {
+        const raw = (e.target.value || '').trim()
+        const form = this.formRef.current
+        if (!raw || !form) {
+            return
+        }
+        const {https, host, port} = parseTcpHost(raw)
+        form.setFieldValue('tcpHost', host)
+        if (https) {
+            form.setFieldValue('tcpProtocol', 'https')
+        }
+        if (port) {
+            // 地址里显式写了端口，就搬到端口框（以用户写的为准）
+            form.setFieldValue('tcpPort', port)
+        }
+    }
+
     handleEdit = record => {
         const type = record.connectionType || 'local'
         const formValues = {
@@ -173,26 +199,11 @@ export default class extends React.Component {
             sshUser: record.sshUser || 'root',
         }
         if (type === 'tcp') {
-            // 远程 TCP 拆成协议 + 主机 + 端口编辑（保存时再拼回 dockerHost）
+            // 远程 TCP 拆成主机地址（可带 https:// 前缀）+ 端口编辑（保存时再拼回 dockerHost）
             Object.assign(formValues, splitTcpHost(record.dockerHost))
             delete formValues.dockerHost
         }
         this.setState({formOpen: true, formValues})
-    }
-
-    /**
-     * 切换 HTTP/HTTPS 时，把「上一个协议的默认端口」跟着换成新协议的默认端口；
-     * 用户自己填过（或刻意清空）的端口不动。
-     */
-    handleProtocolChange = changed => {
-        const protocol = changed.tcpProtocol
-        if (!protocol || !this.formRef.current) {
-            return
-        }
-        const other = protocol === 'https' ? 'http' : 'https'
-        if (this.formRef.current.getFieldValue('tcpPort') === PROTOCOL_PORTS[other]) {
-            this.formRef.current.setFieldValue('tcpPort', PROTOCOL_PORTS[protocol])
-        }
     }
 
 
@@ -260,7 +271,6 @@ export default class extends React.Component {
 
                 <Form ref={this.formRef} labelCol={{flex: '100px'}}
                       initialValues={this.state.formValues}
-                      onValuesChange={this.handleProtocolChange}
                       onFinish={this.onFinish}>
                     <Form.Item name='id' noStyle></Form.Item>
 
@@ -301,22 +311,23 @@ export default class extends React.Component {
                             }
                             if (type === 'tcp') {
                                 return <>
-                                    <Form.Item label='协议' name='tcpProtocol' initialValue='http'
-                                               tooltip={<div style={{width: 460}}>HTTP 走明文；HTTPS 会加密传输，
-                                                   但<b>不校验证书与主机名</b>（自签证书、证书里没填域名的 Docker API
-                                                   网关用这个）。</div>}>
-                                        <Select options={PROTOCOLS}/>
-                                    </Form.Item>
                                     <Form.Item label='主机地址' name='tcpHost' rules={[{required: true}]}
                                                tooltip='Docker 所在机器的 IP 或域名，端口在下一项单独填写'>
-                                        <Input placeholder='192.168.1.2 或 docker.example.com'/>
+                                        <Input allowClear placeholder='192.168.1.2 或 docker.example.com'
+                                               onBlur={this.handleHostBlur}/>
                                     </Form.Item>
                                     <Form.Item label='端口' name='tcpPort' initialValue={DEFAULT_TCP_PORT}
                                                tooltip={<div style={{width: 460}}>Docker daemon 监听端口，默认
-                                                   2375（HTTPS 常见 443）。<br/>留空表示不指定端口，适用于由反向代理
-                                                   直接暴露的域名（按 http/https 默认端口 80/443 访问）。</div>}>
+                                                   2375（HTTPS 常见 443）。<br/>右边是协议：HTTP 明文 / HTTPS 加密
+                                                   （不校验证书身份，自签证书也能连）。<br/>端口留空表示不指定，
+                                                   按 http/https 默认端口（80/443）访问。</div>}>
                                         <InputNumber style={{width: '100%'}} min={1} max={65535}
-                                                     placeholder='留空则不指定端口'/>
+                                                     placeholder='留空则不指定端口'
+                                                     addonAfter={
+                                                         <Form.Item name='tcpProtocol' noStyle initialValue='http'>
+                                                             <Segmented size='small' options={PROTOCOLS}/>
+                                                         </Form.Item>
+                                                     }/>
                                     </Form.Item>
                                     <Form.Item label='自定义请求头' name='headerName'
                                                rules={[({getFieldValue}) => ({
@@ -336,9 +347,9 @@ export default class extends React.Component {
                                     <Form.Item label='请求头值' name='headerValue'
                                                tooltip={<div style={{width: 460}}>照原样发送，不自动加任何前缀——
                                                    需要 <b>Bearer</b> 请自己写进值里（如 Bearer abc123）。<br/>
-                                                   编辑时留空表示不修改。</div>}>
+                                                   清空即删除该请求头（不再发送）。</div>}>
                                         <Input.Password autoComplete='new-password'
-                                                        placeholder='留空则不发送该请求头'/>
+                                                        placeholder='留空/清空则不发送该请求头'/>
                                     </Form.Item>
                                 </>
                             }

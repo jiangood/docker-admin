@@ -104,10 +104,9 @@ public class Host extends BaseEntity {
     /**
      * 自定义请求头的值：{@link #headerName} 对应的值，照原样发送（不自动补 {@code Bearer}）。
      * <p>
-     * 同 {@link #sshPassword}：不回传前端，编辑时留空表示沿用原值。
+     * 回传前端（编辑弹窗要回显，才能改、才能删）。<b>空就是空</b>：保存时留空即删除该请求头。
      */
     @ToString.Exclude
-    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     @Column(name = "auth_header")
     @Remark("请求头值")
     String headerValue;
@@ -131,10 +130,7 @@ public class Host extends BaseEntity {
     }
 
     /**
-     * 是否已配置请求头值。
-     * <p>
-     * {@link #headerValue} 本身以 WRITE_ONLY 回传前端的值为空，这里用一个派生布尔量
-     * 供详情页展示「已配置 / 未配置」，不泄露明文。
+     * 是否已配置请求头值（详情页展示「已配置 / 未配置」，值本身也可以直接读）。
      */
     public boolean isHeaderConfigured() {
         return headerValue != null && !headerValue.isBlank();
