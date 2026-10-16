@@ -35,16 +35,16 @@ export default class extends React.Component {
         {
             title: '镜像名',
             dataIndex: 'name',
+            render: (name, row) => (
+                <LinkButton
+                    onClick={() => PageUtils.open('/image-repo/view?id=' + row.id, "镜像仓库-" + name)}>
+                    {name}
+                </LinkButton>
+            ),
         },
         {
             title: '镜像地址',
             dataIndex: 'imageUrl',
-            render: (imageUrl, row) => (
-                <LinkButton
-                    onClick={() => PageUtils.open('/image-repo/view?id=' + row.id, "镜像仓库-" + imageUrl)}>
-                    {imageUrl}
-                </LinkButton>
-            ),
         },
         {
             title: '来源',
