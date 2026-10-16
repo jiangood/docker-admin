@@ -23,6 +23,7 @@ import io.github.jiangood.docker.admin.entity.App;
 import io.github.jiangood.docker.admin.entity.BuildLog;
 import io.github.jiangood.docker.admin.entity.CodeSource;
 import io.github.jiangood.docker.admin.entity.Host;
+import io.github.jiangood.docker.admin.entity.ImageTag;
 import io.github.jiangood.docker.admin.entity.Project;
 import io.github.jiangood.docker.admin.entity.Registry;
 import io.github.jiangood.docker.admin.util.ImageUrlUtils;
@@ -677,6 +678,14 @@ public class ProjectService extends BaseService<Project> {
     public List<String> tags(String projectId) {
         Project project = projectRepository.findById(projectId).orElse(null);
         return imageTagService.tags(getFullImageUrl(project));
+    }
+
+    /**
+     * 该项目产出的镜像版本明细（含来源、构建时间、大小等），倒序。
+     */
+    public List<ImageTag> versionList(String projectId) {
+        Project project = projectRepository.findById(projectId).orElse(null);
+        return imageTagService.listByImageUrl(getFullImageUrl(project));
     }
 
     /**

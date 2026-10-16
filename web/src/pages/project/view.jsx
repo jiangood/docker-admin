@@ -1,6 +1,6 @@
 import {
   Alert, Button, Card, Descriptions, Form,
-  Modal, Segmented, Select, Space, Spin, Switch, Table, Tabs, Tag, Tooltip, Typography
+  Modal, Segmented, Select, Space, Spin, Switch, Table, Tabs, Tooltip, Typography
 } from 'antd';
 import React from 'react';
 import {
@@ -12,6 +12,8 @@ import {
 } from "@ant-design/icons";
 import {DateUtils, getToken, HttpClient, Page, PageUtils, ProTable, UrlUtils, ViewText} from "@jiangood/open-admin";
 import LogView from "../../components/LogView";
+import {formatBytes} from "../../components/container/utils";
+import {sourceTag} from "../image-repo/index";
 
 
 function getIcon(key, index) {
@@ -67,7 +69,7 @@ export default class extends React.Component {
   }
 
   loadVersions = () => {
-    HttpClient.get('admin/project/versions', {projectId: this.id}).then(rs => this.setState({versions: rs.data || []}))
+    HttpClient.get('admin/project/versionList', {projectId: this.id}).then(rs => this.setState({versions: rs.data || []}))
   }
 
   loadApps = () => {
@@ -354,14 +356,34 @@ export default class extends React.Component {
       },
       {
         key: 'version',
-        label: '构建版本',
-        children: <Space wrap>
-          {versions.length === 0 ? <span>-</span> : versions.map(t => {
-            // 接口返回的是 {value, label, data} 形式的 Option，取其中的 tag 文本渲染
-            const tag = t?.value ?? t;
-            return <Tag key={tag} color='blue'>{tag}</Tag>
-          })}
-        </Space>
+        label: `构建版本 (${versions.length})`,
+        children: <Table
+          size='small'
+          rowKey='id'
+          pagination={false}
+          dataSource={versions}
+          columns={[
+            {title: 'tag', dataIndex: 'tag'},
+            {
+              title: '完整地址', dataIndex: 'fullUrl',
+              render: (v) => <Typography.Text copyable code>{v}</Typography.Text>
+            },
+            {title: '来源', dataIndex: 'source', width: 90, render: (s) => sourceTag(s)},
+            {title: '构建时间', dataIndex: 'buildTime', width: 160, render: (v) => v || '-'},
+            {
+              title: '大小', dataIndex: 'size', width: 100,
+              render: (v) => v ? formatBytes(v) : '-'
+            },
+            {
+              title: '声明端口', dataIndex: 'exposedPorts',
+              render: (list) => (list && list.length) ? list.join(', ') : '-'
+            },
+            {
+              title: '声明卷', dataIndex: 'volumes',
+              render: (list) => (list && list.length) ? list.join(', ') : '-'
+            },
+          ]}
+        />
       },
       {
         key: 'apps',

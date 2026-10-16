@@ -259,6 +259,16 @@ public class ProjectController {
     }
 
     /**
+     * 该项目产出的可用版本明细（含来源、构建时间、大小等），倒序，供详情页展示。
+     */
+    @HasPermission("project:view")
+    @RequestMapping("versionList")
+    public AjaxResult versionList(String projectId) {
+        assertProjectAccess(projectId);
+        return AjaxResult.ok().data(service.versionList(projectId));
+    }
+
+    /**
      * 使用该项目镜像的应用。
      */
     @HasPermission("project:view")
