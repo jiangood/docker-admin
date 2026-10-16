@@ -12,6 +12,7 @@ import {
 } from "@ant-design/icons";
 import {DateUtils, getToken, HttpClient, Page, PageUtils, ProTable, UrlUtils, ViewText} from "@jiangood/open-admin";
 import LogView from "../../components/LogView";
+import LinkButton from "../../components/LinkButton";
 import {formatBytes} from "../../components/container/utils";
 import {sourceTag} from "../image-repo/index";
 
@@ -394,7 +395,13 @@ export default class extends React.Component {
           pagination={false}
           dataSource={apps}
           columns={[
-            {title: '应用', dataIndex: 'name'},
+            {
+              title: '应用', dataIndex: 'name',
+              render: (name, row) => (
+                <LinkButton
+                  onClick={() => PageUtils.open('/app/view?id=' + row.id, '应用-' + name)}>{name}</LinkButton>
+              )
+            },
             {title: '主机', dataIndex: ['host', 'name']},
             {title: '版本', dataIndex: 'imageTag'}
           ]}
