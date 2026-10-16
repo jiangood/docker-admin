@@ -64,7 +64,7 @@ export default class extends React.Component {
             </Card>
             <Modal title={editing ? '编辑注册中心' : '新增注册中心'} open={modalOpen}
                    onCancel={() => this.setState({modalOpen: false})}
-                   onOk={() => this.formRef.current?.submit()} destroyOnClose>
+                   onOk={() => this.formRef.current?.submit()}>
                 <Form ref={this.formRef} layout='vertical' onFinish={this.save} preserve={false}>
                     <Form.Item name='id' hidden><Input/></Form.Item>
                     <Form.Item label='地址' name='url' rules={[{required: true, message: '请输入注册中心地址'}]}
