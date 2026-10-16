@@ -53,8 +53,9 @@ export default class extends React.Component {
             render: (source) => sourceTag(source),
         },
         {
-            title: '组织机构',
-            dataIndex: ['sysOrg', 'name'],
+            title: '最新版本',
+            dataIndex: 'latestTag',
+            render: (tag) => tag || '-',
         },
         {
             title: '最近更新',

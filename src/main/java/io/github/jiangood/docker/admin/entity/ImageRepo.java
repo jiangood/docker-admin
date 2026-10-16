@@ -7,6 +7,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
@@ -50,5 +51,12 @@ public class ImageRepo extends BaseEntity {
     SysOrg sysOrg;
 
     String remark;
+
+    /**
+     * 最新版本：该仓库下最新的版本号（不含可变的 latest），仅列表展示用，不落库。
+     */
+    @Remark("最新版本")
+    @Transient
+    String latestTag;
 
 }

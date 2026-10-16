@@ -82,7 +82,23 @@ public class ImageRepoController {
         });
 
         Page<ImageRepo> page = service.findAll(q, pageable);
+        fillLatestTag(page.getContent());
         return AjaxResult.ok().data(page);
+    }
+
+    /**
+     * 给列表补上「最新版本」：每个仓库最新的非 latest 版本号。
+     */
+    private void fillLatestTag(List<ImageRepo> repos) {
+        List<String> imageUrls = repos.stream()
+                .map(ImageRepo::getImageUrl)
+                .filter(StrUtil::isNotBlank)
+                .toList();
+        if (imageUrls.isEmpty()) {
+            return;
+        }
+        Map<String, String> latestTags = imageTagService.latestTagMap(imageUrls);
+        repos.forEach(r -> r.setLatestTag(latestTags.get(r.getImageUrl())));
     }
 
     @HasPermission("image-repo:view")

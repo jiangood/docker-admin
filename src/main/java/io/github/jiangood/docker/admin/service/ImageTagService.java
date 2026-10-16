@@ -20,9 +20,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -35,6 +38,11 @@ import java.util.stream.Collectors;
 public class ImageTagService extends BaseService<ImageTag> {
 
     private static final Logger fileLog = FileLog.logger();
+
+    /**
+     * 可变的浮动版本号，取「最新版本」时排除。
+     */
+    private static final String LATEST_TAG = "latest";
 
     private final ImageTagRepository imageTagRepository;
 
@@ -77,6 +85,31 @@ public class ImageTagService extends BaseService<ImageTag> {
                 .map(ImageTag::getTag)
                 .filter(StrUtil::isNotBlank)
                 .collect(Collectors.toSet());
+    }
+
+    /**
+     * 批量取每个仓库的最新版本号，不含 latest。
+     * <p>
+     * 供镜像仓库列表展示「最新版本」用：一次查询覆盖整页仓库，避免逐行查询。
+     */
+    public Map<String, String> latestTagMap(Collection<String> imageUrls) {
+        if (imageUrls == null || imageUrls.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Map<String, List<String>> tagsByUrl = new HashMap<>();
+        for (ImageTag it : imageTagRepository.findAllByImageUrlIn(imageUrls)) {
+            String tag = it.getTag();
+            if (StrUtil.isBlank(tag) || LATEST_TAG.equalsIgnoreCase(tag)) {
+                continue;
+            }
+            tagsByUrl.computeIfAbsent(it.getImageUrl(), k -> new ArrayList<>()).add(tag);
+        }
+        Map<String, String> result = new HashMap<>();
+        tagsByUrl.forEach((url, tags) -> tags.stream()
+                .sorted(VersionUtils.VERSION_DESC)
+                .findFirst()
+                .ifPresent(tag -> result.put(url, tag)));
+        return result;
     }
 
     @Transactional
