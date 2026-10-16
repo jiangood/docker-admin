@@ -257,6 +257,7 @@ export default class extends React.Component {
                    open={this.state.formOpen}
                    onCancel={() => this.setState({formOpen: false})}
                    destroyOnHidden
+                   width={720}
                    footer={[
                        <Button key='cancel' onClick={() => this.setState({formOpen: false})}>取消</Button>,
                        <Button key='test' loading={this.state.testing} onClick={this.handleTest}>测试连接</Button>,
