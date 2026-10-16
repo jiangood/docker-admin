@@ -69,7 +69,7 @@ public class RemoteSyncService {
      * 不支持时不报错，返回 {@code supported=false} 与说明文案，由前端降级为手工输入镜像地址。
      */
     public Map<String, Object> catalog(RemoteRegistryQuery query) {
-        Registry registry = requireRegistry();
+        Registry registry = requireRegistry(query == null ? null : query.getRegistryId());
         String host = hostOf(registry);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("registry", registryInfo(registry));
@@ -118,8 +118,8 @@ public class RemoteSyncService {
      * <p>
      * 仓库必须是本地已有的，跨注册中心的仓库直接拒绝——系统只认「镜像注册中心」里配的那一个。
      */
-    public RemoteSyncResult syncTags(String imageUrl, boolean withMeta, int maxTags) {
-        Registry registry = requireRegistry();
+    public RemoteSyncResult syncTags(String imageUrl, boolean withMeta, int maxTags, String registryId) {
+        Registry registry = requireRegistry(registryId);
         Assert.hasText(imageUrl, "镜像地址不能为空");
         String host = hostOf(registry);
         Assert.isTrue(StrUtil.equalsIgnoreCase(host, registryHost(imageUrl)),
@@ -303,8 +303,8 @@ public class RemoteSyncService {
     /**
      * 读取系统里配置生效的注册中心，未配置时给出明确指引。
      */
-    private Registry requireRegistry() {
-        Registry registry = registryService.getEffective();
+    private Registry requireRegistry(String registryId) {
+        Registry registry = registryService.requireRegistry(registryId);
         Assert.notNull(registry, "尚未配置镜像注册中心，请先到「系统设置 → 镜像注册中心」配置");
         Assert.hasText(registry.getUrl(), "镜像注册中心的地址未配置，请先到「系统设置 → 镜像注册中心」配置");
         return registry;
