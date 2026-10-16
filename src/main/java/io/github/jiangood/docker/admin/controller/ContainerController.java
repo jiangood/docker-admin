@@ -3,6 +3,7 @@ package io.github.jiangood.docker.admin.controller;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.dto.ContainerDetailVo;
 import io.github.jiangood.docker.admin.dto.ContainerFileVo;
+import io.github.jiangood.docker.admin.dto.ContainerFileWriteRequest;
 import io.github.jiangood.docker.admin.dto.ContainerSummaryVo;
 import io.github.jiangood.docker.admin.service.ContainerService;
 import io.github.jiangood.docker.admin.service.HostService;
@@ -12,11 +13,16 @@ import io.github.jiangood.openadmin.util.dto.AjaxResult;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.util.Assert;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 @RestController
@@ -97,6 +103,36 @@ public class ContainerController {
             containerService.downloadDirectory(host, containerId, path, out);
             out.flush();
         }
+    }
+
+    /** 上传本地文件到容器内目录（path 为目录，同名文件会被覆盖）。 */
+    @HasPermission("container:file")
+    @PostMapping("upload")
+    public AjaxResult upload(String hostId, String containerId, String path,
+                             @RequestParam("file") MultipartFile file) throws IOException {
+        Host host = requireHost(hostId);
+        Assert.hasText(containerId, "containerId 不能为空");
+        Assert.notNull(file, "请选择要上传的文件");
+        String raw = file.getOriginalFilename() == null ? "" : file.getOriginalFilename().replace('\\', '/');
+        int slash = raw.lastIndexOf('/');
+        String filename = slash >= 0 ? raw.substring(slash + 1) : raw;
+        Assert.hasText(filename, "文件名不能为空");
+        String dir = (path == null || path.isBlank()) ? "/" : path;
+        String target = dir.endsWith("/") ? dir + filename : dir + "/" + filename;
+        containerService.writeFile(host, containerId, target, file.getBytes());
+        return AjaxResult.ok().msg("已上传 " + filename);
+    }
+
+    /** 保存容器内文本文件（覆盖写入，用于在线编辑 yml / toml 等）。 */
+    @HasPermission("container:file")
+    @PostMapping("write")
+    public AjaxResult write(@RequestBody ContainerFileWriteRequest request) {
+        Host host = requireHost(request.getHostId());
+        Assert.hasText(request.getContainerId(), "containerId 不能为空");
+        Assert.hasText(request.getPath(), "path 不能为空");
+        byte[] content = (request.getContent() == null ? "" : request.getContent()).getBytes(StandardCharsets.UTF_8);
+        containerService.writeFile(host, request.getContainerId(), request.getPath(), content);
+        return AjaxResult.ok().msg("保存成功");
     }
 
     // ------------------------------------------------------------------ 操作

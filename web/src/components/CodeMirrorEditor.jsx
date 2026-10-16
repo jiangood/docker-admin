@@ -10,6 +10,14 @@ import 'codemirror/mode/css/css.js'
 import 'codemirror/mode/yaml/yaml';
 import 'codemirror/mode/shell/shell'
 import 'codemirror/mode/dockerfile/dockerfile'
+import 'codemirror/mode/toml/toml'
+import 'codemirror/mode/properties/properties'
+import 'codemirror/mode/xml/xml'
+import 'codemirror/mode/javascript/javascript'
+import 'codemirror/mode/python/python'
+import 'codemirror/mode/markdown/markdown'
+import 'codemirror/mode/nginx/nginx'
+import 'codemirror/mode/sql/sql'
 
 // 内容为空时的占位提示
 import 'codemirror/addon/display/placeholder'
@@ -25,7 +33,7 @@ import 'codemirror/addon/lint/yaml-lint.js'
  * 可直接放在 Form.Item 下使用，接收框架注入的 value / onChange。
  * value 被外部修改（如表单回填、重置）时会同步到编辑器，无需靠 key 重挂载。
  *
- * @param mode        语法高亮，默认 yaml，可传 dockerfile / shell 等
+ * @param mode        语法高亮，默认 yaml，可传 dockerfile / shell / toml / properties 等
  * @param height      编辑器高度（像素），默认 300
  * @param placeholder 内容为空时的占位提示
  */

@@ -19,9 +19,11 @@ import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
 import org.apache.commons.io.IOUtils;
 import org.springframework.stereotype.Service;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -560,6 +562,91 @@ public class ContainerService {
         } finally {
             IOUtils.closeQuietly(client);
         }
+    }
+
+    // ------------------------------------------------------------------ 写入 / 上传
+
+    /**
+     * 写入容器内文件（覆盖）或上传新文件：把内容打包成单文件 tar，经 Docker archive 接口复制进容器。
+     * <p>
+     * 不依赖容器内的 shell / cat，distroless / scratch 镜像同样可用；同名文件会被覆盖，已存在文件沿用原权限。
+     *
+     * @param path    容器内文件的绝对路径
+     * @param content 文件字节内容
+     */
+    public void writeFile(Host host, String containerId, String path, byte[] content) {
+        String file = normalizePath(path);
+        int idx = file.lastIndexOf('/');
+        String dir = idx <= 0 ? "/" : file.substring(0, idx);
+        String name = file.substring(idx + 1);
+        if (name.isEmpty()) {
+            throw new RuntimeException("文件名不能为空");
+        }
+
+        DockerClient client = dockerClientManager.getClient(host);
+        try {
+            // 已存在的文件沿用原权限，避免把 0600 之类的文件覆盖成 0644
+            int mode = resolveFileMode(client, containerId, file);
+            byte[] tar = buildSingleFileTar(name, content, mode);
+            client.copyArchiveToContainerCmd(containerId)
+                    .withTarInputStream(new ByteArrayInputStream(tar))
+                    .withRemotePath(dir)
+                    .exec();
+        } catch (IOException e) {
+            throw new RuntimeException("写入文件失败: " + e.getMessage(), e);
+        } finally {
+            IOUtils.closeQuietly(client);
+        }
+    }
+
+    /** 读取容器内已存在文件的权限位；文件不存在或读取失败时返回默认 0644。 */
+    private int resolveFileMode(DockerClient client, String containerId, String path) {
+        try (InputStream in = client.copyArchiveFromContainerCmd(containerId, path).exec();
+             TarArchiveInputStream tar = new TarArchiveInputStream(in)) {
+            TarArchiveEntry entry = tar.getNextEntry();
+            if (entry != null && !entry.isDirectory()) {
+                int mode = entry.getMode() & 0777;
+                if (mode > 0) {
+                    return mode;
+                }
+            }
+        } catch (Exception e) {
+            log.debug("读取容器 {} 文件 {} 权限失败，使用默认权限: {}", containerId, path, e.getMessage());
+        }
+        return 0644;
+    }
+
+    /** 归一化容器内路径：统一分隔符、去掉重复斜杠与 . / .. 片段，并保证以 / 开头。 */
+    private static String normalizePath(String path) {
+        List<String> parts = new ArrayList<>();
+        for (String seg : StrUtil.trimToEmpty(path).replace('\\', '/').trim().split("/")) {
+            if (seg.isEmpty() || ".".equals(seg)) {
+                continue;
+            }
+            if ("..".equals(seg)) {
+                if (!parts.isEmpty()) {
+                    parts.remove(parts.size() - 1);
+                }
+                continue;
+            }
+            parts.add(seg);
+        }
+        return "/" + String.join("/", parts);
+    }
+
+    /** 把单文件内容打包成 tar，供 archive 接口写入容器。 */
+    private static byte[] buildSingleFileTar(String name, byte[] content, int mode) throws IOException {
+        ByteArrayOutputStream bos = new ByteArrayOutputStream(4096 + content.length);
+        try (TarArchiveOutputStream tar = new TarArchiveOutputStream(bos)) {
+            tar.setLongFileMode(TarArchiveOutputStream.LONGFILE_POSIX);
+            TarArchiveEntry entry = new TarArchiveEntry(name);
+            entry.setSize(content.length);
+            entry.setMode(mode);
+            tar.putArchiveEntry(entry);
+            tar.write(content);
+            tar.closeArchiveEntry();
+        }
+        return bos.toByteArray();
     }
 
     // ------------------------------------------------------------------ 工具
