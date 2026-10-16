@@ -329,7 +329,8 @@ public class ProjectService extends BaseService<Project> {
     }
 
     /**
-     * Webhook 入口：按 token 找到项目并触发分支构建；项目未开启「分支推送自动构建」时忽略。
+     * Webhook 入口：按 token 找到项目并触发分支构建。
+     * 项目未开启「分支推送自动构建」，或推送的分支不在配置的构建分支列表内时忽略。
      */
     public void triggerBranchByToken(String token, String branch) {
         Assert.hasText(branch, "未从 Webhook 请求中解析到分支");
@@ -339,7 +340,36 @@ public class ProjectService extends BaseService<Project> {
             log.info("项目 {} 未开启分支推送自动构建，忽略分支 {} 的推送", project.getName(), branch);
             return;
         }
+        List<String> branches = parseBranches(project.getWebhookBranches());
+        if (!branches.contains(branch)) {
+            log.info("项目 {} 的构建分支为 {}，忽略分支 {} 的推送", project.getName(), branches, branch);
+            return;
+        }
         buildByBranch(project, branch);
+    }
+
+    /**
+     * 分支推送构建的默认分支：未配置时构建 master 与 main。
+     */
+    public static final String DEFAULT_WEBHOOK_BRANCHES = "master,main";
+
+    /**
+     * 解析逗号分隔的分支配置；为空时回退到 {@link #DEFAULT_WEBHOOK_BRANCHES}。
+     */
+    public static List<String> parseBranches(String branches) {
+        String value = StrUtil.isBlank(branches) ? DEFAULT_WEBHOOK_BRANCHES : branches;
+        return Arrays.stream(value.split(","))
+                .map(String::trim)
+                .filter(StrUtil::isNotBlank)
+                .distinct()
+                .toList();
+    }
+
+    /**
+     * 归一化逗号分隔的分支配置：去空格、去重、去空项；结果为空时回退到默认值。
+     */
+    public static String normalizeBranches(String branches) {
+        return String.join(",", parseBranches(branches));
     }
 
     /**

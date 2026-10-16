@@ -1,5 +1,5 @@
 import {
-  Alert, Button, Card, Descriptions, Form,
+  Alert, Button, Card, Descriptions, Form, Input,
   Modal, Segmented, Select, Space, Spin, Switch, Table, Tabs, Tooltip, Typography
 } from 'antd';
 import React from 'react';
@@ -41,7 +41,10 @@ export default class extends React.Component {
     refType: 'TAG',
     versions: [],
     apps: [],
-    webhookLoading: false
+    webhookLoading: false,
+    webhookBranchLoading: false,
+    // 分支推送构建的分支输入框（null 表示跟随 project.webhookBranches）
+    webhookBranchesText: null
   }
   actionRef = React.createRef();
   formRef = React.createRef();
@@ -180,6 +183,25 @@ export default class extends React.Component {
     HttpClient.get('admin/project/setWebhookBranch', {id: this.state.project.id, enabled: checked})
       .then(() => this.loadProject())
       .finally(() => this.setState({webhookLoading: false}))
+  }
+
+  // 输入框当前值；未编辑时回退到项目配置，项目未配置时回退到默认 master,main
+  branchText = () => {
+    const {webhookBranchesText, project} = this.state
+    if (webhookBranchesText != null) return webhookBranchesText
+    return project?.webhookBranches || 'master,main'
+  }
+
+  saveBranches = () => {
+    const id = this.state.project.id
+    const branches = (this.branchText() || '').trim()
+    this.setState({webhookBranchLoading: true})
+    HttpClient.get('admin/project/setWebhookBranches', {id, branches})
+      .then(() => {
+        this.setState({webhookBranchesText: null})
+        this.loadProject()
+      })
+      .finally(() => this.setState({webhookBranchLoading: false}))
   }
 
   webhookUrl = () => {
@@ -350,7 +372,7 @@ export default class extends React.Component {
   }
 
   renderTabs = () => {
-    const {project, versions, apps, webhookLoading} = this.state;
+    const {project, versions, apps, webhookLoading, webhookBranchLoading} = this.state;
 
     const items = [
       {
@@ -432,7 +454,7 @@ export default class extends React.Component {
             showIcon
             className='mb-4'
             title='推送 tag / 分支自动构建'
-            description='推送形如 vX.Y.Z 的 tag 会构建对应版本；开启「分支推送构建」后，推送任意分支会构建该分支最新代码（镜像版本为「分支名 + 提交 id」并更新 latest）。均使用系统默认构建节点。'
+            description='推送形如 vX.Y.Z 的 tag 会构建对应版本；开启「分支推送构建」并配置分支后，仅推送这些分支会构建该分支最新代码（镜像版本为「分支名 + 提交 id」并更新 latest）。均使用系统默认构建节点。'
           />
           <Descriptions column={1} size='small' bordered>
             <Descriptions.Item label='自动配置'>
@@ -449,15 +471,33 @@ export default class extends React.Component {
               </Space>
             </Descriptions.Item>
             <Descriptions.Item label='分支推送构建'>
-              <Space wrap>
-                <Switch
-                  checked={!!project.webhookBranch}
-                  loading={webhookLoading}
-                  onChange={this.toggleBranchBuild}
-                />
+              <Space direction='vertical' size='small' style={{width: '100%'}}>
+                <Space wrap>
+                  <Switch
+                    checked={!!project.webhookBranch}
+                    loading={webhookLoading}
+                    onChange={this.toggleBranchBuild}
+                  />
+                  <Typography.Text type='secondary'>
+                    开启后，仅推送下列分支时才会构建该分支最新代码并更新 latest；tag push 始终构建，不受此开关影响。
+                  </Typography.Text>
+                </Space>
+                <Space.Compact style={{maxWidth: 480, width: '100%'}}>
+                  <Input
+                    value={this.branchText()}
+                    disabled={!project.webhookBranch}
+                    placeholder='默认 master,main'
+                    onChange={e => this.setState({webhookBranchesText: e.target.value})}
+                    onPressEnter={this.saveBranches}
+                  />
+                  <Button
+                    onClick={this.saveBranches}
+                    loading={webhookBranchLoading}
+                    disabled={!project.webhookBranch}
+                  >保存</Button>
+                </Space.Compact>
                 <Typography.Text type='secondary'>
-                  开启后，推送任意分支（含 tag push 之外的分支提交）都会构建该分支最新代码并更新 latest；
-                  tag push 始终构建，不受此开关影响。
+                  多个分支用英文逗号分隔，留空默认 master,main。
                 </Typography.Text>
               </Space>
             </Descriptions.Item>

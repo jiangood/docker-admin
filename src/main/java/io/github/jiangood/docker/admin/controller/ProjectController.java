@@ -163,7 +163,7 @@ public class ProjectController {
     }
 
     /**
-     * 开启/关闭「分支推送自动构建」。开启后，推送任意分支都会触发该分支最新代码的构建。
+     * 开启/关闭「分支推送自动构建」。开启后，仅推送配置分支（见 setWebhookBranches）时触发构建。
      */
     @HasPermission("project:webhook")
     @RequestMapping("setWebhookBranch")
@@ -174,6 +174,18 @@ public class ProjectController {
         return AjaxResult.ok()
                 .msg(Boolean.TRUE.equals(enabled) ? "已开启分支推送构建" : "已关闭分支推送构建")
                 .data(project.getWebhookBranch());
+    }
+
+    /**
+     * 设置「分支推送自动构建」限定的分支，多个分支用英文逗号分隔；留空回退为 master,main。
+     */
+    @HasPermission("project:webhook")
+    @RequestMapping("setWebhookBranches")
+    public AjaxResult setWebhookBranches(String id, String branches) {
+        Project project = assertProjectAccess(id);
+        project.setWebhookBranches(ProjectService.normalizeBranches(branches));
+        service.save(project);
+        return AjaxResult.ok().msg("已保存构建分支").data(project.getWebhookBranches());
     }
 
     /**

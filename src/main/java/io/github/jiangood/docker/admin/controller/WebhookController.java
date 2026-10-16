@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 通用 Git Webhook：推送 tag 时构建对应版本；推送分支时按项目开关构建分支最新代码。
+ * 通用 Git Webhook：推送 tag 时构建对应版本；推送分支时，若项目开启开关且分支在配置列表内，构建分支最新代码。
  * 路径 /admin/public/** 框架已放行，免登录；鉴权依赖 URL 中的随机 token。
  */
 @RestController
