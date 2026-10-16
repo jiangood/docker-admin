@@ -22,7 +22,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class HostService extends BaseService<Host> {
 
-    private final HostRepository hostRepository;
+    private final HostRepository hostRepository;\n    private final SystemConfigService systemConfigService;
 
     /**
      * 获得镜像构建主机（系统默认 runner）。
@@ -30,6 +30,12 @@ public class HostService extends BaseService<Host> {
      * @return
      */
     public Host getDefaultDockerRunner() {
+        String configuredId = systemConfigService.getDefaultBuildHostId();
+        if (StrUtil.isNotBlank(configuredId)) {
+            return hostRepository.findById(configuredId)
+                    .orElseThrow(() -> new io.github.jiangood.openadmin.util.BusinessException(
+                            "系统默认构建主机不存在，请到设置-资料重新选择"));
+        }
         Spec<Host> q = Spec.of();
         q.eq(Host.Fields.isRunner, true);
         return hostRepository.findAll(q, Sort.by(Sort.Direction.DESC, "updateTime")).stream().findFirst().orElse(null);
