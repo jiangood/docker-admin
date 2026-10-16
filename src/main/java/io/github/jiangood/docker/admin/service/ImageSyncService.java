@@ -92,8 +92,7 @@ public class ImageSyncService {
             Assert.notNull(host, "同步主机不存在，请选择一台网络通畅的主机");
 
             // 镜像一律先推到注册中心，目标主机再从注册中心拉取，因此注册中心是硬依赖
-            Registry registry = registryService.getEffective();
-            Assert.notNull(registry, "未配置镜像注册中心，请先在【设置-镜像注册中心】中配置");
+            Registry registry = registryService.requireRegistry(p.getTargetRegistryId());
 
             fileLog.info("开始同步镜像");
             fileLog.info("源镜像: {}", source);
