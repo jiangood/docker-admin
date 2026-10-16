@@ -23,6 +23,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -202,12 +203,15 @@ public class RegistryV2Client {
         JsonNode config = manifest.get("config");
         String configDigest = config == null ? null : text(config, "digest");
         if (StrUtil.isBlank(configDigest)) {
-            return new RemoteImageMeta(null, null, size);
+            return new RemoteImageMeta(null, null, size, null, null);
         }
 
         JsonNode blob = getJson(prefix + "/blobs/" + enc(configDigest), scope, "application/json", "读取镜像配置");
         LocalDateTime created = blob == null ? null : parseTime(text(blob, "created"));
-        return new RemoteImageMeta(created, configDigest, size);
+        // 声明的端口与卷也在同一份 image config 里，顺手一起读出来，供详情页展示
+        JsonNode configNode = blob == null ? null : blob.get("config");
+        return new RemoteImageMeta(created, configDigest, size,
+                fieldNames(configNode, "ExposedPorts"), fieldNames(configNode, "Volumes"));
     }
 
     // ------------------------------------------------------------------ 内部
@@ -340,6 +344,21 @@ public class RegistryV2Client {
         this.service = attr(header, "service");
         // 没有 realm 说明不是 Bearer 认证，交给 Basic 直连
         this.anonymous = StrUtil.isBlank(realm) ? null : Boolean.FALSE;
+    }
+
+    /**
+     * 取 JSON 对象里某个子对象的全部字段名（如 image config 的 config.ExposedPorts 的端口、config.Volumes 的路径），
+     * 排序后返回；节点缺失或不是对象时返回空列表。
+     */
+    private static List<String> fieldNames(JsonNode node, String field) {
+        JsonNode obj = node == null ? null : node.get(field);
+        if (obj == null || !obj.isObject() || obj.isEmpty()) {
+            return List.of();
+        }
+        List<String> out = new ArrayList<>();
+        obj.fieldNames().forEachRemaining(out::add);
+        out.sort(Comparator.naturalOrder());
+        return out;
     }
 
     /**

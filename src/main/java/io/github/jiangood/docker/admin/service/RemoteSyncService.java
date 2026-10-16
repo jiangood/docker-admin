@@ -208,6 +208,8 @@ public class RemoteSyncService {
             vo.setBuildTime(meta.buildTime());
             vo.setSize(meta.size());
             vo.setDigest(meta.digest());
+            vo.setExposedPorts(meta.exposedPorts());
+            vo.setVolumes(meta.volumes());
         } catch (Exception e) {
             log.info("读取镜像 {}:{} 元数据失败：{}", repo, vo.getTag(), e.getMessage());
         }
@@ -275,10 +277,14 @@ public class RemoteSyncService {
                 result.setTagSkipped(result.getTagSkipped() + 1);
                 continue;
             }
-            RemoteImageMeta meta = new RemoteImageMeta(vo.getBuildTime(), vo.getDigest(), vo.getSize());
+            RemoteImageMeta meta = new RemoteImageMeta(vo.getBuildTime(), vo.getDigest(), vo.getSize(),
+                    vo.getExposedPorts(), vo.getVolumes());
             var saved = imageTagService.upsertRemote(group.getImageUrl(), vo.getTag(), meta);
             result.setTagAdded(result.getTagAdded() + 1);
-            if (saved != null && (saved.getBuildTime() != null || saved.getSize() != null)) {
+            boolean metaFilled = saved != null && (saved.getBuildTime() != null || saved.getSize() != null
+                    || (saved.getExposedPorts() != null && !saved.getExposedPorts().isEmpty())
+                    || (saved.getVolumes() != null && !saved.getVolumes().isEmpty()));
+            if (metaFilled) {
                 result.setMetaFilled(result.getMetaFilled() + 1);
             }
         }
@@ -422,6 +428,10 @@ public class RemoteSyncService {
         private Long size;
         /** 镜像配置摘要。 */
         private String digest;
+        /** 镜像声明的端口，形如 80/tcp。 */
+        private List<String> exposedPorts;
+        /** 镜像声明的卷路径，如 /data。 */
+        private List<String> volumes;
     }
 
     /**

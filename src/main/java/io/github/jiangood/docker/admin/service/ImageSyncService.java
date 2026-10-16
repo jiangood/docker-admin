@@ -149,9 +149,18 @@ public class ImageSyncService {
             pushCmd.exec(new DefaultCallback<PushResponseItem>(logId)).awaitCompletion();
             fileLog.info("注册中心同步成功: {}", registryImage.image());
 
-            // 登记镜像仓库与标签
-            imageRepoService.upsert(targetRepo, targetName, "SYNC", registry.getId(), null);
-            imageTagService.upsert(targetRepo, tag, "SYNC");
+            // 登记镜像仓库与标签。镜像此刻已在同步主机本地（推送注册中心时打过 targetRepo:tag），
+            // 直接 inspect 读取大小与声明的端口/卷，与项目构建的登记方式一致；
+            // inspect 拿不到（本地查不到等）退回只登记标签，登记失败也不影响已完成的同步。
+            try {
+                imageRepoService.upsert(targetRepo, targetName, "SYNC", registry.getId(), null);
+                var saved = imageTagService.inspect(client, registryImage.image(), targetRepo, tag, null, "SYNC");
+                if (saved == null) {
+                    imageTagService.upsert(targetRepo, tag, "SYNC");
+                }
+            } catch (Exception e) {
+                fileLog.warn("登记镜像失败: {}", e.getMessage());
+            }
 
             if (!targetHostIds.isEmpty()) {
                 distribute(registryImage, targetHostIds);

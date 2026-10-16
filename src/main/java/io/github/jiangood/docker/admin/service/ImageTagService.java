@@ -120,7 +120,7 @@ public class ImageTagService extends BaseService<ImageTag> {
     }
 
     /**
-     * 新增或更新一个 tag（不读取声明，供镜像同步使用）。
+     * 新增或更新一个 tag，不读取镜像声明。适合已知内容，或读取声明（{@link #inspect}）不可用时兜底登记。
      */
     @Transactional
     public ImageTag upsert(String imageUrl, String tag, String source) {
@@ -164,6 +164,13 @@ public class ImageTagService extends BaseService<ImageTag> {
             }
             if (meta.size() != null) {
                 it.setSize(meta.size());
+            }
+            // 声明的端口/卷读不到时保持原值，不用空列表冲掉已有数据
+            if (meta.exposedPorts() != null && !meta.exposedPorts().isEmpty()) {
+                it.setExposedPorts(new ArrayList<>(meta.exposedPorts()));
+            }
+            if (meta.volumes() != null && !meta.volumes().isEmpty()) {
+                it.setVolumes(new ArrayList<>(meta.volumes()));
             }
         }
         return imageTagRepository.save(it);
