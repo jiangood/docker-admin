@@ -1,4 +1,4 @@
-import {Alert, Button, Card, Col, Drawer, Form, Input, message, Modal, Row, Tooltip} from 'antd'
+import {Alert, Button, Card, Col, Drawer, Form, Input, message, Modal, Row, Select, Tooltip} from 'antd'
 import React from 'react'
 import {
     CloudUploadOutlined,
@@ -29,6 +29,8 @@ export default class extends React.Component {
         // 后端当前运行中的构建任务 logId，用于禁用「构建」并显示「取消构建」
         runningLogId: null,
         cancelling: false,
+        registryOptions: [],
+        hostOptions: [],
     }
 
     formRef = React.createRef()
@@ -37,6 +39,8 @@ export default class extends React.Component {
 
     componentDidMount() {
         this.refreshRunning()
+        HttpClient.get('admin/registry/options').then(rs => this.setState({registryOptions: rs.data || []}))
+        HttpClient.get('admin/host/options').then(rs => this.setState({hostOptions: rs.data || []}))
     }
 
     componentWillUnmount() {
@@ -163,7 +167,7 @@ export default class extends React.Component {
     }
 
     render() {
-        const {logId, logVisible, submitting, reading, writeOpen, writing, runningLogId, cancelling} = this.state
+        const {logId, logVisible, submitting, reading, writeOpen, writing, runningLogId, cancelling, registryOptions, hostOptions} = this.state
         // 编辑器尽量占满首屏，把空间留给 Dockerfile 编写
         const editorHeight = Math.max(480, (typeof window === 'undefined' ? 800 : window.innerHeight) - 280)
 
@@ -203,6 +207,14 @@ export default class extends React.Component {
                                            rules={[{required: true, message: '请输入 Git 仓库地址'}]}
                                            tooltip='可直接输入地址，也可从「设置-代码源」的仓库列表中选择；凭据按地址主机自动匹配代码源'>
                                     <FieldGitRepository/>
+                                </Form.Item>
+
+                                <Form.Item label='构建主机' name='hostId' tooltip='留空使用系统默认构建主机'>
+                                    <Select allowClear showSearch optionFilterProp='label' options={hostOptions} placeholder='系统默认构建主机'/>
+                                </Form.Item>
+
+                                <Form.Item label='基础镜像注册中心' name='registryId' tooltip='用于访问私有基础镜像；留空使用系统默认注册中心'>
+                                    <Select allowClear showSearch optionFilterProp='label' options={registryOptions} placeholder='系统默认注册中心'/>
                                 </Form.Item>
 
                                 <Form.Item label='镜像名' name='targetImage' initialValue='temp:latest'

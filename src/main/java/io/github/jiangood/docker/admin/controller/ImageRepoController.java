@@ -209,7 +209,7 @@ public class ImageRepoController {
     public AjaxResult remoteTags(String id, Boolean withMeta) {
         ImageRepo repo = assertRepoAccess(id);
         RemoteSyncResult result = remoteSyncService.syncTags(repo.getImageUrl(),
-                withMeta == null || withMeta, 100);
+                withMeta == null || withMeta, 100, repo.getRegistryId());
         return AjaxResult.ok().data(result).msg(syncMsg(result, false));
     }
 

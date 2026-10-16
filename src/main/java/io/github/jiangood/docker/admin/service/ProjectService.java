@@ -520,8 +520,7 @@ public class ProjectService extends BaseService<Project> {
             buildLog.setCodeMessage(cloneResult.getCodeMessage());
             buildLog = buildLogService.saveLog(buildLog);
 
-            Registry registry = registryService.getEffective();
-            Assert.notNull(registry, "未配置镜像注册中心，请先在【设置-镜像注册中心】中配置");
+            Registry registry = registryService.requireRegistry(p.getRegistryId());
             fileLog.info("注册中心：{}", registry.getFullUrl());
             client = dockerService.getClient(host, registry);
 

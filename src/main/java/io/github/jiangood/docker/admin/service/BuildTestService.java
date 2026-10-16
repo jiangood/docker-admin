@@ -174,7 +174,9 @@ public class BuildTestService {
             Assert.hasText(gitUrl, "请填写 Git 仓库地址");
             Assert.hasText(p.getDockerfileText(), "请粘贴 Dockerfile 内容");
 
-            Host host = hostService.getDefaultDockerRunner();
+            Host host = StrUtil.isNotBlank(p.getHostId())
+                    ? hostService.findById(p.getHostId()).orElseThrow(() -> new BusinessException("指定的构建主机不存在：" + p.getHostId()))
+                    : hostService.getDefaultDockerRunner();
             Assert.notNull(host, "未配置构建节点（runner），请先在【设置-主机管理】中将某台主机设为构建节点");
 
             String[] target = splitTarget(p.getTargetImage());
@@ -205,7 +207,8 @@ public class BuildTestService {
             FileUtil.writeUtf8String(p.getDockerfileText(), dockerfileFile);
             fileLog.info("已写入 Dockerfile: {}", dockerfileFile.getAbsolutePath());
 
-            Registry registry = registryService.getEffective();
+            Registry registry = StrUtil.isNotBlank(p.getRegistryId())
+                    ? registryService.requireRegistry(p.getRegistryId()) : registryService.getEffective();
             client = dockerService.getClient(host, registry);
 
             String targetImage = targetName + ":" + targetTag;

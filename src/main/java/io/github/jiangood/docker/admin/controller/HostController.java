@@ -67,7 +67,7 @@ public class HostController  {
     @HasPermission("host:delete")
     @RequestMapping("delete")
     public AjaxResult delete(String id) {
-        service.deleteById(id);
+        service.deleteHost(id);
         return AjaxResult.ok().msg("删除成功");
     }
 

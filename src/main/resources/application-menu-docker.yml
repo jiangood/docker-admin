@@ -70,6 +70,14 @@ menus:
     perms:
       - {name: 查看, code: registry:view}
       - {name: 保存, code: registry:save}
+  setting-system-config:
+    pid: setting
+    name: 资料
+    path: /system-config
+    icon: SettingOutlined
+    perms:
+      - {name: 查看, code: system-config:view}
+      - {name: 保存, code: system-config:save}
   setting-code-source:
     pid: setting
     name: 代码源
