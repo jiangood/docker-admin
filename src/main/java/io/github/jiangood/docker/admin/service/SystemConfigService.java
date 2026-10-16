@@ -69,7 +69,7 @@ public class SystemConfigService extends BaseService<SystemConfig> {
         if (StrUtil.isBlank(config.getId())) {
             create(config);
         } else {
-            update(config, null);
+            repository.save(config);
         }
     }
 }
