@@ -18,6 +18,9 @@ public class ImageSyncRequest {
      */
     String hostId;
 
+    /** 源镜像凭据对应的注册中心 ID；用于访问私有源镜像，可留空。 */
+    String sourceRegistryId;
+
     /** 目标注册中心 ID；留空时使用系统默认注册中心。 */
     String targetRegistryId;
 
