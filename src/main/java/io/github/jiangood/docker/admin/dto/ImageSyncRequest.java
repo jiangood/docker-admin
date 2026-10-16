@@ -18,6 +18,9 @@ public class ImageSyncRequest {
      */
     String hostId;
 
+    /** 目标注册中心 ID；留空时使用系统默认注册中心。 */
+    String targetRegistryId;
+
     /**
      * 源镜像，如 nginx:1.25-alpine、docker.io/library/redis:7。
      */
