@@ -128,6 +128,14 @@ public class ImageSyncService {
             String sourceRef = repo + ":" + tag;
             fileLog.info("拉取源镜像 {}", sourceRef);
             PullImageCmd pullCmd = client.pullImageCmd(repo).withTag(tag);
+            if (StrUtil.isNotBlank(p.getSourceRegistryId())) {
+                Registry sourceRegistry = registryService.requireRegistry(p.getSourceRegistryId());
+                AuthConfig sourceAuth = authOf(sourceRegistry);
+                if (sourceAuth != null) {
+                    pullCmd.withAuthConfig(sourceAuth);
+                }
+                fileLog.info("源镜像认证注册中心: {}", sourceRegistry.getUrl());
+            }
             pullCmd.exec(new DefaultCallback<PullResponseItem>(logId)).awaitCompletion();
             fileLog.info("拉取完成 {}", sourceRef);
 
