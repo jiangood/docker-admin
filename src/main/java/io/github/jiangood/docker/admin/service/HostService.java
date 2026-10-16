@@ -42,6 +42,15 @@ public class HostService extends BaseService<Host> {
         return hostRepository.findAll(q, Sort.by(Sort.Direction.DESC, "updateTime")).stream().findFirst().orElse(null);
     }
 
+    @Transactional
+    public void deleteHost(String id) {
+        Assert.hasText(id, "主机 ID 不能为空");
+        if (id.equals(systemConfigService.getDefaultBuildHostId())) {
+            throw new io.github.jiangood.openadmin.util.BusinessException("该主机是系统默认构建主机，请先在设置-资料中更换默认构建主机");
+        }
+        deleteById(id);
+    }
+
     public long count() {
         return hostRepository.count();
     }
