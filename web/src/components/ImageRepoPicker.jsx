@@ -33,14 +33,6 @@ export default class ImageRepoPicker extends React.Component {
             dataIndex: 'imageUrl',
         },
         {
-            title: '组织机构',
-            dataIndex: ['sysOrg', 'name'],
-        },
-        {
-            title: '备注',
-            dataIndex: 'remark',
-        },
-        {
             title: '操作',
             dataIndex: 'option',
             valueType: 'option',
