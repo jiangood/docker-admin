@@ -75,6 +75,7 @@ export default class extends React.Component {
 
     state = {
         registry: null,
+        registryOptions: [],
         hostOptions: [],
         registryPreview: '',
         recentImages: [],
@@ -90,10 +91,12 @@ export default class extends React.Component {
     }
 
     loadRegistry = () => {
-        HttpClient.get('admin/registry/info')
-            .then(rs => this.setState({registry: rs.data || null}))
-            .catch(() => {
-            })
+        Promise.all([HttpClient.get('admin/registry/info'), HttpClient.get('admin/registry/list')])
+            .then(([current, list]) => this.setState({
+                registry: current.data || null,
+                registryOptions: list.data || [],
+            }))
+            .catch(() => {})
     }
 
     loadHosts = () => {
@@ -153,7 +156,9 @@ export default class extends React.Component {
      * 目标镜像预览：镜像在平台注册中心上的完整地址（与后端默认命名规则保持一致）。
      */
     calcRegistryPreview = values => {
-        const {registry} = this.state
+        const {registryOptions} = this.state
+        const registry = registryOptions.find(r => r.id === values.targetRegistryId) || this.state.registry
+        this.setState({registry})
         const name = this.targetNameOf(values.sourceImage)
         if (!name || !registry || !registry.url) {
             this.setState({registryPreview: ''})
@@ -167,6 +172,7 @@ export default class extends React.Component {
         const payload = {
             hostId: values.hostId,
             sourceImage: values.sourceImage,
+            targetRegistryId: values.targetRegistryId,
             targetHostIds: values.targetHostIds || [],
         }
         this.setState({syncing: true})
@@ -195,7 +201,7 @@ export default class extends React.Component {
     }
 
     render() {
-        const {registry, hostOptions, registryPreview, logId, logVisible, syncing} = this.state
+        const {registry, registryOptions, hostOptions, registryPreview, logId, logVisible, syncing} = this.state
         const registryConfigured = !!(registry && registry.url)
         const formProps = {labelCol: {flex: '100px'}, preserve: false}
 
@@ -228,6 +234,13 @@ export default class extends React.Component {
                       initialValues={{targetHostIds: []}}
                       onValuesChange={(_, values) => this.calcRegistryPreview(values)}
                       onFinish={this.submit}>
+
+                    <Form.Item label='目标注册中心' name='targetRegistryId'
+                               tooltip='默认使用系统配置中的注册中心；可在此为本次同步单独指定目标'>
+                        <Select allowClear showSearch optionFilterProp='label'
+                                options={registryOptions.map(r => ({value: r.id, label: r.url + '/' + r.namespace}))}
+                                placeholder='使用系统默认注册中心'/>
+                    </Form.Item>
 
                     <Form.Item label='源镜像' name='sourceImage' rules={[{required: true, message: '请输入源镜像'}]}
                                tooltip='支持完整地址，如 nginx:1.25-alpine、docker.io/library/redis:7；可从下拉列表选择常用镜像或最近同步过的镜像'>
