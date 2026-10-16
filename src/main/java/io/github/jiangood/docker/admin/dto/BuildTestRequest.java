@@ -8,6 +8,12 @@ import lombok.Data;
 @Data
 public class BuildTestRequest {
 
+    /** 可选构建主机 ID；为空时使用系统默认构建主机。 */
+    String hostId;
+
+    /** 可选注册中心 ID，用于构建时访问私有基础镜像；为空时使用系统默认注册中心。 */
+    String registryId;
+
     /**
      * Git 仓库地址，凭据按地址主机自动匹配代码源。
      */
