@@ -25,12 +25,12 @@ export default class ImageRepoPicker extends React.Component {
 
     columns = [
         {
-            title: '镜像地址',
-            dataIndex: 'imageUrl',
+            title: '镜像名',
+            dataIndex: 'name',
         },
         {
-            title: '仓库名',
-            dataIndex: 'name',
+            title: '镜像地址',
+            dataIndex: 'imageUrl',
         },
         {
             title: '组织机构',

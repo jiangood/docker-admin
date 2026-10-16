@@ -34,7 +34,10 @@ public class ImageRepo extends BaseEntity {
     @Column(nullable = false, unique = true, length = 400)
     String imageUrl;
 
-    @Remark("仓库名")
+    /**
+     * 镜像名：地址的最后一段，如 registry.cn-hangzhou.aliyuncs.com/ztcn/nginx 中的 nginx。
+     */
+    @Remark("镜像名")
     String name;
 
     /**

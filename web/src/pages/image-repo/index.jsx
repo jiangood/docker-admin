@@ -1,9 +1,8 @@
-import {Button, Form, Popconfirm, Tag} from 'antd'
+import {Button, Form, Input, Popconfirm, Tag} from 'antd'
 import {CloudSyncOutlined} from '@ant-design/icons'
 import React from 'react'
 
 import {
-    FieldOrgTreeSelect,
     HttpClient,
     Page,
     PageUtils,
@@ -34,6 +33,10 @@ export default class extends React.Component {
 
     columns = [
         {
+            title: '镜像名',
+            dataIndex: 'name',
+        },
+        {
             title: '镜像地址',
             dataIndex: 'imageUrl',
             render: (imageUrl, row) => (
@@ -42,10 +45,6 @@ export default class extends React.Component {
                     {imageUrl}
                 </LinkButton>
             ),
-        },
-        {
-            title: '仓库名',
-            dataIndex: 'name',
         },
         {
             title: '来源',
@@ -99,8 +98,8 @@ export default class extends React.Component {
                     </PermActions>
                 )}
                 searchFormRender={() => (
-                    <Form.Item label='组织机构' name='orgId'>
-                        <FieldOrgTreeSelect placeholder='全部组织机构'/>
+                    <Form.Item label='镜像名' name='name'>
+                        <Input placeholder='按镜像名查询' allowClear/>
                     </Form.Item>
                 )}
                 request={(params) => HttpClient.get('admin/image-repo/page', params)}

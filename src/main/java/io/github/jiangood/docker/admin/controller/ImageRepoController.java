@@ -68,12 +68,13 @@ public class ImageRepoController {
 
     @HasPermission("image-repo:view")
     @RequestMapping("page")
-    public AjaxResult page(String orgId, String searchText, @PageableDefault(direction = Sort.Direction.DESC, sort = {"updateTime"}) Pageable pageable) {
+    public AjaxResult page(String name, String searchText, @PageableDefault(direction = Sort.Direction.DESC, sort = {"updateTime"}) Pageable pageable) {
         Spec<ImageRepo> q = Spec.of();
+        // 关键字：供 ImageRepoPicker 等按地址或名称模糊查
         q.orLike(searchText, "imageUrl", "name", "remark");
-
-        if (StrUtil.isNotEmpty(orgId)) {
-            q.eq("sysOrg.id", orgId);
+        // 列表页「镜像名」查询条件
+        if (StrUtil.isNotBlank(name)) {
+            q.like("name", name);
         }
 
         q.or(qq -> {

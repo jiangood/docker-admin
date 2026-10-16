@@ -246,7 +246,7 @@ export default class extends React.Component {
                        </PermActions>
                    }>
                 <Descriptions>
-                    <Descriptions.Item label='仓库名'>{repo.name}</Descriptions.Item>
+                    <Descriptions.Item label='镜像名'>{repo.name}</Descriptions.Item>
                     <Descriptions.Item label='来源'>{sourceTag(repo.source)}</Descriptions.Item>
                     <Descriptions.Item label='组织机构'>{repo.sysOrg?.name}</Descriptions.Item>
                     <Descriptions.Item label='备注'>{repo.remark}</Descriptions.Item>
