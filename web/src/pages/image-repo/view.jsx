@@ -5,7 +5,7 @@ import {HttpClient, Page, PageUtils, PermActions, UrlUtils} from "@jiangood/open
 import LogView from '../../components/LogView'
 import LinkButton from '../../components/LinkButton'
 import RemoteTagSyncModal from '../../components/RemoteTagSyncModal'
-import {formatBytes} from "../../components/container/utils"
+import {formatBytes, formatTime} from "../../components/container/utils"
 import {sourceTag} from "./index"
 
 
@@ -273,7 +273,7 @@ export default class extends React.Component {
                                 {title: '来源', dataIndex: 'source', render: (s) => sourceTag(s)},
                                 {
                                     title: '构建时间', dataIndex: 'buildTime', width: 160,
-                                    render: (v) => v || '-'
+                                    render: (v) => formatTime(v)
                                 },
                                 {
                                     title: '大小', dataIndex: 'size', width: 100,

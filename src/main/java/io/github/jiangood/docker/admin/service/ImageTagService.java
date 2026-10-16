@@ -9,6 +9,7 @@ import com.github.dockerjava.api.model.ExposedPort;
 import io.github.jiangood.docker.admin.dao.ImageTagRepository;
 import io.github.jiangood.docker.admin.entity.ImageTag;
 import io.github.jiangood.docker.admin.service.registry.RemoteImageMeta;
+import io.github.jiangood.docker.admin.util.ImageTimeUtils;
 import io.github.jiangood.docker.admin.util.ImageUrlUtils;
 import io.github.jiangood.docker.admin.util.VersionUtils;
 import io.github.jiangood.docker.base.FileLog;
@@ -216,6 +217,12 @@ public class ImageTagService extends BaseService<ImageTag> {
         }
         if (response.getSize() != null) {
             it.setSize(response.getSize());
+        }
+        // 构建时间取镜像配置里的 created（构建时由 docker 写入），不是登记时间；
+        // 读不到时保持原值，避免用 null 冲掉已有的时间
+        LocalDateTime buildTime = ImageTimeUtils.parse(response.getCreated());
+        if (buildTime != null) {
+            it.setBuildTime(buildTime);
         }
         it.setExposedPorts(ports);
         it.setVolumes(volumes);

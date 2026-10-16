@@ -3,6 +3,7 @@ package io.github.jiangood.docker.admin.service.registry;
 import cn.hutool.core.util.StrUtil;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.jiangood.docker.admin.util.ImageTimeUtils;
 import io.github.jiangood.openadmin.util.BusinessException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.util.Assert;
@@ -16,11 +17,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.OffsetDateTime;
-import java.time.ZoneId;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Comparator;
@@ -207,7 +204,7 @@ public class RegistryV2Client {
         }
 
         JsonNode blob = getJson(prefix + "/blobs/" + enc(configDigest), scope, "application/json", "读取镜像配置");
-        LocalDateTime created = blob == null ? null : parseTime(text(blob, "created"));
+        LocalDateTime created = blob == null ? null : ImageTimeUtils.parse(text(blob, "created"));
         // 声明的端口与卷也在同一份 image config 里，顺手一起读出来，供详情页展示
         JsonNode configNode = blob == null ? null : blob.get("config");
         return new RemoteImageMeta(created, configDigest, size,
@@ -396,30 +393,6 @@ public class RegistryV2Client {
             }
         }
         return sum == 0 ? null : sum;
-    }
-
-    /**
-     * 解析镜像构建时间。OCI/Docker 配置里是 RFC3339（如 {@code 2026-10-10T01:35:06.803968147Z}），
-     * 部分注册中心接口返回毫秒时间戳字符串，两种都兜住，都不识别时返回 null。
-     */
-    private static LocalDateTime parseTime(String value) {
-        if (StrUtil.isBlank(value)) {
-            return null;
-        }
-        String v = value.trim();
-        try {
-            return OffsetDateTime.parse(v).atZoneSameInstant(ZoneId.systemDefault()).toLocalDateTime();
-        } catch (DateTimeParseException ignored) {
-            // 不是 RFC3339，继续按时间戳试
-        }
-        if (v.chars().allMatch(Character::isDigit)) {
-            try {
-                return LocalDateTime.ofInstant(Instant.ofEpochMilli(Long.parseLong(v)), ZoneId.systemDefault());
-            } catch (NumberFormatException ignored) {
-                // 也不是时间戳
-            }
-        }
-        return null;
     }
 
     /**

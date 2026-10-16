@@ -265,7 +265,7 @@ public class RemoteSyncService {
     }
 
     /**
-     * 写入版本：已存在的跳过，新增的补齐来源与元数据。
+     * 写入版本：新增的登记并补齐来源与元数据；已存在的只补缺失的元数据，不重复计数。
      */
     private void persistTags(RepoGroup group, RemoteSyncResult result) {
         List<RemoteTag> tags = group.getTags();
@@ -273,14 +273,22 @@ public class RemoteSyncService {
             return;
         }
         for (RemoteTag vo : tags) {
-            if (vo.isExists()) {
+            RemoteImageMeta meta = new RemoteImageMeta(vo.getBuildTime(), vo.getDigest(), vo.getSize(),
+                    vo.getExposedPorts(), vo.getVolumes());
+            // 远程没读到任何元数据（如关闭了 withMeta）时，已存在的版本无需重写
+            if (vo.isExists() && vo.getBuildTime() == null && vo.getSize() == null
+                    && StrUtil.isBlank(vo.getDigest())) {
                 result.setTagSkipped(result.getTagSkipped() + 1);
                 continue;
             }
-            RemoteImageMeta meta = new RemoteImageMeta(vo.getBuildTime(), vo.getDigest(), vo.getSize(),
-                    vo.getExposedPorts(), vo.getVolumes());
+            // upsertRemote 只在远程读到值时才覆盖，因此对已存在的版本是「补齐空字段」，
+            // 可修好历史上登记时没记下构建时间/大小的数据
             var saved = imageTagService.upsertRemote(group.getImageUrl(), vo.getTag(), meta);
-            result.setTagAdded(result.getTagAdded() + 1);
+            if (vo.isExists()) {
+                result.setTagSkipped(result.getTagSkipped() + 1);
+            } else {
+                result.setTagAdded(result.getTagAdded() + 1);
+            }
             boolean metaFilled = saved != null && (saved.getBuildTime() != null || saved.getSize() != null
                     || (saved.getExposedPorts() != null && !saved.getExposedPorts().isEmpty())
                     || (saved.getVolumes() != null && !saved.getVolumes().isEmpty()));

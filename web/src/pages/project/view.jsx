@@ -13,7 +13,7 @@ import {
 import {DateUtils, getToken, HttpClient, Page, PageUtils, ProTable, UrlUtils, ViewText} from "@jiangood/open-admin";
 import LogView from "../../components/LogView";
 import LinkButton from "../../components/LinkButton";
-import {formatBytes} from "../../components/container/utils";
+import {formatBytes, formatTime} from "../../components/container/utils";
 import {sourceTag} from "../image-repo/index";
 
 
@@ -420,7 +420,7 @@ export default class extends React.Component {
               render: (v) => <Typography.Text copyable code>{v}</Typography.Text>
             },
             {title: '来源', dataIndex: 'source', width: 90, render: (s) => sourceTag(s)},
-            {title: '构建时间', dataIndex: 'buildTime', width: 160, render: (v) => v || '-'},
+            {title: '构建时间', dataIndex: 'buildTime', width: 160, render: (v) => formatTime(v)},
             {
               title: '大小', dataIndex: 'size', width: 100,
               render: (v) => v ? formatBytes(v) : '-'
