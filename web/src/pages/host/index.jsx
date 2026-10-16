@@ -1,5 +1,5 @@
 import {PlusOutlined} from '@ant-design/icons'
-import {Button, Checkbox, Form, Input, InputNumber, Modal, Popconfirm, Select, Space} from 'antd'
+import {Button, Checkbox, Form, Input, InputNumber, Modal, Popconfirm, Radio, Space} from 'antd'
 import React from 'react'
 
 import {PermActions, FieldBoolean, HttpClient, Page, PageUtils, ProTable} from "@jiangood/open-admin"
@@ -282,7 +282,7 @@ export default class extends React.Component {
                     </Form.Item>
 
                     <Form.Item label='连接方式' name='connectionType' rules={[{required: true}]}>
-                        <Select options={CONNECTION_TYPES}/>
+                        <Radio.Group optionType='button' buttonStyle='solid' options={CONNECTION_TYPES}/>
                     </Form.Item>
 
                     <Form.Item noStyle shouldUpdate={(prev, cur) => (prev.connectionType || 'local') !== (cur.connectionType || 'local')}>
