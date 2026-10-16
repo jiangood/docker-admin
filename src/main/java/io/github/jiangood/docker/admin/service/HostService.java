@@ -22,7 +22,8 @@ import java.util.List;
 @RequiredArgsConstructor
 public class HostService extends BaseService<Host> {
 
-    private final HostRepository hostRepository;\n    private final SystemConfigService systemConfigService;
+    private final HostRepository hostRepository;
+    private final SystemConfigService systemConfigService;
 
     /**
      * 获得镜像构建主机（系统默认 runner）。
