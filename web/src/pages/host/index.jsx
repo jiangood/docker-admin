@@ -290,18 +290,36 @@ export default class extends React.Component {
                             const type = getFieldValue('connectionType') || 'local'
                             if (type === 'ssh') {
                                 return <>
-                                    <Form.Item label='SSH地址' name='sshHost' rules={[{required: true}]}>
-                                        <Input placeholder='192.168.1.2'/>
+                                    <Form.Item label='SSH地址'
+                                               tooltip={<div style={{width: 460}}>SSH 所在机器的 IP 或域名，
+                                                   端口紧跟在后面（默认 22）。<br/>登录后在远端执行
+                                                   docker system dial-stdio，所以远端不需要暴露 2375 端口，
+                                                   也不要求 Docker TLS 证书。</div>}>
+                                        <Space.Compact style={{width: '100%'}}>
+                                            <Form.Item name='sshHost' noStyle rules={[{required: true}]}>
+                                                <Input allowClear style={{width: '100%'}} placeholder='192.168.1.2'/>
+                                            </Form.Item>
+                                            <Form.Item name='sshPort' noStyle initialValue={22}>
+                                                <InputNumber style={{width: 110}} min={1} max={65535}
+                                                             placeholder='端口'/>
+                                            </Form.Item>
+                                        </Space.Compact>
                                     </Form.Item>
-                                    <Form.Item label='SSH端口' name='sshPort' rules={[{required: true}]}>
-                                        <InputNumber style={{width: '100%'}} min={1} max={65535}/>
-                                    </Form.Item>
-                                    <Form.Item label='SSH用户' name='sshUser' rules={[{required: true}]}>
-                                        <Input placeholder='root'/>
-                                    </Form.Item>
-                                    <Form.Item label='SSH密码' name='sshPassword'
-                                               tooltip='编辑时留空表示不修改密码'>
-                                        <Input.Password autoComplete='new-password'/>
+
+                                    <Form.Item label='SSH账号'
+                                               tooltip={<div style={{width: 460}}>左边是用户名（默认 root），
+                                                   右边是密码。<br/>密码不回传前端：编辑时留空表示沿用原密码；
+                                                   内网不校验 host key，只走密码认证。</div>}>
+                                        <Space.Compact style={{width: '100%'}}>
+                                            <Form.Item name='sshUser' noStyle rules={[{required: true}]}>
+                                                <Input style={{width: '40%'}} placeholder='root'/>
+                                            </Form.Item>
+                                            <Form.Item name='sshPassword' noStyle>
+                                                <Input.Password autoComplete='new-password'
+                                                                style={{width: '60%'}}
+                                                                placeholder='密码，留空表示不修改'/>
+                                            </Form.Item>
+                                        </Space.Compact>
                                     </Form.Item>
                                 </>
                             }
