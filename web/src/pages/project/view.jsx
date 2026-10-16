@@ -44,6 +44,7 @@ export default class extends React.Component {
     webhookLoading: false
   }
   actionRef = React.createRef();
+  formRef = React.createRef();
   timer = null
 
   componentDidMount() {
@@ -114,13 +115,27 @@ export default class extends React.Component {
   }
 
   triggerPipeline = () => {
+    // 远程 tag 列表已按版本倒序、分支列表已按常见主分支优先排序，故取第一项作为默认值
     HttpClient.get('admin/project/tags', {projectId: this.id}).then(rs => {
-      this.setState({tagOptions: rs.data || []})
+      const options = rs.data || []
+      this.setState({tagOptions: options})
+      this.selectDefault('tag', options)
     })
     HttpClient.get('admin/project/branches', {projectId: this.id}).then(rs => {
-      this.setState({branchOptions: rs.data || []})
+      const options = rs.data || []
+      this.setState({branchOptions: options})
+      this.selectDefault('branch', options)
     })
     this.setState({showTrigger: true, refType: 'TAG'})
+  }
+
+  // 默认选中第一个选项；用户已选择时不再覆盖
+  selectDefault = (name, options) => {
+    const form = this.formRef.current
+    const value = options[0]?.value
+    if (form && value && !form.getFieldValue(name)) {
+      form.setFieldsValue({[name]: value})
+    }
   }
 
   submitTrigger = (values) => {
@@ -284,6 +299,7 @@ export default class extends React.Component {
              onCancel={() => this.setState({showTrigger: false})}>
 
         <Form
+          ref={this.formRef}
           onFinish={this.submitTrigger}
           labelCol={{flex: '100px'}}
           initialValues={{
