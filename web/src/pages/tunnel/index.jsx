@@ -174,10 +174,6 @@ export default class extends React.Component {
                 <Table rowKey={row => row.id || row.name} size='small' loading={clientsLoading}
                        dataSource={clients} columns={this.clientColumns}
                        pagination={false}/>
-
-                <Typography.Text type='secondary' className='mt-2' style={{display: 'block'}}>
-                    客户端需以 <code>--api-port</code> 启动管理 API；API 地址形如 http://主机:2336，令牌与客户端 <code>--token</code> 一致；客户端所在目录需可写（隧道改动会写回其 client.toml）。
-                </Typography.Text>
             </div>
         )
     }
