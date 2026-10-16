@@ -64,7 +64,7 @@ public class SystemConfigService extends BaseService<SystemConfig> {
     public void saveValue(String key, String value, String description) {
         SystemConfig config = repository.findByConfigKey(key).orElseGet(SystemConfig::new);
         config.setConfigKey(key);
-        config.setConfigValue(StrUtil.blankToNull(value));
+        config.setConfigValue(StrUtil.trimToNull(value));
         config.setDescription(description);
         if (StrUtil.isBlank(config.getId())) {
             create(config);
