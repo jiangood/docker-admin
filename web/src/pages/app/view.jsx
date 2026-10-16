@@ -197,6 +197,25 @@ export default class extends React.Component {
     }
 
     /**
+     * 直连访问地址：桥接模式下把 TCP 端口映射到主机侧的「主机 IP + 主机端口」拼成 http 地址，
+     * 点击在新窗口打开（UDP 端口与未映射主机端口的项没有 http 地址，直接跳过）。
+     * 主机未填 IP 时返回空数组（不展示，避免拼出无意义的地址）。
+     */
+    accessUrls = () => {
+        const {app} = this.state
+        const ip = (app.host?.ip || '').trim()
+        const config = app.config || {}
+        const networkMode = (config.networkMode || 'bridge').toLowerCase()
+        if (!ip || networkMode !== 'bridge') {
+            return []
+        }
+        return (config.ports || [])
+            .filter(p => p && p.publicPort != null
+                && String(p.protocol || 'tcp').toLowerCase() === 'tcp')
+            .map(p => 'http://' + ip + ':' + p.publicPort)
+    }
+
+    /**
      * 隧道开启时的提示条：名称、容器配置、迁移、删除等变更都要求先关闭隧道。
      */
     renderTunnelHint = () => (
@@ -313,6 +332,7 @@ export default class extends React.Component {
             return <Page padding><Spin/></Page>
         }
         const {state} = container;
+        const accessUrls = this.accessUrls()
 
 
         return (<Page padding>
@@ -333,8 +353,17 @@ export default class extends React.Component {
 
                     </Item>
 
-                    <Item label='主机'>  {app.host?.name} </Item>
+                    <Item label='主机'>
+                        {app.host?.name}{app.host?.ip ? '（' + app.host.ip + '）' : ''}
+                    </Item>
 
+                    <Item label='访问地址'>
+                        {accessUrls.length === 0 ? '-' : <Space orientation='vertical' size={0}>
+                            {accessUrls.map(url => (
+                                <a key={url} href={url} target='_blank' rel='noreferrer'>{url}</a>
+                            ))}
+                        </Space>}
+                    </Item>
 
                     <Item label='组织机构'>  {app.sysOrg?.name} </Item>
 
