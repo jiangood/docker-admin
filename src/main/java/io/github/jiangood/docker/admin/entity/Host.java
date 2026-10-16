@@ -105,9 +105,12 @@ public class Host extends BaseEntity {
      * 自定义请求头的值：{@link #headerName} 对应的值，照原样发送（不自动补 {@code Bearer}）。
      * <p>
      * 回传前端（编辑弹窗要回显，才能改、才能删）。<b>空就是空</b>：保存时留空即删除该请求头。
+     * <p>
+     * 该字段原来叫 {@code authHeader}（只支持 Authorization），物理列名曾是 {@code auth_header}；
+     * 现在列名随字段走（{@code header_value}），老库里已有的值由
+     * {@code HostHeaderColumnMigration} 在启动时搬到新列。
      */
     @ToString.Exclude
-    @Column(name = "auth_header")
     @Remark("请求头值")
     String headerValue;
 
