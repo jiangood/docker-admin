@@ -130,9 +130,9 @@ public class ProjectController {
         buildRequest.setProjectId(project.getId());
         buildRequest.setDockerfile(project.getDockerfile());
         buildRequest.setBuildHostId(service.resolveBuildHostId(buildHostId));
-        service.buildImage(buildRequest);
+        String logId = service.buildImage(buildRequest);
 
-        return AjaxResult.ok().msg("构建已触发");
+        return AjaxResult.ok().data(logId).msg("构建已触发");
     }
 
     /**

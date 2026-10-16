@@ -389,20 +389,54 @@ public class ProjectService extends BaseService<Project> {
         return save(project);
     }
 
-    public void buildImage(BuildRequest p) throws IOException {
+    /**
+     * 触发构建：先同步落一条构建记录，再把真正的构建任务交给线程池异步执行。
+     * 记录必须先入库，否则前端在触发接口返回后立即刷新列表时，会与异步线程写库形成竞态，
+     * 出现「构建历史看不到新记录，刷新页面才有」的现象。
+     *
+     * @return 构建记录 id
+     */
+    public String buildImage(BuildRequest p) throws IOException {
         List<BuildLog> processing = buildLogService.findByProjectProcessing(p.getProjectId());
 
         for (BuildLog buildLog : processing) {
             stopBuild(buildLog.getId());
         }
 
+        BuildLog buildLog = createProcessingLog(p);
+
+        // 任务在调度前就标记为运行中：前端触发后会立刻打开日志窗口，
+        // 若此时尚未标记，日志 WebSocket 会误判任务已结束而提前关闭连接。
+        taskLogRegistry.start(buildLog.getId());
+
         // 通过代理调用 @Async 方法，避免自调用失效
-        SpringUtil.getBean(ProjectService.class).buildImageJob(p);
+        SpringUtil.getBean(ProjectService.class).buildImageJob(p, buildLog.getId());
+        return buildLog.getId();
+    }
+
+    /**
+     * 构建开始前先落一条「处理中」记录（success 为空即处理中），供前端立刻在构建历史中看到。
+     */
+    private BuildLog createProcessingLog(BuildRequest p) {
+        Project project = projectRepository.findById(p.getProjectId()).orElse(null);
+        Assert.notNull(project, "项目不存在");
+
+        boolean branchBuild = BuildRequest.REF_TYPE_BRANCH.equals(p.getRefType())
+                && StrUtil.isNotBlank(p.getBranch());
+        String branch = branchBuild ? p.getBranch().trim() : null;
+
+        BuildLog buildLog = new BuildLog();
+        buildLog.setProjectId(project.getId());
+        buildLog.setProjectName(project.getName());
+        buildLog.setDockerfile(project.getDockerfile());
+        buildLog.setTag(branchBuild ? branch : p.getTag());
+        buildLog.setBranch(branch);
+        return buildLogService.saveLog(buildLog);
     }
 
 
     @Async
-    public void buildImageJob(BuildRequest p) {
+    public void buildImageJob(BuildRequest p, String logId) {
         String tag = p.getTag();
         String projectId = p.getProjectId();
         String context = p.getContext();
@@ -415,15 +449,9 @@ public class ProjectService extends BaseService<Project> {
         String cloneRef = branchBuild ? branch : tag;
 
         Project project = projectRepository.findById(projectId).orElse(null);
-        BuildLog buildLog = new BuildLog();
-        buildLog.setProjectId(project.getId());
-        buildLog.setProjectName(project.getName());
-        buildLog.setDockerfile(project.getDockerfile());
-        buildLog.setTag(branchBuild ? branch : tag);
-        buildLog.setBranch(branch);
-        buildLog = buildLogService.saveLog(buildLog);
-        String logId = buildLog.getId();
-        taskLogRegistry.start(logId);
+        BuildLog buildLog = buildLogService.findById(logId).orElse(null);
+        Assert.notNull(buildLog, "构建记录不存在");
+        // 任务已在 buildImage() 调度前通过 taskLogRegistry.start() 标记为运行中
 
 
         DockerClient client = null;

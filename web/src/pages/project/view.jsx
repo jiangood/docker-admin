@@ -124,7 +124,11 @@ export default class extends React.Component {
     const params = {...values, refType: this.state.refType}
     HttpClient.get("admin/project/build", params).then(rs => {
       this.setState({showTrigger: false})
-      this.actionRef.current.reload()
+      this.reload()
+      // 后端在触发时已同步落库并返回构建记录 id，这里直接打开日志弹窗，边构建边看输出
+      if (rs.data) {
+        this.openLog({id: rs.data, tag: values.tag || values.branch})
+      }
     })
   }
 
