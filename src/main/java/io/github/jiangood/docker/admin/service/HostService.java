@@ -7,6 +7,8 @@ import io.github.jiangood.openadmin.framework.data.specification.Spec;
 import io.github.jiangood.openadmin.framework.data.BaseService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,16 +41,53 @@ public class HostService extends BaseService<Host> {
 
     /**
      * 保存主机：新建走 create，编辑走 update，并归一化连接配置。
+     * <p>
+     * 「构建节点」全局唯一：设为「是」时自动取消其他主机的该标记，
+     * 保证同时只有一台构建主机，避免多处构建相互干扰。
      */
     @Transactional
     public Host saveHost(Host input, List<String> updateFields) {
         normalize(input);
         Assert.hasText(input.getIp(), "请填写主机 IP 地址");
         fillSshPassword(input);
-        if (StrUtil.isBlank(input.getId())) {
-            return create(input);
+
+        // 先落库（create/update 只更新前端提交的字段），再看最终结果决定是否取消其他主机的标记
+        Host saved = StrUtil.isBlank(input.getId()) ? create(input) : update(input, updateFields);
+        if (Boolean.TRUE.equals(saved.getIsRunner())) {
+            clearRunnerFlagOfOthers(saved.getId());
         }
-        return update(input, updateFields);
+        return saved;
+    }
+
+    /**
+     * 启动时归一化历史数据：构建节点只保留一台（updateTime 最新的一台）。
+     * 此前允许标记多台，构建会落到哪台不确定；这里收敛为唯一的一台，幂等。
+     */
+    @EventListener(ApplicationReadyEvent.class)
+    @Transactional
+    public void normalizeRunnerUniqueness() {
+        Host runner = getDefaultDockerRunner();
+        if (runner != null) {
+            clearRunnerFlagOfOthers(runner.getId());
+        }
+    }
+
+    /**
+     * 取消其他主机的「构建节点」标记，保证构建主机唯一。
+     */
+    private void clearRunnerFlagOfOthers(String keepId) {
+        Spec<Host> q = Spec.of();
+        q.eq(Host.Fields.isRunner, true);
+        if (StrUtil.isNotBlank(keepId)) {
+            q.ne("id", keepId);
+        }
+        List<Host> others = hostRepository.findAll(q);
+        if (others.isEmpty()) {
+            return;
+        }
+        others.forEach(h -> h.setIsRunner(false));
+        hostRepository.saveAll(others);
+        log.info("构建节点唯一，已取消其他 {} 台主机的构建节点标记", others.size());
     }
 
     /**

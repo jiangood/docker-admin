@@ -277,8 +277,9 @@ export default class extends React.Component {
                                tooltip='隧道转发目标：目标地址 = 该 IP + 应用映射到主机侧的端口，需隧道客户端所在机器可访问'>
                         <Input placeholder='192.168.1.10'/>
                     </Form.Item>
-                    <Form.Item label='构建节点' name='isRunner' rules={[{required: true}]}>
-                        <FieldBoolean/>
+                    <Form.Item label='构建节点' name='isRunner' rules={[{required: true}]}
+                               tooltip='全局只能有一台构建主机：设为「是」后，会自动把其他主机的构建节点标记改为「否」'>
+                        <FieldBoolean type='radio'/>
                     </Form.Item>
 
                     <Form.Item label='连接方式' name='connectionType' rules={[{required: true}]}>
