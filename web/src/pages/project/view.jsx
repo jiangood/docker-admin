@@ -39,6 +39,7 @@ export default class extends React.Component {
     branchOptions: [],
     // 可选构建主机
     buildHostOptions: [],
+    registryOptions: [],
     // 构建来源：BRANCH（分支最新代码）/ TAG（tag），默认从分支构建
     refType: 'BRANCH',
     versions: [],
@@ -134,6 +135,9 @@ export default class extends React.Component {
     // 构建主机列表：所有主机都可选，默认不选（留给后端用系统默认 runner）
     HttpClient.get('admin/host/options').then(rs => {
       this.setState({buildHostOptions: rs.data || []})
+    })
+    HttpClient.get('admin/registry/options').then(rs => {
+      this.setState({registryOptions: rs.data || []})
     })
     this.setState({showTrigger: true, refType: 'BRANCH'})
   }
@@ -298,7 +302,7 @@ export default class extends React.Component {
       return <Page padding><Spin/></Page>
     }
 
-    const {project, showTrigger, logRow, tagOptions, branchOptions, buildHostOptions, refType} = this.state;
+    const {project, showTrigger, logRow, tagOptions, branchOptions, buildHostOptions, registryOptions, refType} = this.state;
 
     return (<Page padding>
 
@@ -357,6 +361,12 @@ export default class extends React.Component {
               <Select options={tagOptions} showSearch placeholder='请选择远程 tag'/>
             </Form.Item>
           )}
+
+          <Form.Item name="registryId" label="目标注册中心"
+                     help="可选：为本次构建指定推送目标，留空使用系统默认注册中心">
+            <Select options={registryOptions} allowClear showSearch optionFilterProp="label"
+                    placeholder='系统默认注册中心'/>
+          </Form.Item>
 
           <Form.Item name="buildHostId" label="构建主机"
                      help="可选：改用网络更好的主机构建（如拉取基础镜像慢时），留空使用系统默认构建节点">
