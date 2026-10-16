@@ -24,6 +24,7 @@ import io.github.jiangood.docker.base.FileLog;
 import io.github.jiangood.docker.sdk.engine.DefaultCallback;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import io.github.jiangood.openadmin.framework.data.BaseService;
+import io.github.jiangood.openadmin.modules.logviewer.config.FileLogConfig;
 import io.github.jiangood.openadmin.util.BusinessException;
 import io.github.jiangood.openadmin.util.JsonTool;
 import jakarta.annotation.Resource;
@@ -38,6 +39,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.Assert;
 
+import java.io.File;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -72,6 +75,9 @@ public class AppService extends BaseService<App> {
 
     @Resource
     TunnelService tunnelService;
+
+    @Resource
+    FileLogConfig fileLogConfig;
 
     /**
      * 保存应用：新建走 create，编辑走 update。
@@ -110,9 +116,8 @@ public class AppService extends BaseService<App> {
         DeployLog deployLog = null;
         boolean success = false;
         try {
-            FileLog.bind(app.getId());
-
-            // 修改更新时间
+            // 每次部署落一条独立记录，并以其 id 作为日志文件名：前端「部署日志」按部署记录
+            // 列表展示，各次部署的日志互不混在一起（不再用 appId 绑定日志文件）。
             app.setUpdateTime(LocalDateTime.now());
             appRepository.save(app);
             app = appRepository.findById(app.getId()).orElse(null); // 确保关联对象都取出来
@@ -120,8 +125,11 @@ public class AppService extends BaseService<App> {
             deployLog = new DeployLog();
             deployLog.setAppId(app.getId());
             deployLog.setAppName(app.getName());
+            deployLog.setImageTag(app.getImageTag());
+            // saveAndFlush：立即拿到底层生成的 id，绑定日志文件时才有值（与 BuildLogService.saveLog 一致）
+            deployLog = deployLogRepository.saveAndFlush(deployLog);
 
-            deployLog = deployLogRepository.save(deployLog);
+            FileLog.bind(deployLog.getId());
             fileLog.info("部署阶段开始");
             Host host = app.getHost();
 
@@ -304,6 +312,23 @@ public class AppService extends BaseService<App> {
             FileLog.unbind();
         }
 
+    }
+
+    /**
+     * 某应用的部署记录，最新在前，并标记各自是否已有独立日志文件、耗时。
+     * 更早版本把同一应用的多次部署日志合并写在 {@code appId.log} 里，这些历史记录没有
+     * 独立文件，前端据此提示「无独立日志」。
+     */
+    public List<DeployLog> listDeployLogs(String appId) {
+        List<DeployLog> list = deployLogRepository.findByAppIdOrderByCreateTimeDesc(appId);
+        File logDir = new File(fileLogConfig.getLogPath());
+        for (DeployLog log : list) {
+            log.setLogExists(new File(logDir, log.getId() + ".log").exists());
+            if (log.getCreateTime() != null && log.getCompleteTime() != null) {
+                log.setTimeSpend(Duration.between(log.getCreateTime(), log.getCompleteTime()).toMillis());
+            }
+        }
+        return list;
     }
 
     /**

@@ -26,8 +26,8 @@ import {history} from "@jiangood/open-admin";
 
 import {FieldRemoteSelect, HttpClient, Page, PageUtils} from "@jiangood/open-admin";
 import PublishForm from "./PublishForm";
-import LogView from "../../components/LogView";
 import ContainerDetail from "../../components/container/ContainerDetail";
+import DeployLogList from "./DeployLogList";
 import LinkButton from "../../components/LinkButton";
 import {stateColor, stateLabel} from "../../components/container/utils";
 
@@ -408,12 +408,11 @@ export default class extends React.Component {
         const {app, container, tabTokens} = this.state
 
 
-        let publishLogUrl = '/admin/sys/log/' + app.id;
         const items = [
             {
                 key: 'log',
                 label: '部署日志',
-                children: <LogView key={'log-' + tabTokens.log} url={publishLogUrl} websocket={false}/>
+                children: <DeployLogList key={'log-' + tabTokens.log} appId={app.id}/>
             },
             {
                 key: 'container',

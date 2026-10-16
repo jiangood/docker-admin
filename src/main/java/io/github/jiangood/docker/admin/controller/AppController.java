@@ -94,6 +94,16 @@ public class AppController {
     }
 
     /**
+     * 应用的部署记录列表（最新在前），供「部署日志」标签按次查看。
+     */
+    @HasPermission("app:view")
+    @RequestMapping("deployLogs")
+    public AjaxResult deployLogs(String id) {
+        assertAppAccess(id);
+        return AjaxResult.ok().data(service.listDeployLogs(id));
+    }
+
+    /**
      * 应用容器的详情（基本信息 + 只读配置），供应用详情页的通用容器组件使用。
      * 与主机维度的 {@code admin/container/inspect} 相对，这里额外做了组织数据权限校验。
      */
