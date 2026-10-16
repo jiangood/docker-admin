@@ -1,5 +1,5 @@
 import {PlusOutlined} from '@ant-design/icons'
-import {Button, Form, Input, InputNumber, Modal, Popconfirm, Segmented, Select} from 'antd'
+import {Button, Checkbox, Form, Input, InputNumber, Modal, Popconfirm, Select, Space} from 'antd'
 import React from 'react'
 
 import {PermActions, FieldBoolean, HttpClient, Page, PageUtils, ProTable} from "@jiangood/open-admin"
@@ -15,11 +15,6 @@ const LOCAL_TIP = '留空则使用平台本机 Docker：Linux 为 unix:///var/ru
     + '如需 rootless 等自定义路径，可在此填写 socket 路径。'
 
 const DEFAULT_TCP_PORT = 2375
-
-const PROTOCOLS = [
-    {value: 'http', label: 'HTTP'},
-    {value: 'https', label: 'HTTPS'},
-]
 
 function isHttps(record) {
     return /^https:\/\//i.test((record && record.dockerHost) || '')
@@ -59,28 +54,28 @@ function parseTcpHost(dockerHost) {
 }
 
 /**
- * 编辑回显：协议 + 主机 + 端口拆到各控件（保存时再拼回 dockerHost）。
+ * 编辑回显：主机 / 端口 / SSL 拆到服务地址那一行的几个控件里（保存时再拼回 dockerHost）。
  */
 function splitTcpHost(dockerHost) {
     const {https, host, port} = parseTcpHost(dockerHost)
-    return {tcpProtocol: https ? 'https' : 'http', tcpHost: host, tcpPort: port}
+    return {tcpHost: host, tcpPort: port, tcpTls: https}
 }
 
 /**
- * 提交前把协议 + 主机 + 端口拼回 dockerHost，并清掉表单专用字段（实体没有这几列）。
+ * 提交前把主机 + 端口 + SSL 拼回 dockerHost，并清掉表单专用字段（实体没有这几列）。
  * https:// 前缀是后端识别 TLS 的标记；端口以「端口」框为准，框里空着就用地址里写的。
  */
 function buildPayload(values) {
     const payload = {...values}
     if ((payload.connectionType || 'local') === 'tcp') {
         const parsed = parseTcpHost(payload.tcpHost)
-        const https = payload.tcpProtocol === 'https' || parsed.https
+        const https = payload.tcpTls === true || parsed.https
         const port = payload.tcpPort || parsed.port
         payload.dockerHost = (https ? 'https://' : '') + parsed.host + (port ? `:${port}` : '')
     }
     delete payload.tcpHost
     delete payload.tcpPort
-    delete payload.tcpProtocol
+    delete payload.tcpTls
     return payload
 }
 
@@ -163,15 +158,15 @@ export default class extends React.Component {
                 connectionType: 'local',
                 isRunner: false,
                 sshPort: 22,
-                tcpProtocol: 'http',
                 tcpPort: DEFAULT_TCP_PORT,
+                tcpTls: false,
             }
         })
     }
 
     /**
      * 地址框失焦时做一次整理：粘进来的 `https://host:443` 会被拆成
-     * 主机 = host、协议 = HTTPS、端口 = 443，所见即所得，不留隐藏前缀。
+     * 主机 = host、端口 = 443、SSL = 勾选，所见即所得，不留隐藏前缀。
      */
     handleHostBlur = e => {
         const raw = (e.target.value || '').trim()
@@ -182,7 +177,7 @@ export default class extends React.Component {
         const {https, host, port} = parseTcpHost(raw)
         form.setFieldValue('tcpHost', host)
         if (https) {
-            form.setFieldValue('tcpProtocol', 'https')
+            form.setFieldValue('tcpTls', true)
         }
         if (port) {
             // 地址里显式写了端口，就搬到端口框（以用户写的为准）
@@ -311,45 +306,53 @@ export default class extends React.Component {
                             }
                             if (type === 'tcp') {
                                 return <>
-                                    <Form.Item label='主机地址' name='tcpHost' rules={[{required: true}]}
-                                               tooltip='Docker 所在机器的 IP 或域名，端口在下一项单独填写'>
-                                        <Input allowClear placeholder='192.168.1.2 或 docker.example.com'
-                                               onBlur={this.handleHostBlur}/>
+                                    <Form.Item label='服务地址'
+                                               tooltip={<div style={{width: 460}}>Docker 所在机器的 IP 或域名，
+                                                   端口紧跟在后面（默认 2375，留空表示不指定，按 http/https 默认端口
+                                                   80/443 访问）。<br/>勾选 <b>SSL</b> 走 https 加密，且不校验证书
+                                                   身份（自签证书、证书里没填域名的网关也能连）。</div>}>
+                                        <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
+                                            <Space.Compact style={{flex: 1, minWidth: 0}}>
+                                                <Form.Item name='tcpHost' noStyle rules={[{required: true}]}>
+                                                    <Input allowClear style={{width: '100%'}}
+                                                           placeholder='192.168.1.2 或 docker.example.com'
+                                                           onBlur={this.handleHostBlur}/>
+                                                </Form.Item>
+                                                <Form.Item name='tcpPort' noStyle initialValue={DEFAULT_TCP_PORT}>
+                                                    <InputNumber style={{width: 110}} min={1} max={65535}
+                                                                 placeholder='端口'/>
+                                                </Form.Item>
+                                            </Space.Compact>
+                                            <Form.Item name='tcpTls' noStyle valuePropName='checked'>
+                                                <Checkbox>SSL</Checkbox>
+                                            </Form.Item>
+                                        </div>
                                     </Form.Item>
-                                    <Form.Item label='端口' name='tcpPort' initialValue={DEFAULT_TCP_PORT}
-                                               tooltip={<div style={{width: 460}}>Docker daemon 监听端口，默认
-                                                   2375（HTTPS 常见 443）。<br/>右边是协议：HTTP 明文 / HTTPS 加密
-                                                   （不校验证书身份，自签证书也能连）。<br/>端口留空表示不指定，
-                                                   按 http/https 默认端口（80/443）访问。</div>}>
-                                        <InputNumber style={{width: '100%'}} min={1} max={65535}
-                                                     placeholder='留空则不指定端口'
-                                                     addonAfter={
-                                                         <Form.Item name='tcpProtocol' noStyle initialValue='http'>
-                                                             <Segmented size='small' options={PROTOCOLS}/>
-                                                         </Form.Item>
-                                                     }/>
-                                    </Form.Item>
-                                    <Form.Item label='自定义请求头' name='headerName'
-                                               rules={[({getFieldValue}) => ({
-                                                   validator(_, value) {
-                                                       if (!value && getFieldValue('headerValue')) {
-                                                           return Promise.reject(new Error('填了请求头值就必须填名称，否则不会发送'))
-                                                       }
-                                                       return Promise.resolve()
-                                                   }
-                                               })]}
-                                               tooltip={<div style={{width: 460}}>代理要求的请求头名称（header name），
-                                                   如 docker-api-auth 是 <b>Authorization</b>、http-tunnel
-                                                   是它约定的自定义 key。<br/><b>留空则不发送该请求头</b>，不会替你补
-                                                   Authorization。</div>}>
-                                        <Input allowClear placeholder='如 Authorization，留空则不发送'/>
-                                    </Form.Item>
-                                    <Form.Item label='请求头值' name='headerValue'
-                                               tooltip={<div style={{width: 460}}>照原样发送，不自动加任何前缀——
-                                                   需要 <b>Bearer</b> 请自己写进值里（如 Bearer abc123）。<br/>
-                                                   清空即删除该请求头（不再发送）。</div>}>
-                                        <Input.Password autoComplete='new-password'
-                                                        placeholder='留空/清空则不发送该请求头'/>
+
+                                    <Form.Item label='自定义请求头'
+                                               tooltip={<div style={{width: 460}}>代理要求的请求头：左边是名称
+                                                   （header name，如 Authorization），右边是值。
+                                                   <br/><b>名称为空则不发送该请求头</b>；值照原样发送，需要
+                                                   <b>Bearer</b> 自己写在值里；清空即删除。</div>}>
+                                        <Space.Compact style={{width: '100%'}}>
+                                            <Form.Item name='headerName' noStyle
+                                                       rules={[({getFieldValue}) => ({
+                                                           validator(_, value) {
+                                                               if (!value && getFieldValue('headerValue')) {
+                                                                   return Promise.reject(new Error('填了值就必须填名称，否则不会发送'))
+                                                               }
+                                                               return Promise.resolve()
+                                                           }
+                                                       })]}>
+                                                <Input allowClear style={{width: '42%'}}
+                                                       placeholder='名称，如 Authorization'/>
+                                            </Form.Item>
+                                            <Form.Item name='headerValue' noStyle>
+                                                <Input.Password autoComplete='new-password'
+                                                                style={{width: '58%'}}
+                                                                placeholder='值，留空则不发送'/>
+                                            </Form.Item>
+                                        </Space.Compact>
                                     </Form.Item>
                                 </>
                             }
