@@ -37,7 +37,7 @@ export default class extends React.Component {
     logRow: null,
     tagOptions: [],
     branchOptions: [],
-    // 可选构建节点（主机管理中标记为「构建节点」的主机）
+    // 可选构建主机
     buildHostOptions: [],
     // 构建来源：BRANCH（分支最新代码）/ TAG（tag），默认从分支构建
     refType: 'BRANCH',
@@ -131,8 +131,8 @@ export default class extends React.Component {
       this.setState({branchOptions: options})
       this.selectDefault('branch', options)
     })
-    // 构建节点列表，默认不选（留给后端用系统默认 runner）
-    HttpClient.get('admin/host/options', {onlyRunner: true}).then(rs => {
+    // 构建主机列表：所有主机都可选，默认不选（留给后端用系统默认 runner）
+    HttpClient.get('admin/host/options').then(rs => {
       this.setState({buildHostOptions: rs.data || []})
     })
     this.setState({showTrigger: true, refType: 'BRANCH'})
@@ -359,7 +359,7 @@ export default class extends React.Component {
           )}
 
           <Form.Item name="buildHostId" label="构建主机"
-                     help="可选：改用网络更好的构建节点（如拉取基础镜像慢时），留空使用系统默认构建节点">
+                     help="可选：改用网络更好的主机构建（如拉取基础镜像慢时），留空使用系统默认构建节点">
             <Select options={buildHostOptions} allowClear showSearch optionFilterProp="label"
                     placeholder='系统默认构建节点'/>
           </Form.Item>
