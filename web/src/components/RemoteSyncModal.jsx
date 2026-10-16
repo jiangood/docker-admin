@@ -1,4 +1,4 @@
-import {Alert, Button, Descriptions, Form, Input, Modal, Space, Switch, Table, Tag, Typography} from 'antd'
+import {Alert, Button, Descriptions, Form, Input, Modal, Select, Space, Switch, Table, Tag, Typography} from 'antd'
 import React from 'react'
 import {HttpClient} from '@jiangood/open-admin'
 
@@ -21,6 +21,8 @@ export default class RemoteSyncModal extends React.Component {
         // 后端返回 {supported, repos, existing, registry, message}
         supported: null,
         registry: null,
+        registryOptions: [],
+        registryId: undefined,
         repos: [],
         existing: [],
         // 一次只能补录一个仓库，这里存被选中的仓库名（未选为 null）
@@ -33,6 +35,7 @@ export default class RemoteSyncModal extends React.Component {
 
     /** 打开弹窗 */
     show = () => {
+        HttpClient.get('admin/registry/options').then(rs => this.setState({registryOptions: rs.data || []}))
         this.setState({
             open: true, supported: null, repos: [], existing: [], selected: null,
             tip: null, result: null,
@@ -47,7 +50,7 @@ export default class RemoteSyncModal extends React.Component {
     /** 从系统配置的注册中心列举可补录的仓库 */
     catalog = () => {
         this.setState({catalogLoading: true})
-        HttpClient.post('admin/image-repo/remote/catalog', {})
+        HttpClient.post('admin/image-repo/remote/catalog', {registryId: this.state.registryId})
             .then(rs => {
                 const data = rs.data || {}
                 this.setState({
@@ -90,12 +93,13 @@ export default class RemoteSyncModal extends React.Component {
         const imageUrls = [...new Set([this.state.selected, manual].filter(Boolean))]
         return {
             imageUrls,
+            registryId: this.state.registryId,
             withMeta: values.withMeta !== false,
         }
     }
 
     render() {
-        const {open, loading, catalogLoading, supported, registry, repos, existing, selected, tip, result} = this.state
+        const {open, loading, catalogLoading, supported, registry, registryOptions, registryId, repos, existing, selected, tip, result} = this.state
         const manualOnly = supported === false
         const count = this.payload().imageUrls.length
 
@@ -130,6 +134,11 @@ export default class RemoteSyncModal extends React.Component {
                     </Descriptions>
                     : null}
 
+                <Form.Item label='源注册中心' style={{marginBottom: 12}}>
+                    <Select allowClear showSearch optionFilterProp='label' value={registryId}
+                            options={registryOptions} placeholder='使用系统默认注册中心'
+                            onChange={value => this.setState({registryId: value, supported: null, repos: [], existing: [], selected: null, registry: null})}/>
+                </Form.Item>
                 <Space align='center' wrap style={{marginBottom: 8}}>
                     <Button loading={catalogLoading} onClick={this.catalog}>
                         {manualOnly ? '重新尝试列举' : '读取远程仓库'}
