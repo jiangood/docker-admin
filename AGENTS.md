@@ -69,10 +69,6 @@ git tag vx.y.z && git push && git push origin vx.y.z
 - **领域模型：** `Project`(项目，构建定义) → `Image`(镜像，`imageUrl` 唯一) → `ImageTag`(镜像标签，`imageUrl`+`tag`)。
   项目与镜像按 `imageUrl` 相等关联；`App` 只存 `imageUrl` + `imageTag`，与项目/镜像均无 id 外键。
   菜单为「项目」(`/project`) 与「镜像」(`/image`)，权限码为 `image:*`，表名为 `t_image`。
-- **镜像表自动迁移：** 启动期 `ImageTableMigrationEnvironmentPostProcessor`（注册在
-  `META-INF/spring.factories`，早于 Hibernate）会把 `t_image_repo` 自动迁移为 `t_image`：
-  存在旧 `t_image` 时先备份为 `t_image_legacy` 再删除；同时把角色里的 `image-repo:*` / 菜单 id
-  替换为 `image`。迁移幂等、失败只记日志不阻断启动；手工方案见 `docs/migration/`。
 - **Tests** 是 `main()` 方法（如 `DockerSdkTest`、`PrintTest`），**不是** JUnit 测试，
   无法通过 `mvn test` 运行，需要在 IDE 里单独执行。
 - **权限**用 open-admin 的 `@HasPermission("app:view")`，不是标准 Spring Security 注解。
