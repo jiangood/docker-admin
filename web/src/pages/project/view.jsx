@@ -10,7 +10,7 @@ import {
   Loading3QuartersOutlined,
   MinusCircleTwoTone
 } from "@ant-design/icons";
-import {DateUtils, getToken, HttpClient, Page, PageUtils, ProTable, UrlUtils, ViewText} from "@jiangood/open-admin";
+import {DateUtils, getToken, HttpClient, Page, PageUtils, PermUtils, ProTable, UrlUtils, ViewText} from "@jiangood/open-admin";
 import LogView from "../../components/LogView";
 import LinkButton from "../../components/LinkButton";
 import {formatBytes, formatTime} from "../../components/container/utils";
@@ -39,6 +39,7 @@ export default class extends React.Component {
     branchOptions: [],
     // 可选构建主机
     buildHostOptions: [],
+    // 目标注册中心选项，仅用于详情展示
     registryOptions: [],
     // 构建来源：BRANCH（分支最新代码）/ TAG（tag），默认从分支构建
     refType: 'BRANCH',
@@ -59,6 +60,9 @@ export default class extends React.Component {
     this.loadProject()
     this.loadVersions()
     this.loadApps()
+    if (PermUtils.hasPermission('registry:view')) {
+      HttpClient.get('admin/registry/options').then(rs => this.setState({registryOptions: rs.data || []}))
+    }
 
     this.timer = setInterval(() => {
       if (document.hidden) return;
@@ -116,6 +120,16 @@ export default class extends React.Component {
     this.setState({logRow: row})
   }
 
+  /** 目标注册中心展示文案：绑定的注册中心地址，未绑定显示系统默认。 */
+  registryLabel = () => {
+    const registryId = this.state.project?.registryId
+    if (!registryId) {
+      return '系统默认'
+    }
+    const option = this.state.registryOptions.find(o => o.value === registryId)
+    return option ? option.label : registryId
+  }
+
   closeLog = () => {
     this.setState({logRow: null})
   }
@@ -135,9 +149,6 @@ export default class extends React.Component {
     // 构建主机列表：所有主机都可选，默认不选（留给后端用系统默认 runner）
     HttpClient.get('admin/host/options').then(rs => {
       this.setState({buildHostOptions: rs.data || []})
-    })
-    HttpClient.get('admin/registry/options').then(rs => {
-      this.setState({registryOptions: rs.data || []})
     })
     this.setState({showTrigger: true, refType: 'BRANCH'})
   }
@@ -302,7 +313,7 @@ export default class extends React.Component {
       return <Page padding><Spin/></Page>
     }
 
-    const {project, showTrigger, logRow, tagOptions, branchOptions, buildHostOptions, registryOptions, refType} = this.state;
+    const {project, showTrigger, logRow, tagOptions, branchOptions, buildHostOptions, refType} = this.state;
 
     return (<Page padding>
 
@@ -310,6 +321,7 @@ export default class extends React.Component {
         <Descriptions>
           <Descriptions.Item label='id'>{project.id}</Descriptions.Item>
           <Descriptions.Item label='镜像地址'>{project.imageUrl}</Descriptions.Item>
+          <Descriptions.Item label='目标注册中心'>{this.registryLabel()}</Descriptions.Item>
           <Descriptions.Item label='代码源'>{project.gitUrl}</Descriptions.Item>
           <Descriptions.Item label='dockerfile'>{project.dockerfile}</Descriptions.Item>
           <Descriptions.Item label='创建时间'>{project.createTime}</Descriptions.Item>
@@ -326,6 +338,7 @@ export default class extends React.Component {
       </Card>
 
       <Modal open={showTrigger} title="手动触发流水线"
+             width={720}
              destroyOnHidden={true}
              footer={null}
              onCancel={() => this.setState({showTrigger: false})}>
@@ -361,12 +374,6 @@ export default class extends React.Component {
               <Select options={tagOptions} showSearch placeholder='请选择远程 tag'/>
             </Form.Item>
           )}
-
-          <Form.Item name="registryId" label="目标注册中心"
-                     help="可选：为本次构建指定推送目标，留空使用系统默认注册中心">
-            <Select options={registryOptions} allowClear showSearch optionFilterProp="label"
-                    placeholder='系统默认注册中心'/>
-          </Form.Item>
 
           <Form.Item name="buildHostId" label="构建主机"
                      help="可选：改用网络更好的主机构建（如拉取基础镜像慢时），留空使用系统默认构建节点">

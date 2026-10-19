@@ -54,6 +54,13 @@ public class Project extends BaseEntity {
     @Remark("构建参数")
     String buildArg;
 
+    /**
+     * 目标注册中心 id；为空时使用系统默认注册中心。
+     * 在项目上配置一次即可，后续手动构建与 Webhook 触发都沿用该值。
+     */
+    @Remark("目标注册中心")
+    String registryId;
+
 
     @Remark("Webhook 令牌")
     @Column(unique = true)

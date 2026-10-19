@@ -112,7 +112,7 @@ public class ProjectService extends BaseService<Project> {
         if (project == null) {
             return null;
         }
-        return ImageUrlUtils.repoUrl(registryService.getEffective(), project.getName());
+        return ImageUrlUtils.repoUrl(registryService.effectiveFor(project.getRegistryId()), project.getName());
     }
 
     /**
@@ -129,6 +129,10 @@ public class ProjectService extends BaseService<Project> {
      */
     @Transactional
     public Project saveProject(Project input, List<String> updateFields) {
+        if (StrUtil.isNotBlank(input.getRegistryId())) {
+            // 校验绑定的注册中心存在（不存在会抛业务异常）
+            registryService.requireRegistry(input.getRegistryId());
+        }
         if (StrUtil.isBlank(input.getId())) {
             return create(input);
         }
@@ -520,7 +524,7 @@ public class ProjectService extends BaseService<Project> {
             buildLog.setCodeMessage(cloneResult.getCodeMessage());
             buildLog = buildLogService.saveLog(buildLog);
 
-            Registry registry = registryService.requireRegistry(p.getRegistryId());
+            Registry registry = registryService.requireRegistry(project.getRegistryId());
             fileLog.info("注册中心：{}", registry.getFullUrl());
             client = dockerService.getClient(host, registry);
 

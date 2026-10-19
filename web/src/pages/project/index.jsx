@@ -1,5 +1,5 @@
 import {PlusOutlined} from '@ant-design/icons'
-import {Button, Form, Input, Modal, Popconfirm} from 'antd'
+import {Button, Form, Input, Modal, Popconfirm, Select} from 'antd'
 import React from 'react'
 
 import {
@@ -8,6 +8,7 @@ import {
     HttpClient,
     Page,
     PageUtils,
+    PermUtils,
     ProTable
 } from "@jiangood/open-admin"
 
@@ -20,10 +21,29 @@ export default class extends React.Component {
     state = {
         formValues: {},
         formOpen: false,
+        // 可选目标注册中心，供项目绑定（为空使用系统默认注册中心）
+        registryOptions: [],
+        // 系统默认注册中心 id，新建项目时默认选中
+        defaultRegistryId: '',
     }
 
     formRef = React.createRef()
     tableRef = React.createRef()
+
+    componentDidMount() {
+        // 无注册中心查看权限时静默跳过，避免报错；此时下拉只剩「系统默认」
+        if (PermUtils.hasPermission('registry:view')) {
+            HttpClient.get('admin/registry/options').then(rs => this.setState({registryOptions: rs.data || []}))
+            // info 返回的即「系统默认」：配置了默认就用默认，未配置但只有一条时回退到该条
+            HttpClient.get('admin/registry/info').then(rs => this.setState({defaultRegistryId: rs.data?.id || ''}))
+        }
+    }
+
+    /**
+     * 目标注册中心选项：首项为「系统默认」（空值），
+     * 用显式空值而非 allowClear，避免清除后值为 undefined 而被后端 X-Body-Fields 过滤、无法真正清空。
+     */
+    registrySelectOptions = () => [{value: '', label: '系统默认'}, ...this.state.registryOptions]
 
     // 用户是否手动改过项目名；改过之后不再随代码仓库自动覆盖
     nameTouched = false
@@ -43,6 +63,17 @@ export default class extends React.Component {
         {
             title: '镜像地址',
             dataIndex: 'imageUrl',
+        },
+        {
+            title: '目标注册中心',
+            dataIndex: 'registryId',
+            render: (registryId) => {
+                if (!registryId) {
+                    return '系统默认'
+                }
+                const option = this.state.registryOptions.find(o => o.value === registryId)
+                return option ? option.label : registryId
+            },
         },
         {
             title: '代码仓库',
@@ -86,7 +117,8 @@ export default class extends React.Component {
 
     handleAdd = () => {
         this.nameTouched = false
-        this.setState({formOpen: true, formValues: {}})
+        // 新建时默认选中系统默认注册中心；没有默认值则不预选，留空（placeholder 提示系统默认）
+        this.setState({formOpen: true, formValues: {registryId: this.state.defaultRegistryId || undefined}})
     }
 
     handleEdit = record => {
@@ -190,6 +222,12 @@ export default class extends React.Component {
                     </Form.Item>
                     <Form.Item label='构建参数' name='buildArg' help='格式: key=value&key2=value2'>
                         <Input/>
+                    </Form.Item>
+
+                    <Form.Item label='目标注册中心' name='registryId'
+                               tooltip='本项目构建产物推送的目标注册中心，配置一次即可，手动构建与 Webhook 触发都沿用'>
+                        <Select options={this.registrySelectOptions()} showSearch
+                                optionFilterProp='label' placeholder='系统默认注册中心'/>
                     </Form.Item>
 
 

@@ -39,9 +39,6 @@ public class BuildRequest {
      */
     String buildHostId;
 
-    /** 本次构建目标注册中心 ID；为空时使用系统默认注册中心。 */
-    String registryId;
-
     // 构建时是否拉取基础镜像（手动触发不暴露开关，默认不拉取）
     boolean pull = false;
 
