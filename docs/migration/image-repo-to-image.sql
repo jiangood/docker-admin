@@ -1,6 +1,10 @@
--- 镜像仓库 → 镜像：一次性数据迁移
+-- 镜像仓库 → 镜像：一次性数据迁移（手工备用方案）
 --
--- 执行时机：升级到本次改动后、启动新版本前。执行前请备份数据库并停止应用。
+-- 注意：新版本启动时会由 ImageTableMigrationEnvironmentPostProcessor 自动完成迁移，
+--       正常情况下无需手工执行本脚本。
+--       仅在自动迁移失败、或需要手工处理 MySQL 时使用。
+--
+-- 执行时机：停止应用后执行（H2 需先停服释放文件锁）。执行前请备份数据库。
 -- 兼容 H2（MODE=MySQL）与 MySQL 8。
 --
 -- 本次改动涉及：
@@ -13,14 +17,18 @@
 -- 如不希望这些角色自动获得访问权，请先检查并清理 sys_role.perms / sys_role.menus。
 
 -- ---------------------------------------------------------------------------
--- 0. 历史遗留表检查
+-- 0. 历史遗留表检查（重要）
 --
--- 更早版本曾用 t_image 作为「镜像」实体表。若库中已存在 t_image（旧结构），
--- 直接执行第 1 步会失败或覆盖错误的数据。请先确认 t_image 是旧表还是空表；
--- 确认是旧表后，先改名备份：
+-- 更早版本的「镜像」实体也用 t_image 作为表名（旧结构，没有 image_url 列）。
+-- 若库中已存在这样的旧 t_image，直接执行第 1 步会失败；
+-- 应用启动后打开镜像页面会报 "Column I1_0.IMAGE_URL not found"。
 --
--- ALTER TABLE t_image RENAME TO t_image_legacy;
--- ALTER TABLE t_image_version RENAME TO t_image_version_legacy;
+-- 先诊断：
+--   SELECT table_name FROM information_schema.tables
+--    WHERE table_schema='PUBLIC' AND table_name LIKE 'T_IMAGE%';
+--   SELECT column_name FROM information_schema.columns WHERE table_name='T_IMAGE';
+--
+-- 若确认是遗留旧表，请改用 docs/migration/image-repo-to-image-legacy-fix.sql。
 -- ---------------------------------------------------------------------------
 
 -- 1. 表名
