@@ -19,7 +19,6 @@ import io.github.jiangood.docker.admin.entity.DeployLog;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.entity.ImageTag;
 import io.github.jiangood.docker.admin.entity.Project;
-import io.github.jiangood.docker.admin.entity.Registry;
 import io.github.jiangood.docker.base.FileLog;
 import io.github.jiangood.docker.sdk.engine.DefaultCallback;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
@@ -619,54 +618,15 @@ public class AppService extends BaseService<App> {
     /**
      * 创建主机 docker 客户端。
      * <p>
-     * 仅当镜像来自注册中心（镜像 host 与注册中心地址一致）时才附带注册中心凭据。
-     * docker-java 会把客户端级凭据（registry.url/username/password）用于所有 pull，
+     * 仅当镜像属于某个注册中心时才附带该注册中心的凭据，归属按镜像地址解析
+     * （见 {@link RegistryService#forImageUrl}）——多注册中心并存时不能用系统默认值代替，
+     * 否则镜像所在注册中心与默认值不一致就会匿名拉取，报 pull access denied。
+     * <p>
+     * 另一个原因：docker-java 会把客户端级凭据（registry.url/username/password）用于所有 pull，
      * 拉取 ghcr.io / Docker Hub 等公共镜像时带上注册中心账号密码会被直接拒绝（401/403）。
      */
     public DockerClient getClient(Host host, String imageUrl) {
-        Registry registry = registryService.getEffective();
-        if (registry != null && sameRegistry(imageUrl, registry.getUrl())) {
-            return dockerManager.getClient(host, registry);
-        }
-        return dockerManager.getClient(host);
-    }
-
-    /**
-     * 镜像地址的 registry host 是否等于注册中心地址（两者都归一为不含协议、不带路径的 host）。
-     * 镜像首段不含 "." / ":" 且不是 localhost 时视为 Docker Hub，无显式注册中心。
-     */
-    private static boolean sameRegistry(String imageUrl, String registryUrl) {
-        String imageHost = imageHost(imageUrl);
-        return imageHost != null && imageHost.equalsIgnoreCase(registryHost(registryUrl));
-    }
-
-    private static String imageHost(String imageUrl) {
-        if (StrUtil.isBlank(imageUrl)) {
-            return null;
-        }
-        String image = imageUrl.trim();
-        int slash = image.indexOf('/');
-        if (slash <= 0) {
-            return null;
-        }
-        String first = image.substring(0, slash);
-        return (first.contains(".") || first.contains(":") || "localhost".equals(first)) ? first : null;
-    }
-
-    private static String registryHost(String registryUrl) {
-        if (StrUtil.isBlank(registryUrl)) {
-            return null;
-        }
-        String url = registryUrl.trim();
-        int scheme = url.indexOf("://");
-        if (scheme >= 0) {
-            url = url.substring(scheme + 3);
-        }
-        int slash = url.indexOf('/');
-        if (slash >= 0) {
-            url = url.substring(0, slash);
-        }
-        return url;
+        return dockerManager.getClient(host, registryService.forImageUrl(imageUrl));
     }
 
     private void normalizeConfig(App.AppConfig cfg) {
