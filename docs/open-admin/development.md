@@ -117,6 +117,7 @@ public void deleteById(String id) {
 - 使用 ES6+，强制 `const`/`let`，解构赋值
 - 优先使用框架组件：`ProTable`、`Page`、`FieldDictSelect` 等
 - 权限控制：`<PermActions actions={[{label, perm, onClick}]} />`（数据驱动，推荐）、`<Perm code="...">`；旧式 `<Button perm="...">` 已不推荐
+- **列表页工具栏**：操作按钮（新增/导出/清理/刷新）统一放右侧 `toolBarRightRender`，左槽 `toolBarRender` 只放状态/说明类内容（如「已选 N 项」）；与筛选卡的「查询/重置」、分页器同处右侧，避免同一屏出现两个方向的按钮列
 - 跨组件通信使用 `EventBus`（`emit` / `on` / `once` / `off`），不要使用 `document.dispatchEvent`
 - 表单弹框优先用 `FormModal`（ref 调用 `open(values)`），避免静态 `Modal.confirm()` 表单场景；对话框用 `<Modal open={...}>` 控制，避免 `Modal.info()` / `Modal.confirm()` 等静态方法
 - 页面生命周期：页面组件实现 `onShow()` 方法，在首次加载或 Tab 切换激活时自动调用，详见[页面生命周期](api.md#页面生命周期)

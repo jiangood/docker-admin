@@ -80,7 +80,7 @@ public class DataSyncJob extends BaseJob {
 
 | 组件 | 用途 |
 |------|------|
-| `Page` | 页面容器（标题/描述/右侧操作区），`padding`/`backgroundGray`/`debug`/`title`/`description`/`actions` |
+| `Page` | 页面容器（标题/描述/右侧操作区），`padding`/`backgroundGray`/`debug`/`title`/`description`/`actions`（推荐传 `PermAction[]`，兼容带 `perm` 属性的节点） |
 | `PageLoading` | 页面加载中提示（`message` 单条 / `messages` 多阶段） |
 | `ProTable` | 数据表格，分页/筛选/工具栏/树形模式，详见[下方](#protable) |
 | `LinkButton` | 链接跳转按钮（`path` + `label`，通过 `PageUtils.open` 打开页面） |
@@ -183,11 +183,12 @@ import { PermActions } from '@jiangood/open-admin';
   searchFormRender={() => (
     <Form.Item label="名称" name="name"><Input/></Form.Item>
   )}
-  toolBarRender={(params, {selectedRows, selectedRowKeys}) => (
+  searchInline                           // 搜索表单内联到工具栏左侧（单条件页面），默认 false
+  toolBarRightRender={(params, {selectedRowKeys}) => (        // 操作按钮统一放右侧
     <Button type="primary" onClick={this.handleAdd}>新增</Button>
   )}
-  toolBarRightRender={(params) => (
-    <Button danger onClick={this.handleClean}>清理失败记录</Button>
+  toolBarRender={(params) => (                          // 左侧只放状态/说明类内容（如「已选 N 项」）
+    <span>已选 {params.selectedRowKeys?.length ?? 0} 项</span>
   )}
   defaultPageSize={20}
   scrollY={500}
@@ -200,17 +201,36 @@ import { PermActions } from '@jiangood/open-admin';
 | `columns` | antd Table 列定义 |
 | `actionRef` | 表格操作句柄（`reload` / `clearSelection`） |
 | `formRef` | 搜索表单实例（`getFieldsValue` 等） |
-| `toolBarRender` | 工具栏渲染，参数为当前搜索值 + 行选择状态 |
-| `toolBarRightRender` | 工具栏右侧渲染，参数同 `toolBarRender`；用于导出/清理/刷新等右侧操作 |
+| `toolBarRender` | 工具栏左侧渲染，参数为当前搜索值 + 行选择状态；**只放状态/说明类内容**（如「已选 N 项」），操作按钮请用右侧插槽 |
+| `toolBarRightRender` | 工具栏右侧渲染，参数同 `toolBarRender`；**操作按钮统一放这里**（新增/导出/清理/刷新等） |
 | `rowSelection` | 行选择：`true` 为 checkbox，对象可覆盖 `type`/`onChange` |
 | `treeMode` | 树形数据模式，关闭分页 |
 | `searchFormRender` | 搜索表单渲染函数，返回 `Form.Item` 列表 |
-| `searchFormCols` | 搜索栏每行列数，默认 4 |
+| `searchFormCols` | 搜索栏每行列数，默认 4（`searchInline` 时忽略） |
+| `searchInline` | 搜索表单内联到工具栏左侧，与操作按钮同一行（单条件页面省一行空间）；默认 `false` = 独立筛选卡 |
 | `defaultPageSize` | 默认每页条数 |
 | `scrollY` | 表格纵向滚动高度 |
 | `bordered` | 是否显示边框 |
 
 `extData.summary` 会渲染为表格底部汇总行（见 `PageExt`）。
+
+`searchInline` 只建议用于**单条件**页面（如「主机」「镜像」这种只按关键词搜索的列表）：搜索控件内联在工具栏左侧，与 `toolBarRightRender` 的操作按钮同一行，省掉整张筛选卡。内联模式不渲染「查询/重置」按钮——回车即提交，条件被清空时自动回到无筛选状态；`searchFormRender` 无返回时按无搜索表单处理。多条件页面继续用默认筛选卡，行为不变。搜索框宽度可用 `--oa-search-inline-width` 覆盖（默认 260px）。
+
+> 限制：只有文本框符合「输入后回车」的自然交互。`Select`/日期等控件**选中后不会自动查询**（仅在清空时自动查询），需要用户在表单内按回车（在日期框里按回车同样会提交）；若希望选中即查询，可在业务侧 `onChange` 里调用 `formRef.current.submit()`，或继续使用默认筛选卡。
+
+```jsx
+<ProTable
+  searchInline
+  searchFormRender={() => (
+    <Form.Item name="searchText" noStyle>
+      <Input prefix={<SearchOutlined/>} placeholder="搜索主机名 / IP" allowClear/>
+    </Form.Item>
+  )}
+  toolBarRightRender={() => <Button type="primary" perm="host:save">新增</Button>}
+  request={(params) => HttpClient.get('admin/host/page', params)}
+  columns={columns}
+/>
+```
 
 ### 页面生命周期
 

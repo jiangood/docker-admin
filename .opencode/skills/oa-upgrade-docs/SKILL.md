@@ -28,7 +28,7 @@ description: 在业务项目中同步 open-admin 框架的 skills + docs —— 
 
 | 目标 | 规则 |
 |------|------|
-| `<根>/.opencode/skills/` | 仅覆盖框架 skill（`oa-crud`、`oa-upgrade`、`oa-upgrade-docs`、`oa-sonar-scan`），不删除业务本地 skill |
+| `<根>/.opencode/skills/` | 仅覆盖框架 skill（`oa-crud`、`oa-upgrade`、`oa-upgrade-docs`），不删除业务本地 skill |
 | `<根>/docs/open-admin/` | 全量镜像（删除该目录下 ZIP 之外的孤儿文件） |
 
 - 同步按**内容比对**：无变更不写入。
@@ -68,7 +68,7 @@ SRC=/tmp/oa-framework-files
 
 # 3a. .opencode/skills/ —— 仅覆盖框架 skill，不删除本地 skill
 mkdir -p "$PROJ_ROOT/.opencode/skills"
-for skill in oa-crud oa-upgrade oa-upgrade-docs oa-sonar-scan; do
+for skill in oa-crud oa-upgrade oa-upgrade-docs; do
   if [ -d "$SRC/.opencode/skills/$skill" ]; then
     mkdir -p "$PROJ_ROOT/.opencode/skills/$skill"
     cp -r "$SRC/.opencode/skills/$skill/." "$PROJ_ROOT/.opencode/skills/$skill/"
@@ -112,7 +112,7 @@ ls -la .opencode/skills/oa-upgrade-docs/SKILL.md docs/open-admin/guide.md
 
 ## 验证清单
 
-- [ ] `.opencode/skills/oa-crud|oa-upgrade|oa-upgrade-docs|oa-sonar-scan/SKILL.md` 已更新
+- [ ] `.opencode/skills/oa-crud|oa-upgrade|oa-upgrade-docs/SKILL.md` 已更新
 - [ ] `docs/open-admin/*.md` 已镜像，孤儿文件已删除
 - [ ] 无变更文件未被无谓写入
 

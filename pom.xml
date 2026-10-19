@@ -23,7 +23,7 @@
                容易各自漂移，产生类路径混用。
           统一改用属性后，dependabot 的 groups 配置可将同类升级合并为一个 PR。
         -->
-        <open-admin.version>3.1.7</open-admin.version>
+        <open-admin.version>3.1.8</open-admin.version>
 
         <!--
           hutool 各模块必须同版本：hutool-core / hutool-extra / hutool-http
@@ -31,7 +31,7 @@
           改此值前请用 `mvn dependency:tree -Dincludes=cn.hutool` 核对，
           避免与 open-admin 传递进来的版本错配。
         -->
-        <hutool.version>5.8.47</hutool.version>
+        <hutool.version>5.8.48</hutool.version>
 
         <!-- docker-java 核心与 HTTP 传输层必须同版本 -->
         <docker-java.version>3.7.1</docker-java.version>

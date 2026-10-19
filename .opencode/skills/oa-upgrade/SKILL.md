@@ -111,7 +111,7 @@ npm run build
 
 **调用 `oa-upgrade-docs` skill**：以目标版本号为参数执行该 skill，它会从 GitHub Release 下载 `framework-files.zip` 并按规则同步：
 
-- `<项目根>/.opencode/skills/oa-crud/`、`oa-upgrade/`、`oa-upgrade-docs/`、`oa-sonar-scan/` — 覆盖写入（不删除业务本地 skill）
+- `<项目根>/.opencode/skills/oa-crud/`、`oa-upgrade/`、`oa-upgrade-docs/` — 覆盖写入（不删除业务本地 skill）
 - `<项目根>/docs/open-admin/*.md` — 全量镜像（删除孤儿文件）
 
 > 若 `oa-upgrade-docs` skill 不可用（首次接入 / 文件缺失），需先手动从 `https://github.com/jiangood/open-admin/releases/download/v{版本}/framework-files.zip` 下载 ZIP 并解压到项目根目录，或告知开发者该 release 资产缺失。

@@ -332,7 +332,7 @@ public class CustomerController {
 
 ```jsx
 import {PlusOutlined} from '@ant-design/icons'
-import {Button, Form, Input, Popconfirm} from 'antd'
+import {Form, Input} from 'antd'
 import React from 'react'
 import {FormModal, HttpClient, Page, PermActions, ProTable} from "@jiangood/open-admin";
 
@@ -349,12 +349,10 @@ export default class extends React.Component {
         { title: '创建时间', dataIndex: 'createTime' },
         { title: '操作', dataIndex: 'option',
             render: (_, record) => (
-                <PermActions>
-                    <Button size='small' perm='customer:update' onClick={() => this.handleEdit(record)}>编辑</Button>
-                    <Popconfirm perm='customer:delete' title='确定删除？' onConfirm={() => this.handleDelete(record)}>
-                        <Button size='small'>删除</Button>
-                    </Popconfirm>
-                </PermActions>
+                <PermActions actions={[
+                    {label: '编辑', perm: 'customer:update', onClick: () => this.handleEdit(record)},
+                    {label: '删除', perm: 'customer:delete', confirm: '确定删除？', onClick: () => this.handleDelete(record)},
+                ]}/>
             ),
         },
     ]
@@ -374,10 +372,10 @@ export default class extends React.Component {
         return <Page padding={true}>
             <ProTable
                 actionRef={this.tableRef}
-                toolBarRender={() => (
-                    <PermActions>
-                        <Button perm='customer:create' type='primary' icon={<PlusOutlined/>} onClick={this.handleAdd}>新增</Button>
-                    </PermActions>
+                toolBarRightRender={() => (
+                    <PermActions actions={[
+                        {label: '新增', type: 'primary', icon: <PlusOutlined/>, perm: 'customer:create', onClick: this.handleAdd},
+                    ]}/>
                 )}
                 request={(params) => HttpClient.get('admin/customer/page', params)}
                 columns={this.columns}
@@ -406,15 +404,18 @@ export default class extends React.Component {
 }
 ```
 
-> **工具栏右侧插槽**：需要把「导出/清理/刷新」等操作放到工具栏右侧时，用 `toolBarRightRender`（签名与 `toolBarRender` 相同，参数为 `params` + `{selectedRows, selectedRowKeys}`），示例：
+> **工具栏左右插槽的分工**：**操作按钮统一放右侧** `toolBarRightRender`（新增/导出/清理/刷新等，签名与 `toolBarRender` 相同，参数为 `params` + `{selectedRows, selectedRowKeys}`）；左槽 `toolBarRender` 只放状态/说明类内容，例如：
 >
 > ```jsx
-> toolBarRightRender={(params, {selectedRowKeys}) => (
->     <Button danger disabled={!selectedRowKeys.length} onClick={this.handleClean}>清理失败记录</Button>
+> toolBarRender={(params, {selectedRowKeys}) => (
+>     <span>已选 {selectedRowKeys.length} 项</span>
+> )}
+> toolBarRightRender={() => (
+>     <PermActions actions={[{label: '新增', type: 'primary', perm: 'customer:create', onClick: this.handleAdd}]}/>
 > )}
 > ```
 >
-> 左右插槽可单独或同时使用；不要再写 CSS 覆盖 `.pro-table-toolbar-left` 来绕过。
+> 与行选择强耦合的批量操作（如批量删除）放右侧时，把数量写进按钮文案（`批量删除(2)`）以保留与勾选框的关联。左右插槽可单独或同时使用；不要再写 CSS 覆盖 `.pro-table-toolbar-left` 来绕过。
 
 ### 页面生命周期
 
