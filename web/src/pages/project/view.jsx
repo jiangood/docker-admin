@@ -53,6 +53,10 @@ export default class extends React.Component {
   actionRef = React.createRef();
   formRef = React.createRef();
   timer = null
+  // 构建历史最新一条记录的 id；只有它失败时才提供重试入口，否则表里会出现一堆重复的「重试」
+  latestLogId = null
+  // 是否存在构建中的记录（success 为空）；构建中不允许重试，避免打断正在执行的构建
+  buildProcessing = false
 
   componentDidMount() {
     this.id = PageUtils.currentParams().id
@@ -303,11 +307,18 @@ export default class extends React.Component {
       fixed: 'right',
       render: (_, row) => {
         const isProcessing = row.success == null;
-        const isError = row.success == false;
+        // 仅最新一条记录失败时显示重试：列表按开始时间倒序，重试旧记录等于再触发一次同样的构建，意义不大
+        const canRetry = row.success == false && row.id === this.latestLogId;
         return <Space>
           <Button size='small' onClick={() => this.openLog(row)}>日志</Button>
           {isProcessing && <Button size='small' onClick={() => this.stop(row)}>停止</Button>}
-          {isError && <Button size='small' onClick={() => this.retry(row)}>重试</Button>}
+          {canRetry && (
+            <Tooltip title={this.buildProcessing ? '构建进行中，请稍后再试' : null}>
+              <span>
+                <Button size='small' disabled={this.buildProcessing} onClick={() => this.retry(row)}>重试</Button>
+              </span>
+            </Tooltip>
+          )}
         </Space>
       }
     },
@@ -418,7 +429,15 @@ export default class extends React.Component {
             )}
             request={(params) => {
               params.projectId = project.id
-              return HttpClient.get("admin/buildLog/list", params);
+              return HttpClient.get("admin/buildLog/list", params).then(rs => {
+                // 第一页的内容才是项目最新记录，用于决定「重试」按钮归属（翻页时沿用已有值）
+                if (!params.page || params.page === 1) {
+                  const content = rs.data?.content || []
+                  this.latestLogId = content[0]?.id ?? null
+                  this.buildProcessing = content.some(row => row.success == null)
+                }
+                return rs
+              })
             }}
             columns={this.columns}
             showSearch={false}
@@ -427,7 +446,7 @@ export default class extends React.Component {
       },
       {
         key: 'version',
-        label: `构建版本 (${versions.length})`,
+        label: '构建版本',
         children: <Table
           size='small'
           rowKey='id'
