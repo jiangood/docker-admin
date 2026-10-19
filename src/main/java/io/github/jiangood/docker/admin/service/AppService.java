@@ -19,6 +19,7 @@ import io.github.jiangood.docker.admin.entity.DeployLog;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.entity.ImageTag;
 import io.github.jiangood.docker.admin.entity.Project;
+import io.github.jiangood.docker.admin.websocket.TaskLogRegistry;
 import io.github.jiangood.docker.base.FileLog;
 import io.github.jiangood.docker.sdk.engine.DefaultCallback;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
@@ -78,6 +79,9 @@ public class AppService extends BaseService<App> {
     @Resource
     FileLogConfig fileLogConfig;
 
+    @Resource
+    TaskLogRegistry taskLogRegistry;
+
     /**
      * 保存应用：新建走 create，编辑走 update。
      */
@@ -129,6 +133,9 @@ public class AppService extends BaseService<App> {
             deployLog = deployLogRepository.saveAndFlush(deployLog);
 
             FileLog.bind(deployLog.getId());
+            // 登记为运行中的任务：前端「部署日志」用 WebSocket 实时 tail 本文件，
+            // 未登记时 WS 会立刻判定任务已结束并断开（与构建 / 镜像同步一致）。
+            taskLogRegistry.start(deployLog.getId());
             fileLog.info("部署阶段开始");
             Host host = app.getHost();
 
@@ -142,7 +149,12 @@ public class AppService extends BaseService<App> {
                 fileLog.info("本地已存在镜像 {}，跳过拉取（如需更新请勾选强制拉取）", image);
             } else {
                 fileLog.info("开始拉取镜像 {}", image);
-                client.pullImageCmd(image).exec(new DefaultCallback<>(app.getId())).awaitCompletion();
+                // 回调的 logId 必须是本次部署记录 id：DefaultCallback 在 docker 流线程上
+                // 重新绑定 MDC，传 appId 会把拉取进度写进 appId.log（前端并不展示该文件）。
+                client.pullImageCmd(image)
+                        .exec(new DefaultCallback<PullResponseItem>(deployLog.getId()))
+                        .awaitCompletion();
+                fileLog.info("拉取完成 {}", image);
             }
 
 
@@ -305,6 +317,8 @@ public class AppService extends BaseService<App> {
                 deployLog.setSuccess(success);
                 deployLog.setCompleteTime(LocalDateTime.now());
                 deployLogRepository.save(deployLog);
+                // 标记任务结束：前端 WS 收到后补发剩余内容并断开
+                taskLogRegistry.finish(deployLog.getId());
             }
             IOUtils.closeQuietly(client);
             deployingList.remove(app.getId());

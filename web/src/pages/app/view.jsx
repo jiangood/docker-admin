@@ -415,7 +415,8 @@ export default class extends React.Component {
             {
                 key: 'log',
                 label: '部署日志',
-                children: <DeployLogList key={'log-' + tabTokens.log} appId={app.id}/>
+                children: <DeployLogList key={'log-' + tabTokens.log} appId={app.id}
+                                         deploying={container?.state === 'deploying'}/>
             },
             {
                 key: 'container',
