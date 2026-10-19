@@ -3,7 +3,6 @@ import React from 'react'
 import {DeleteOutlined, ReloadOutlined} from '@ant-design/icons'
 import {HttpClient, Page, PageUtils, PermUtils} from "@jiangood/open-admin"
 import ContainerDetail from "../../components/container/ContainerDetail"
-import LinkButton from "../../components/LinkButton"
 import {formatBytes, formatTime, stateColor, stateLabel} from "../../components/container/utils"
 
 const CONNECTION_LABELS = {local: '本机', tcp: '远程 TCP', ssh: 'SSH'}
@@ -150,8 +149,9 @@ export default class extends React.Component {
 
         const containerColumns = [
             {
-                title: '名称', dataIndex: 'name',
-                render: (name, record) => <LinkButton onClick={() => this.openContainer(record)}>{name}</LinkButton>
+                title: '名称', dataIndex: 'name', width: 240,
+                // 不可点击（打开容器走「操作」列或双击行），超长名称换行显示，避免撑破列宽压到镜像列
+                render: name => <span style={{wordBreak: 'break-all', whiteSpace: 'normal'}}>{name}</span>
             },
             {title: '镜像', dataIndex: 'image', ellipsis: true},
             {
