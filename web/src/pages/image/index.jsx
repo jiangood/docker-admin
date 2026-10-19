@@ -1,5 +1,5 @@
 import {Button, Form, Input, Popconfirm, Tag} from 'antd'
-import {CloudSyncOutlined} from '@ant-design/icons'
+import {CloudSyncOutlined, SearchOutlined} from '@ant-design/icons'
 import React from 'react'
 
 import {
@@ -89,6 +89,7 @@ export default class extends React.Component {
         return <Page padding>
             <ProTable
                 actionRef={this.tableRef}
+                searchInline
                 toolBarRightRender={() => (
                     <PermActions>
                         <Button perm='image:sync' icon={<CloudSyncOutlined/>}
@@ -98,8 +99,8 @@ export default class extends React.Component {
                     </PermActions>
                 )}
                 searchFormRender={() => (
-                    <Form.Item label='镜像名' name='name'>
-                        <Input placeholder='按镜像名查询' allowClear/>
+                    <Form.Item name='name' noStyle>
+                        <Input prefix={<SearchOutlined/>} placeholder='搜索镜像名' allowClear/>
                     </Form.Item>
                 )}
                 request={(params) => HttpClient.get('admin/image/page', params)}

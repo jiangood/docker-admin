@@ -33,9 +33,11 @@ public class HostController  {
 
     @HasPermission("host:list")
     @RequestMapping("page")
-    public AjaxResult page(Host request, @PageableDefault(direction = Sort.Direction.DESC, sort = "updateTime") Pageable pageable) throws Exception {
+    public AjaxResult page(Host request, String searchText, @PageableDefault(direction = Sort.Direction.DESC, sort = "updateTime") Pageable pageable) throws Exception {
         Spec<Host> q = Spec.of();
         q.addExample(request);
+        // 列表页顶部搜索框：名称 / IP / 连接地址 任一命中即可
+        q.orLike(searchText, Host.Fields.name, Host.Fields.ip, Host.Fields.dockerHost, Host.Fields.sshHost);
         Page<Host> page = service.findAll(q, pageable);
         return AjaxResult.ok().data(page);
     }

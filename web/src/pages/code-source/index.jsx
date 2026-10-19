@@ -1,4 +1,4 @@
-import {PlusOutlined} from '@ant-design/icons'
+import {PlusOutlined, SearchOutlined} from '@ant-design/icons'
 import {Button, Form, Input, Modal, Popconfirm} from 'antd'
 import React from 'react'
 
@@ -167,7 +167,13 @@ export default class extends React.Component {
         return <Page padding>
             <ProTable
                 actionRef={this.tableRef}
-                toolBarRender={() => (
+                searchInline
+                searchFormRender={() => (
+                    <Form.Item name='searchText' noStyle>
+                        <Input prefix={<SearchOutlined/>} placeholder='搜索名称 / 地址 / 账号' allowClear/>
+                    </Form.Item>
+                )}
+                toolBarRightRender={() => (
                     <PermActions>
                         <Button perm='code-source:save' type='primary' onClick={this.handleAdd}>
                             <PlusOutlined/> 新增
@@ -176,11 +182,6 @@ export default class extends React.Component {
                 )}
                 request={(params) => HttpClient.get('admin/code-source/page', params)}
                 columns={this.columns}
-                searchFormRender={() => (
-                    <Form.Item label='关键字' name='searchText'>
-                        <Input/>
-                    </Form.Item>
-                )}
             />
 
             <Modal title='代码源'

@@ -1,4 +1,4 @@
-import {PlusOutlined} from '@ant-design/icons'
+import {PlusOutlined, SearchOutlined} from '@ant-design/icons'
 import {Button, Checkbox, Form, Input, InputNumber, Modal, Popconfirm, Radio, Space} from 'antd'
 import React from 'react'
 
@@ -242,7 +242,13 @@ export default class extends React.Component {
         return <Page padding>
             <ProTable
                 actionRef={this.tableRef}
-                toolBarRender={() => {
+                searchInline
+                searchFormRender={() => (
+                    <Form.Item name='searchText' noStyle>
+                        <Input prefix={<SearchOutlined/>} placeholder='搜索名称 / IP' allowClear/>
+                    </Form.Item>
+                )}
+                toolBarRightRender={() => {
                     return <PermActions>
                         <Button perm='host:save' type='primary' onClick={this.handleAdd}>
                             <PlusOutlined/> 新增
