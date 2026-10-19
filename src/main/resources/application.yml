@@ -28,4 +28,6 @@ spring:
         dialect: org.hibernate.dialect.H2Dialect
 sys:
   title: 容器管理平台
+  # 同一账号最大并发会话数。默认 1（单点登录）；2 表示允许两台设备同时在线，第 3 次登录会顶掉最早的会话。
+  maximum-sessions: 2
 
