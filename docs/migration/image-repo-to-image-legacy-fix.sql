@@ -5,35 +5,34 @@
 --
 -- 适用于：升级后发现 t_image 是旧「镜像」模型表（没有 image_url 列），
 --         打开镜像页面报 Column "I1_0.IMAGE_URL" not found。
+--         包含两种情况：
+--           1) 库里同时有 t_image_repo（当前镜像表）与旧 t_image；
+--           2) 库里只有旧 t_image、没有 t_image_repo（从 4.7 之前直接升级）。
 --
 -- 执行前：
 --   1. 停止应用（释放 H2 文件锁）
 --   2. 备份数据库文件，如 data/db/docker-admin.mv.db
 -- 兼容 H2（MODE=MySQL）与 MySQL 8。
+--
+-- 用 RENAME 而不是 CREATE TABLE ... AS SELECT + DROP：
+--   数据原样保留；指向旧表的外键（如历史版本 t_app.image_id）会自动跟随改名，
+--   不会因为 "Cannot drop T_IMAGE because FK... depends on it" 导致迁移失败。
 
--- 0. 诊断：确认 t_image 是旧表、t_image_repo 存在且是当前镜像表
+-- 0. 诊断：确认 t_image 是旧表
 -- SELECT table_name FROM information_schema.tables
 --  WHERE table_schema='PUBLIC' AND table_name LIKE 'T_IMAGE%' ORDER BY table_name;
 -- SELECT column_name FROM information_schema.columns
 --  WHERE table_name='T_IMAGE' ORDER BY ordinal_position;
--- SELECT COUNT(*) FROM t_image_repo;
 
--- 1. 备份遗留表数据
---    用 CREATE TABLE AS SELECT 而不是 RENAME：备份表不携带原表的约束，
---    避免遗留表上的外键/唯一约束名与新建的 t_image 冲突。
-CREATE TABLE t_image_legacy AS SELECT * FROM t_image;
+-- 1. 把遗留旧表改名让位，数据原样保留在 t_image_legacy
+--    （若 t_image_legacy 已存在，改用 t_image_legacy_2、t_image_legacy_3 …）
+ALTER TABLE t_image RENAME TO t_image_legacy;
 
--- 2. 核对行数一致后再继续（不一致就停下来排查，不要 DROP）
--- SELECT COUNT(*) FROM t_image;
--- SELECT COUNT(*) FROM t_image_legacy;
-
--- 3. 删除遗留表，释放表名与约束名
-DROP TABLE t_image;
-
--- 4. 把真正的镜像表改名为 t_image
+-- 2. 若存在真正的镜像表 t_image_repo，把它改名为 t_image
+--    （库里没有 t_image_repo 时跳过这一步，交由应用启动时按新实体重建）
 ALTER TABLE t_image_repo RENAME TO t_image;
 
--- 5. 角色权限码与菜单 id
+-- 3. 角色权限码与菜单 id
 UPDATE sys_role
 SET perms = REPLACE(perms, '"image-repo:', '"image:')
 WHERE perms LIKE '%"image-repo:%';
@@ -46,6 +45,9 @@ UPDATE sys_role
 SET menus = REPLACE(menus, '"divider-image-repo"', '"divider-image"')
 WHERE menus LIKE '%"divider-image-repo"%';
 
--- 6. 校验
--- SELECT id, name, perms, menus FROM sys_role;
+-- 4. 校验
+-- SELECT table_name FROM information_schema.tables
+--  WHERE table_schema='PUBLIC' AND table_name LIKE 'T_IMAGE%' ORDER BY table_name;
 -- SELECT COUNT(*) FROM t_image;
+-- SELECT COUNT(*) FROM t_image_legacy;
+-- SELECT id, name, perms, menus FROM sys_role;

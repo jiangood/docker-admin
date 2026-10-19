@@ -18,10 +18,18 @@ import java.sql.Statement;
  * 迁移内容：
  * <ul>
  *     <li>{@code t_image_repo} → {@code t_image}；</li>
- *     <li>若存在更早版本遗留的旧 {@code t_image}（没有 {@code image_url} 列），先备份为
- *     {@code t_image_legacy} 再删除，为真正的镜像表让出表名（避免 "Column IMAGE_URL not found"）；</li>
+ *     <li>把更早版本遗留的旧 {@code t_image}（没有 {@code image_url} 列）改名为
+ *     {@code t_image_legacy}（必要时 {@code _2}、{@code _3}…），为真正的镜像表让出表名
+ *     （避免 "Column IMAGE_URL not found"）；</li>
  *     <li>{@code sys_role} 中的权限码 {@code image-repo:*} → {@code image:*}、菜单 id
  *     {@code image-repo} → {@code image}。</li>
+ * </ul>
+ * <p>
+ * 旧表用 {@code RENAME} 而不是 {@code DROP} 让位：
+ * <ul>
+ *     <li>数据原样保留；</li>
+ *     <li>指向旧表的外键（如历史版本 {@code t_app.image_id}）会自动跟随改名，
+ *     不会因为 {@code Cannot drop "T_IMAGE" because "FK..." depends on it} 导致迁移整体失败。</li>
  * </ul>
  * <p>
  * 迁移是幂等的：无需迁移时（全新安装、已完成迁移）直接跳过；失败只记录日志，不阻断启动，
@@ -60,6 +68,7 @@ public class ImageTableMigrationEnvironmentPostProcessor implements EnvironmentP
             migrate(connection);
         } catch (Exception e) {
             System.err.println(PREFIX + "自动迁移失败：" + e.getMessage());
+            e.printStackTrace();
             System.err.println(PREFIX + "未影响启动；可参考 docs/migration/image-repo-to-image-legacy-fix.sql 手工处理");
         }
     }
@@ -75,35 +84,57 @@ public class ImageTableMigrationEnvironmentPostProcessor implements EnvironmentP
         }
     }
 
-    private void migrate(Connection connection) throws SQLException {
+    void migrate(Connection connection) throws SQLException {
         DatabaseMetaData meta = connection.getMetaData();
 
+        String imageTable = findTable(meta, IMAGE_TABLE);
         String repoTable = findTable(meta, IMAGE_REPO_TABLE);
-        if (repoTable == null) {
+
+        if (imageTable == null && repoTable == null) {
             // 全新安装，或已完成迁移
+            migratePermissionCodes(connection, meta);
             return;
         }
 
-        String imageTable = findTable(meta, IMAGE_TABLE);
-        if (imageTable == null) {
-            rename(connection, repoTable, IMAGE_TABLE);
-            System.out.println(PREFIX + repoTable + " → " + IMAGE_TABLE);
-        } else if (!hasColumn(meta, imageTable, IMAGE_URL_COLUMN)) {
-            // 更早版本遗留的旧「镜像」表（无 image_url）：备份后删除，让出表名
+        // 1. 先给遗留的旧「镜像」表让位。
+        //    注意：无论 t_image_repo 是否存在都要判断 —— 从 4.7 之前直升上来的库里只有旧 t_image，
+        //    若不处理，Hibernate 无法给有数据的旧表补上 NOT NULL 的 image_url 列。
+        if (imageTable != null && shouldRetire(connection, meta, imageTable, repoTable)) {
             String backup = uniqueTableName(meta, IMAGE_LEGACY_TABLE);
-            backup(connection, imageTable, backup);
-            drop(connection, imageTable);
-            rename(connection, repoTable, IMAGE_TABLE);
-            System.out.println(PREFIX + "遗留表 " + imageTable + " 已备份为 " + backup
-                    + "，" + repoTable + " → " + IMAGE_TABLE);
-        } else if (isEmpty(connection, imageTable) && !isEmpty(connection, repoTable)) {
-            // 极端情况：t_image 已存在（空表）且有数据的 t_image_repo 还在
-            drop(connection, imageTable);
-            rename(connection, repoTable, IMAGE_TABLE);
-            System.out.println(PREFIX + repoTable + " → " + IMAGE_TABLE);
+            rename(connection, imageTable, backup);
+            System.out.println(PREFIX + "旧表 " + imageTable + "（无 " + IMAGE_URL_COLUMN + " 或为空表）"
+                    + "已改名为 " + backup + "，表名让给新的镜像表");
+            imageTable = null;
+            meta = connection.getMetaData();
         }
 
-        migratePermissionCodes(connection, meta);
+        // 2. 把真正的镜像表改名为 t_image
+        if (repoTable != null) {
+            if (imageTable == null) {
+                rename(connection, repoTable, IMAGE_TABLE);
+                System.out.println(PREFIX + repoTable + " → " + IMAGE_TABLE);
+            } else {
+                System.out.println(PREFIX + IMAGE_TABLE + " 已存在且含 " + IMAGE_URL_COLUMN
+                        + "，保留不动；" + repoTable + " 不再使用");
+            }
+        }
+
+        migratePermissionCodes(connection, connection.getMetaData());
+    }
+
+    /**
+     * 这张 t_image 是否需要让出表名：
+     * <ul>
+     *     <li>没有 {@code image_url} 列 —— 更早版本遗留的旧「镜像」表；</li>
+     *     <li>或它只是一张空表，而 {@code t_image_repo} 里有真正的数据。</li>
+     * </ul>
+     */
+    private static boolean shouldRetire(Connection connection, DatabaseMetaData meta,
+                                        String imageTable, String repoTable) throws SQLException {
+        if (!hasColumn(meta, imageTable, IMAGE_URL_COLUMN)) {
+            return true;
+        }
+        return repoTable != null && isEmpty(connection, imageTable) && !isEmpty(connection, repoTable);
     }
 
     /**
@@ -143,7 +174,7 @@ public class ImageTableMigrationEnvironmentPostProcessor implements EnvironmentP
 
     // ------------------------------------------------------------------ 元数据
 
-    private static String findTable(DatabaseMetaData meta, String tableName) throws SQLException {
+    static String findTable(DatabaseMetaData meta, String tableName) throws SQLException {
         try (ResultSet rs = meta.getTables(null, null, null, new String[]{"TABLE"})) {
             while (rs.next()) {
                 String name = rs.getString("TABLE_NAME");
@@ -155,11 +186,22 @@ public class ImageTableMigrationEnvironmentPostProcessor implements EnvironmentP
         return null;
     }
 
-    private static boolean hasColumn(DatabaseMetaData meta, String tableName, String columnName) throws SQLException {
+    static boolean hasColumn(DatabaseMetaData meta, String tableName, String columnName) throws SQLException {
         try (ResultSet rs = meta.getColumns(null, null, tableName, null)) {
             while (rs.next()) {
                 String name = rs.getString("COLUMN_NAME");
                 if (name != null && name.equalsIgnoreCase(columnName)) {
+                    return true;
+                }
+            }
+        }
+        // 有些库对 tableName 大小写敏感（H2 存的是大写表名），精确匹配不到时退化为忽略大小写扫描
+        try (ResultSet rs = meta.getColumns(null, null, null, null)) {
+            while (rs.next()) {
+                String table = rs.getString("TABLE_NAME");
+                String name = rs.getString("COLUMN_NAME");
+                if (table != null && table.equalsIgnoreCase(tableName)
+                        && name != null && name.equalsIgnoreCase(columnName)) {
                     return true;
                 }
             }
@@ -183,14 +225,6 @@ public class ImageTableMigrationEnvironmentPostProcessor implements EnvironmentP
              ResultSet rs = st.executeQuery("SELECT COUNT(*) FROM " + table)) {
             return rs.next() && rs.getInt(1) == 0;
         }
-    }
-
-    private static void backup(Connection connection, String table, String backupName) throws SQLException {
-        execute(connection, "CREATE TABLE " + backupName + " AS SELECT * FROM " + table);
-    }
-
-    private static void drop(Connection connection, String table) throws SQLException {
-        execute(connection, "DROP TABLE " + table);
     }
 
     private static void rename(Connection connection, String from, String to) throws SQLException {

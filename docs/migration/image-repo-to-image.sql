@@ -22,13 +22,17 @@
 -- 更早版本的「镜像」实体也用 t_image 作为表名（旧结构，没有 image_url 列）。
 -- 若库中已存在这样的旧 t_image，直接执行第 1 步会失败；
 -- 应用启动后打开镜像页面会报 "Column I1_0.IMAGE_URL not found"。
+-- 从 4.7 之前直接升级的库还可能只有旧 t_image、根本没有 t_image_repo。
+--
+-- 正常情况无需关心：新版本启动时 ImageTableMigrationEnvironmentPostProcessor 会
+-- 自动把旧 t_image 改名为 t_image_legacy，再把 t_image_repo 改名为 t_image。
 --
 -- 先诊断：
 --   SELECT table_name FROM information_schema.tables
 --    WHERE table_schema='PUBLIC' AND table_name LIKE 'T_IMAGE%';
 --   SELECT column_name FROM information_schema.columns WHERE table_name='T_IMAGE';
 --
--- 若确认是遗留旧表，请改用 docs/migration/image-repo-to-image-legacy-fix.sql。
+-- 若确认是遗留旧表、且自动迁移失败，请改用 docs/migration/image-repo-to-image-legacy-fix.sql。
 -- ---------------------------------------------------------------------------
 
 -- 1. 表名
