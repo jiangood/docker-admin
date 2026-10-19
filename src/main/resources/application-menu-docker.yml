@@ -89,7 +89,7 @@ menus:
       - {name: 保存, code: system-config:save}
   tool:
     pid: biz
-    name: 辅助工具
+    name: 工具
     icon: ToolOutlined
   setting-sync:
     pid: tool
