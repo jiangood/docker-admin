@@ -18,7 +18,7 @@ import java.util.regex.Pattern;
  * 镜像导出日志 WebSocket 握手鉴权。
  * <p>
  * {@code afterConnectionEstablished} 执行时已脱离 HTTP 请求线程、没有 Spring Security 上下文，
- * 因此权限校验必须放在握手拦截器（仍在请求线程）中完成：校验 {@code image-repo:export} 权限，
+ * 因此权限校验必须放在握手拦截器（仍在请求线程）中完成：校验 {@code image:export} 权限，
  * 并限制 logId 取值以防目录穿越。
  */
 @Slf4j
@@ -41,7 +41,7 @@ public class ImageExportLogHandshakeInterceptor implements HandshakeInterceptor 
             return false;
         }
         if (!hasPermission()) {
-            log.warn("导出日志 WebSocket 握手被拒绝，缺少 image-repo:export 权限");
+            log.warn("导出日志 WebSocket 握手被拒绝，缺少 image:export 权限");
             response.setStatusCode(HttpStatus.FORBIDDEN);
             return false;
         }
@@ -54,7 +54,7 @@ public class ImageExportLogHandshakeInterceptor implements HandshakeInterceptor 
             return false;
         }
         Set<String> permissions = user.getPermissions();
-        return permissions != null && (permissions.contains("*") || permissions.contains("image-repo:export"));
+        return permissions != null && (permissions.contains("*") || permissions.contains("image:export"));
     }
 
     @Override

@@ -64,7 +64,7 @@ public class ImageTagService extends BaseService<ImageTag> {
     }
 
     /**
-     * 某个镜像仓库的所有版本号（tag），版本倒序（如 v1.10.0 在 v1.9.0 之前，latest 在最后）。
+     * 某个镜像的所有版本号（tag），版本倒序（如 v1.10.0 在 v1.9.0 之前，latest 在最后）。
      */
     public List<String> tags(String imageUrl) {
         return listByImageUrl(imageUrl).stream()
@@ -76,7 +76,7 @@ public class ImageTagService extends BaseService<ImageTag> {
     }
 
     /**
-     * 某个镜像仓库已登记的版本号集合，用于远程同步时批量判断「已存在」。
+     * 某个镜像已登记的版本号集合，用于远程同步时批量判断「已存在」。
      */
     public Set<String> tagSet(String imageUrl) {
         if (StrUtil.isBlank(imageUrl)) {
@@ -91,7 +91,7 @@ public class ImageTagService extends BaseService<ImageTag> {
     /**
      * 批量取每个仓库的最新版本号，不含 latest。
      * <p>
-     * 供镜像仓库列表展示「最新版本」用：一次查询覆盖整页仓库，避免逐行查询。
+     * 供镜像列表展示「最新版本」用：一次查询覆盖整页镜像，避免逐行查询。
      */
     public Map<String, String> latestTagMap(Collection<String> imageUrls) {
         if (imageUrls == null || imageUrls.isEmpty()) {

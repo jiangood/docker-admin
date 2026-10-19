@@ -14,18 +14,18 @@ import lombok.ToString;
 import lombok.experimental.FieldNameConstants;
 
 /**
- * 镜像仓库：一个 registry.url/namespace/name 形式的镜像仓库地址（不含 tag）。
+ * 镜像：一个 registry.url/namespace/name 形式的镜像地址（不含 tag）。
  * <p>
- * 一个仓库下有多条 {@link ImageTag}；项目与镜像仓库通过 imageUrl 相等关联。
+ * 一个镜像下有多条 {@link ImageTag}；项目与镜像通过 imageUrl 相等关联。
  */
-@Remark("镜像仓库")
+@Remark("镜像")
 @Entity
 @Getter
 @Setter
 @ToString
 @FieldNameConstants
-@Table(name = "t_image_repo")
-public class ImageRepo extends BaseEntity {
+@Table(name = "t_image")
+public class Image extends BaseEntity {
 
     /**
      * 镜像url：registry.url/namespace/name，不含 tag。
@@ -56,7 +56,7 @@ public class ImageRepo extends BaseEntity {
     String remark;
 
     /**
-     * 最新版本：该仓库下最新的版本号（不含可变的 latest），仅列表展示用，不落库。
+     * 最新版本：该镜像下最新的版本号（不含可变的 latest），仅列表展示用，不落库。
      */
     @Remark("最新版本")
     @Transient

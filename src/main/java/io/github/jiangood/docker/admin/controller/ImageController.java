@@ -7,11 +7,11 @@ import io.github.jiangood.docker.admin.dto.ImageExportTaskView;
 import io.github.jiangood.docker.admin.dto.RemoteRegistryQuery;
 import io.github.jiangood.docker.admin.dto.RemoteSyncResult;
 import io.github.jiangood.docker.admin.entity.App;
-import io.github.jiangood.docker.admin.entity.ImageRepo;
+import io.github.jiangood.docker.admin.entity.Image;
 import io.github.jiangood.docker.admin.entity.ImageTag;
 import io.github.jiangood.docker.admin.service.ImageExportRegistry;
 import io.github.jiangood.docker.admin.service.ImageExportService;
-import io.github.jiangood.docker.admin.service.ImageRepoService;
+import io.github.jiangood.docker.admin.service.ImageService;
 import io.github.jiangood.docker.admin.service.ImageTagService;
 import io.github.jiangood.docker.admin.service.RemoteSyncService;
 import io.github.jiangood.docker.base.OrgAccessTool;
@@ -42,14 +42,14 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 镜像仓库：registry.url/namespace/name 形式的镜像仓库及其标签。
+ * 镜像：registry.url/namespace/name 形式的镜像及其标签。
  */
 @RestController
-@RequestMapping("admin/image-repo")
-public class ImageRepoController {
+@RequestMapping("admin/image")
+public class ImageController {
 
     @Resource
-    private ImageRepoService service;
+    private ImageService service;
 
     @Resource
     private ImageTagService imageTagService;
@@ -66,11 +66,11 @@ public class ImageRepoController {
     @Resource
     private RemoteSyncService remoteSyncService;
 
-    @HasPermission("image-repo:view")
+    @HasPermission("image:view")
     @RequestMapping("page")
     public AjaxResult page(String name, String searchText, @PageableDefault(direction = Sort.Direction.DESC, sort = {"updateTime"}) Pageable pageable) {
-        Spec<ImageRepo> q = Spec.of();
-        // 关键字：供 ImageRepoPicker 等按地址或名称模糊查
+        Spec<Image> q = Spec.of();
+        // 关键字：供 ImagePicker 等按地址或名称模糊查
         q.orLike(searchText, "imageUrl", "name", "remark");
         // 列表页「镜像名」查询条件
         if (StrUtil.isNotBlank(name)) {
@@ -82,41 +82,41 @@ public class ImageRepoController {
             qq.in("sysOrg.id", LoginTool.getOrgPermissions());
         });
 
-        Page<ImageRepo> page = service.findAll(q, pageable);
+        Page<Image> page = service.findAll(q, pageable);
         fillLatestTag(page.getContent());
         return AjaxResult.ok().data(page);
     }
 
     /**
-     * 给列表补上「最新版本」：每个仓库最新的非 latest 版本号。
+     * 给列表补上「最新版本」：每个镜像最新的非 latest 版本号。
      */
-    private void fillLatestTag(List<ImageRepo> repos) {
-        List<String> imageUrls = repos.stream()
-                .map(ImageRepo::getImageUrl)
+    private void fillLatestTag(List<Image> images) {
+        List<String> imageUrls = images.stream()
+                .map(Image::getImageUrl)
                 .filter(StrUtil::isNotBlank)
                 .toList();
         if (imageUrls.isEmpty()) {
             return;
         }
         Map<String, String> latestTags = imageTagService.latestTagMap(imageUrls);
-        repos.forEach(r -> r.setLatestTag(latestTags.get(r.getImageUrl())));
+        images.forEach(image -> image.setLatestTag(latestTags.get(image.getImageUrl())));
     }
 
-    @HasPermission("image-repo:view")
+    @HasPermission("image:view")
     @RequestMapping("get")
     public AjaxResult get(String id) {
-        return AjaxResult.ok().data(assertRepoAccess(id));
+        return AjaxResult.ok().data(assertImageAccess(id));
     }
 
-    @HasPermission("image-repo:view")
+    @HasPermission("image:view")
     @RequestMapping("tags")
     public AjaxResult tags(String imageUrl) {
         if (StrUtil.isBlank(imageUrl)) {
             return AjaxResult.ok().data(List.of());
         }
-        ImageRepo repo = service.findByImageUrl(imageUrl);
-        if (repo != null) {
-            OrgAccessTool.assertAccess(repo.getSysOrg());
+        Image image = service.findByImageUrl(imageUrl);
+        if (image != null) {
+            OrgAccessTool.assertAccess(image.getSysOrg());
         }
         List<Option> options = imageTagService.tags(imageUrl).stream()
                 .map(v -> new Option(v, v))
@@ -125,12 +125,12 @@ public class ImageRepoController {
     }
 
     /**
-     * 仓库列表，供应用选择镜像（value 为镜像url）。
+     * 镜像列表，供应用选择镜像（value 为镜像url）。
      */
-    @HasPermission("image-repo:view")
+    @HasPermission("image:view")
     @RequestMapping("options")
     public AjaxResult options(String searchText) {
-        Spec<ImageRepo> q = Spec.of();
+        Spec<Image> q = Spec.of();
         if (StrUtil.isNotBlank(searchText)) {
             q.orLike(searchText, "imageUrl", "name");
         }
@@ -138,61 +138,61 @@ public class ImageRepoController {
             qq.isNull("sysOrg.id");
             qq.in("sysOrg.id", LoginTool.getOrgPermissions());
         });
-        List<ImageRepo> list = service.findAll(q, Sort.by(Sort.Direction.DESC, "updateTime"));
+        List<Image> list = service.findAll(q, Sort.by(Sort.Direction.DESC, "updateTime"));
 
         List<Option> options = list.stream()
-                .map(r -> new Option(r.getImageUrl(), r.getImageUrl()))
+                .map(image -> new Option(image.getImageUrl(), image.getImageUrl()))
                 .toList();
         return AjaxResult.ok().data(options);
     }
 
     /**
-     * 使用该镜像仓库的应用。
+     * 使用该镜像的应用。
      */
-    @HasPermission("image-repo:view")
+    @HasPermission("image:view")
     @RequestMapping("apps")
     public AjaxResult apps(String imageUrl) {
         if (StrUtil.isBlank(imageUrl)) {
             return AjaxResult.ok().data(List.of());
         }
-        ImageRepo repo = service.findByImageUrl(imageUrl);
-        if (repo != null) {
-            OrgAccessTool.assertAccess(repo.getSysOrg());
+        Image image = service.findByImageUrl(imageUrl);
+        if (image != null) {
+            OrgAccessTool.assertAccess(image.getSysOrg());
         }
         List<App> apps = appRepository.findAllByImageUrl(imageUrl);
         return AjaxResult.ok().data(apps);
     }
 
     /**
-     * 该仓库的所有标签。
+     * 该镜像的所有标签。
      */
-    @HasPermission("image-repo:view")
+    @HasPermission("image:view")
     @RequestMapping("tagsDetail")
     public AjaxResult tagsDetail(String id) {
-        ImageRepo repo = assertRepoAccess(id);
-        List<ImageTag> tags = imageTagService.listByImageUrl(repo.getImageUrl());
+        Image image = assertImageAccess(id);
+        List<ImageTag> tags = imageTagService.listByImageUrl(image.getImageUrl());
         return AjaxResult.ok().data(tags);
     }
 
     // ------------------------------------------------------------------ 远程注册中心
 
     /**
-     * 尝试列举系统已配置的注册中心下可补录的仓库，并标出哪些已经补录过（列表页用）。
+     * 尝试列举系统已配置的注册中心下可补录的镜像，并标出哪些已经补录过（列表页用）。
      * <p>
      * 阿里云个人版不开放该接口，此时返回 {@code supported=false} 与说明，前端降级为手工输入镜像地址。
      */
-    @HasPermission("image-repo:sync")
+    @HasPermission("image:sync")
     @PostMapping("remote/catalog")
     public AjaxResult remoteCatalog(@RequestBody(required = false) RemoteRegistryQuery query) {
         return AjaxResult.ok().data(remoteSyncService.catalog(query));
     }
 
     /**
-     * 补录镜像仓库（列表页）：把选中的仓库连同其版本写入本平台（来源标记 REMOTE）。
+     * 补录镜像（列表页）：把选中的镜像连同其版本写入本平台（来源标记 REMOTE）。
      * <p>
-     * 逐仓库逐版本容错，单个失败只记入结果里的 failures，不中断整体补录。
+     * 逐镜像逐版本容错，单个失败只记入结果里的 failures，不中断整体补录。
      */
-    @HasPermission("image-repo:sync")
+    @HasPermission("image:sync")
     @PostMapping("remote/sync")
     public AjaxResult remoteSync(@RequestBody RemoteRegistryQuery query) {
         RemoteSyncResult result = remoteSyncService.sync(query);
@@ -200,24 +200,24 @@ public class ImageRepoController {
     }
 
     /**
-     * 同步单个仓库的版本（详情页「同步标签」）。
+     * 同步单个镜像的版本（详情页「同步标签」）。
      * <p>
-     * 只补该仓库下新增的版本，不新建仓库；注册中心与凭据取系统里配置生效的那一个。
+     * 只补该镜像下新增的版本，不新建镜像；注册中心与凭据取系统里配置生效的那一个。
      */
-    @HasPermission("image-repo:sync")
+    @HasPermission("image:sync")
     @PostMapping("remote/tags")
     public AjaxResult remoteTags(String id, Boolean withMeta) {
-        ImageRepo repo = assertRepoAccess(id);
-        RemoteSyncResult result = remoteSyncService.syncTags(repo.getImageUrl(),
-                withMeta == null || withMeta, 100, repo.getRegistryId());
+        Image image = assertImageAccess(id);
+        RemoteSyncResult result = remoteSyncService.syncTags(image.getImageUrl(),
+                withMeta == null || withMeta, 100, image.getRegistryId());
         return AjaxResult.ok().data(result).msg(syncMsg(result, false));
     }
 
-    private static String syncMsg(RemoteSyncResult result, boolean withRepo) {
+    private static String syncMsg(RemoteSyncResult result, boolean withImage) {
         StringBuilder msg = new StringBuilder("完成：");
-        if (withRepo) {
-            msg.append("新增 ").append(result.getRepoAdded()).append(" 个仓库、")
-                    .append("跳过已存在 ").append(result.getRepoSkipped()).append(" 个仓库，");
+        if (withImage) {
+            msg.append("新增 ").append(result.getImageAdded()).append(" 个镜像、")
+                    .append("跳过已存在 ").append(result.getImageSkipped()).append(" 个镜像，");
         }
         msg.append("新增 ").append(result.getTagAdded()).append(" 个版本、")
                 .append("跳过已存在 ").append(result.getTagSkipped()).append(" 个版本");
@@ -236,12 +236,12 @@ public class ImageRepoController {
      * <p>
      * 目录容量超限时在派发任务前就失败（见 {@code assertDirCapacity}），前端点「确定」即收到提示。
      */
-    @HasPermission("image-repo:export")
+    @HasPermission("image:export")
     @PostMapping("export/start")
     public AjaxResult exportStart(String imageUrl, String tag) {
         Assert.hasText(imageUrl, "镜像地址不能为空");
         Assert.hasText(tag, "镜像版本不能为空");
-        assertRepoAccessible(imageUrl);
+        assertImageAccessible(imageUrl);
         imageExportService.assertDirCapacity();
 
         String logId = "export-" + RandomUtil.randomString(16);
@@ -251,13 +251,13 @@ public class ImageRepoController {
     }
 
     /**
-     * 某镜像仓库下所有 tag 的导出状态（列表页逐行展示下载状态、按需轮询）。
+     * 某镜像下所有 tag 的导出状态（列表页逐行展示下载状态、按需轮询）。
      */
-    @HasPermission("image-repo:view")
+    @HasPermission("image:view")
     @RequestMapping("export/tasks")
     public AjaxResult exportTasks(String imageUrl) {
         Assert.hasText(imageUrl, "镜像地址不能为空");
-        assertRepoAccessible(imageUrl);
+        assertImageAccessible(imageUrl);
         return AjaxResult.ok().data(imageExportService.taskViews(imageUrl));
     }
 
@@ -266,7 +266,7 @@ public class ImageRepoController {
      * <p>
      * logId 与 imageUrl + tag 两种定位方式都支持，前者用于日志结束时的一次性确认。
      */
-    @HasPermission("image-repo:export")
+    @HasPermission("image:export")
     @RequestMapping("export/status")
     public AjaxResult exportStatus(String logId, String imageUrl, String tag) {
         ImageExportTaskView view = StrUtil.isNotBlank(logId)
@@ -285,7 +285,7 @@ public class ImageRepoController {
      * <p>
      * 下载成功后删除临时文件并取消登记；失败则保留以便重试（超时未下载的由清扫兜底）。
      */
-    @HasPermission("image-repo:export")
+    @HasPermission("image:export")
     @RequestMapping("export/download")
     public void exportDownload(String logId, String imageUrl, String tag, HttpServletResponse response) throws IOException {
         // isReady 内部先校验 logId 白名单（防目录穿越），再判断任务是否已结束、文件是否存在
@@ -313,28 +313,28 @@ public class ImageRepoController {
      * <p>
      * 顺带覆盖两种清理：不想等 120 分钟后的清扫，或导出完就不需要了。
      */
-    @HasPermission("image-repo:export")
+    @HasPermission("image:export")
     @PostMapping("export/delete")
     public AjaxResult exportDelete(String logId) {
         imageExportService.deleteAndUnregister(logId);
         return AjaxResult.ok().msg("已删除");
     }
 
-    private void assertRepoAccessible(String imageUrl) {
-        ImageRepo repo = service.findByImageUrl(imageUrl);
-        Assert.notNull(repo, "镜像仓库不存在");
-        OrgAccessTool.assertAccess(repo.getSysOrg());
+    private void assertImageAccessible(String imageUrl) {
+        Image image = service.findByImageUrl(imageUrl);
+        Assert.notNull(image, "镜像不存在");
+        OrgAccessTool.assertAccess(image.getSysOrg());
     }
 
     /**
      * 导出文件名：镜像名最后一段 + 版本，如 app-v1.tar。
      */
     private static String tarName(String imageUrl, String tag) {
-        String name = imageRepoName(imageUrl);
+        String name = imageName(imageUrl);
         return name + "-" + tag + ".tar";
     }
 
-    private static String imageRepoName(String imageUrl) {
+    private static String imageName(String imageUrl) {
         if (StrUtil.isBlank(imageUrl)) {
             return "image";
         }
@@ -346,22 +346,22 @@ public class ImageRepoController {
         return StrUtil.blankToDefault(name, "image");
     }
 
-    @HasPermission("image-repo:delete")
+    @HasPermission("image:delete")
     @RequestMapping("delete")
     public AjaxResult delete(String id) {
-        ImageRepo repo = assertRepoAccess(id);
-        List<App> apps = appRepository.findAllByImageUrl(repo.getImageUrl());
-        Assert.state(apps.isEmpty(), "该镜像仓库下还有 " + apps.size() + " 个应用，请先删除应用");
-        imageTagService.deleteByImageUrl(repo.getImageUrl());
+        Image image = assertImageAccess(id);
+        List<App> apps = appRepository.findAllByImageUrl(image.getImageUrl());
+        Assert.state(apps.isEmpty(), "该镜像下还有 " + apps.size() + " 个应用，请先删除应用");
+        imageTagService.deleteByImageUrl(image.getImageUrl());
         service.deleteById(id);
         return AjaxResult.ok().msg("删除成功");
     }
 
-    private ImageRepo assertRepoAccess(String id) {
-        ImageRepo repo = service.findById(id).orElse(null);
-        Assert.notNull(repo, "镜像仓库不存在");
-        OrgAccessTool.assertAccess(repo.getSysOrg());
-        return repo;
+    private Image assertImageAccess(String id) {
+        Image image = service.findById(id).orElse(null);
+        Assert.notNull(image, "镜像不存在");
+        OrgAccessTool.assertAccess(image.getSysOrg());
+        return image;
     }
 
 }

@@ -3,14 +3,14 @@ import React from 'react'
 import {HttpClient} from '@jiangood/open-admin'
 
 /**
- * 补录镜像仓库（镜像仓库列表页）。
- * 作用是把注册中心里已有的仓库补录到本平台：连接地址与凭据一律取
- * 「系统设置 → 镜像注册中心」里已保存的那一条，这里只负责列出仓库、勾选要补录的。
+ * 补录镜像（镜像列表页）。
+ * 作用是把注册中心里已有的镜像补录到本平台：连接地址与凭据一律取
+ * 「系统设置 → 镜像注册中心」里已保存的那一条，这里只负责列出镜像、勾选要补录的。
  *
  * 注册中心是否开放仓库列举（/v2/_catalog）由后端探测：阿里云个人版不开放，
  * 此时自动降级为手工填写镜像地址。
  *
- * 一次只能补录一个仓库：远程列表用单选，手工填写也只有一个地址，两者互斥。
+ * 一次只能补录一个镜像：远程列表用单选，手工填写也只有一个地址，两者互斥。
  */
 export default class RemoteSyncModal extends React.Component {
 
@@ -18,14 +18,14 @@ export default class RemoteSyncModal extends React.Component {
         open: false,
         loading: false,
         catalogLoading: false,
-        // 后端返回 {supported, repos, existing, registry, message}
+        // 后端返回 {supported, images, existing, registry, message}
         supported: null,
         registry: null,
         registryOptions: [],
         registryId: undefined,
-        repos: [],
+        images: [],
         existing: [],
-        // 一次只能补录一个仓库，这里存被选中的仓库名（未选为 null）
+        // 一次只能补录一个镜像，这里存被选中的镜像名（未选为 null）
         selected: null,
         tip: null,
         result: null,
@@ -37,7 +37,7 @@ export default class RemoteSyncModal extends React.Component {
     show = () => {
         HttpClient.get('admin/registry/options').then(rs => this.setState({registryOptions: rs.data || []}))
         this.setState({
-            open: true, supported: null, repos: [], existing: [], selected: null,
+            open: true, supported: null, images: [], existing: [], selected: null,
             tip: null, result: null,
         })
     }
@@ -47,16 +47,16 @@ export default class RemoteSyncModal extends React.Component {
         this.props.onClose?.()
     }
 
-    /** 从系统配置的注册中心列举可补录的仓库 */
+    /** 从系统配置的注册中心列举可补录的镜像 */
     catalog = () => {
         this.setState({catalogLoading: true})
-        HttpClient.post('admin/image-repo/remote/catalog', {registryId: this.state.registryId})
+        HttpClient.post('admin/image/remote/catalog', {registryId: this.state.registryId})
             .then(rs => {
                 const data = rs.data || {}
                 this.setState({
                     supported: data.supported !== false,
                     registry: data.registry || null,
-                    repos: data.repos || [],
+                    images: data.images || [],
                     existing: data.existing || [],
                     selected: null,
                     tip: data.supported === false
@@ -70,15 +70,15 @@ export default class RemoteSyncModal extends React.Component {
             .finally(() => this.setState({catalogLoading: false}))
     }
 
-    /** 选中一个待补录的仓库；同时清掉手工填写的地址（一次只能补录一个） */
-    selectRepo = repo => {
+    /** 选中一个待补录的镜像；同时清掉手工填写的地址（一次只能补录一个） */
+    selectImage = image => {
         this.formRef.current?.setFieldValue('imageUrl', undefined)
-        this.setState({selected: repo || null})
+        this.setState({selected: image || null})
     }
 
     sync = () => {
         this.setState({loading: true})
-        HttpClient.post('admin/image-repo/remote/sync', this.payload())
+        HttpClient.post('admin/image/remote/sync', this.payload())
             .then(rs => {
                 this.setState({result: rs.data})
                 this.props.onSuccess?.()
@@ -86,7 +86,7 @@ export default class RemoteSyncModal extends React.Component {
             .finally(() => this.setState({loading: false}))
     }
 
-    /** 单个仓库地址：远程列表选中的一项，或手工填写的一个地址，两者互斥 */
+    /** 单个镜像地址：远程列表选中的一项，或手工填写的一个地址，两者互斥 */
     payload = () => {
         const values = this.formRef.current?.getFieldsValue() || {}
         const manual = (values.imageUrl || '').trim()
@@ -99,13 +99,13 @@ export default class RemoteSyncModal extends React.Component {
     }
 
     render() {
-        const {open, loading, catalogLoading, supported, registry, registryOptions, registryId, repos, existing, selected, tip, result} = this.state
+        const {open, loading, catalogLoading, supported, registry, registryOptions, registryId, images, existing, selected, tip, result} = this.state
         const manualOnly = supported === false
         const count = this.payload().imageUrls.length
 
         return <Modal open={open}
                      width={760}
-                     title='补录镜像仓库'
+                     title='补录镜像'
                      onCancel={this.cancel}
                      destroyOnHidden
                      footer={[
@@ -123,7 +123,7 @@ export default class RemoteSyncModal extends React.Component {
                       }
                   }}>
                 <Alert style={{marginBottom: 12}} type='info' showIcon
-                       message='一次只能补录一个仓库：勾选下方远程列表中的一项，或手工填写一个镜像地址'
+                       message='一次只能补录一个镜像：勾选下方远程列表中的一项，或手工填写一个镜像地址'
                        description='地址与凭据取「系统设置 → 镜像注册中心」里已保存的那一条，无需再次输入'/>
 
                 {registry
@@ -137,11 +137,11 @@ export default class RemoteSyncModal extends React.Component {
                 <Form.Item label='源注册中心' style={{marginBottom: 12}}>
                     <Select allowClear showSearch optionFilterProp='label' value={registryId}
                             options={registryOptions} placeholder='使用系统默认注册中心'
-                            onChange={value => this.setState({registryId: value, supported: null, repos: [], existing: [], selected: null, registry: null})}/>
+                            onChange={value => this.setState({registryId: value, supported: null, images: [], existing: [], selected: null, registry: null})}/>
                 </Form.Item>
                 <Space align='center' wrap style={{marginBottom: 8}}>
                     <Button loading={catalogLoading} onClick={this.catalog}>
-                        {manualOnly ? '重新尝试列举' : '读取远程仓库'}
+                        {manualOnly ? '重新尝试列举' : '读取远程镜像'}
                     </Button>
                     <Form.Item name='withMeta' valuePropName='checked' noStyle>
                         <Switch checkedChildren='同时读取镜像元数据' unCheckedChildren='仅补录版本号'/>
@@ -155,19 +155,19 @@ export default class RemoteSyncModal extends React.Component {
                     ? <Alert style={{marginBottom: 12}} type={tip.type} message={tip.text} showIcon/>
                     : null}
 
-                {repos.length
+                {images.length
                     ? <Table size='small'
-                             rowKey='repo'
+                             rowKey='image'
                              pagination={false}
                              scroll={{y: 300}}
-                             dataSource={repos.map(r => ({repo: r, imported: existing.includes(r)}))}
+                             dataSource={images.map(r => ({image: r, imported: existing.includes(r)}))}
                              rowSelection={{
                                  type: 'radio',
                                  selectedRowKeys: selected ? [selected] : [],
-                                 onChange: keys => this.selectRepo(keys[0]),
+                                 onChange: keys => this.selectImage(keys[0]),
                              }}
                              columns={[
-                                 {title: '仓库', dataIndex: 'repo'},
+                                 {title: '镜像', dataIndex: 'image'},
                                  {
                                      title: '状态', dataIndex: 'imported', width: 100,
                                      render: imported => imported
@@ -180,7 +180,7 @@ export default class RemoteSyncModal extends React.Component {
                 <Form.Item style={{marginTop: 12, marginBottom: 0}}
                            name='imageUrl'
                            label={manualOnly ? '镜像地址' : '手工指定镜像地址（可选）'}
-                           extra={<>一次只能补录一个仓库，这里填写一个地址即可；可写相对路径（ztcn/nginx）或完整地址。{manualOnly
+                           extra={<>一次只能补录一个镜像，这里填写一个地址即可；可写相对路径（ztcn/nginx）或完整地址。{manualOnly
                                ? '该注册中心不支持自动列举，请手工填写要补录的镜像地址。'
                                : ''}</>}>
                     <Input allowClear placeholder='ztcn/camera-vision-search'/>
@@ -189,8 +189,8 @@ export default class RemoteSyncModal extends React.Component {
 
             {result
                 ? <Alert style={{marginTop: 12}} type='success' showIcon
-                         message={`已补录：新增 ${result.repoAdded} 个仓库、${result.tagAdded} 个版本`
-                                 + `，跳过已存在 ${result.repoSkipped} 个仓库、${result.tagSkipped} 个版本`
+                         message={`已补录：新增 ${result.imageAdded} 个镜像、${result.tagAdded} 个版本`
+                                 + `，跳过已存在 ${result.imageSkipped} 个镜像、${result.tagSkipped} 个版本`
                                  + (result.metaFilled ? `，填充元数据 ${result.metaFilled} 个` : '')}
                          description={result.failures?.length
                              ? `部分失败：${result.failures.join('；')}`

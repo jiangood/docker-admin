@@ -231,7 +231,7 @@ public class RegistryV2Client {
             throw new BusinessException(failHint + "失败：账号密码错误、无访问权限，或镜像地址不存在（" + base + "）");
         }
         if (code == 404) {
-            throw new BusinessException(failHint + "失败：镜像仓库或版本不存在（" + base + "）");
+            throw new BusinessException(failHint + "失败：镜像或版本不存在（" + base + "）");
         }
         if (code < 200 || code >= 300) {
             throw new BusinessException(failHint + "失败：注册中心返回 " + code + "，" + errorText(r.body()));

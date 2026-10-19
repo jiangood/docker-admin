@@ -45,7 +45,7 @@ public class App extends BaseEntity {
 
 
     /**
-     * 镜像url（不带 tag 的仓库地址），应用运行的镜像所属仓库。
+     * 镜像url（不带 tag 的镜像地址），应用运行的镜像。
      */
     @Remark("镜像地址")
     @Column(length = 400)

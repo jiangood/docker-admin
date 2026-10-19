@@ -4,7 +4,7 @@ import cn.hutool.core.util.StrUtil;
 import io.github.jiangood.docker.admin.entity.Registry;
 
 /**
- * 镜像地址工具：统一拼/拆「镜像url」（不带 tag 的仓库地址）与「完整地址」。
+ * 镜像地址工具：统一拼/拆「镜像url」（不带 tag 的镜像地址）与「完整地址」。
  */
 public final class ImageUrlUtils {
 
@@ -29,7 +29,7 @@ public final class ImageUrlUtils {
     }
 
     /**
-     * 从完整地址（repo:tag）中取仓库地址（不含 tag）；无 tag 时原样返回。
+     * 从完整地址（repo:tag）中取镜像地址（不含 tag）；无 tag 时原样返回。
      */
     public static String repoOf(String fullUrl) {
         if (StrUtil.isBlank(fullUrl)) {

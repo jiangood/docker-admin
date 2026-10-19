@@ -20,7 +20,7 @@ export default class extends React.Component {
     pollTimer = null
 
     state = {
-        repo: null,
+        image: null,
         tags: [],
         apps: [],
         // 后端登记的导出任务，列表行内据此展示下载状态
@@ -33,22 +33,22 @@ export default class extends React.Component {
 
     componentDidMount() {
         this.id = PageUtils.currentParams().id
-        this.loadRepo()
+        this.loadImage()
     }
 
     componentWillUnmount() {
         this.stopPoll()
     }
 
-    loadRepo = () => {
-        HttpClient.get('admin/image-repo/get', {id: this.id}).then(rs => {
-            const repo = rs.data
-            this.setState({repo})
-            if (repo) {
-                HttpClient.get('admin/image-repo/tagsDetail', {id: this.id}).then(r => {
+    loadImage = () => {
+        HttpClient.get('admin/image/get', {id: this.id}).then(rs => {
+            const image = rs.data
+            this.setState({image})
+            if (image) {
+                HttpClient.get('admin/image/tagsDetail', {id: this.id}).then(r => {
                     this.setState({tags: r.data || []})
                 })
-                HttpClient.get('admin/image-repo/apps', {imageUrl: repo.imageUrl}).then(r => {
+                HttpClient.get('admin/image/apps', {imageUrl: image.imageUrl}).then(r => {
                     this.setState({apps: r.data || []})
                 })
                 this.pollTasks()
@@ -72,15 +72,15 @@ export default class extends React.Component {
     }
 
     /**
-     * 拉取整个仓库的导出状态。有任务在跑（或正在等待登记）时持续轮询，否则停下，
+     * 拉取整个镜像的导出状态。有任务在跑（或正在等待登记）时持续轮询，否则停下，
      * 避免无意义的请求。关闭抽屉、刷新页面回来后依然能拿到状态。
      */
     pollTasks = () => {
-        const {repo, drawer} = this.state
-        if (!repo) {
+        const {image, drawer} = this.state
+        if (!image) {
             return
         }
-        HttpClient.get('admin/image-repo/export/tasks', {imageUrl: repo.imageUrl}).then(rs => {
+        HttpClient.get('admin/image/export/tasks', {imageUrl: image.imageUrl}).then(rs => {
             const exportTasks = rs.data || []
             const mine = drawer
                 ? exportTasks.find(t => t.imageUrl === drawer.imageUrl && t.tag === drawer.tag)
@@ -125,7 +125,7 @@ export default class extends React.Component {
             return
         }
         this.setState({starting: true})
-        HttpClient.postForm('admin/image-repo/export/start', {
+        HttpClient.postForm('admin/image/export/start', {
             imageUrl: drawer.imageUrl,
             tag: drawer.tag,
         }).then(() => {
@@ -146,7 +146,7 @@ export default class extends React.Component {
         if (!drawer) {
             return
         }
-        HttpClient.get('admin/image-repo/export/status', {imageUrl: drawer.imageUrl, tag: drawer.tag}).then(rs => {
+        HttpClient.get('admin/image/export/status', {imageUrl: drawer.imageUrl, tag: drawer.tag}).then(rs => {
             const data = rs.data || {}
             if (!data.ready) {
                 return
@@ -170,7 +170,7 @@ export default class extends React.Component {
         if (!task) {
             return
         }
-        HttpClient.postForm('admin/image-repo/export/delete', {logId: task.logId}).then(() => {
+        HttpClient.postForm('admin/image/export/delete', {logId: task.logId}).then(() => {
             this.setState({drawer: null})
             this.pollTasks()
         })
@@ -186,7 +186,7 @@ export default class extends React.Component {
             imageUrl: task.imageUrl,
             tag: task.tag,
         })
-        return UrlUtils.contextPath('/admin/image-repo/export/download') + '?' + params.toString()
+        return UrlUtils.contextPath('/admin/image/export/download') + '?' + params.toString()
     }
 
     /** 还没有导出任务：说明 + 「确定」开始导出。 */
@@ -226,8 +226,8 @@ export default class extends React.Component {
     )
 
     render() {
-        const {repo, tags, apps, drawer, starting} = this.state
-        if (!repo) {
+        const {image, tags, apps, drawer, starting} = this.state
+        if (!image) {
             return <Page padding><Spin/></Page>
         }
 
@@ -237,20 +237,20 @@ export default class extends React.Component {
         const task = this.drawerTask
 
         return <Page padding>
-            <Card className='mb-4' title={repo.imageUrl}
+            <Card className='mb-4' title={image.imageUrl}
                    extra={
                        <PermActions>
-                           <Button perm='image-repo:sync' icon={<CloudSyncOutlined/>}
-                                   onClick={() => this.tagSyncModalRef.current.show(repo, tags.length)}>
+                           <Button perm='image:sync' icon={<CloudSyncOutlined/>}
+                                   onClick={() => this.tagSyncModalRef.current.show(image, tags.length)}>
                                同步标签
                            </Button>
                        </PermActions>
                    }>
                 <Descriptions>
-                    <Descriptions.Item label='镜像名'>{repo.name}</Descriptions.Item>
-                    <Descriptions.Item label='来源'>{sourceTag(repo.source)}</Descriptions.Item>
-                    <Descriptions.Item label='组织机构'>{repo.sysOrg?.name}</Descriptions.Item>
-                    <Descriptions.Item label='备注'>{repo.remark}</Descriptions.Item>
+                    <Descriptions.Item label='镜像名'>{image.name}</Descriptions.Item>
+                    <Descriptions.Item label='来源'>{sourceTag(image.source)}</Descriptions.Item>
+                    <Descriptions.Item label='组织机构'>{image.sysOrg?.name}</Descriptions.Item>
+                    <Descriptions.Item label='备注'>{image.remark}</Descriptions.Item>
                 </Descriptions>
             </Card>
 
@@ -294,7 +294,7 @@ export default class extends React.Component {
                                         const running = !!t && t.status === 'RUNNING'
                                         return <PermActions>
                                             <Space size={4}>
-                                                <Button perm='image-repo:export' size='small'
+                                                <Button perm='image:export' size='small'
                                                         loading={running}
                                                         onClick={() => this.openExport(record)}>
                                                     {running ? '导出中' : '导出'}
@@ -338,8 +338,8 @@ export default class extends React.Component {
                     },
                 ]}/>
                 <RemoteTagSyncModal ref={this.tagSyncModalRef}
-                                    onClose={this.loadRepo}
-                                    onSuccess={this.loadRepo}/>
+                                    onClose={this.loadImage}
+                                    onSuccess={this.loadImage}/>
             </Card>
 
             <Drawer title={drawer ? `导出 ${drawer.tag}` : '导出'}

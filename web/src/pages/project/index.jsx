@@ -65,17 +65,6 @@ export default class extends React.Component {
             dataIndex: 'imageUrl',
         },
         {
-            title: '目标注册中心',
-            dataIndex: 'registryId',
-            render: (registryId) => {
-                if (!registryId) {
-                    return '系统默认'
-                }
-                const option = this.state.registryOptions.find(o => o.value === registryId)
-                return option ? option.label : registryId
-            },
-        },
-        {
             title: '代码仓库',
             dataIndex: 'gitUrl',
         },

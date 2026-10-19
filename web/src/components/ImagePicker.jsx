@@ -4,9 +4,9 @@ import React from 'react'
 import {HttpClient, ProTable} from '@jiangood/open-admin'
 
 /**
- * 从镜像仓库（已登记的镜像）中列出镜像，选中后通过 onSelect 回填镜像地址。
+ * 从已登记的镜像中列出镜像，选中后通过 onSelect 回填镜像地址。
  */
-export default class ImageRepoPicker extends React.Component {
+export default class ImagePicker extends React.Component {
 
     tableRef = React.createRef()
 
@@ -54,7 +54,7 @@ export default class ImageRepoPicker extends React.Component {
                       destroyOnHidden>
             <ProTable
                 actionRef={this.tableRef}
-                request={params => HttpClient.get('admin/image-repo/page', params)}
+                request={params => HttpClient.get('admin/image/page', params)}
                 columns={this.columns}
                 searchFormRender={() => (
                     <Form.Item label='关键字' name='searchText'>

@@ -37,7 +37,7 @@ export default class extends React.Component {
             dataIndex: 'name',
             render: (name, row) => (
                 <LinkButton
-                    onClick={() => PageUtils.open('/image-repo/view?id=' + row.id, "镜像仓库-" + name)}>
+                    onClick={() => PageUtils.open('/image/view?id=' + row.id, "镜像-" + name)}>
                     {name}
                 </LinkButton>
             ),
@@ -70,7 +70,7 @@ export default class extends React.Component {
             valueType: 'option',
             render: (_, record) => (
                 <PermActions>
-                    <Popconfirm perm='image-repo:delete' title='是否确定删除该镜像仓库及其标签'
+                    <Popconfirm perm='image:delete' title='是否确定删除该镜像及其标签'
                                 onConfirm={() => this.handleDelete(record)}>
                         <Button size='small'>删除</Button>
                     </Popconfirm>
@@ -80,7 +80,7 @@ export default class extends React.Component {
     ]
 
     handleDelete = record => {
-        HttpClient.postForm('admin/image-repo/delete', {id: record.id}).then(() => {
+        HttpClient.postForm('admin/image/delete', {id: record.id}).then(() => {
             this.tableRef.current.reload()
         })
     }
@@ -91,9 +91,9 @@ export default class extends React.Component {
                 actionRef={this.tableRef}
                 toolBarRightRender={() => (
                     <PermActions>
-                        <Button perm='image-repo:sync' icon={<CloudSyncOutlined/>}
+                        <Button perm='image:sync' icon={<CloudSyncOutlined/>}
                                 onClick={() => this.remoteModalRef.current.show()}>
-                            补录镜像仓库
+                            补录镜像
                         </Button>
                     </PermActions>
                 )}
@@ -102,7 +102,7 @@ export default class extends React.Component {
                         <Input placeholder='按镜像名查询' allowClear/>
                     </Form.Item>
                 )}
-                request={(params) => HttpClient.get('admin/image-repo/page', params)}
+                request={(params) => HttpClient.get('admin/image/page', params)}
                 columns={this.columns}
             />
             <RemoteSyncModal ref={this.remoteModalRef}

@@ -14,7 +14,7 @@ import {DateUtils, getToken, HttpClient, Page, PageUtils, PermUtils, ProTable, U
 import LogView from "../../components/LogView";
 import LinkButton from "../../components/LinkButton";
 import {formatBytes, formatTime} from "../../components/container/utils";
-import {sourceTag} from "../image-repo/index";
+import {sourceTag} from "../image/index";
 
 
 function getIcon(key, index) {
@@ -146,17 +146,22 @@ export default class extends React.Component {
       this.setState({branchOptions: options})
       this.selectDefault('branch', options)
     })
-    // 构建主机列表：所有主机都可选，默认不选（留给后端用系统默认 runner）
+    // 构建主机列表：所有主机都可选；默认选中全局设置的默认构建主机（未配置则不选，后端回退默认 runner）
     HttpClient.get('admin/host/options').then(rs => {
       this.setState({buildHostOptions: rs.data || []})
+    })
+    HttpClient.get('admin/host/default').then(rs => {
+      this.selectValue('buildHostId', rs.data)
     })
     this.setState({showTrigger: true, refType: 'BRANCH'})
   }
 
   // 默认选中第一个选项；用户已选择时不再覆盖
-  selectDefault = (name, options) => {
+  selectDefault = (name, options) => this.selectValue(name, options[0]?.value)
+
+  // 默认选中指定值；值为空或用户已选择时不再覆盖
+  selectValue = (name, value) => {
     const form = this.formRef.current
-    const value = options[0]?.value
     if (form && value && !form.getFieldValue(name)) {
       form.setFieldsValue({[name]: value})
     }
@@ -338,7 +343,6 @@ export default class extends React.Component {
       </Card>
 
       <Modal open={showTrigger} title="手动触发流水线"
-             width={720}
              destroyOnHidden={true}
              footer={null}
              onCancel={() => this.setState({showTrigger: false})}>
@@ -375,8 +379,7 @@ export default class extends React.Component {
             </Form.Item>
           )}
 
-          <Form.Item name="buildHostId" label="构建主机"
-                     help="可选：改用网络更好的主机构建（如拉取基础镜像慢时），留空使用系统默认构建节点">
+          <Form.Item name="buildHostId" label="构建主机">
             <Select options={buildHostOptions} allowClear showSearch optionFilterProp="label"
                     placeholder='系统默认构建节点'/>
           </Form.Item>

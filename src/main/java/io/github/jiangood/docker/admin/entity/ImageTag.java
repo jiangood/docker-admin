@@ -18,7 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 镜像标签：某个镜像仓库（repository）下的一个 tag。
+ * 镜像标签：某个镜像（repository）下的一个 tag。
  * <p>
  * 缓存镜像（Dockerfile）中声明的端口与卷，容器的端口/卷映射只允许根据这里声明的值进行配置。
  */
@@ -32,7 +32,7 @@ import java.util.List;
 public class ImageTag extends BaseEntity {
 
     /**
-     * 所属仓库的镜像url（不含 tag），关联 {@link ImageRepo#getImageUrl()}。
+     * 所属镜像的镜像url（不含 tag），关联 {@link Image#getImageUrl()}。
      */
     @Remark("镜像地址")
     @Column(nullable = false, length = 400)

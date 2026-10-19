@@ -20,7 +20,7 @@ import lombok.experimental.FieldNameConstants;
 /**
  * 项目：一个从代码仓库构建、产出带版本（tag）镜像的构建定义。
  * <p>
- * 每个项目对应一个镜像仓库地址（registry.url/namespace + name），
+ * 每个项目对应一个镜像地址（registry.url/namespace + name），
  * 构建产生的 tag 即为其镜像标签（{@link ImageTag}）。
  */
 @Remark("项目")

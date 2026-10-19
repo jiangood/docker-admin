@@ -114,7 +114,7 @@ public class ImageExportRegistry {
     }
 
     /**
-     * 某镜像仓库（或全部，imageUrl 为空时）的导出任务。
+     * 某镜像（或全部，imageUrl 为空时）的导出任务。
      */
     public List<Task> list(String imageUrl) {
         List<Task> list = new ArrayList<>();

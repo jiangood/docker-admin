@@ -91,6 +91,16 @@ public class HostController  {
     }
 
     /**
+     * 默认构建主机（全局设置）的 id，供「立即构建」弹窗默认选中；未配置时为 null。
+     */
+    @HasPermission("host:list")
+    @RequestMapping("default")
+    public AjaxResult defaultHost() {
+        Host host = service.getDefaultDockerRunner();
+        return AjaxResult.ok().data(host == null ? null : host.getId());
+    }
+
+    /**
      * 主机 Docker 引擎信息（详情页头部）。
      */
     @HasPermission("host:list")

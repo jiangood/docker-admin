@@ -32,17 +32,17 @@ menus:
   divider-app:
     pid: biz
     type: divider
-  image-repo:
+  image:
     pid: biz
-    name: 镜像仓库
-    path: /image-repo
+    name: 镜像
+    path: /image
     icon: DatabaseOutlined
     perms:
-      - { name: 查看, code: image-repo:view }
-      - { name: 导出, code: image-repo:export }
-      - { name: 删除, code: image-repo:delete }
-      - { name: 补录, code: image-repo:sync }
-  divider-image-repo:
+      - { name: 查看, code: image:view }
+      - { name: 导出, code: image:export }
+      - { name: 删除, code: image:delete }
+      - { name: 补录, code: image:sync }
+  divider-image:
     pid: biz
     type: divider
   setting:

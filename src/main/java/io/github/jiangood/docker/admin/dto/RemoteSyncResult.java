@@ -12,14 +12,14 @@ import java.util.List;
 public class RemoteSyncResult {
 
     /**
-     * 新建的镜像仓库数。
+     * 新建的镜像数。
      */
-    private int repoAdded;
+    private int imageAdded;
 
     /**
-     * 已存在跳过的镜像仓库数。
+     * 已存在跳过的镜像数。
      */
-    private int repoSkipped;
+    private int imageSkipped;
 
     /**
      * 新建的版本数。
@@ -37,7 +37,7 @@ public class RemoteSyncResult {
     private int metaFilled;
 
     /**
-     * 逐仓库/逐版本的失败原因，不中断整体同步。
+     * 逐镜像/逐版本的失败原因，不中断整体同步。
      */
     private List<String> failures = new ArrayList<>();
 

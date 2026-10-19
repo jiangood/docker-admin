@@ -3,7 +3,7 @@ package io.github.jiangood.docker.admin.service;
 import cn.hutool.core.util.StrUtil;
 import io.github.jiangood.docker.admin.dto.RemoteRegistryQuery;
 import io.github.jiangood.docker.admin.dto.RemoteSyncResult;
-import io.github.jiangood.docker.admin.entity.ImageRepo;
+import io.github.jiangood.docker.admin.entity.Image;
 import io.github.jiangood.docker.admin.entity.Registry;
 import io.github.jiangood.docker.admin.service.registry.RegistryV2Client;
 import io.github.jiangood.docker.admin.service.registry.RemoteImageMeta;
@@ -29,8 +29,8 @@ import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 
 /**
- * 从系统已配置的镜像注册中心补录镜像：把注册中心里已有的镜像仓库与版本读取到本平台的
- * {@code t_image_repo} / {@code t_image_tag}。
+ * 从系统已配置的镜像注册中心补录镜像：把注册中心里已有的镜像与版本读取到本平台的
+ * {@code t_image} / {@code t_image_tag}。
  * <p>
  * 走标准 Docker Registry V2 协议（{@link RegistryV2Client}），不需要云厂商 SDK。
  * 地址与凭据一律取 {@link RegistryService#getEffective()}——也就是「系统设置 → 镜像注册中心」
@@ -38,11 +38,11 @@ import java.util.stream.Collectors;
  * <p>
  * 两个入口对应两个页面，职责不同：
  * <ul>
- *     <li>镜像仓库<b>列表页</b>：{@link #catalog} 列出可补录的仓库，{@link #sync} 把选中的仓库连同版本一起补录；</li>
- *     <li>镜像仓库<b>详情页</b>：{@link #syncTags} 只把该仓库下新增的版本补进来，不新建仓库、不需要填地址。</li>
+ *     <li>镜像<b>列表页</b>：{@link #catalog} 列出可补录的镜像，{@link #sync} 把选中的镜像连同版本一起补录；</li>
+ *     <li>镜像<b>详情页</b>：{@link #syncTags} 只把该镜像下新增的版本补进来，不新建镜像、不需要填地址。</li>
  * </ul>
  * <p>
- * <b>能力边界：</b>各注册中心对仓库列举（{@code /v2/_catalog}）的开放程度不同。阿里云个人版不开放，
+ * <b>能力边界：</b>各注册中心对镜像列举（{@code /v2/_catalog}）的开放程度不同。阿里云个人版不开放，
  * 此时只能手工提供镜像地址；本服务对此做了降级处理，不会直接报错。
  */
 @Slf4j
@@ -51,20 +51,20 @@ import java.util.stream.Collectors;
 public class RemoteSyncService {
 
     /**
-     * 同时处理的仓库数。每个仓库内部顺序拉版本，避免并发过高打爆注册中心。
+     * 同时处理的镜像数。每个镜像内部顺序拉版本，避免并发过高打爆注册中心。
      */
     private static final int CONCURRENCY = 4;
 
-    private final ImageRepoService imageRepoService;
+    private final ImageService imageService;
 
     private final ImageTagService imageTagService;
 
     private final RegistryService registryService;
 
-    // ------------------------------------------------------------------ 列表页：从注册中心导入仓库
+    // ------------------------------------------------------------------ 列表页：从注册中心导入镜像
 
     /**
-     * 尝试列举注册中心下的全部仓库，并标出哪些已经导入过。
+     * 尝试列举注册中心下的全部镜像，并标出哪些已经导入过。
      * <p>
      * 不支持时不报错，返回 {@code supported=false} 与说明文案，由前端降级为手工输入镜像地址。
      */
@@ -77,37 +77,37 @@ public class RemoteSyncService {
         RegistryV2Client client = client(registry);
         if (!client.supportsCatalog()) {
             result.put("supported", false);
-            result.put("repos", List.of());
+            result.put("images", List.of());
             result.put("existing", List.of());
-            result.put("message", "该注册中心未开放仓库列举接口（阿里云个人版即如此），请直接输入镜像地址");
+            result.put("message", "该注册中心未开放镜像列举接口（阿里云个人版即如此），请直接输入镜像地址");
             return result;
         }
 
         String prefix = namespacePrefix(registry.getNamespace());
-        List<String> repos = client.listRepos(100, maxRepos(query));
-        List<String> filtered = repos.stream()
+        List<String> images = client.listRepos(100, maxImages(query));
+        List<String> filtered = images.stream()
                 .filter(r -> StrUtil.isBlank(prefix) || r.startsWith(prefix))
                 .toList();
         Set<String> local = filtered.isEmpty() ? Set.of() : localImages(host, prefix);
         result.put("supported", true);
-        result.put("repos", filtered);
+        result.put("images", filtered);
         result.put("existing", filtered.stream()
                 .filter(r -> local.contains(normalize(r, host).toLowerCase(Locale.ROOT)))
                 .toList());
         result.put("message", StrUtil.isBlank(prefix)
                 ? null
-                : "共 " + repos.size() + " 个仓库，命名空间 " + prefix + " 下有 " + filtered.size() + " 个");
+                : "共 " + images.size() + " 个镜像，命名空间 " + prefix + " 下有 " + filtered.size() + " 个");
         return result;
     }
 
     /**
-     * 导入镜像仓库：把选中的仓库连同其版本 upsert 进本平台。
+     * 导入镜像：把选中的镜像连同其版本 upsert 进本平台。
      */
     public RemoteSyncResult sync(RemoteRegistryQuery query) {
         Registry registry = requireRegistry(query == null ? null : query.getRegistryId());
         RemoteSyncResult result = new RemoteSyncResult();
-        for (RepoGroup group : groups(registry, query, query.isWithMeta())) {
-            persistRepo(registry, group, result);
+        for (ImageGroup group : groups(registry, query, query.isWithMeta())) {
+            persistImage(registry, group, result);
         }
         return result;
     }
@@ -115,30 +115,30 @@ public class RemoteSyncService {
     // ------------------------------------------------------------------ 详情页：只同步版本
 
     /**
-     * 同步单个仓库的版本（详情页「同步标签」）。
+     * 同步单个镜像的版本（详情页「同步标签」）。
      * <p>
-     * 仓库必须是本地已有的，跨注册中心的仓库直接拒绝——系统只认「镜像注册中心」里配的那一个。
+     * 镜像必须是本地已有的，跨注册中心的镜像直接拒绝——系统只认「镜像注册中心」里配的那一个。
      */
     public RemoteSyncResult syncTags(String imageUrl, boolean withMeta, int maxTags, String registryId) {
         Registry registry = requireRegistry(registryId);
         Assert.hasText(imageUrl, "镜像地址不能为空");
         String host = hostOf(registry);
         Assert.isTrue(StrUtil.equalsIgnoreCase(host, registryHost(imageUrl)),
-                "该镜像仓库不属于已配置的注册中心 " + host + "，无法同步版本");
+                "该镜像不属于已配置的注册中心 " + host + "，无法同步版本");
 
-        RepoGroup group = groupOf(registry, imageUrl, withMeta, maxTags);
+        ImageGroup group = groupOf(registry, imageUrl, withMeta, maxTags);
         Assert.state(StrUtil.isBlank(group.getError()), "读取远程版本失败：" + group.getError());
 
         RemoteSyncResult result = new RemoteSyncResult();
-        // 仓库本地已存在，这里只做计数，不新建
-        result.setRepoSkipped(1);
+        // 镜像本地已存在，这里只做计数，不新建
+        result.setImageSkipped(1);
         persistTags(group, result);
         return result;
     }
 
     // ------------------------------------------------------------------ 内部：读远端
 
-    private List<RepoGroup> groups(Registry registry, RemoteRegistryQuery query, boolean withMeta) {
+    private List<ImageGroup> groups(Registry registry, RemoteRegistryQuery query, boolean withMeta) {
         List<String> urls = targetUrls(query);
         if (urls.isEmpty()) {
             return List.of();
@@ -146,32 +146,32 @@ public class RemoteSyncService {
         int threads = Math.min(CONCURRENCY, urls.size());
         ExecutorService pool = Executors.newFixedThreadPool(threads);
         try {
-            List<Future<RepoGroup>> futures = new ArrayList<>(urls.size());
+            List<Future<ImageGroup>> futures = new ArrayList<>(urls.size());
             for (String url : urls) {
                 futures.add(pool.submit(() -> groupOf(registry, url, withMeta, query.getMaxTags())));
             }
-            List<RepoGroup> groups = new ArrayList<>(urls.size());
-            for (Future<RepoGroup> f : futures) {
+            List<ImageGroup> groups = new ArrayList<>(urls.size());
+            for (Future<ImageGroup> f : futures) {
                 groups.add(f.get());
             }
             return groups;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new IllegalStateException("读取远程仓库被中断", e);
+            throw new IllegalStateException("读取远程镜像被中断", e);
         } catch (Exception e) {
-            throw new IllegalStateException("读取远程仓库失败：" + e.getMessage(), e);
+            throw new IllegalStateException("读取远程镜像失败：" + e.getMessage(), e);
         } finally {
             pool.shutdown();
         }
     }
 
     /**
-     * 读取单个仓库的版本列表。
+     * 读取单个镜像的版本列表。
      */
-    private RepoGroup groupOf(Registry registry, String rawUrl, boolean withMeta, int maxTags) {
+    private ImageGroup groupOf(Registry registry, String rawUrl, boolean withMeta, int maxTags) {
         String host = hostOf(registry);
         String imageUrl = normalize(rawUrl, host);
-        RepoGroup group = new RepoGroup();
+        ImageGroup group = new ImageGroup();
         group.setImageUrl(imageUrl);
         try {
             RegistryV2Client client = client(registry);
@@ -191,7 +191,7 @@ public class RemoteSyncService {
             }
             group.setTags(list);
         } catch (Exception e) {
-            log.warn("读取远程仓库 {} 失败：{}", imageUrl, e.getMessage());
+            log.warn("读取远程镜像 {} 失败：{}", imageUrl, e.getMessage());
             group.setError(e.getMessage());
         }
         return group;
@@ -232,8 +232,8 @@ public class RemoteSyncService {
             return new ArrayList<>(urls);
         }
         // 没填地址：尝试自动列举，不支持就返回空列表（调用方给出提示）
-        Object repos = catalog(query).get("repos");
-        if (repos instanceof List<?> list) {
+        Object images = catalog(query).get("images");
+        if (images instanceof List<?> list) {
             list.stream().map(String::valueOf).forEach(urls::add);
         }
         return new ArrayList<>(urls);
@@ -242,25 +242,25 @@ public class RemoteSyncService {
     // ------------------------------------------------------------------ 内部：落库
 
     /**
-     * 补录一个仓库：本地没有才新建，连同版本一起写入。
+     * 补录一个镜像：本地没有才新建，连同版本一起写入。
      * <p>
-     * 仓库只在本地不存在时才 {@code save()}——{@code @LastModifiedDate} 会刷新 {@code updateTime}，
-     * 对已有仓库反复保存会把「最近更新」排序打乱。
+     * 镜像只在本地不存在时才 {@code save()}——{@code @LastModifiedDate} 会刷新 {@code updateTime}，
+     * 对已有镜像反复保存会把「最近更新」排序打乱。
      * <p>
      * 这里没有加 {@code @Transactional}：本方法由同类内的 {@link #sync} 直接调用，走不到 Spring 代理，
      * 加了也不生效。写入本身是逐条 {@code save()}，每条自带 Spring Data 的事务，单条失败不会脏掉整批。
      */
-    private void persistRepo(Registry registry, RepoGroup group, RemoteSyncResult result) {
+    private void persistImage(Registry registry, ImageGroup group, RemoteSyncResult result) {
         if (StrUtil.isNotBlank(group.getError())) {
             result.getFailures().add(group.getImageUrl() + "：" + group.getError());
             return;
         }
-        if (imageRepoService.findByImageUrl(group.getImageUrl()) == null) {
-            imageRepoService.upsert(group.getImageUrl(), nameOf(group.getImageUrl()),
+        if (imageService.findByImageUrl(group.getImageUrl()) == null) {
+            imageService.upsert(group.getImageUrl(), nameOf(group.getImageUrl()),
                     "REMOTE", registry.getId(), null);
-            result.setRepoAdded(result.getRepoAdded() + 1);
+            result.setImageAdded(result.getImageAdded() + 1);
         } else {
-            result.setRepoSkipped(result.getRepoSkipped() + 1);
+            result.setImageSkipped(result.getImageSkipped() + 1);
         }
         persistTags(group, result);
     }
@@ -268,7 +268,7 @@ public class RemoteSyncService {
     /**
      * 写入版本：新增的登记并补齐来源与元数据；已存在的只补缺失的元数据，不重复计数。
      */
-    private void persistTags(RepoGroup group, RemoteSyncResult result) {
+    private void persistTags(ImageGroup group, RemoteSyncResult result) {
         List<RemoteTag> tags = group.getTags();
         if (tags == null) {
             return;
@@ -342,19 +342,19 @@ public class RemoteSyncService {
     }
 
     /**
-     * 本地已存在的镜像地址（小写），用于标记哪些远程仓库已经导入过。
+     * 本地已存在的镜像地址（小写），用于标记哪些远程镜像已经导入过。
      */
     private Set<String> localImages(String host, String prefix) {
-        return imageRepoService.findAll(
-                        Spec.<ImageRepo>of().rightLike("imageUrl", StrUtil.nullToEmpty(host) + "/" + prefix),
+        return imageService.findAll(
+                        Spec.<Image>of().rightLike("imageUrl", StrUtil.nullToEmpty(host) + "/" + prefix),
                         Sort.unsorted()).stream()
-                .map(ImageRepo::getImageUrl)
+                .map(Image::getImageUrl)
                 .map(v -> v.toLowerCase(Locale.ROOT))
                 .collect(Collectors.toSet());
     }
 
-    private static int maxRepos(RemoteRegistryQuery query) {
-        return query == null ? 500 : query.getMaxRepos();
+    private static int maxImages(RemoteRegistryQuery query) {
+        return query == null ? 500 : query.getMaxImages();
     }
 
     // ------------------------------------------------------------------ 地址处理
@@ -379,7 +379,7 @@ public class RemoteSyncService {
     }
 
     /**
-     * 把用户填的地址补全成 {@code registry.host/namespace/name} 形式（与 {@code t_image_repo.imageUrl} 一致）。
+     * 把用户填的地址补全成 {@code registry.host/namespace/name} 形式（与 {@code t_image.imageUrl} 一致）。
      * <p>
      * 三种写法都能接受：{@code ztcn/nginx}、{@code registry.cn-hangzhou.aliyuncs.com/ztcn/nginx}、
      * {@code https://registry.cn-hangzhou.aliyuncs.com/ztcn/nginx}。
@@ -402,7 +402,7 @@ public class RemoteSyncService {
     }
 
     /**
-     * 从镜像地址里取仓库相对路径：{@code registry.cn-hangzhou.aliyuncs.com/ztcn/nginx} -> {@code ztcn/nginx}。
+     * 从镜像地址里取镜像相对路径：{@code registry.cn-hangzhou.aliyuncs.com/ztcn/nginx} -> {@code ztcn/nginx}。
      */
     static String repoOf(String imageUrl, String host) {
         String v = StrUtil.trimToEmpty(imageUrl);
@@ -413,7 +413,7 @@ public class RemoteSyncService {
     }
 
     /**
-     * 仓库名取地址最后一段：{@code registry.cn-hangzhou.aliyuncs.com/ztcn/nginx} -> {@code nginx}。
+     * 镜像名取地址最后一段：{@code registry.cn-hangzhou.aliyuncs.com/ztcn/nginx} -> {@code nginx}。
      */
     static String nameOf(String imageUrl) {
         String v = StrUtil.trimToEmpty(imageUrl);
@@ -444,10 +444,10 @@ public class RemoteSyncService {
     }
 
     /**
-     * 读回来的单个仓库及其版本，按 imageUrl 分组。
+     * 读回来的单个镜像及其版本，按 imageUrl 分组。
      */
     @Data
-    private static class RepoGroup {
+    private static class ImageGroup {
         private String imageUrl;
         private String error;
         private List<RemoteTag> tags;

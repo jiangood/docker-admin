@@ -261,7 +261,7 @@ public class ImageExportService {
     }
 
     /**
-     * 某镜像仓库下所有 tag 的导出状态，列表页一次拿全。
+     * 某镜像下所有 tag 的导出状态，列表页一次拿全。
      */
     public List<ImageExportTaskView> taskViews(String imageUrl) {
         List<ImageExportTaskView> list = new ArrayList<>();

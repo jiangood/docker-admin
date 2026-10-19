@@ -45,7 +45,7 @@ export default class extends React.Component {
             }
         },
         {
-            title: '镜像仓库',
+            title: '镜像',
             dataIndex: 'imageUrl',
         },
         {
@@ -161,7 +161,7 @@ export default class extends React.Component {
             this.setState({tagOptions: []})
             return
         }
-        HttpClient.get('admin/image-repo/tags', {imageUrl}).then(rs => {
+        HttpClient.get('admin/image/tags', {imageUrl}).then(rs => {
             this.setState({tagOptions: rs.data || []})
         }).catch(() => {
             this.setState({tagOptions: []})
@@ -177,7 +177,7 @@ export default class extends React.Component {
     }
 
     /**
-     * 从镜像仓库选中镜像后：应用名称为空时，用镜像名自动填充。
+     * 从镜像列表选中镜像后：应用名称为空时，用镜像名自动填充。
      */
     handleImageSelected = imageUrl => {
         if (this.formRef.current.getFieldValue('name')) {
@@ -283,7 +283,7 @@ export default class extends React.Component {
                         <Row gutter={16}>
                             <Col span={16}>
                                 <Form.Item name='imageUrl' label='镜像' required rules={[{required: true}]}
-                                           tooltip='可直接输入任意镜像地址，如 ghcr.io/jiangood/http-tunnel；也可点击右侧按钮从镜像仓库选择'>
+                                           tooltip='可直接输入任意镜像地址，如 ghcr.io/jiangood/http-tunnel；也可点击右侧按钮从镜像选择'>
                                     <FieldImageUrl onSelectImage={this.handleImageSelected}/>
                                 </Form.Item>
                             </Col>
@@ -356,7 +356,7 @@ export default class extends React.Component {
                         <Form.Item name='id' noStyle></Form.Item>
 
                         <Form.Item name='imageUrl' label='镜像' required rules={[{required: true}]}
-                                   tooltip='可直接输入任意镜像地址，如 ghcr.io/jiangood/http-tunnel；也可点击右侧按钮从镜像仓库选择'>
+                                   tooltip='可直接输入任意镜像地址，如 ghcr.io/jiangood/http-tunnel；也可点击右侧按钮从镜像选择'>
                             <FieldImageUrl/>
                         </Form.Item>
 

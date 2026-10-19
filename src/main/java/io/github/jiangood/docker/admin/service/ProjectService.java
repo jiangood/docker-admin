@@ -91,7 +91,7 @@ public class ProjectService extends BaseService<Project> {
     ImageTagService imageTagService;
 
     @Resource
-    ImageRepoService imageRepoService;
+    ImageService imageService;
 
     @Resource
     AppRepository appRepository;
@@ -604,9 +604,9 @@ public class ProjectService extends BaseService<Project> {
             pushImageCmd.exec(new DefaultCallback<>(logId)).awaitCompletion();
             fileLog.info("推送镜像结束 {}", latestImageTag);
 
-            // 登记镜像仓库与标签，并记录镜像声明的端口与卷（版本号与 latest 各登记一条）
+            // 登记镜像与标签，并记录镜像声明的端口与卷（版本号与 latest 各登记一条）
             try {
-                imageRepoService.upsert(imageUrl, project.getName(), "BUILD", registry.getId(), project.getSysOrg());
+                imageService.upsert(imageUrl, project.getName(), "BUILD", registry.getId(), project.getSysOrg());
                 imageTagService.inspect(client, imageTag, imageUrl, versionTag, buildLog.getId(), "BUILD");
                 imageTagService.inspect(client, latestImageTag, imageUrl, LATEST_TAG, buildLog.getId(), "BUILD");
             } catch (Exception e) {
@@ -695,7 +695,7 @@ public class ProjectService extends BaseService<Project> {
         }
 
         imageTagService.deleteByImageUrl(imageUrl);
-        imageRepoService.deleteByImageUrl(imageUrl);
+        imageService.deleteByImageUrl(imageUrl);
         projectRepository.deleteById(id);
     }
 

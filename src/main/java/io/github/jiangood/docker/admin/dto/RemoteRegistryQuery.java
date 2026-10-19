@@ -17,25 +17,25 @@ public class RemoteRegistryQuery {
     private String registryId;
 
     /**
-     * 要导入的镜像仓库地址列表，可写相对路径（{@code ztcn/nginx}）或完整地址
+     * 要导入的镜像地址列表，可写相对路径（{@code ztcn/nginx}）或完整地址
      * （{@code registry.cn-hangzhou.aliyuncs.com/ztcn/nginx}）。
      * <p>
-     * 为空时按注册中心列举出的全部仓库处理。
+     * 为空时按注册中心列举出的全部镜像处理。
      */
     private List<String> imageUrls;
 
     /**
-     * 是否读取镜像元数据（构建时间、大小、摘要）。每个版本需额外 2 次请求，版本多的仓库会明显变慢。
+     * 是否读取镜像元数据（构建时间、大小、摘要）。每个版本需额外 2 次请求，版本多的镜像会明显变慢。
      */
     private boolean withMeta = true;
 
     /**
-     * 自动发现仓库时最多取多少个，0 表示不限。
+     * 自动发现镜像时最多取多少个，0 表示不限。
      */
-    private int maxRepos = 500;
+    private int maxImages = 500;
 
     /**
-     * 每个仓库最多处理的版本数，0 表示不限。用于防止一次同步拉爆注册中心。
+     * 每个镜像最多处理的版本数，0 表示不限。用于防止一次同步拉爆注册中心。
      */
     private int maxTags = 100;
 
