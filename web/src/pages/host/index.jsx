@@ -1,5 +1,5 @@
 import {PlusOutlined, SearchOutlined} from '@ant-design/icons'
-import {Button, Checkbox, Form, Input, InputNumber, Modal, Popconfirm, Radio, Space} from 'antd'
+import {Button, Checkbox, Form, Input, InputNumber, Modal, Radio, Space} from 'antd'
 import React from 'react'
 
 import {PermActions, FieldBoolean, HttpClient, Page, PageUtils, ProTable} from "@jiangood/open-admin"
@@ -134,19 +134,21 @@ export default class extends React.Component {
             dataIndex: 'option',
             valueType: 'option',
             render: (_, record) => (
-                <PermActions>
-                    <Button size='small' perm='host:list'
-                            onClick={() => PageUtils.open('/host/view?id=' + record.id, '主机-' + record.name)}>
-                        查看
-                    </Button>
-                    <Button size='small' perm='host:save' onClick={() => this.handleTestRow(record)}>
-                        {this.state.testingId === record.id ? '测试中…' : '测试连接'}
-                    </Button>
-                    <Button size='small' perm='host:save' onClick={() => this.handleEdit(record)}>修改</Button>
-                    <Popconfirm perm='host:delete' title='是否确定删除主机' onConfirm={() => this.handleDelete(record)}>
-                        <Button size='small'>删除</Button>
-                    </Popconfirm>
-                </PermActions>
+                <PermActions size='small' actions={[
+                    {
+                        label: '查看', perm: 'host:list',
+                        onClick: () => PageUtils.open('/host/view?id=' + record.id, '主机-' + record.name)
+                    },
+                    {
+                        label: this.state.testingId === record.id ? '测试中…' : '测试连接',
+                        perm: 'host:save', onClick: () => this.handleTestRow(record)
+                    },
+                    {label: '修改', perm: 'host:save', onClick: () => this.handleEdit(record)},
+                    {
+                        label: '删除', perm: 'host:delete',
+                        confirm: '是否确定删除主机', onClick: () => this.handleDelete(record)
+                    },
+                ]}/>
             ),
         },
     ]
@@ -249,11 +251,9 @@ export default class extends React.Component {
                     </Form.Item>
                 )}
                 toolBarRightRender={() => {
-                    return <PermActions>
-                        <Button perm='host:save' type='primary' onClick={this.handleAdd}>
-                            <PlusOutlined/> 新增
-                        </Button>
-                    </PermActions>
+                    return <PermActions actions={[
+                        {label: '新增', perm: 'host:save', type: 'primary', icon: <PlusOutlined/>, onClick: this.handleAdd},
+                    ]}/>
                 }}
                 request={(params) => HttpClient.get('admin/host/page', params)}
                 columns={this.columns}

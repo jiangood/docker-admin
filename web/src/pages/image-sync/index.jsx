@@ -1,7 +1,7 @@
 import {Alert, AutoComplete, Button, Card, Drawer, Form, Select, Typography} from 'antd'
 import React from 'react'
 import {FileTextOutlined} from '@ant-design/icons'
-import {HttpClient, Page, PermActions} from '@jiangood/open-admin'
+import {HttpClient, Page, Perm} from '@jiangood/open-admin'
 import LogView from '../../components/LogView'
 
 /**
@@ -285,12 +285,12 @@ export default class extends React.Component {
                     </Form.Item>
 
                     <Form.Item>
-                        <PermActions>
-                            <Button perm='image-sync:sync' type='primary' htmlType='submit'
+                        <Perm code='image-sync:sync'>
+                            <Button type='primary' htmlType='submit'
                                     loading={syncing} disabled={!registryConfigured}>
                                 开始同步
                             </Button>
-                        </PermActions>
+                        </Perm>
                     </Form.Item>
                 </Form>
             </Card>

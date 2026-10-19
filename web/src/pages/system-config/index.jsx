@@ -1,6 +1,6 @@
 import {Button, Card, Form, Select, Space, message} from 'antd'
 import React from 'react'
-import {HttpClient, Page, PermActions} from '@jiangood/open-admin'
+import {HttpClient, Page} from '@jiangood/open-admin'
 
 /**
  * 系统级默认资源配置。
@@ -57,9 +57,7 @@ export default class extends React.Component {
                                 options={hosts.map(x => ({value: x.value, label: x.label}))}/>
                     </Form.Item>
                     <Space>
-                        <PermActions>
-                            <Button type='primary' htmlType='submit'>保存</Button>
-                        </PermActions>
+                        <Button type='primary' htmlType='submit'>保存</Button>
                     </Space>
                 </Form>
             </Card>

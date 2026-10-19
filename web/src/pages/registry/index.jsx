@@ -59,7 +59,9 @@ export default class extends React.Component {
         ]
         return <Page padding>
             <Card title='镜像注册中心' className='page-card'
-                  extra={<PermActions><Button perm='registry:save' type='primary' onClick={this.create}>新增注册中心</Button></PermActions>}>
+                  extra={<PermActions actions={[
+                      {label: '新增注册中心', perm: 'registry:save', type: 'primary', onClick: this.create},
+                  ]}/>}>
                 <Table rowKey='id' loading={loading} dataSource={rows} columns={columns} pagination={false}/>
             </Card>
             <Modal title={editing ? '编辑注册中心' : '新增注册中心'} open={modalOpen} destroyOnHidden

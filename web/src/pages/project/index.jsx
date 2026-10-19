@@ -1,5 +1,5 @@
 import {PlusOutlined} from '@ant-design/icons'
-import {Button, Form, Input, Modal, Popconfirm, Select} from 'antd'
+import {Form, Input, Modal, Select} from 'antd'
 import React from 'react'
 
 import {
@@ -91,13 +91,13 @@ export default class extends React.Component {
             dataIndex: 'option',
             valueType: 'option',
             render: (_, record) => (
-                <PermActions>
-                    <Button size='small' perm='project:save' onClick={() => this.handleEdit(record)}> 修改 </Button>
-                    <Popconfirm perm='project:delete' title='是否确定删除项目'
-                                onConfirm={() => this.handleDelete(record)}>
-                        <Button size='small'>删除</Button>
-                    </Popconfirm>
-                </PermActions>
+                <PermActions size='small' actions={[
+                    {label: '修改', perm: 'project:save', onClick: () => this.handleEdit(record)},
+                    {
+                        label: '删除', perm: 'project:delete',
+                        confirm: '是否确定删除项目', onClick: () => this.handleDelete(record)
+                    },
+                ]}/>
             ),
         },
     ]
@@ -160,12 +160,10 @@ export default class extends React.Component {
         return <Page padding>
             <ProTable
                 actionRef={this.tableRef}
-                toolBarRender={() => {
-                    return <PermActions>
-                        <Button perm='project:save' type='primary' onClick={this.handleAdd}>
-                            <PlusOutlined/> 新增
-                        </Button>
-                    </PermActions>
+                toolBarRightRender={() => {
+                    return <PermActions actions={[
+                        {label: '新增', perm: 'project:save', type: 'primary', icon: <PlusOutlined/>, onClick: this.handleAdd},
+                    ]}/>
                 }}
                 searchFormRender={() => (
                     <Form.Item label='组织机构' name='orgId'>

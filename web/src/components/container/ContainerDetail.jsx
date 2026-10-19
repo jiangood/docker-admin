@@ -1,5 +1,5 @@
 import React from "react";
-import {Alert, Button, Popconfirm, Space, Spin, Tabs, Tag, Typography} from "antd";
+import {Alert, Button, Space, Spin, Tabs, Tag, Typography} from "antd";
 import {ReloadOutlined} from "@ant-design/icons";
 import {HttpClient, PermActions} from "@jiangood/open-admin";
 import ContainerInfo from "./ContainerInfo";
@@ -99,18 +99,15 @@ export default class extends React.Component {
             </Space>
             <Space>
                 {extra}
-                <PermActions>
-                    <Button perm='container:operate' size='small' disabled={running}
-                            onClick={() => this.action('start')}>启动</Button>
-                    <Button perm='container:operate' size='small' disabled={!running}
-                            onClick={() => this.action('stop')}>停止</Button>
-                    <Button perm='container:operate' size='small' disabled={!running}
-                            onClick={() => this.action('restart')}>重启</Button>
-                    <Popconfirm perm='container:operate' title='确定删除该容器？删除后不可恢复'
-                                onConfirm={() => this.action('remove')}>
-                        <Button perm='container:operate' size='small' danger>删除</Button>
-                    </Popconfirm>
-                </PermActions>
+                <PermActions size='small' actions={[
+                    {label: '启动', perm: 'container:operate', disabled: running, onClick: () => this.action('start')},
+                    {label: '停止', perm: 'container:operate', disabled: !running, onClick: () => this.action('stop')},
+                    {label: '重启', perm: 'container:operate', disabled: !running, onClick: () => this.action('restart')},
+                    {
+                        label: '删除', perm: 'container:operate', danger: true,
+                        confirm: '确定删除该容器？删除后不可恢复', onClick: () => this.action('remove')
+                    },
+                ]}/>
                 <Button size='small' icon={<ReloadOutlined/>} onClick={this.load}>刷新</Button>
             </Space>
         </div>

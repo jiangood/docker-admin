@@ -1,6 +1,6 @@
 import React from "react";
 import {AutoComplete, Button, Divider, Form, Input, message, Modal, Skeleton, Switch, Typography} from "antd";
-import {FieldRemoteSelect, HttpClient, PageUtils, PermActions} from "@jiangood/open-admin";
+import {FieldRemoteSelect, HttpClient, PageUtils, Perm} from "@jiangood/open-admin";
 import LinkButton from "../../components/LinkButton";
 
 /**
@@ -193,10 +193,10 @@ export default class extends React.Component {
                         <FieldRemoteSelect url='admin/host/options' placeholder='请选择目标主机' style={{width: 300}}/>
                     </Form.Item>
 
-                    <PermActions>
-                        <Button danger type="primary" htmlType='submit' perm='app:migrate'
+                    <Perm code='app:migrate'>
+                        <Button danger type="primary" htmlType='submit'
                                 disabled={tunnelOn}>迁移应用</Button>
-                    </PermActions>
+                    </Perm>
                 </Form>
             </div>
 

@@ -143,15 +143,15 @@ export default class extends React.Component {
         {
             title: '操作', dataIndex: 'option',
             render: (_, row) => (
-                <PermActions>
-                    <Button perm='tunnel:save' size='small' type='link'
-                            loading={this.state.testingId === row.id} disabled={!row.configured}
-                            onClick={() => this.testClient(row)}>测试连接</Button>
-                    <Button perm='tunnel:save' size='small' type='link'
-                            onClick={() => this.openClientModal(row)}>编辑</Button>
-                    <Button perm='tunnel:save' size='small' type='link' danger
-                            onClick={() => this.deleteClient(row)}>删除</Button>
-                </PermActions>
+                <PermActions size='small' actions={[
+                    {
+                        label: this.state.testingId === row.id ? '测试中…' : '测试连接',
+                        perm: 'tunnel:save', type: 'link', disabled: !row.configured,
+                        onClick: () => this.testClient(row)
+                    },
+                    {label: '编辑', perm: 'tunnel:save', type: 'link', onClick: () => this.openClientModal(row)},
+                    {label: '删除', perm: 'tunnel:save', type: 'link', danger: true, onClick: () => this.deleteClient(row)},
+                ]}/>
             ),
         },
     ]
@@ -166,8 +166,12 @@ export default class extends React.Component {
                     </Typography.Text>
                     <Space>
                         <Button size='small' icon={<ReloadOutlined/>} onClick={this.loadClients}>刷新</Button>
-                        <Button perm='tunnel:save' size='small' type='primary' icon={<PlusOutlined/>}
-                                onClick={() => this.openClientModal(null)}>新增客户端</Button>
+                        <PermActions size='small' actions={[
+                            {
+                                label: '新增客户端', perm: 'tunnel:save', type: 'primary',
+                                icon: <PlusOutlined/>, onClick: () => this.openClientModal(null)
+                            },
+                        ]}/>
                     </Space>
                 </div>
 

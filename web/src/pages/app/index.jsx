@@ -88,9 +88,9 @@ export default class extends React.Component {
             dataIndex: 'option',
             valueType: 'option',
             render: (_, record) => (
-                <PermActions>
-                    <Button size='small' perm='app:save' onClick={() => this.handleEdit(record)}>修改</Button>
-                </PermActions>
+                <PermActions size='small' actions={[
+                    {label: '修改', perm: 'app:save', onClick: () => this.handleEdit(record)},
+                ]}/>
             ),
         },
 
@@ -238,13 +238,11 @@ export default class extends React.Component {
             <Page padding>
                 <ProTable
                     actionRef={this.tableRef}
-                    toolBarRender={() => [
-                        <PermActions key="add">
-                            <Button type="primary" perm='app:deploy' onClick={this.handleAdd}>
-                                新增应用
-                            </Button>
-                        </PermActions>
-                    ]}
+                    toolBarRightRender={() => (
+                        <PermActions actions={[
+                            {label: '新增应用', perm: 'app:deploy', type: 'primary', onClick: this.handleAdd},
+                        ]}/>
+                    )}
                     searchFormRender={() => (
                         <>
                             <Form.Item label='组织机构' name='orgId'>

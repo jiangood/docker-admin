@@ -1,6 +1,6 @@
 import {Button, Col, Descriptions, Divider, Form, Input, Row, Select, Space, Spin, Switch, Tag, Typography} from 'antd';
 import React from 'react';
-import {HttpClient, PermActions} from '@jiangood/open-admin';
+import {HttpClient, Perm} from '@jiangood/open-admin';
 
 /**
  * 应用隧道：在应用详情页显式选择隧道客户端，完整域名 = 域名前缀 + "." + 客户端域名。
@@ -158,13 +158,13 @@ export default class extends React.Component {
                 </Form.Item>
 
                 <Form.Item style={{marginBottom: 0}}>
-                    <PermActions>
-                        <Button perm='app:tunnel' type='primary' loading={saving}
+                    <Perm code='app:tunnel'>
+                        <Button type='primary' loading={saving}
                                 disabled={!canSave}
                                 onClick={() => this.save(true)}>
                             {enabled ? '保存' : '保存并启用'}
                         </Button>
-                    </PermActions>
+                    </Perm>
                 </Form.Item>
             </Form>
 

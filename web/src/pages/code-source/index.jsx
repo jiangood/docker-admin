@@ -1,5 +1,5 @@
 import {PlusOutlined, SearchOutlined} from '@ant-design/icons'
-import {Button, Form, Input, Modal, Popconfirm} from 'antd'
+import {Form, Input, Modal} from 'antd'
 import React from 'react'
 
 import {DictUtils, FieldDictSelect, HttpClient, Page, PermActions, ProTable} from '@jiangood/open-admin'
@@ -73,12 +73,13 @@ export default class extends React.Component {
             valueType: 'option',
             width: 120,
             render: (_, record) => (
-                <PermActions>
-                    <Button size='small' perm='code-source:save' onClick={() => this.handleEdit(record)}>修改</Button>
-                    <Popconfirm perm='code-source:delete' title='是否确定删除该代码源' onConfirm={() => this.handleDelete(record)}>
-                        <Button size='small'>删除</Button>
-                    </Popconfirm>
-                </PermActions>
+                <PermActions size='small' actions={[
+                    {label: '修改', perm: 'code-source:save', onClick: () => this.handleEdit(record)},
+                    {
+                        label: '删除', perm: 'code-source:delete',
+                        confirm: '是否确定删除该代码源', onClick: () => this.handleDelete(record)
+                    },
+                ]}/>
             ),
         },
     ]
@@ -174,11 +175,9 @@ export default class extends React.Component {
                     </Form.Item>
                 )}
                 toolBarRightRender={() => (
-                    <PermActions>
-                        <Button perm='code-source:save' type='primary' onClick={this.handleAdd}>
-                            <PlusOutlined/> 新增
-                        </Button>
-                    </PermActions>
+                    <PermActions actions={[
+                        {label: '新增', perm: 'code-source:save', type: 'primary', icon: <PlusOutlined/>, onClick: this.handleAdd},
+                    ]}/>
                 )}
                 request={(params) => HttpClient.get('admin/code-source/page', params)}
                 columns={this.columns}

@@ -1,4 +1,4 @@
-import {Button, Form, Input, Popconfirm, Tag} from 'antd'
+import {Form, Input, Tag} from 'antd'
 import {CloudSyncOutlined, SearchOutlined} from '@ant-design/icons'
 import React from 'react'
 
@@ -69,12 +69,12 @@ export default class extends React.Component {
             dataIndex: 'option',
             valueType: 'option',
             render: (_, record) => (
-                <PermActions>
-                    <Popconfirm perm='image:delete' title='是否确定删除该镜像及其标签'
-                                onConfirm={() => this.handleDelete(record)}>
-                        <Button size='small'>删除</Button>
-                    </Popconfirm>
-                </PermActions>
+                <PermActions size='small' actions={[
+                    {
+                        label: '删除', perm: 'image:delete',
+                        confirm: '是否确定删除该镜像及其标签', onClick: () => this.handleDelete(record)
+                    },
+                ]}/>
             ),
         },
     ]
@@ -91,12 +91,12 @@ export default class extends React.Component {
                 actionRef={this.tableRef}
                 searchInline
                 toolBarRightRender={() => (
-                    <PermActions>
-                        <Button perm='image:sync' icon={<CloudSyncOutlined/>}
-                                onClick={() => this.remoteModalRef.current.show()}>
-                            补录镜像
-                        </Button>
-                    </PermActions>
+                    <PermActions actions={[
+                        {
+                            label: '补录镜像', perm: 'image:sync', icon: <CloudSyncOutlined/>,
+                            onClick: () => this.remoteModalRef.current.show()
+                        },
+                    ]}/>
                 )}
                 searchFormRender={() => (
                     <Form.Item name='name' noStyle>

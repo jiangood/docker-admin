@@ -1,7 +1,7 @@
 import {Alert, Button, Card, Descriptions, Drawer, Popconfirm, Space, Spin, Table, Tabs, Typography} from 'antd'
 import {CloudSyncOutlined, DownloadOutlined} from '@ant-design/icons'
 import React from 'react'
-import {HttpClient, Page, PageUtils, PermActions, UrlUtils} from "@jiangood/open-admin"
+import {HttpClient, Page, PageUtils, Perm, PermActions, UrlUtils} from "@jiangood/open-admin"
 import LogView from '../../components/LogView'
 import LinkButton from '../../components/LinkButton'
 import RemoteTagSyncModal from '../../components/RemoteTagSyncModal'
@@ -239,12 +239,12 @@ export default class extends React.Component {
         return <Page padding>
             <Card className='mb-4' title={image.imageUrl}
                    extra={
-                       <PermActions>
-                           <Button perm='image:sync' icon={<CloudSyncOutlined/>}
-                                   onClick={() => this.tagSyncModalRef.current.show(image, tags.length)}>
-                               同步标签
-                           </Button>
-                       </PermActions>
+                       <PermActions actions={[
+                           {
+                               label: '同步标签', perm: 'image:sync', icon: <CloudSyncOutlined/>,
+                               onClick: () => this.tagSyncModalRef.current.show(image, tags.length)
+                           },
+                       ]}/>
                    }>
                 <Descriptions>
                     <Descriptions.Item label='镜像名'>{image.name}</Descriptions.Item>
@@ -292,24 +292,23 @@ export default class extends React.Component {
                                     render: (_, record) => {
                                         const t = this.taskOf(record.imageUrl, record.tag)
                                         const running = !!t && t.status === 'RUNNING'
-                                        return <PermActions>
-                                            <Space size={4}>
-                                                <Button perm='image:export' size='small'
-                                                        loading={running}
+                                        return <Space size={4}>
+                                            <Perm code='image:export'>
+                                                <Button size='small' loading={running}
                                                         onClick={() => this.openExport(record)}>
                                                     {running ? '导出中' : '导出'}
                                                 </Button>
-                                                {t && t.ready
-                                                    ? <Typography.Text type='success' style={{fontSize: 12}}>
-                                                        可下载 {formatBytes(t.size)}
+                                            </Perm>
+                                            {t && t.ready
+                                                ? <Typography.Text type='success' style={{fontSize: 12}}>
+                                                    可下载 {formatBytes(t.size)}
+                                                  </Typography.Text>
+                                                : t && t.status === 'FAILED'
+                                                    ? <Typography.Text type='danger' style={{fontSize: 12}}>
+                                                        失败
                                                       </Typography.Text>
-                                                    : t && t.status === 'FAILED'
-                                                        ? <Typography.Text type='danger' style={{fontSize: 12}}>
-                                                            失败
-                                                          </Typography.Text>
-                                                        : null}
-                                            </Space>
-                                        </PermActions>
+                                                    : null}
+                                        </Space>
                                     },
                                 },
                             ]}
