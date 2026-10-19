@@ -22,7 +22,7 @@ public class SystemConfigController {
         return AjaxResult.ok().data(service.getDefaults());
     }
 
-    @Log("系统配置-保存默认资源")
+    @Log("全局设置-保存默认资源")
     @HasPermission("system-config:save")
     @PostMapping("defaults")
     public AjaxResult saveDefaults(@RequestBody DefaultsRequest request) {

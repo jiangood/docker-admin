@@ -70,14 +70,6 @@ menus:
     perms:
       - {name: 查看, code: registry:view}
       - {name: 保存, code: registry:save}
-  setting-system-config:
-    pid: setting
-    name: 资料
-    path: /system-config
-    icon: SettingOutlined
-    perms:
-      - {name: 查看, code: system-config:view}
-      - {name: 保存, code: system-config:save}
   setting-code-source:
     pid: setting
     name: 代码源
@@ -87,6 +79,14 @@ menus:
       - {name: 查看, code: code-source:view}
       - {name: 保存, code: code-source:save}
       - {name: 删除, code: code-source:delete}
+  setting-system-config:
+    pid: setting
+    name: 全局设置
+    path: /system-config
+    icon: ControlOutlined
+    perms:
+      - {name: 查看, code: system-config:view}
+      - {name: 保存, code: system-config:save}
   tool:
     pid: biz
     name: 辅助工具

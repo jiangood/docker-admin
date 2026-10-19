@@ -6,13 +6,10 @@ import {HttpClient, Page, PermActions} from '@jiangood/open-admin'
  * 系统级默认资源配置。
  */
 export default class extends React.Component {
-    state = {loading: true, registries: [], hosts: []}
-    formRef = React.createRef()
+    state = {loading: true, registries: [], hosts: [], values: {}}
 
-    componentDidMount() {
-        this.load()
-    }
-
+    // 回填走 state + initialValues：Card 的 loading 会把表单卸载重建，
+    // 在 setState 回调里 setFieldsValue 时表单尚未挂载，数据会丢失。
     onShow() {
         this.load()
     }
@@ -25,8 +22,12 @@ export default class extends React.Component {
                 HttpClient.get('admin/registry/options'),
                 HttpClient.get('admin/host/options')
             ])
-            this.setState({loading: false, registries: registries.data || [], hosts: hosts.data || []})
-            this.formRef.current?.setFieldsValue(defaults.data || {})
+            this.setState({
+                loading: false,
+                registries: registries.data || [],
+                hosts: hosts.data || [],
+                values: defaults.data || {}
+            })
         } catch (e) {
             this.setState({loading: false})
         }
@@ -41,10 +42,10 @@ export default class extends React.Component {
     }
 
     render() {
-        const {loading, registries, hosts} = this.state
+        const {loading, registries, hosts, values} = this.state
         return <Page padding>
-            <Card title='系统配置' loading={loading} className='page-card'>
-                <Form ref={this.formRef} labelCol={{flex: '140px'}} onFinish={this.onFinish}>
+            <Card title='全局设置' loading={loading} className='page-card'>
+                <Form initialValues={values} labelCol={{flex: '140px'}} onFinish={this.onFinish}>
                     <Form.Item label='默认镜像注册中心' name='defaultRegistryId'
                                tooltip='未指定注册中心的镜像操作使用此默认值；留空表示不设置默认注册中心'>
                         <Select allowClear showSearch optionFilterProp='label' placeholder='选择默认注册中心'

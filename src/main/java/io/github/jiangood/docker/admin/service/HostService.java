@@ -35,7 +35,7 @@ public class HostService extends BaseService<Host> {
         if (StrUtil.isNotBlank(configuredId)) {
             return hostRepository.findById(configuredId)
                     .orElseThrow(() -> new io.github.jiangood.openadmin.util.BusinessException(
-                            "系统默认构建主机不存在，请到设置-资料重新选择"));
+                            "系统默认构建主机不存在，请到设置-全局设置重新选择"));
         }
         Spec<Host> q = Spec.of();
         q.eq(Host.Fields.isRunner, true);
@@ -46,7 +46,7 @@ public class HostService extends BaseService<Host> {
     public void deleteHost(String id) {
         Assert.hasText(id, "主机 ID 不能为空");
         if (id.equals(systemConfigService.getDefaultBuildHostId())) {
-            throw new io.github.jiangood.openadmin.util.BusinessException("该主机是系统默认构建主机，请先在设置-资料中更换默认构建主机");
+            throw new io.github.jiangood.openadmin.util.BusinessException("该主机是系统默认构建主机，请先在设置-全局设置中更换默认构建主机");
         }
         deleteById(id);
     }
