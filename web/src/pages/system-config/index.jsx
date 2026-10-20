@@ -1,4 +1,4 @@
-import {Button, Card, Form, Select, Space, message} from 'antd'
+import {Button, Card, Form, Select, Space} from 'antd'
 import React from 'react'
 import {HttpClient, Page} from '@jiangood/open-admin'
 
@@ -6,7 +6,7 @@ import {HttpClient, Page} from '@jiangood/open-admin'
  * 系统级默认资源配置。
  */
 export default class extends React.Component {
-    state = {loading: true, registries: [], hosts: [], values: {}}
+    state = {loading: true, saving: false, registries: [], hosts: [], values: {}}
 
     // 回填走 state + initialValues：Card 的 loading 会把表单卸载重建，
     // 在 setState 回调里 setFieldsValue 时表单尚未挂载，数据会丢失。
@@ -33,16 +33,20 @@ export default class extends React.Component {
         }
     }
 
-    onFinish = values => {
-        const hide = message.loading('保存中…', 0)
-        HttpClient.post('admin/system-config/defaults', values)
-            .then(() => message.success('保存成功'))
-            .then(() => this.load())
-            .finally(hide)
+    // 保存状态只用按钮 loading 表达：HttpClient 已自动弹出后端的 msg，
+    // 不用 message.loading，避免它被后续刷新拖着不关闭。
+    onFinish = async values => {
+        this.setState({saving: true})
+        try {
+            const rs = await HttpClient.post('admin/system-config/defaults', values)
+            this.setState({values: rs.data || values})
+        } finally {
+            this.setState({saving: false})
+        }
     }
 
     render() {
-        const {loading, registries, hosts, values} = this.state
+        const {loading, saving, registries, hosts, values} = this.state
         return <Page padding>
             <Card title='全局设置' loading={loading} className='page-card'>
                 <Form initialValues={values} labelCol={{flex: '140px'}} onFinish={this.onFinish}>
@@ -57,7 +61,7 @@ export default class extends React.Component {
                                 options={hosts.map(x => ({value: x.value, label: x.label}))}/>
                     </Form.Item>
                     <Space>
-                        <Button type='primary' htmlType='submit'>保存</Button>
+                        <Button type='primary' htmlType='submit' loading={saving}>保存</Button>
                     </Space>
                 </Form>
             </Card>
