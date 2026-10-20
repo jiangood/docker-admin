@@ -1,3 +1,4 @@
+import {SearchOutlined} from '@ant-design/icons'
 import {Alert, Button, Form, Input, Modal, Select, Space} from 'antd'
 import dayjs from 'dayjs'
 import React from 'react'
@@ -104,28 +105,30 @@ export default class CodeSourceProjectPicker extends React.Component {
                       width={800}
                       destroyOnHidden>
             <Space orientation='vertical' style={{width: '100%'}}>
-                <Space>
-                    <span>代码源</span>
-                    <Select style={{minWidth: 260}}
-                            value={selectedId}
-                            onChange={this.handleSourceChange}
-                            options={codeSources.map(o => ({value: o.value, label: o.label}))}
-                            placeholder='请选择代码源'/>
-                </Space>
-
                 {selectedType && selectedType !== 'GITLAB' &&
                     <Alert type='info' showIcon title='该类型暂不支持自动列出仓库，请关闭后手动填写仓库地址'/>}
 
-                <ProTable
-                    actionRef={this.tableRef}
-                    request={this.request}
-                    columns={this.columns}
-                    searchFormRender={() => (
-                        <Form.Item label='关键字' name='search'>
-                            <Input placeholder='仓库名关键字'/>
-                        </Form.Item>
-                    )}
-                />
+                {/* 搜索栏内联到表格工具栏：代码源在前，关键字在后；800px 弹窗里放宽输入框宽度 */}
+                <div style={{'--oa-search-inline-width': '320px', width: '100%'}}>
+                    <ProTable
+                        actionRef={this.tableRef}
+                        request={this.request}
+                        columns={this.columns}
+                        searchInline
+                        searchFormRender={() => (
+                            <>
+                                <Select style={{width: 220}}
+                                        value={selectedId}
+                                        onChange={this.handleSourceChange}
+                                        options={codeSources.map(o => ({value: o.value, label: o.label}))}
+                                        placeholder='请选择代码源'/>
+                                <Form.Item name='search' noStyle>
+                                    <Input prefix={<SearchOutlined/>} placeholder='仓库名关键字' allowClear/>
+                                </Form.Item>
+                            </>
+                        )}
+                    />
+                </div>
             </Space>
         </Modal>
     }
