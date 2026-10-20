@@ -19,7 +19,6 @@ import io.github.jiangood.openadmin.framework.data.specification.Spec;
 import io.github.jiangood.openadmin.framework.auth.LoginTool;
 import io.github.jiangood.openadmin.util.BusinessException;
 import jakarta.annotation.Resource;
-import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
@@ -34,6 +33,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.io.IOException;
@@ -122,6 +122,9 @@ public class AppController {
     /**
      * 单次部署的日志正文（已结束的部署记录），运行中的日志由 WebSocket 实时 tail。
      * <p>
+     * 按 {@code offset}/{@code length} 增量返回 {@code {content, nextOffset, eof}}，
+     * 前端用框架 {@code LogViewer} 按偏移续读，长日志也不会每次重读整文件。
+     * <p>
      * 以前直接复用 open-admin 的 {@code admin/sys/log/{key}}，但该接口是「通用文件日志」：
      * 权限按日志 key 前缀注册、返回体也已改为增量 JSON，与本模块的部署日志语义对不上。
      * 部署日志属于业务资源，改由本模块提供读取接口，权限沿用 {@code app:view}。
@@ -130,17 +133,16 @@ public class AppController {
      */
     @HasPermission("app:view")
     @RequestMapping("deployLog/{id}")
-    public void deployLog(@PathVariable String id, HttpServletResponse response) throws IOException {
+    public AjaxResult deployLog(@PathVariable String id,
+                                @RequestParam(defaultValue = "0") long offset,
+                                @RequestParam(defaultValue = "0") int length) throws IOException {
         Assert.isTrue(LOG_ID_PATTERN.matcher(id).matches(), "非法的部署日志标识");
-        DeployLog deployLog = deployLogRepository.findById(id).orElse(null);
-        if (deployLog == null) {
-            response.setStatus(HttpServletResponse.SC_NOT_FOUND);
-            return;
+        if (!deployLogRepository.existsById(id)) {
+            return AjaxResult.err(404, "部署记录不存在");
         }
 
-        response.setCharacterEncoding("utf-8");
-        response.setContentType("text/plain; charset=utf-8");
-        response.getWriter().print(fileLogService.readLogContent(id));
+        // 返回 {content, nextOffset, eof}，与框架 LogViewer 的增量读取契约一致
+        return AjaxResult.ok().data(fileLogService.readChunk(id, offset, length));
     }
 
     /**

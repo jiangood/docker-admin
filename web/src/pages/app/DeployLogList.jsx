@@ -5,7 +5,7 @@ import {
     Loading3QuartersOutlined
 } from '@ant-design/icons';
 import React from 'react';
-import {DateUtils, getToken, HttpClient} from '@jiangood/open-admin';
+import {DateUtils, getToken, HttpClient, LogViewer} from '@jiangood/open-admin';
 import LogView from '../../components/LogView';
 
 /** 部署进行中时的列表刷新间隔（毫秒）：新部署记录是 @Async 里才落库的，需要等它出现 */
@@ -34,8 +34,8 @@ function statusOf(log) {
  * 每次部署一个独立日志文件（logId = 部署记录 id），不再把所有部署混在一起。
  * <p>
  * 进行中的部署走 WebSocket 实时 tail（与构建、镜像同步日志一致），任务结束后 WS 会补发
- * 剩余内容并断开，随后列表切换为一次性 HTTP 读取。部署记录由 @Async 任务在部署开始时才
- * 落库，因此列表需要轮询，直到最新记录从「部署中」变成终态。
+ * 剩余内容并断开，随后列表切换为框架 LogViewer 的增量 HTTP 读取。
+ * 部署记录由 @Async 任务在部署开始时才落库，因此列表需要轮询，直到最新记录从「部署中」变成终态。
  */
 export default class extends React.Component {
 
@@ -183,7 +183,7 @@ export default class extends React.Component {
             return <Alert type='warning' showIcon
                           title='该次部署为历史记录，没有按次拆分的独立日志'/>
         }
-        return <LogView key={key} url={'/admin/app/deployLog/' + key} websocket={false}/>
+        return <LogViewer key={key} url={'admin/app/deployLog/' + key} running={false}/>
     }
 
 }
