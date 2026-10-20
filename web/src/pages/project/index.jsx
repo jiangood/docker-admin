@@ -95,6 +95,7 @@ export default class extends React.Component {
             title: '操作',
             dataIndex: 'option',
             valueType: 'option',
+            fixed: 'right',
             render: (_, record) => (
                 <PermActions size='small' actions={[
                     {label: '修改', perm: 'project:save', onClick: () => this.handleEdit(record)},
