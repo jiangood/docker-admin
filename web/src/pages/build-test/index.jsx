@@ -117,17 +117,18 @@ export default class extends React.Component {
     }
 
     /**
-     * 克隆 Git 仓库并读取根目录下的 Dockerfile，回填到编辑框。
+     * 克隆 Git 仓库并读取构建上下文目录下的 Dockerfile，回填到编辑框。
      */
     readRepositoryDockerfile = e => {
         e.preventDefault()
-        const gitUrl = this.formRef.current?.getFieldValue('gitUrl')
+        const form = this.formRef.current
+        const gitUrl = form?.getFieldValue('gitUrl')
         if (!gitUrl) {
             message.warning('请先填写 Git 仓库地址')
             return
         }
         this.setState({reading: true})
-        HttpClient.get('admin/build-test/read-dockerfile', {gitUrl}).then(rs => {
+        HttpClient.get('admin/build-test/read-dockerfile', {gitUrl, context: form?.getFieldValue('context')}).then(rs => {
             this.formRef.current?.setFieldsValue({dockerfileText: rs.data})
             message.success('已读取仓库中的 Dockerfile')
         }).finally(() => this.setState({reading: false}))
@@ -161,6 +162,7 @@ export default class extends React.Component {
             dockerfileText: values.dockerfileText,
             commitMessage: writeValues?.commitMessage,
             branch: writeValues?.branch,
+            context: values.context,
         }).then(() => {
             this.setState({writeOpen: false})
         }).finally(() => this.setState({writing: false}))
@@ -179,7 +181,7 @@ export default class extends React.Component {
                               extra={
                                   <Tooltip placement='left' title={
                                       <>
-                                          <div>以 Git 仓库为构建上下文，粘贴的 Dockerfile 会覆盖仓库中的同名文件。</div>
+                                          <div>以 Git 仓库为构建上下文（可配置子目录），粘贴的 Dockerfile 会覆盖该目录中的同名文件。</div>
                                           <div className='mt-1'>使用「设置-主机管理」中标记为构建节点的主机进行本地构建，不推送到注册中心。</div>
                                       </>
                                   }>
@@ -207,6 +209,11 @@ export default class extends React.Component {
                                            rules={[{required: true, message: '请输入 Git 仓库地址'}]}
                                            tooltip='可直接输入地址，也可从「设置-代码源」的仓库列表中选择；凭据按地址主机自动匹配代码源'>
                                     <FieldGitRepository/>
+                                </Form.Item>
+
+                                <Form.Item label='构建上下文' name='context'
+                                           tooltip='发给 Docker 的构建目录，决定 COPY 的根目录与 .dockerignore 的生效位置；粘贴的 Dockerfile 会写入该目录'>
+                                    <Input placeholder='留空 = 仓库根目录，例如 admin'/>
                                 </Form.Item>
 
                                 <Form.Item label='构建主机' name='hostId' tooltip='留空使用系统默认构建主机'>

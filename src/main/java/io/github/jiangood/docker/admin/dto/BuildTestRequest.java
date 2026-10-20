@@ -3,7 +3,7 @@ package io.github.jiangood.docker.admin.dto;
 import lombok.Data;
 
 /**
- * 构建测试请求：以 Git 仓库为上下文，用粘贴的 Dockerfile 覆盖后，在默认构建节点本地构建镜像。
+ * 构建测试请求：以 Git 仓库（或指定子目录）为构建上下文，用粘贴的 Dockerfile 覆盖后，在默认构建节点本地构建镜像。
  */
 @Data
 public class BuildTestRequest {
@@ -18,6 +18,12 @@ public class BuildTestRequest {
      * Git 仓库地址，凭据按地址主机自动匹配代码源。
      */
     String gitUrl;
+
+    /**
+     * 构建上下文：相对代码仓库根目录的目录，留空表示仓库根目录。
+     * 粘贴的 Dockerfile 会写入该目录下的 Dockerfile 文件，并以其作为构建上下文。
+     */
+    String context;
 
     /**
      * 粘贴的 Dockerfile 内容，覆盖仓库中同路径文件。

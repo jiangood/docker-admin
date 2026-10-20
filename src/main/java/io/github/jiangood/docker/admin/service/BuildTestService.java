@@ -9,6 +9,7 @@ import com.github.dockerjava.api.model.BuildResponseItem;
 import io.github.jiangood.docker.admin.dto.BuildTestRequest;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.entity.Registry;
+import io.github.jiangood.docker.admin.util.BuildContextUtils;
 import io.github.jiangood.docker.admin.websocket.TaskLogRegistry;
 import io.github.jiangood.docker.base.FileLog;
 import io.github.jiangood.docker.base.tool.GitCredential;
@@ -32,7 +33,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * 构建测试：以 Git 仓库为构建上下文，用粘贴的 Dockerfile 覆盖后，在默认构建节点上本地构建镜像。
+ * 构建测试：以 Git 仓库（或指定子目录）为构建上下文，用粘贴的 Dockerfile 覆盖后，在默认构建节点上本地构建镜像。
  * <p>
  * 不落库、不推送；构建过程写入 {@code /data/logs/{logId}.log}，前端通过 WebSocket 实时查看。
  */
@@ -43,11 +44,19 @@ public class BuildTestService {
     private static final Logger fileLog = FileLog.logger();
 
     /**
-     * 覆盖仓库中的 Dockerfile 相对路径。
+     * 覆盖仓库中的 Dockerfile 文件名，路径相对构建上下文目录。
      */
     private static final String DOCKERFILE = "Dockerfile";
 
     private static final String DEFAULT_TARGET_IMAGE = "temp:latest";
+
+    /**
+     * 构建上下文下的 Dockerfile 相对仓库根目录的路径。
+     */
+    private static String dockerfilePath(String context) {
+        String dir = BuildContextUtils.normalize(context);
+        return StrUtil.isEmpty(dir) ? DOCKERFILE : dir + "/" + DOCKERFILE;
+    }
 
     @Resource
     HostService hostService;
@@ -114,17 +123,18 @@ public class BuildTestService {
     }
 
     /**
-     * 读取 Git 仓库根目录下的 Dockerfile 内容，供构建测试页面回填编辑。
+     * 读取 Git 仓库中构建上下文目录下的 Dockerfile 内容，供构建测试页面回填编辑。
      */
-    public String readDockerfile(String gitUrl) {
+    public String readDockerfile(String gitUrl, String context) {
         String url = StrUtil.trim(gitUrl);
         Assert.hasText(url, "请先填写 Git 仓库地址");
 
+        String path = dockerfilePath(context);
         try {
             GitCredential credential = codeSourceService.credentialByGitUrl(url);
-            String content = GitTool.readTextFile(url, credential, DOCKERFILE);
+            String content = GitTool.readTextFile(url, credential, path);
             if (content == null) {
-                throw new BusinessException("仓库根目录未找到 " + DOCKERFILE + " 文件，请确认仓库地址或手动粘贴内容");
+                throw new BusinessException("仓库中未找到 " + path + " 文件，请确认仓库地址、构建上下文或手动粘贴内容");
             }
             return content;
         } catch (GitAPIException e) {
@@ -133,19 +143,22 @@ public class BuildTestService {
     }
 
     /**
-     * 将编辑后的 Dockerfile 写入 Git 仓库根目录，提交并推送。
+     * 将编辑后的 Dockerfile 写入 Git 仓库的构建上下文目录，提交并推送。
      *
      * @param branch 目标分支，留空使用仓库默认分支
+     * @param context 构建上下文，Dockerfile 写入该目录
      * @return 新提交的短 id
      */
-    public String writeDockerfile(String gitUrl, String dockerfileText, String commitMessage, String branch) {
+    public String writeDockerfile(String gitUrl, String dockerfileText, String commitMessage, String branch,
+            String context) {
         String url = StrUtil.trim(gitUrl);
         Assert.hasText(url, "请先填写 Git 仓库地址");
         Assert.hasText(dockerfileText, "请填写 Dockerfile 内容");
 
+        String path = dockerfilePath(context);
         try {
             GitCredential credential = codeSourceService.credentialByGitUrl(url);
-            String commit = GitTool.writeTextFile(url, credential, DOCKERFILE, dockerfileText, commitMessage, branch);
+            String commit = GitTool.writeTextFile(url, credential, path, dockerfileText, commitMessage, branch);
             if (commit == null) {
                 throw new BusinessException("Dockerfile 内容与仓库一致，无需写入");
             }
@@ -202,8 +215,15 @@ public class BuildTestService {
                 return;
             }
 
-            // 用粘贴内容覆盖仓库中的 Dockerfile
-            File dockerfileFile = new File(workDir, DOCKERFILE);
+            // 用粘贴内容覆盖构建上下文目录中的 Dockerfile
+            String context = BuildContextUtils.normalize(p.getContext());
+            File buildDir = BuildContextUtils.resolve(workDir, context);
+            fileLog.info("构建上下文: {}（{}）", BuildContextUtils.display(context), buildDir.getAbsolutePath());
+            Assert.state(buildDir.isDirectory(), "构建上下文目录不存在：" + buildDir.getAbsolutePath()
+                    + "，请检查构建上下文：" + BuildContextUtils.display(context));
+
+            File dockerfileFile = new File(buildDir, DOCKERFILE);
+            FileUtil.mkParentDirs(dockerfileFile);
             FileUtil.writeUtf8String(p.getDockerfileText(), dockerfileFile);
             fileLog.info("已写入 Dockerfile: {}", dockerfileFile.getAbsolutePath());
 
@@ -213,7 +233,8 @@ public class BuildTestService {
 
             String targetImage = targetName + ":" + targetTag;
             fileLog.info("构建命令执行中...");
-            BuildImageCmd buildImageCmd = client.buildImageCmd(workDir)
+            BuildImageCmd buildImageCmd = client.buildImageCmd()
+                    .withBaseDirectory(buildDir)
                     // 删除构建产生的临时容器
                     .withForcerm(true)
                     .withPull(false)

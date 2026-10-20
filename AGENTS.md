@@ -69,8 +69,12 @@ git tag vx.y.z && git push && git push origin vx.y.z
 - **领域模型：** `Project`(项目，构建定义) → `Image`(镜像，`imageUrl` 唯一) → `ImageTag`(镜像标签，`imageUrl`+`tag`)。
   项目与镜像按 `imageUrl` 相等关联；`App` 只存 `imageUrl` + `imageTag`，与项目/镜像均无 id 外键。
   菜单为「项目」(`/project`) 与「镜像」(`/image`)，权限码为 `image:*`，表名为 `t_image`。
-- **Tests** 是 `main()` 方法（如 `DockerSdkTest`、`PrintTest`），**不是** JUnit 测试，
-  无法通过 `mvn test` 运行，需要在 IDE 里单独执行。
+- **构建上下文：** `Project.context` 相对仓库根目录，留空/`/` 表示仓库根；
+  `dockerfile` 始终按仓库根解析，且必须位于上下文内（如 `context=admin` + `dockerfile=admin/Dockerfile`）。
+  归一化与校验集中在 `BuildContextUtils`，构建测试页也支持同样的上下文参数。
+- **Tests** 大多是 `main()` 方法（如 `DockerSdkTest`、`PrintTest`），无法通过 `mvn test` 运行，
+  需要在 IDE 里单独执行；`src/test/java` 下另有少量 JUnit 测试（如 `VersionUtilsTest`、
+  `BuildContextUtilsTest`），可用 `mvn test -Dtest=<类名>` 单独跑。
 - **权限**用 open-admin 的 `@HasPermission("app:view")`，不是标准 Spring Security 注解。
 - **前端**是 `@jiangood/open-admin` 之上的薄层，页面在 `web/src/pages/`，构建配置 `web/vite.config.js`。
 - **静态文件**从 JAR 提供；开发时前端通过 Vite 代理访问后端。

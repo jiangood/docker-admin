@@ -51,6 +51,15 @@ public class Project extends BaseEntity {
     @NotNull
     String dockerfile;
 
+    /**
+     * 构建上下文：相对代码仓库根目录的目录，留空或 "/" 表示仓库根目录。
+     * <p>
+     * {@link #dockerfile} 仍按仓库根目录解析，但必须位于该上下文目录内；
+     * 用于 Dockerfile 与构建产物不在仓库根目录的项目（如 {@code admin/Dockerfile}）。
+     */
+    @Remark("构建上下文")
+    String context;
+
     @Remark("构建参数")
     String buildArg;
 

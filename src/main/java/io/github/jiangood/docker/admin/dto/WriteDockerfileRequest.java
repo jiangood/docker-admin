@@ -14,7 +14,13 @@ public class WriteDockerfileRequest {
     String gitUrl;
 
     /**
-     * 要写入的 Dockerfile 内容，覆盖仓库根目录下的同名文件。
+     * 构建上下文：相对代码仓库根目录的目录，留空表示仓库根目录。
+     * Dockerfile 写入该目录，而不是仓库根目录。
+     */
+    String context;
+
+    /**
+     * 要写入的 Dockerfile 内容，覆盖构建上下文目录下的同名文件。
      */
     String dockerfileText;
 

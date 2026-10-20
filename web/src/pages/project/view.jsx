@@ -340,6 +340,7 @@ export default class extends React.Component {
           <Descriptions.Item label='目标注册中心'>{this.registryLabel()}</Descriptions.Item>
           <Descriptions.Item label='代码源'>{project.gitUrl}</Descriptions.Item>
           <Descriptions.Item label='dockerfile'>{project.dockerfile}</Descriptions.Item>
+          <Descriptions.Item label='构建上下文'>{project.context || '/'}</Descriptions.Item>
           <Descriptions.Item label='创建时间'>{project.createTime}</Descriptions.Item>
         </Descriptions>
 

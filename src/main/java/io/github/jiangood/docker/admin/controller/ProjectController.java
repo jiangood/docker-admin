@@ -7,6 +7,7 @@ import io.github.jiangood.docker.admin.entity.BuildLog;
 import io.github.jiangood.docker.admin.entity.Project;
 import io.github.jiangood.docker.admin.service.BuildLogService;
 import io.github.jiangood.docker.admin.service.ProjectService;
+import io.github.jiangood.docker.admin.util.BuildContextUtils;
 import io.github.jiangood.docker.base.OrgAccessTool;
 import io.github.jiangood.openadmin.util.dto.AjaxResult;
 import io.github.jiangood.openadmin.util.dto.Option;
@@ -79,6 +80,8 @@ public class ProjectController {
         }
         param.setGitUrl(param.getGitUrl().trim());
         param.setName(param.getName().trim());
+        // 构建上下文统一存成归一化后的相对路径，空表示仓库根目录
+        param.setContext(BuildContextUtils.normalize(param.getContext()));
         Project result = this.service.saveProject(param, updateFields);
         return AjaxResult.ok().data(result.getId()).msg("保存成功");
     }
@@ -129,6 +132,7 @@ public class ProjectController {
 
         buildRequest.setProjectId(project.getId());
         buildRequest.setDockerfile(project.getDockerfile());
+        buildRequest.setContext(project.getContext());
         buildRequest.setBuildHostId(service.resolveBuildHostId(buildHostId));
         String logId = service.buildImage(buildRequest);
 

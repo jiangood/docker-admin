@@ -26,6 +26,7 @@ import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.entity.ImageTag;
 import io.github.jiangood.docker.admin.entity.Project;
 import io.github.jiangood.docker.admin.entity.Registry;
+import io.github.jiangood.docker.admin.util.BuildContextUtils;
 import io.github.jiangood.docker.admin.util.ImageUrlUtils;
 import io.github.jiangood.docker.admin.util.VersionUtils;
 import io.github.jiangood.docker.admin.websocket.TaskLogRegistry;
@@ -292,6 +293,7 @@ public class ProjectService extends BaseService<Project> {
         req.setProjectId(project.getId());
         req.setTag(tag);
         req.setDockerfile(project.getDockerfile());
+        req.setContext(project.getContext());
         req.setBuildHostId(runner.getId());
         try {
             buildImage(req);
@@ -324,6 +326,7 @@ public class ProjectService extends BaseService<Project> {
         req.setRefType(BuildRequest.REF_TYPE_BRANCH);
         req.setBranch(branch);
         req.setDockerfile(project.getDockerfile());
+        req.setContext(project.getContext());
         req.setBuildHostId(runner.getId());
         try {
             buildImage(req);
@@ -464,6 +467,7 @@ public class ProjectService extends BaseService<Project> {
         buildLog.setProjectId(project.getId());
         buildLog.setProjectName(project.getName());
         buildLog.setDockerfile(project.getDockerfile());
+        buildLog.setContext(BuildContextUtils.display(project.getContext()));
         buildLog.setTag(branchBuild ? branch : p.getTag());
         buildLog.setBranch(branch);
         return buildLogService.saveLog(buildLog);
@@ -540,7 +544,10 @@ public class ProjectService extends BaseService<Project> {
 
 
             buildLog.setImageUrl(imageUrl);
-            File buildDir = new File(workDir, context);
+            File buildDir = BuildContextUtils.resolve(workDir, context);
+            fileLog.info("构建上下文: {}（{}）", BuildContextUtils.display(context), buildDir.getAbsolutePath());
+            Assert.state(buildDir.isDirectory(), "构建上下文目录不存在：" + buildDir.getAbsolutePath()
+                    + "，请检查项目配置的构建上下文：" + BuildContextUtils.display(context));
 
             fileLog.info("向docker发送构建指令");
             DefaultCallback<BuildResponseItem> buildCallback = new DefaultCallback<>(logId);
@@ -548,11 +555,15 @@ public class ProjectService extends BaseService<Project> {
 
             fileLog.info("是否拉取基础镜像 withPull {}", p.isPull());
             fileLog.info("是否使用缓存 {}", p.isUseCache());
-            File dockerfileFile = new File(buildDir, dockerfile);
+            // dockerfile 始终相对代码仓库根目录解析，且必须位于构建上下文内
+            File dockerfileFile = new File(workDir, dockerfile);
             fileLog.info("dockerfile绝对路径: {}", dockerfileFile.getAbsolutePath());
             fileLog.info("是否拉取基础镜像:{}", p.isPull());
-            Assert.state(dockerfileFile.isFile(), "构建上下文 " + buildDir.getAbsolutePath()
-                    + " 下未找到 Dockerfile： " + dockerfile + "，请检查项目配置的 dockerfile 路径");
+            Assert.state(dockerfileFile.isFile(), "未找到 Dockerfile： " + dockerfile
+                    + "（仓库根目录 " + workDir.getAbsolutePath() + "），请检查项目配置的 dockerfile 路径");
+            Assert.state(BuildContextUtils.isInside(buildDir, dockerfileFile), "Dockerfile 必须位于构建上下文内：dockerfile="
+                    + dockerfile + "，构建上下文=" + BuildContextUtils.display(context)
+                    + "。dockerfile 按仓库根目录填写，如 admin/Dockerfile");
 
 
             fileLog.info("构建命令执行中...");

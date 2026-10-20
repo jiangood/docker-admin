@@ -78,6 +78,11 @@ export default class extends React.Component {
             title: 'dockerfile',
             dataIndex: 'dockerfile',
         },
+        {
+            title: '构建上下文',
+            dataIndex: 'context',
+            render: (context) => context || '/',
+        },
 
 
         {
@@ -204,8 +209,12 @@ export default class extends React.Component {
 
                     <Form.Item label='dockerfile' name='dockerfile' rules={[{required: true}]}
                                initialValue='Dockerfile'
-                               help='相对代码仓库根目录的路径，可位于子目录，如 docker/Dockerfile'>
+                               help='相对代码仓库根目录的路径，必须位于构建上下文内，如 admin/Dockerfile'>
                         <Input/>
+                    </Form.Item>
+                    <Form.Item label='构建上下文' name='context'
+                               tooltip='发给 Docker 的构建目录，决定 COPY 的根目录与 .dockerignore 的生效位置'>
+                        <Input placeholder='留空 = 仓库根目录，例如 admin'/>
                     </Form.Item>
                     <Form.Item label='构建参数' name='buildArg' help='格式: key=value&key2=value2'>
                         <Input/>

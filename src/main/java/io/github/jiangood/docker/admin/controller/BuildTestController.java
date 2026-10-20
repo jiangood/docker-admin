@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 构建测试：以 Git 仓库为上下文，用粘贴的 Dockerfile 覆盖后在默认构建节点本地构建。
+ * 构建测试：以 Git 仓库（或指定子目录）为上下文，用粘贴的 Dockerfile 覆盖后在默认构建节点本地构建。
  * <p>
  * 构建过程通过 {@code /admin/ws/build-test-log/{logId}} 实时输出日志。
  */
@@ -32,8 +32,8 @@ public class BuildTestController {
      */
     @HasPermission("build-test:view")
     @RequestMapping("read-dockerfile")
-    public AjaxResult readDockerfile(String gitUrl) {
-        return AjaxResult.ok().data(service.readDockerfile(gitUrl));
+    public AjaxResult readDockerfile(String gitUrl, String context) {
+        return AjaxResult.ok().data(service.readDockerfile(gitUrl, context));
     }
 
     /**
@@ -43,7 +43,7 @@ public class BuildTestController {
     @PostMapping("write-dockerfile")
     public AjaxResult writeDockerfile(@RequestBody WriteDockerfileRequest request) {
         String commit = service.writeDockerfile(request.getGitUrl(), request.getDockerfileText(),
-                request.getCommitMessage(), request.getBranch());
+                request.getCommitMessage(), request.getBranch(), request.getContext());
         return AjaxResult.ok().data(commit).msg("已写入并推送到仓库（提交 " + commit + "）");
     }
 
