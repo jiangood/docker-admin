@@ -109,16 +109,16 @@ public class OrderLogPermissionProvider implements LogKeyPermissionProvider {
 
 ### 代码生成
 
-系统管理 →「代码生成」页面：动态扫描已注册实体（继承 `BaseEntity` 且标注 `@Entity`），按选中实体生成常见 CRUD 代码并写入项目源码目录（先预览确认，再写入）。
+系统管理 →「代码生成」页面：动态扫描已注册实体（继承 `BaseEntity` 且标注 `@Entity`），按选中实体生成常见 CRUD 代码并写入项目源码目录（先预览确认，再在预览抽屉里勾选要写入的文件）。
 
 | 端点 | HTTP | 权限 | 说明 |
 |------|------|------|------|
 | `admin/codegen/entity-options` | GET | `sys-codegen:read` | 扫描实体列表（`value` 全限定类名，`label` 中文名，`data` 含 `module`/`packageName`/`frameworkEntity`） |
 | `admin/codegen/entity-info` | GET | `sys-codegen:read` | 单实体字段元数据（`className`） |
 | `admin/codegen/preview` | POST | `sys-codegen:generate` | 只生成不写盘，返回各文件路径/内容/是否已存在 |
-| `admin/codegen/generate` | POST | `sys-codegen:generate` | 写入文件，返回 `written`/`skipped` |
+| `admin/codegen/generate` | POST | `sys-codegen:generate` | 仅写入 `paths` 指定的文件，返回 `written`/`skipped` |
 
-请求体（`CodegenReq`）：`className`（必填）、`module`（缺省取类名 kebab-case）、`label`（缺省取实体 `@Remark`）、`parentMenu`（默认 `sys`）、`overwrite`（是否覆盖已存在文件）。
+请求体（`CodegenReq`）：`className`（必填）、`module`（缺省取类名 kebab-case）、`label`（缺省取实体 `@Remark`）、`parentMenu`（默认 `sys`）、`paths`（要写入的文件相对路径，来自预览结果；不能为空，未包含的文件跳过）。
 
 生成物：
 
@@ -132,7 +132,7 @@ public class OrderLogPermissionProvider implements LogKeyPermissionProvider {
 
 字段映射：String→`Input`、`@Lob`/TEXT→`Input.TextArea`、数字→`InputNumber`、布尔→`FieldBoolean`、日期→`FieldDate`、枚举（`@DictType`）→`FieldDictSelect`、`@FileField(html=true)`→`FieldEditor`、图片类文件→`FieldUploadImage`、其他文件→`FieldUploadFile`；查询条件为可搜索 String 字段的 `searchText` 模糊匹配 + 枚举/布尔等值过滤。
 
-写盘根目录由 `sys.codegen.*` 配置（见 [config.md](config.md)），路径越界会被拒绝；目标文件已存在且未开启 `overwrite` 时跳过。
+写盘根目录由 `sys.codegen.*` 配置（见 [config.md](config.md)），路径越界会被拒绝；未出现在 `paths` 中的文件跳过，出现在其中的已存在文件会被覆盖。前端预览抽屉默认只勾选新增文件，已存在文件需手动勾选。
 
 ## 前端
 

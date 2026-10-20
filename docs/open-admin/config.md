@@ -7,6 +7,7 @@
 | 配置 | 说明 | 默认值 |
 |------|------|--------|
 | `sys.title` | 系统标题（必填） | 管理系统 |
+| `sys.short-title` | 系统简称，仅在左侧菜单顶部等空间受限处显示；留空则使用 `sys.title` | 空 |
 | `sys.file.store-type` | 文件存储 (`LOCAL`/`MINIO`) | LOCAL |
 | `sys.file.upload-path` | 本地上传路径 | /home/files |
 | `sys.file.clean-temp-minutes` | 临时文件自动清理时间（分钟） | 120 |
