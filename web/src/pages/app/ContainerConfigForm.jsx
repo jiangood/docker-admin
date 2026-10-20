@@ -23,13 +23,13 @@ const NETWORK_OPTIONS = [
 ]
 
 const portsColumns = (strict) => strict ? [
-    {title: '主机端口', dataIndex: 'publicPort', dataType: 'InputNumber'},
-    {title: '容器端口', dataIndex: 'privatePort', readonly: true},
-    {title: '协议', dataIndex: 'protocol', readonly: true},
+    {title: '主机端口', dataIndex: 'publicPort', dataType: 'InputNumber', width: 160},
+    {title: '容器端口', dataIndex: 'privatePort', readonly: true, width: 160},
+    {title: '协议', dataIndex: 'protocol', readonly: true, width: 120},
 ] : [
-    {title: '主机端口', dataIndex: 'publicPort', dataType: 'InputNumber'},
-    {title: '容器端口', dataIndex: 'privatePort', dataType: 'InputNumber'},
-    {title: '协议', dataIndex: 'protocol', dataType: 'Select', valueEnum: {TCP: 'TCP', UDP: 'UDP'}},
+    {title: '主机端口', dataIndex: 'publicPort', dataType: 'InputNumber', width: 160},
+    {title: '容器端口', dataIndex: 'privatePort', dataType: 'InputNumber', width: 160},
+    {title: '协议', dataIndex: 'protocol', dataType: 'Select', valueEnum: {TCP: 'TCP', UDP: 'UDP'}, width: 120},
 ]
 
 const bindsColumns = (strict) => strict ? [

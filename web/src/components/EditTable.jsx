@@ -55,15 +55,19 @@ export default class extends React.Component {
   }
 
   renderCell = (c, p, i) => {
+    // 列上声明了 width 时控件撑满单元格，否则保持控件自身默认宽度
+    const controlStyle = c.width ? {width: '100%'} : undefined;
     if (c.readonly) {
       const v = p[c.dataIndex];
       return v === null || v === undefined || v === '' ? '-' : v;
     }
     if (c.dataType === 'Input') {
-      return <Input value={p[c.dataIndex]} onChange={e => this.edit(c.dataIndex, e.target.value, i)}/>
+      return <Input style={controlStyle} value={p[c.dataIndex]}
+                    onChange={e => this.edit(c.dataIndex, e.target.value, i)}/>
     }
     if (c.dataType === 'InputNumber') {
-      return <InputNumber value={p[c.dataIndex]} onChange={v => this.edit(c.dataIndex, v, i)}/>
+      return <InputNumber style={controlStyle} value={p[c.dataIndex]}
+                          onChange={v => this.edit(c.dataIndex, v, i)}/>
     }
     if (c.dataType === 'Select') {
       const options = c.options
@@ -74,7 +78,7 @@ export default class extends React.Component {
       return <Select value={value}
                      mode={c.mode}
                      onChange={v => this.edit(c.dataIndex, c.parse ? c.parse(v) : v, i)}
-                     style={{minWidth: 100}}>
+                     style={controlStyle || {minWidth: 100}}>
         {options}
       </Select>
     }
@@ -103,12 +107,14 @@ export default class extends React.Component {
       borderBottom: `1px solid ${token.colorBorderSecondary}`,
     }
     const actionTdStyle = {...tdStyle, width: 48, textAlign: 'center'}
+    // 所有列都声明了宽度时按固定宽度排布，避免表格铺满后把短列（如协议）拉得过宽
+    const allWidth = columns.length > 0 && columns.every(c => c.width)
 
     return <div>
-      <table style={{width: '100%', borderCollapse: 'collapse'}}>
+      <table style={{width: allWidth ? 'auto' : '100%', borderCollapse: 'collapse'}}>
         {!empty && <thead>
         <tr>
-          {columns.map(c => <th key={c.dataIndex} style={thStyle}>{c.title}</th>)}
+          {columns.map(c => <th key={c.dataIndex} style={c.width ? {...thStyle, width: c.width} : thStyle}>{c.title}</th>)}
           {canRemove && <th style={{...thStyle, width: 48}}></th>}
         </tr>
         </thead>}
@@ -124,7 +130,7 @@ export default class extends React.Component {
 
 
         {dataSource.map((p, i) => <tr key={i}>
-          {columns.map(c => <td key={c.dataIndex} style={tdStyle}>
+          {columns.map(c => <td key={c.dataIndex} style={c.width ? {...tdStyle, width: c.width} : tdStyle}>
             {this.renderCell(c, p, i)}
           </td>)}
           {canRemove && <td style={actionTdStyle}>
