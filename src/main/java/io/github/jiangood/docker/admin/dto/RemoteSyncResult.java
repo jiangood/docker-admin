@@ -6,7 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 远程同步结果汇总。
+ * 镜像补录/同步结果汇总。
  */
 @Data
 public class RemoteSyncResult {

@@ -49,7 +49,7 @@ public class ImageTag extends BaseEntity {
     String fullUrl;
 
     /**
-     * 来源：BUILD（项目构建）/ SYNC（镜像同步）/ IMPORT（导入）/ REMOTE（远程注册中心）。
+     * 来源：BUILD（项目构建）/ SYNC（镜像同步）/ IMPORT（导入）/ MANUAL（手工补录）/ REMOTE（远程注册中心）。
      */
     @Remark("来源")
     String source;

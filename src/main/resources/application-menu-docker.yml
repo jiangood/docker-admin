@@ -40,6 +40,7 @@ menus:
     perms:
       - { name: 查看, code: image:view }
       - { name: 导出, code: image:export }
+      - { name: 导入, code: image:import }
       - { name: 删除, code: image:delete }
       - { name: 补录, code: image:sync }
   divider-image:

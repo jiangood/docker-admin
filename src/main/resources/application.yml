@@ -14,6 +14,11 @@ spring:
     active: default
   application:
     name: docker-admin
+  servlet:
+    multipart:
+      # 镜像 tar 常见数 GB，默认 1MB 会在上传阶段直接失败
+      max-file-size: 20GB
+      max-request-size: 20GB
   datasource:
     # 内置 H2，MySQL 兼容模式，首次启动自动建表并写入种子数据，无需外部数据库。
     driver-class-name: org.h2.Driver

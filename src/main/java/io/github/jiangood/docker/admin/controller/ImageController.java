@@ -1,18 +1,24 @@
 package io.github.jiangood.docker.admin.controller;
 
+import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
 import io.github.jiangood.docker.admin.dao.AppRepository;
 import io.github.jiangood.docker.admin.dto.ImageExportTaskView;
-import io.github.jiangood.docker.admin.dto.RemoteRegistryQuery;
+import io.github.jiangood.docker.admin.dto.ManualImageRequest;
 import io.github.jiangood.docker.admin.dto.RemoteSyncResult;
 import io.github.jiangood.docker.admin.entity.App;
 import io.github.jiangood.docker.admin.entity.Image;
 import io.github.jiangood.docker.admin.entity.ImageTag;
+import io.github.jiangood.docker.admin.service.HostService;
 import io.github.jiangood.docker.admin.service.ImageExportRegistry;
 import io.github.jiangood.docker.admin.service.ImageExportService;
+import io.github.jiangood.docker.admin.service.ImageImportRegistry;
+import io.github.jiangood.docker.admin.service.ImageImportService;
+import io.github.jiangood.docker.admin.service.ImageManualService;
 import io.github.jiangood.docker.admin.service.ImageService;
 import io.github.jiangood.docker.admin.service.ImageTagService;
+import io.github.jiangood.docker.admin.service.RegistryService;
 import io.github.jiangood.docker.admin.service.RemoteSyncService;
 import io.github.jiangood.docker.base.OrgAccessTool;
 import io.github.jiangood.openadmin.framework.auth.LoginTool;
@@ -30,7 +36,9 @@ import org.springframework.util.Assert;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.io.IOException;
@@ -64,7 +72,22 @@ public class ImageController {
     private ImageExportRegistry imageExportRegistry;
 
     @Resource
+    private ImageImportService imageImportService;
+
+    @Resource
+    private ImageImportRegistry imageImportRegistry;
+
+    @Resource
+    private RegistryService registryService;
+
+    @Resource
+    private HostService hostService;
+
+    @Resource
     private RemoteSyncService remoteSyncService;
+
+    @Resource
+    private ImageManualService imageManualService;
 
     @HasPermission("image:view")
     @RequestMapping("page")
@@ -174,28 +197,17 @@ public class ImageController {
         return AjaxResult.ok().data(tags);
     }
 
-    // ------------------------------------------------------------------ 远程注册中心
+    // ------------------------------------------------------------------ 补录
 
     /**
-     * 尝试列举系统已配置的注册中心下可补录的镜像，并标出哪些已经补录过（列表页用）。
+     * 手工补录镜像（列表页）：镜像地址与版本都由用户填写，不访问注册中心。
      * <p>
-     * 阿里云个人版不开放该接口，此时返回 {@code supported=false} 与说明，前端降级为手工输入镜像地址。
+     * 已存在的镜像与版本只计数跳过，不覆盖已有来源与元数据。
      */
     @HasPermission("image:sync")
-    @PostMapping("remote/catalog")
-    public AjaxResult remoteCatalog(@RequestBody(required = false) RemoteRegistryQuery query) {
-        return AjaxResult.ok().data(remoteSyncService.catalog(query));
-    }
-
-    /**
-     * 补录镜像（列表页）：把选中的镜像连同其版本写入本平台（来源标记 REMOTE）。
-     * <p>
-     * 逐镜像逐版本容错，单个失败只记入结果里的 failures，不中断整体补录。
-     */
-    @HasPermission("image:sync")
-    @PostMapping("remote/sync")
-    public AjaxResult remoteSync(@RequestBody RemoteRegistryQuery query) {
-        RemoteSyncResult result = remoteSyncService.sync(query);
+    @PostMapping("manual/save")
+    public AjaxResult manualSave(@RequestBody ManualImageRequest request) {
+        RemoteSyncResult result = imageManualService.save(request);
         return AjaxResult.ok().data(result).msg(syncMsg(result, true));
     }
 
@@ -318,6 +330,63 @@ public class ImageController {
     public AjaxResult exportDelete(String logId) {
         imageExportService.deleteAndUnregister(logId);
         return AjaxResult.ok().msg("已删除");
+    }
+
+    // ------------------------------------------------------------------ 导入
+
+    /**
+     * 上传 tar 并导入到注册中心：先在执行主机上 {@code docker load}，再打上注册中心前缀并 push，
+     * 最后登记镜像与版本（来源 IMPORT）。
+     * <p>
+     * 上传完成后立即返回 logId，载入与推送在后台执行；前端通过
+     * {@code /admin/ws/image-import-log/{logId}} 看实时日志，用 {@code import/status} 取最终结果。
+     * <p>
+     * 镜像名与版本可留空，此时沿用 tar 内的 RepoTags；指定镜像名时归档里只能有一个镜像。
+     * 执行主机留空表示使用平台所在主机的 docker。
+     */
+    @HasPermission("image:import")
+    @PostMapping("import/start")
+    public AjaxResult importStart(@RequestParam("file") MultipartFile file,
+                                  String registryId, String hostId, String imageName, String tag) throws IOException {
+        Assert.notNull(file, "请选择要导入的 tar 包");
+        Assert.state(!file.isEmpty(), "tar 包为空，无法导入");
+
+        String filename = file.getOriginalFilename() == null ? "" : file.getOriginalFilename().replace('\\', '/');
+        filename = filename.substring(filename.lastIndexOf('/') + 1);
+        Assert.state(StrUtil.endWithIgnoreCase(filename, ".tar"),
+                "仅支持 docker save 生成的 .tar 归档");
+
+        String name = StrUtil.trimToNull(imageName);
+        String version = StrUtil.trimToNull(tag);
+        imageImportService.validate(name, version);
+
+        // 同步校验注册中心与主机，错误直接返回给前端，不必等后台任务跑起来才在日志里报错
+        registryService.requireRegistry(registryId);
+        if (StrUtil.isNotBlank(hostId)) {
+            Assert.notNull(hostService.findById(hostId).orElse(null), "执行主机不存在，请重新选择");
+        }
+
+        String logId = "import-" + RandomUtil.randomString(16);
+        File target = imageImportService.newTarFile(logId);
+        try {
+            file.transferTo(target);
+        } catch (IOException | IllegalStateException e) {
+            FileUtil.del(target);
+            throw e;
+        }
+
+        imageImportRegistry.register(logId);
+        imageImportService.importTar(logId, target, registryId, hostId, name, version);
+        return AjaxResult.ok().data(logId).msg("已开始导入");
+    }
+
+    /**
+     * 导入任务状态：RUNNING / SUCCESS / FAILED，附带结果说明与已导入的镜像地址。
+     */
+    @HasPermission("image:import")
+    @RequestMapping("import/status")
+    public AjaxResult importStatus(String logId) {
+        return AjaxResult.ok().data(imageImportRegistry.get(logId));
     }
 
     private void assertImageAccessible(String imageUrl) {

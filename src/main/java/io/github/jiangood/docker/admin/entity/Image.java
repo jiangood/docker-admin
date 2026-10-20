@@ -41,7 +41,7 @@ public class Image extends BaseEntity {
     String name;
 
     /**
-     * 来源：BUILD（项目构建）/ SYNC（镜像同步）/ REMOTE（从系统配置的注册中心补录）。
+     * 来源：BUILD（项目构建）/ SYNC（镜像同步）/ IMPORT（tar 导入）/ MANUAL（手工补录）/ REMOTE（旧版从注册中心补录）。
      */
     @Remark("来源")
     String source;

@@ -5,8 +5,8 @@ import {HttpClient} from '@jiangood/open-admin'
 /**
  * 同步单个镜像的标签（镜像详情页）。
  *
- * 与列表页的「补录镜像」不同：这里镜像已经确定，只需从「系统设置 → 镜像注册中心」
- * 把该镜像下本地还没有的版本同步进来，不需要选镜像、不需要填地址。
+ * 与列表页的「补录镜像」不同：补录是手工登记镜像地址与版本，不访问注册中心；
+ * 这里镜像已经确定，只需从「系统设置 → 镜像注册中心」把该镜像下本地还没有的版本同步进来。
  */
 export default class RemoteTagSyncModal extends React.Component {
 

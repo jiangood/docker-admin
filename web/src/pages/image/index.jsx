@@ -1,5 +1,5 @@
 import {Form, Input, Tag} from 'antd'
-import {CloudSyncOutlined, SearchOutlined} from '@ant-design/icons'
+import {ImportOutlined, PlusOutlined, SearchOutlined} from '@ant-design/icons'
 import React from 'react'
 
 import {
@@ -10,14 +10,16 @@ import {
     ProTable
 } from "@jiangood/open-admin"
 
+import ImageImportModal from '../../components/ImageImportModal'
 import LinkButton from '../../components/LinkButton'
-import RemoteSyncModal from '../../components/RemoteSyncModal'
+import ImageManualModal from '../../components/ImageManualModal'
 
 
 const SOURCE_LABELS = {
     BUILD: {text: '构建', color: 'green'},
     SYNC: {text: '同步', color: 'blue'},
     IMPORT: {text: '导入', color: 'orange'},
+    MANUAL: {text: '手动', color: 'cyan'},
     REMOTE: {text: '远程', color: 'purple'},
 }
 
@@ -29,7 +31,8 @@ export function sourceTag(source) {
 export default class extends React.Component {
 
     tableRef = React.createRef()
-    remoteModalRef = React.createRef()
+    manualModalRef = React.createRef()
+    importModalRef = React.createRef()
 
     columns = [
         {
@@ -93,8 +96,12 @@ export default class extends React.Component {
                 toolBarRightRender={() => (
                     <PermActions actions={[
                         {
-                            label: '补录镜像', perm: 'image:sync', icon: <CloudSyncOutlined/>,
-                            onClick: () => this.remoteModalRef.current.show()
+                            label: '导入 tar', perm: 'image:import', icon: <ImportOutlined/>,
+                            onClick: () => this.importModalRef.current.show()
+                        },
+                        {
+                            label: '补录镜像', perm: 'image:sync', icon: <PlusOutlined/>,
+                            onClick: () => this.manualModalRef.current.show()
                         },
                     ]}/>
                 )}
@@ -106,8 +113,10 @@ export default class extends React.Component {
                 request={(params) => HttpClient.get('admin/image/page', params)}
                 columns={this.columns}
             />
-            <RemoteSyncModal ref={this.remoteModalRef}
-                             onSuccess={() => this.tableRef.current.reload()}/>
+            <ImageManualModal ref={this.manualModalRef}
+                              onSuccess={() => this.tableRef.current.reload()}/>
+            <ImageImportModal ref={this.importModalRef}
+                              onSuccess={() => this.tableRef.current.reload()}/>
         </Page>
     }
 }
