@@ -183,7 +183,7 @@ export default class extends React.Component {
             return <Alert type='warning' showIcon
                           title='该次部署为历史记录，没有按次拆分的独立日志'/>
         }
-        return <LogView key={key} url={'/admin/sys/log/' + key} websocket={false}/>
+        return <LogView key={key} url={'/admin/app/deployLog/' + key} websocket={false}/>
     }
 
 }

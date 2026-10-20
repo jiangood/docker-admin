@@ -4,18 +4,22 @@ import cn.hutool.core.util.StrUtil;
 import com.github.dockerjava.api.model.Container;
 import io.github.jiangood.docker.base.OrgAccessTool;
 import io.github.jiangood.openadmin.framework.perm.HasPermission;
+import io.github.jiangood.docker.admin.dao.DeployLogRepository;
 import io.github.jiangood.docker.admin.dto.ContainerVo;
 import io.github.jiangood.docker.admin.entity.App;
+import io.github.jiangood.docker.admin.entity.DeployLog;
 import io.github.jiangood.docker.admin.service.AppService;
 import io.github.jiangood.docker.admin.service.ContainerService;
 import io.github.jiangood.docker.admin.service.TunnelService;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
+import io.github.jiangood.openadmin.modules.logviewer.service.FileLogService;
 import io.github.jiangood.openadmin.util.dto.AjaxResult;
 import io.github.jiangood.openadmin.util.dto.Option;
 import io.github.jiangood.openadmin.framework.data.specification.Spec;
 import io.github.jiangood.openadmin.framework.auth.LoginTool;
 import io.github.jiangood.openadmin.util.BusinessException;
 import jakarta.annotation.Resource;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
@@ -32,8 +36,10 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 
 @RestController
@@ -41,9 +47,19 @@ import java.util.Map;
 @RequestMapping("admin/app")
 public class AppController {
 
+    /**
+     * 部署日志标识（部署记录 id）白名单，同时阻止目录穿越。
+     */
+    private static final Pattern LOG_ID_PATTERN = Pattern.compile("^[A-Za-z0-9_-]{1,64}$");
 
     @Resource
     private AppService service;
+
+    @Resource
+    private DeployLogRepository deployLogRepository;
+
+    @Resource
+    private FileLogService fileLogService;
 
     @Resource
     private TunnelService tunnelService;
@@ -101,6 +117,30 @@ public class AppController {
     public AjaxResult deployLogs(String id) {
         assertAppAccess(id);
         return AjaxResult.ok().data(service.listDeployLogs(id));
+    }
+
+    /**
+     * 单次部署的日志正文（已结束的部署记录），运行中的日志由 WebSocket 实时 tail。
+     * <p>
+     * 以前直接复用 open-admin 的 {@code admin/sys/log/{key}}，但该接口是「通用文件日志」：
+     * 权限按日志 key 前缀注册、返回体也已改为增量 JSON，与本模块的部署日志语义对不上。
+     * 部署日志属于业务资源，改由本模块提供读取接口，权限沿用 {@code app:view}。
+     * <p>
+     * 后续如需行级数据权限，在这里按 {@code deployLog.getAppId()} 调 {@code assertAppAccess} 即可。
+     */
+    @HasPermission("app:view")
+    @RequestMapping("deployLog/{id}")
+    public void deployLog(@PathVariable String id, HttpServletResponse response) throws IOException {
+        Assert.isTrue(LOG_ID_PATTERN.matcher(id).matches(), "非法的部署日志标识");
+        DeployLog deployLog = deployLogRepository.findById(id).orElse(null);
+        if (deployLog == null) {
+            response.setStatus(HttpServletResponse.SC_NOT_FOUND);
+            return;
+        }
+
+        response.setCharacterEncoding("utf-8");
+        response.setContentType("text/plain; charset=utf-8");
+        response.getWriter().print(fileLogService.readLogContent(id));
     }
 
     /**
