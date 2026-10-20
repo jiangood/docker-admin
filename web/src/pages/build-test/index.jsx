@@ -11,6 +11,7 @@ import {getToken, HttpClient, Page, Perm, PermUtils} from '@jiangood/open-admin'
 import CodeMirrorEditor from '../../components/CodeMirrorEditor'
 import FieldGitRepository from '../../components/FieldGitRepository'
 import LogView from '../../components/LogView'
+import {normalizeRelativePath} from '../../buildPath'
 
 /**
  * 构建测试：以 Git 仓库为上下文，用粘贴的 Dockerfile 覆盖后，在默认构建节点本地构建镜像（不推送）。
@@ -87,7 +88,10 @@ export default class extends React.Component {
 
     onFinish = values => {
         this.setState({submitting: true})
-        HttpClient.post('admin/build-test/build', values).then(rs => {
+        HttpClient.post('admin/build-test/build', {
+            ...values,
+            context: normalizeRelativePath(values.context),
+        }).then(rs => {
             this.setState({logId: rs.data, runningLogId: rs.data, logVisible: true})
             this.startPolling()
         }).catch(() => {
@@ -128,7 +132,10 @@ export default class extends React.Component {
             return
         }
         this.setState({reading: true})
-        HttpClient.get('admin/build-test/read-dockerfile', {gitUrl, context: form?.getFieldValue('context')}).then(rs => {
+        HttpClient.get('admin/build-test/read-dockerfile', {
+            gitUrl,
+            context: normalizeRelativePath(form?.getFieldValue('context')),
+        }).then(rs => {
             this.formRef.current?.setFieldsValue({dockerfileText: rs.data})
             message.success('已读取仓库中的 Dockerfile')
         }).finally(() => this.setState({reading: false}))
@@ -162,10 +169,20 @@ export default class extends React.Component {
             dockerfileText: values.dockerfileText,
             commitMessage: writeValues?.commitMessage,
             branch: writeValues?.branch,
-            context: values.context,
+            context: normalizeRelativePath(values.context),
         }).then(() => {
             this.setState({writeOpen: false})
         }).finally(() => this.setState({writing: false}))
+    }
+
+    /**
+     * 构建上下文失焦时去掉前导 /，与项目配置保持一致。
+     */
+    handleContextBlur = () => {
+        const form = this.formRef.current
+        if (form) {
+            form.setFieldsValue({context: normalizeRelativePath(form.getFieldValue('context'))})
+        }
     }
 
     render() {
@@ -212,8 +229,9 @@ export default class extends React.Component {
                                 </Form.Item>
 
                                 <Form.Item label='构建上下文' name='context'
-                                           tooltip='发给 Docker 的构建目录，决定 COPY 的根目录与 .dockerignore 的生效位置；粘贴的 Dockerfile 会写入该目录'>
-                                    <Input placeholder='留空 = 仓库根目录，例如 admin'/>
+                                           tooltip='发给 Docker 的构建目录，决定 COPY 的根目录与 .dockerignore 的生效位置；粘贴的 Dockerfile 会写入该目录；相对仓库根目录，不要以 / 开头，留空表示仓库根目录'>
+                                    <Input placeholder='留空 = 仓库根目录，如 admin'
+                                           onBlur={this.handleContextBlur}/>
                                 </Form.Item>
 
                                 <Form.Item label='构建主机' name='hostId' tooltip='留空使用系统默认构建主机'>

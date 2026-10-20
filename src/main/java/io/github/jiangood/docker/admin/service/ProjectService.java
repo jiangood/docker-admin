@@ -479,7 +479,7 @@ public class ProjectService extends BaseService<Project> {
         BuildLog buildLog = new BuildLog();
         buildLog.setProjectId(project.getId());
         buildLog.setProjectName(project.getName());
-        buildLog.setDockerfile(project.getDockerfile());
+        buildLog.setDockerfile(BuildContextUtils.normalizeDockerfile(project.getDockerfile()));
         buildLog.setContext(BuildContextUtils.display(project.getContext()));
         buildLog.setTag(branchBuild ? branch : p.getTag());
         buildLog.setBranch(branch);
@@ -492,7 +492,8 @@ public class ProjectService extends BaseService<Project> {
         String tag = p.getTag();
         String projectId = p.getProjectId();
         String context = p.getContext();
-        String dockerfile = p.getDockerfile();
+        // 兼容历史数据里带前导 / 的 dockerfile
+        String dockerfile = BuildContextUtils.normalizeDockerfile(p.getDockerfile());
 
         // 分支构建：克隆分支最新代码，镜像版本号由「分支名 + 构建时间 + 提交短 id」生成
         boolean branchBuild = BuildRequest.REF_TYPE_BRANCH.equals(p.getRefType())

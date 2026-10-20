@@ -264,6 +264,8 @@ export default class extends React.Component {
     {
       title: '目录',
       dataIndex: 'context',
+      // 历史构建记录里仓库根目录存的是 "/"，一并显示为「仓库根目录」
+      render: (context) => !context || context === '/' ? '仓库根目录' : context,
     },
     {
       title: 'Dockerfile',
@@ -340,7 +342,7 @@ export default class extends React.Component {
           <Descriptions.Item label='目标注册中心'>{this.registryLabel()}</Descriptions.Item>
           <Descriptions.Item label='代码源'>{project.gitUrl}</Descriptions.Item>
           <Descriptions.Item label='dockerfile'>{project.dockerfile}</Descriptions.Item>
-          <Descriptions.Item label='构建上下文'>{project.context || '/'}</Descriptions.Item>
+          <Descriptions.Item label='构建上下文'>{project.context || '仓库根目录'}</Descriptions.Item>
           <Descriptions.Item label='创建时间'>{project.createTime}</Descriptions.Item>
         </Descriptions>
 
@@ -381,12 +383,12 @@ export default class extends React.Component {
           </Form.Item>
           {refType === 'BRANCH' ? (
             <Form.Item name="branch" label="构建分支" rules={[{required: true, message: '请选择分支'}]}
-                       help="使用该分支最新代码构建，镜像版本为「分支名-年月日-时分-提交 id」">
+                       tooltip="使用该分支最新代码构建，镜像版本为「分支名-年月日-时分-提交 id」">
               <Select options={branchOptions} showSearch placeholder='请选择远程分支'/>
             </Form.Item>
           ) : (
             <Form.Item name="tag" label="构建 tag" rules={[{required: true, message: '请选择 tag'}]}
-                       help="只支持 vX.Y.Z 形式的 tag">
+                       tooltip="只支持 vX.Y.Z 形式的 tag">
               <Select options={tagOptions} showSearch placeholder='请选择远程 tag'/>
             </Form.Item>
           )}

@@ -14,6 +14,7 @@ import {
 
 import FieldGitRepository from '../../components/FieldGitRepository'
 import LinkButton from '../../components/LinkButton'
+import {dockerfileForContext, normalizeRelativePath} from '../../buildPath'
 
 
 export default class extends React.Component {
@@ -48,6 +49,9 @@ export default class extends React.Component {
     // 用户是否手动改过项目名；改过之后不再随代码仓库自动覆盖
     nameTouched = false
 
+    // 当前表单里的构建上下文，用于判断 dockerfile 是否仍跟随上下文默认值
+    contextValue = ''
+
     columns = [
 
 
@@ -81,7 +85,7 @@ export default class extends React.Component {
         {
             title: '构建上下文',
             dataIndex: 'context',
-            render: (context) => context || '/',
+            render: (context) => context || '仓库根目录',
         },
 
 
@@ -112,6 +116,7 @@ export default class extends React.Component {
 
     handleAdd = () => {
         this.nameTouched = false
+        this.contextValue = ''
         // 新建时默认选中系统默认注册中心；没有默认值则不预选，留空（placeholder 提示系统默认）
         this.setState({formOpen: true, formValues: {registryId: this.state.defaultRegistryId || undefined}})
     }
@@ -119,6 +124,7 @@ export default class extends React.Component {
     handleEdit = record => {
         // 已有项目的项目名视为用户设定，不随代码仓库自动覆盖
         this.nameTouched = true
+        this.contextValue = normalizeRelativePath(record.context)
         this.setState({formOpen: true, formValues: record})
     }
 
@@ -149,10 +155,42 @@ export default class extends React.Component {
 
 
     onFinish = values => {
-        HttpClient.post('admin/project/save', values).then(rs => {
+        // 两个路径统一按相对仓库根目录保存，不带前导 /
+        const data = {
+            ...values,
+            dockerfile: normalizeRelativePath(values.dockerfile) || 'Dockerfile',
+            context: normalizeRelativePath(values.context),
+        }
+        HttpClient.post('admin/project/save', data).then(rs => {
             this.setState({formOpen: false})
             this.tableRef.current.reload()
         })
+    }
+
+    /**
+     * 构建上下文失焦时归一化为不带前导 / 的相对路径；
+     * dockerfile 仍是默认值时跟随新上下文，用户自定义过的不覆盖。
+     */
+    handleContextBlur = () => {
+        const form = this.formRef.current
+        if (!form) {
+            return
+        }
+        const context = normalizeRelativePath(form.getFieldValue('context'))
+        const dockerfile = normalizeRelativePath(form.getFieldValue('dockerfile'))
+        const values = {context}
+        if (!dockerfile || dockerfile === dockerfileForContext(this.contextValue)) {
+            values.dockerfile = dockerfileForContext(context)
+        }
+        this.contextValue = context
+        form.setFieldsValue(values)
+    }
+
+    handleDockerfileBlur = () => {
+        const form = this.formRef.current
+        if (form) {
+            form.setFieldsValue({dockerfile: normalizeRelativePath(form.getFieldValue('dockerfile'))})
+        }
     }
 
 
@@ -204,20 +242,26 @@ export default class extends React.Component {
                     </Form.Item>
 
                     <Form.Item label='项目名' name='name' rules={[{required: true}]}
-                               help='不能包含中文，小写字母开头；默认取代码仓库名，决定镜像地址'>
+                               tooltip='不能包含中文，小写字母开头；默认取代码仓库名，决定镜像地址'>
                         <Input/>
                     </Form.Item>
 
-                    <Form.Item label='dockerfile' name='dockerfile' rules={[{required: true}]}
-                               initialValue='Dockerfile'
-                               help='相对代码仓库根目录的路径，必须位于构建上下文内，如 admin/Dockerfile'>
-                        <Input/>
+                    <Form.Item noStyle shouldUpdate={(prev, cur) => prev.context !== cur.context}>
+                        {({getFieldValue}) => {
+                            const context = normalizeRelativePath(getFieldValue('context'))
+                            return <Form.Item label='dockerfile' name='dockerfile' rules={[{required: true}]}
+                                              initialValue='Dockerfile'
+                                              tooltip='相对仓库根目录的路径，不要以 / 开头；必须位于构建上下文内'>
+                                <Input placeholder={dockerfileForContext(context)}
+                                       onBlur={this.handleDockerfileBlur}/>
+                            </Form.Item>
+                        }}
                     </Form.Item>
                     <Form.Item label='构建上下文' name='context'
-                               tooltip='发给 Docker 的构建目录，决定 COPY 的根目录与 .dockerignore 的生效位置'>
-                        <Input placeholder='留空 = 仓库根目录，例如 admin'/>
+                               tooltip='发给 Docker 的构建目录，决定 COPY 的根目录与 .dockerignore 的生效位置；相对仓库根目录的子目录，不要以 / 开头，留空表示仓库根目录'>
+                        <Input placeholder='留空 = 仓库根目录，如 admin' onBlur={this.handleContextBlur}/>
                     </Form.Item>
-                    <Form.Item label='构建参数' name='buildArg' help='格式: key=value&key2=value2'>
+                    <Form.Item label='构建参数' name='buildArg' tooltip='格式: key=value&key2=value2'>
                         <Input/>
                     </Form.Item>
 

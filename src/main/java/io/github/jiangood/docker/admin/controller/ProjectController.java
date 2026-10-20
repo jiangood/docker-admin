@@ -80,7 +80,8 @@ public class ProjectController {
         }
         param.setGitUrl(param.getGitUrl().trim());
         param.setName(param.getName().trim());
-        // 构建上下文统一存成归一化后的相对路径，空表示仓库根目录
+        // dockerfile 与构建上下文统一存成不带前导 / 的相对路径，空上下文表示仓库根目录
+        param.setDockerfile(BuildContextUtils.normalizeDockerfile(param.getDockerfile()));
         param.setContext(BuildContextUtils.normalize(param.getContext()));
         Project result = this.service.saveProject(param, updateFields);
         return AjaxResult.ok().data(result.getId()).msg("保存成功");

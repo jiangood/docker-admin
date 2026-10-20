@@ -41,9 +41,23 @@ class BuildContextUtilsTest {
 
     @Test
     void displayFallsBackToRoot() {
-        assertEquals("/", BuildContextUtils.display(null));
-        assertEquals("/", BuildContextUtils.display("/"));
+        assertEquals("仓库根目录", BuildContextUtils.display(null));
+        assertEquals("仓库根目录", BuildContextUtils.display("/"));
         assertEquals("admin", BuildContextUtils.display("./admin/"));
+    }
+
+    @Test
+    void dockerfileIsNormalizedToRepoRelativePath() {
+        assertEquals("Dockerfile", BuildContextUtils.normalizeDockerfile(null));
+        assertEquals("Dockerfile", BuildContextUtils.normalizeDockerfile("  "));
+        assertEquals("Dockerfile", BuildContextUtils.normalizeDockerfile("/"));
+        assertEquals("admin/Dockerfile", BuildContextUtils.normalizeDockerfile("/admin/Dockerfile"));
+        assertEquals("admin/Dockerfile", BuildContextUtils.normalizeDockerfile("./admin/Dockerfile"));
+        assertEquals("admin/Dockerfile", BuildContextUtils.normalizeDockerfile("admin\\Dockerfile"));
+        assertEquals("admin/web/Dockerfile", BuildContextUtils.normalizeDockerfile("admin//web/Dockerfile"));
+        assertThrows(IllegalArgumentException.class, () -> BuildContextUtils.normalizeDockerfile("../Dockerfile"));
+        assertThrows(IllegalArgumentException.class, () -> BuildContextUtils.normalizeDockerfile("admin/../Dockerfile"));
+        assertThrows(IllegalArgumentException.class, () -> BuildContextUtils.normalizeDockerfile("D:/ws/cvs/Dockerfile"));
     }
 
     @Test

@@ -20,7 +20,24 @@ public class BuildContextUtils {
      * @return 归一化后的相对路径；仓库根目录返回空字符串
      */
     public static String normalize(String context) {
-        String value = StrUtil.trim(context);
+        return normalizePath(context, "构建上下文");
+    }
+
+    /**
+     * 归一化 dockerfile 路径：与构建上下文一样按仓库根目录解析，统一为不带前导 {@code /} 的相对路径。
+     * <p>
+     * 历史上可能存成 {@code /admin/Dockerfile}，这里一并兼容；空值回退为 {@code Dockerfile}。
+     */
+    public static String normalizeDockerfile(String dockerfile) {
+        String normalized = normalizePath(dockerfile, "dockerfile 路径");
+        return StrUtil.isEmpty(normalized) ? "Dockerfile" : normalized;
+    }
+
+    /**
+     * 归一化仓库内的相对路径，空值或 {@code /}、{@code .} 表示仓库根目录。
+     */
+    private static String normalizePath(String raw, String label) {
+        String value = StrUtil.trim(raw);
         if (StrUtil.isBlank(value)) {
             return "";
         }
@@ -36,20 +53,20 @@ public class BuildContextUtils {
             return "";
         }
 
-        Assert.isTrue(!value.contains(":"), "构建上下文必须是相对路径，不能包含盘符或协议：" + context);
+        Assert.isTrue(!value.contains(":"), label + "必须是相对路径，不能包含盘符或协议：" + raw);
         for (String segment : value.split("/")) {
             Assert.isTrue(!".".equals(segment) && !"..".equals(segment),
-                    "构建上下文不能包含 . 或 .. 路径：" + context);
+                    label + "不能包含 . 或 .. 路径：" + raw);
         }
         return value;
     }
 
     /**
-     * 归一化后用于展示的上下文：仓库根目录显示为 {@code /}。
+     * 归一化后用于展示的上下文：仓库根目录显示为「仓库根目录」。
      */
     public static String display(String context) {
         String normalized = normalize(context);
-        return StrUtil.isEmpty(normalized) ? "/" : normalized;
+        return StrUtil.isEmpty(normalized) ? "仓库根目录" : normalized;
     }
 
     /**
