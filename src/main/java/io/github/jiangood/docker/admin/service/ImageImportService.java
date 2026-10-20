@@ -7,7 +7,6 @@ import com.github.dockerjava.api.command.PushImageCmd;
 import com.github.dockerjava.api.model.AuthConfig;
 import com.github.dockerjava.api.model.LoadResponseItem;
 import com.github.dockerjava.api.model.PushResponseItem;
-import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.entity.ImageTag;
 import io.github.jiangood.docker.admin.entity.Registry;
 import io.github.jiangood.docker.admin.websocket.ImageImportLogHandshakeInterceptor;
@@ -36,13 +35,12 @@ import java.util.regex.Pattern;
  * 并登记镜像与版本（来源 IMPORT）。
  * <p>
  * 与导出的方向相反：导出是「注册中心 → 本机 docker → tar 下载」，导入是
- * 「上传 tar → 执行主机 docker load → 打标 → push 注册中心」。
+ * 「上传 tar → 本机 docker load → 打标 → push 注册中心」。
  * <p>
  * 载入与推送都在后台线程执行，进度写入 {@code /data/logs/{logId}.log}，
  * 前端通过 {@code /admin/ws/image-import-log/{logId}} 实时查看。
  * <p>
- * 执行主机可以不选，此时使用平台所在主机的 docker（compose 部署已挂载 docker.sock）；
- * 选择远程主机时会先把归档通过 docker API 传到该主机，适合把镜像直接送上目标机器使用。
+ * 载入统一使用平台所在主机的 docker（compose 部署已挂载 docker.sock），不支持指定远程主机。
  * <p>
  * 镜像名与版本都可以不填：默认按 tar 内的 RepoTags 导入，
  * 即 {@code docker save app:1.0} 会导入为 {@code 注册中心/命名空间/app:1.0}。
@@ -70,8 +68,6 @@ public class ImageImportService {
     private static final Pattern TAG_PATTERN = Pattern.compile("^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$");
 
     private final DockerClientManager dockerManager;
-
-    private final HostService hostService;
 
     private final RegistryService registryService;
 
@@ -106,7 +102,7 @@ public class ImageImportService {
      * 后台导入。异常只写进任务日志（前端在日志里可见），不向上抛。
      */
     @Async
-    public void importTar(String logId, File tar, String registryId, String hostId, String imageName, String tag) {
+    public void importTar(String logId, File tar, String registryId, String imageName, String tag) {
         taskLogRegistry.start(logId);
         FileLog.bind(logId);
 
@@ -120,18 +116,12 @@ public class ImageImportService {
             Assert.hasText(registryBase,
                     "注册中心地址未配置，请先在【设置-镜像注册中心】中配置地址与命名空间");
 
-            Host host = null;
-            if (StrUtil.isNotBlank(hostId)) {
-                host = hostService.findById(hostId)
-                        .orElseThrow(() -> new IllegalArgumentException("执行主机不存在，请重新选择"));
-            }
-
             fileLog.info("开始导入镜像归档 {}", tar.getName());
             fileLog.info("归档大小: {}", FileUtil.readableFileSize(tar.length()));
-            fileLog.info("执行主机: {}", host == null ? "本机 Docker" : host.getName());
+            fileLog.info("执行主机: 平台所在主机（本机 Docker）");
             fileLog.info("目标注册中心: {}", registryBase);
 
-            client = dockerManager.getClient(host);
+            client = dockerManager.getLocalClient();
 
             // docker 的 load 接口不返回结构化结果，只能从回调流里识别 "Loaded image: xxx"
             LoadCallback callback = new LoadCallback(logId);
@@ -232,7 +222,7 @@ public class ImageImportService {
         }
         pushCmd.exec(new DefaultCallback<PushResponseItem>(logId)).awaitCompletion();
 
-        // 推送时已在本机（或执行主机）打好注册中心前缀的 tag，直接 inspect 读取端口/卷等声明
+        // 推送时已在本机打好注册中心前缀的 tag，直接 inspect 读取端口/卷等声明
         try {
             imageService.upsert(target.targetRepo(), target.name(), "IMPORT", registry.getId(), null);
             ImageTag saved = imageTagService.inspect(client, target.fullName(), target.targetRepo(),

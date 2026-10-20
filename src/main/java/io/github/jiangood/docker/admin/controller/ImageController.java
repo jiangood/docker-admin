@@ -10,7 +10,6 @@ import io.github.jiangood.docker.admin.dto.RemoteSyncResult;
 import io.github.jiangood.docker.admin.entity.App;
 import io.github.jiangood.docker.admin.entity.Image;
 import io.github.jiangood.docker.admin.entity.ImageTag;
-import io.github.jiangood.docker.admin.service.HostService;
 import io.github.jiangood.docker.admin.service.ImageExportRegistry;
 import io.github.jiangood.docker.admin.service.ImageExportService;
 import io.github.jiangood.docker.admin.service.ImageImportRegistry;
@@ -79,9 +78,6 @@ public class ImageController {
 
     @Resource
     private RegistryService registryService;
-
-    @Resource
-    private HostService hostService;
 
     @Resource
     private RemoteSyncService remoteSyncService;
@@ -335,19 +331,18 @@ public class ImageController {
     // ------------------------------------------------------------------ 导入
 
     /**
-     * 上传 tar 并导入到注册中心：先在执行主机上 {@code docker load}，再打上注册中心前缀并 push，
+     * 上传 tar 并导入到注册中心：先在平台所在主机上 {@code docker load}，再打上注册中心前缀并 push，
      * 最后登记镜像与版本（来源 IMPORT）。
      * <p>
      * 上传完成后立即返回 logId，载入与推送在后台执行；前端通过
      * {@code /admin/ws/image-import-log/{logId}} 看实时日志，用 {@code import/status} 取最终结果。
      * <p>
      * 镜像名与版本可留空，此时沿用 tar 内的 RepoTags；指定镜像名时归档里只能有一个镜像。
-     * 执行主机留空表示使用平台所在主机的 docker。
      */
     @HasPermission("image:import")
     @PostMapping("import/start")
     public AjaxResult importStart(@RequestParam("file") MultipartFile file,
-                                  String registryId, String hostId, String imageName, String tag) throws IOException {
+                                  String registryId, String imageName, String tag) throws IOException {
         Assert.notNull(file, "请选择要导入的 tar 包");
         Assert.state(!file.isEmpty(), "tar 包为空，无法导入");
 
@@ -360,11 +355,8 @@ public class ImageController {
         String version = StrUtil.trimToNull(tag);
         imageImportService.validate(name, version);
 
-        // 同步校验注册中心与主机，错误直接返回给前端，不必等后台任务跑起来才在日志里报错
+        // 同步校验注册中心，错误直接返回给前端，不必等后台任务跑起来才在日志里报错
         registryService.requireRegistry(registryId);
-        if (StrUtil.isNotBlank(hostId)) {
-            Assert.notNull(hostService.findById(hostId).orElse(null), "执行主机不存在，请重新选择");
-        }
 
         String logId = "import-" + RandomUtil.randomString(16);
         File target = imageImportService.newTarFile(logId);
@@ -376,7 +368,7 @@ public class ImageController {
         }
 
         imageImportRegistry.register(logId);
-        imageImportService.importTar(logId, target, registryId, hostId, name, version);
+        imageImportService.importTar(logId, target, registryId, name, version);
         return AjaxResult.ok().data(logId).msg("已开始导入");
     }
 

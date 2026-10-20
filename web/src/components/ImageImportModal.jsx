@@ -13,7 +13,7 @@ const POLL_INTERVAL = 2000
 /**
  * 导入 tar 到注册中心（镜像列表页）。
  * <p>
- * 流程：上传 tar → 执行主机 docker load → 打上注册中心前缀并 push → 登记镜像与版本。
+ * 流程：上传 tar → 平台所在主机 docker load → 打上注册中心前缀并 push → 登记镜像与版本。
  * 上传完成后后台任务才真正开始，因此这里先展示实时日志，再轮询最终结果。
  * 镜像名与版本可留空，默认沿用 tar 内的 RepoTags。
  */
@@ -32,20 +32,15 @@ export default class ImageImportModal extends React.Component {
         // 后端返回的 {status, message, images}
         task: null,
         registryOptions: [],
-        hostOptions: [],
     }
 
     show = () => {
         this.stopPoll()
         this.notified = false
         this.setState({open: true, starting: false, file: null, logId: null, task: null})
-        Promise.all([
-            HttpClient.get('admin/registry/options'),
-            HttpClient.get('admin/host/options'),
-        ]).then(([registry, hosts]) => this.setState({
-            registryOptions: registry.data || [],
-            hostOptions: hosts.data || [],
-        })).catch(() => {
+        HttpClient.get('admin/registry/options').then(rs => {
+            this.setState({registryOptions: rs.data || []})
+        }).catch(() => {
         })
     }
 
@@ -70,7 +65,6 @@ export default class ImageImportModal extends React.Component {
             this.setState({starting: true})
             HttpClient.post('admin/image/import/start', form, {
                 registryId: values.registryId,
-                hostId: values.hostId,
                 imageName: values.imageName,
                 tag: values.tag,
             }).then(rs => {
@@ -154,12 +148,8 @@ export default class ImageImportModal extends React.Component {
     }
 
     renderForm = () => {
-        const {file, registryOptions, hostOptions} = this.state
+        const {file, registryOptions} = this.state
         return <Form ref={this.formRef} layout='vertical' preserve={false}>
-            <Alert type='info' showIcon style={{marginBottom: 16}}
-                   message='把 docker save 生成的 tar 载入执行主机，推送到注册中心后登记到镜像列表'
-                   description='大文件上传耗时较长，请保持页面打开；载入与推送完成后可在下方查看结果。'/>
-
             <Form.Item label='镜像归档' required>
                 <Upload.Dragger accept='.tar' maxCount={1} showUploadList={false}
                                 beforeUpload={f => {
@@ -180,12 +170,6 @@ export default class ImageImportModal extends React.Component {
             <Form.Item label='目标注册中心' name='registryId' tooltip='留空使用系统默认注册中心'>
                 <Select allowClear showSearch optionFilterProp='label' options={registryOptions}
                         placeholder='使用系统默认注册中心'/>
-            </Form.Item>
-
-            <Form.Item label='执行主机' name='hostId'
-                       tooltip='负责 docker load 与 push 的主机；留空使用平台所在主机的 docker'>
-                <Select allowClear showSearch optionFilterProp='label' options={hostOptions}
-                        placeholder='本机 Docker（平台所在主机）'/>
             </Form.Item>
 
             <Form.Item label='镜像名' name='imageName'

@@ -67,6 +67,13 @@ public class DockerClientManager {
         return this.getClient(host, new Registry());
     }
 
+    /**
+     * 平台所在主机（本机）的 docker 客户端，与 {@code getClient((Host) null)} 等价。
+     */
+    public DockerClient getLocalClient() {
+        return this.getClient((Host) null, new Registry());
+    }
+
 
     /**
      * 获取主机对应的 docker 客户端。
