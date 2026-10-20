@@ -107,7 +107,7 @@ web/
 
 | 功能 | 说明 |
 |------|------|
-| 定时任务 | 基于 Quartz，动态创建/暂停/恢复，继承 `BaseJob` + `@JobDescription` |
+| 定时任务 | 基于 Quartz，动态创建/暂停/恢复，继承 `BaseJob` + `@JobDescription`；`BaseJob.progress(...)` 上报运行进度，日志聚合（每次执行/按小时/按天）与保留期清理 |
 | 文件管理 | `sys.file.store-type` 配置（`LOCAL` / `MINIO`），统一上传下载预览；临时文件自动清理（TTL 可配置） |
 | 操作日志 | `@Log` 注解 + AOP 切面，异步记录（独立线程池 `operationLogExecutor`） |
 | 运行日志查看 | 在线查看日志文件 |
@@ -129,7 +129,7 @@ web/
 |------|--------|------|
 | system | `modules/system/` | 用户/角色/菜单/组织/字典/文件/日志管理 |
 | job | `modules/job/` | Quartz 定时任务 |
-| logviewer | `modules/logviewer/` | 运行日志在线查看 |
+| logviewer | `modules/logviewer/` | 运行日志在线查看（写入 `FileLog` + 增量读取接口 + 按 key 前缀鉴权） |
 | codegen | `modules/codegen/` | 实体扫描与 CRUD 代码生成（系统管理 →「代码生成」） |
 
 ## FAQ

@@ -47,6 +47,66 @@ public class DataSyncJob extends BaseJob {
 }
 ```
 
+进度上报（`BaseJob` 受保护方法，供前端「定时任务」页面轮询展示）：
+
+| 方法 | 说明 |
+|------|------|
+| `progress(int percent, String message)` | 直接上报百分比（0-100） |
+| `progress(long current, long total, String message)` | 上报「已处理/总数」，百分比自动计算 |
+| `progress(String message)` | 仅更新描述，进度未知时使用 |
+
+进度只保存在内存（`JobProgressRegistry`），重启后丢失；执行结果仍由 `sys_job_log` 落库。
+
+| 端点 | HTTP | 权限 | 说明 |
+|------|------|------|------|
+| `admin/job/progress` | GET | `job:read` | 全部任务运行进度快照，按开始时间倒序 |
+| `admin/job/progress/{jobId}` | GET | `job:read` | 单个任务进度，从未运行时 `data` 为 `null` |
+
+快照字段：`jobId` / `jobName` / `logId` / `state`(`RUNNING`/`SUCCESS`/`FAILED`) / `stateLabel` / `stateColor` / `percent` / `current` / `total` / `message` / `beginTime` / `updateTime` / `endTime` / `runTime` / `result`。
+
+### 日志聚合
+
+`SysJob.logAggregation`（新建/编辑任务时选择，字典 `jobLogAggregation`）控制执行记录与日志文件粒度：
+
+| 取值 | 执行记录 | 日志文件 |
+|---|---|---|
+| `PER_RUN` 每次执行（默认） | 每次一行 | 每次一个文件 |
+| `HOURLY` 按小时 | 每任务每小时一行 | 每任务每小时一个文件 |
+| `DAILY` 按天 | 每任务每天一行 | 每任务每天一个文件 |
+
+聚合记录的 `SysJobLog` 额外字段：`logBucket`（聚合桶）、`executeCount`（执行次数）、`failCount`（失败次数）、`totalRunTime`（累计耗时）/`totalRunTimeLabel`；`jobRunTime`/`result` 为最近一次，`success` 表示周期内是否全部成功。执行记录与日志文件按 `sys.job-log-retain-days`（默认 30 天）自动清理。
+
+### 运行日志
+
+前端展示的文件日志（定时任务、以及业务模块自己的异步任务）统一由 `modules/logviewer/` 提供：日志写入、增量读取与查看权限按 key 前缀解耦。
+
+写入（`FileLog`）：`bind(key)` 把当前线程绑定到 `${logging.file.path}/{key}.log`，`logger()` 取日志 logger，`unbind()` 解绑；写入哪个文件只取决于当前线程绑定的 key，与包名/类名无关。
+
+| 端点 | HTTP | 权限 | 说明 |
+|------|------|------|------|
+| `admin/sys/log/{key}` | GET | 按 key 前缀注册（见下） | 增量读取日志，返回 `{content, nextOffset, eof}` |
+| `admin/sys/log/raw/{key}` | GET | 同上 | 纯文本返回完整日志，供新窗口打开 |
+
+> **升级注意（3.1.9）**：`admin/sys/log/{key}` 在 3.1.8 及之前返回 `text/plain` 全量内容，3.1.9 起改为增量 JSON（纯文本改用 `admin/sys/log/raw/{key}`）；查看权限由硬编码 `job:read` 改为按 key 前缀注册，未注册的前缀一律拒绝。原 `FileLogTool` 已更名为 `FileLog`。
+
+`admin/sys/log/{key}` 查询参数：`offset`（起始字节偏移，默认 0）、`length`（单次最多读取字节数，默认 256KB，上限 4MB）。日志会随任务持续增长，前端按返回的 `nextOffset` 反复请求即可只取新增部分；读取按 UTF-8 字符边界切分，不会截断多字节字符。
+
+查看权限由各模块通过实现 `LogKeyPermissionProvider` 声明（key 前缀 → 权限），通用模块不写死业务权限，未注册的前缀一律拒绝：
+
+```java
+@Component
+public class OrderLogPermissionProvider implements LogKeyPermissionProvider {
+    @Override
+    public Map<String, String> logKeyPermissions() {
+        return Map.of("order", "order:read");   // order/{logId} 需要 order:read
+    }
+}
+```
+
+前端可直接使用框架的 `LogViewer` 组件增量跟随运行中的日志（参见[组件](#组件)）。
+
+日志如果属于业务数据、需要行级/数据权限校验，不要复用上面的通用接口（它只能校验权限码）：由业务模块自己提供读取接口，并让 `LogViewer` 通过 `url` 指向它，返回同样的 `{content, nextOffset, eof}` 即可复用增量跟随。
+
 ### 代码生成
 
 系统管理 →「代码生成」页面：动态扫描已注册实体（继承 `BaseEntity` 且标注 `@Entity`），按选中实体生成常见 CRUD 代码并写入项目源码目录（先预览确认，再写入）。
@@ -80,7 +140,7 @@ public class DataSyncJob extends BaseJob {
 
 | 组件 | 用途 |
 |------|------|
-| `Page` | 页面容器（标题/描述/右侧操作区），`padding`/`backgroundGray`/`debug`/`title`/`description`/`actions`（推荐传 `PermAction[]`，兼容带 `perm` 属性的节点） |
+| `Page` | 页面容器（标题/描述/右侧操作区），`padding`/`debug`/`title`/`description`/`actions`（推荐传 `PermAction[]`，兼容带 `perm` 属性的节点）；`backgroundGray` 已废弃（页面底色默认跟随布局底色，该参数不再产生差异） |
 | `PageLoading` | 页面加载中提示（`message` 单条 / `messages` 多阶段） |
 | `ProTable` | 数据表格，分页/筛选/工具栏/树形模式，详见[下方](#protable) |
 | `LinkButton` | 链接跳转按钮（`path` + `label`，通过 `PageUtils.open` 打开页面） |
@@ -96,6 +156,7 @@ public class DataSyncJob extends BaseJob {
 | `ValueType` | 按类型渲染字段/视图（`renderField(type, props)` / `renderView(type, props)`） |
 | `View*` | 展示组件，见[展示组件](#展示组件) |
 | `DownloadModal` | 下载弹框，通过 ref 调用 `download()` 方法，支持进度追踪/取消/重试 |
+| `LogViewer` | 文件日志查看器，按字节偏移增量读取；`logKey` + `running` 时自动轮询新内容、任务结束自动补拉最后一段；`url` 可指向业务模块自建接口 |
 
 #### PageFrame
 
@@ -403,7 +464,7 @@ location /file/public/ {
 
 | 类 | 主要方法 |
 |----|---------|
-| `HttpClient` | `get` / `post` / `postForm` / `download` / `ajax`（axios 封装，自动 context-path；所有请求方法返回 `Promise<AjaxBody>`：成功 resolve 整个 AjaxResult 响应体（`{success, code, data, message, traceId, ...}`，业务取数据用 `rs.data`、提示文案用 `rs.message`），失败 `reject({code, message})` 且默认自动弹错；成功时后端返回了 `message` 会自动 `message.success` 弹出（传 `{toastSuccess: false}` 关闭），失败弹错传 `{toastError: false}` 可静默仅 reject） |
+| `HttpClient` | `get` / `post` / `postForm` / `download` / `ajax`（axios 封装，自动 context-path；所有请求方法返回 `Promise<AjaxBody>`：成功 resolve 整个 AjaxResult 响应体（`{success, code, data, message, traceId, ...}`，业务取数据用 `rs.data`、提示文案用 `rs.message`），失败 `reject({code, message})` 且默认自动弹错；成功时后端返回了 `message` 会自动 `message.success` 弹出（传 `{toastSuccess: false}` 关闭），失败弹错传 `{toastError: false}` 可静默仅 reject。**例外**：`401`（HTTP 401 或业务 code=401）不单独弹错，而是广播 `loginExpired` 由全局登录失效弹窗提示；非 `AjaxResult` 结构的响应体一律按失败处理） |
 | `UrlUtils` | `contextPath(path)` 拼接 context-path / `getParams` / `setParam` / `getPathname` |
 | `DictUtils` | `dictList` / `dictLabel` / `dictOptions` / `dictTag` |
 | `TreeUtils` | `walk` / `findByKey` / `flattenTree` / `getKeyList` / `getChildRecursive` |
@@ -417,6 +478,8 @@ location /file/public/ {
 | `EventBus` | `on` / `once` / `emit` / `off` — 跨组件通信，优先使用，替代 `document.dispatchEvent` |
 
 `EventBus.on` / `once` 返回取消订阅函数；`on` 支持传 `ctx`（this）。`PageUtils.open(path, label)` 用于跳转到页面（`label` 会作为 Tab 标题，通过 `currentLabel()` 读取）。
+
+框架内置事件：登录失效时 `HttpClient` 广播 `loginExpired`（载荷 `{message, reason}`，`reason` 为 `CONCURRENT_LOGIN` 表示同一账号并发登录被顶下线），`Layouts` 已内置监听并弹出提示，业务无需处理；提示文案由 `sys.login-expired-message` / `sys.concurrent-login-message` 配置（见 [config.md](config.md)）。
 
 ### 路由
 

@@ -12,7 +12,11 @@
 | `sys.file.clean-temp-minutes` | 临时文件自动清理时间（分钟） | 120 |
 | `sys.file.minio.*` | MinIO 对象存储配置 | — |
 | `sys.session-idle-time` | Session 超时（分钟） | 180 |
+| `sys.maximum-sessions` | 最大并发会话数（同一账号同时在线数），超出时踢出旧会话 | 1 |
+| `sys.concurrent-login-message` | 被并发登录顶下线时的提示文案 | 您的账号已在别处登录，请重新登录 |
+| `sys.login-expired-message` | 会话空闲超时/未登录时的提示文案（经 `/admin/public/site-info` 下发给前端） | 登录已过期，请重新登录 |
 | `sys.job-enable` | 定时任务开关 | true |
+| `sys.job-log-retain-days` | 定时任务执行记录保留天数，`<=0` 表示不清理 | 30 |
 | `sys.codegen.backend-dir` | 代码生成后端源码根目录（相对项目根） | src/main/java |
 | `sys.codegen.resource-dir` | 代码生成资源目录（菜单 YAML 输出位置） | src/main/resources |
 | `sys.codegen.frontend-dir` | 代码生成前端页面根目录 | web/src/pages |
@@ -102,7 +106,10 @@ resetUserTheme();           // 恢复默认（antd）
     colorWarning: '#faad14',
     colorError: '#ff4d4f',
     colorInfo: '#1677ff',
+    // 页面底色：colorBgLayout 仅浅色模式生效
     colorBgLayout: '#f5f5f5',
+    // 暗色模式页面底色（非 antd token）；不设则由 antd 暗色算法推导（#000000）
+    darkColorBgLayout: '#0f1115',
     // 侧栏配色，不设则用 antd 默认
     siderBg: '#102A43',
     siderSubBg: '#102A43',
@@ -127,10 +134,10 @@ setThemeMode('dark');  // 指定模式
 toggleThemeMode();     // 明暗互切
 ```
 
-- 暗色模式下 `colorBgLayout` **不再套用默认浅灰**，交由 antd 暗色算法推导；若业务显式在 `colors` 中传入 `colorBgLayout`，两种模式都会尊重。
+- 页面底色分模式生效：浅色用 `colors.colorBgLayout`，暗色用 `colors.darkColorBgLayout`（框架自定义字段，非 antd token）。暗色下**不再复用** `colorBgLayout`，未传 `darkColorBgLayout` 时由 antd 暗色算法推导（`#000000`）。暗色下若只传了浅色的 `colorBgLayout`，控制台会提示一次迁移，避免配置静默失效。
 - 左侧栏独立套用 antd 暗色算法，因此分割线、边框在深色底上始终可见；业务无需额外处理。
 - 颜色/预设切换通过 `EventBus` 的 `themeChange` 事件广播，`Layouts` 已内置监听并重渲染，业务无需处理。
-- 自定义样式请复用框架同步的 CSS 变量以自动跟随明/暗：`--primary-color`、`--primary-color-hover`、`--oa-color-bg-container`、`--oa-color-bg-layout`、`--oa-color-border`、`--oa-color-text`、`--oa-color-text-secondary`、`--oa-color-text-tertiary`、`--oa-color-fill`、`--oa-color-primary-bg`，以及侧栏相关的 `--oa-sider-bg`、`--oa-sider-text`、`--oa-sider-hover-bg`、`--oa-sider-trigger-bg`。
+- 自定义样式请复用框架同步的 CSS 变量以自动跟随明/暗：`--primary-color`、`--primary-color-hover`、`--oa-color-bg-container`、`--oa-color-bg-layout`、`--oa-color-border`、`--oa-color-text`、`--oa-color-text-secondary`、`--oa-color-text-tertiary`、`--oa-color-fill`、`--oa-color-fill-quaternary`、`--oa-color-primary-bg`，以及侧栏相关的 `--oa-sider-bg`、`--oa-sider-text`、`--oa-sider-hover-bg`、`--oa-sider-trigger-bg`。
 
 ### 界面密度
 

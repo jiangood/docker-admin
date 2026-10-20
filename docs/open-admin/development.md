@@ -41,6 +41,47 @@
 - 若任务类存在**多个构造器**（含无参构造），Spring 不会自动选择，必须用 `@Autowired` 显式标注其中一个，否则默认走无参构造、`final` 字段不会注入（运行时 NPE）；
 - 任务实例每次触发重建，不要在字段中缓存跨触发的可变状态。
 
+### 进度上报
+
+长任务可调用 `BaseJob` 提供的 `progress(...)` 把运行进度暴露给前端「定时任务」页面（页面每 3 秒轮询 `admin/job/progress`）：
+
+```java
+List<Row> rows = load();
+for (int i = 0; i < rows.size(); i++) {
+    sync(rows.get(i));
+    progress(i + 1, rows.size(), "已同步 " + (i + 1) + "/" + rows.size());
+}
+return "同步完成 " + rows.size() + " 条";
+```
+
+- 三种重载：`progress(percent, msg)` / `progress(current, total, msg)`（百分比自动算）/ `progress(msg)`
+- 进度是**内存态**（`JobProgressRegistry`），不落库；重启后运行中进度丢失，但 `sys_job_log` 执行记录完整
+- 只对继承 `BaseJob` 的任务生效；直接实现 `org.quartz.Job` 的类没有进度
+- 进度按 `SysJob.id` 记录，同一任务受 `@DisallowConcurrentExecution` 保护不会并发覆盖
+- 建议按批次/每秒最多一次上报，避免无谓开销；任务结束后状态保留 30 分钟自动清理
+
+### 日志聚合
+
+高频任务（如每 5 秒执行）会在 `sys_job_log` 和日志目录产生海量记录。任务定义上的「日志聚合」属性（`SysJob.logAggregation`，前端新建/编辑时可选）控制执行记录与日志文件的粒度：
+
+| 取值 | 执行记录 | 日志文件 |
+|---|---|---|
+| `PER_RUN` 每次执行（默认） | 每次一行 | 每次一个文件 |
+| `HOURLY` 按小时 | 每任务每小时一行 | 每任务每小时一个文件 |
+| `DAILY` 按天 | 每任务每天一行 | 每任务每天一个文件 |
+
+- 聚合模式下复用同一条 `SysJobLog`（id 不变），日志按 `job/{logId}` 追加到同一文件；「执行记录 → 日志」按钮打开的就是该周期的完整文件日志。
+- 聚合记录字段：`beginTime` 为周期内第一次执行时间，`jobRunTime` 为最近一次耗时，`totalRunTime` 为累计耗时，`executeCount`/`failCount` 为执行/失败次数，`success` 表示周期内是否全部成功，`result` 为最近一次返回值。
+- 过期执行记录与日志文件由 `sys.job-log-retain-days`（默认 30 天，`<=0` 不清理）每天 03:00 自动清理；删除任务时也会一并删除其执行记录与日志文件。
+
+### 日志写入与在线查看
+
+任务的 `logger` 参数由 `BaseJob` 通过 `FileLog` 绑定到 `job/{logId}`，任务内所有日志都会写入该文件；日志文件为**追加**模式，聚合模式下同一周期的内容会持续追加到同一文件。
+
+前端「执行记录 → 日志」弹窗使用框架 `LogViewer` 组件：任务运行中按 1.5s 增量拉取新增内容（只读文件新增字节，不会整文件重读），任务结束后停止轮询并补拉最后一段；「在新窗口打开」走 `admin/sys/log/raw/job/{logId}` 返回纯文本。
+
+`admin/sys/log/{key}` 的查看权限按 key 前缀注册（定时任务日志注册为 `job:read`）。业务模块自己的文件日志（如 `FileLog.bind("order/" + id)`）需要实现 `LogKeyPermissionProvider` 声明前缀权限，否则该日志一律拒绝访问——详见 [api.md](api.md#运行日志)。
+
 ## 临时文件确认
 
 上传文件/图片后，`SysFile` 记录默认处于 **临时（TEMP）** 状态；只有业务数据保存时调用 `SysFileService` 的确认方法才会转为 **使用中（IN_USE）** 并记录关联表/关联 ID。临时文件默认 120 分钟（`sys.file.clean-temp-minutes`）后被 `CleanTempFileJob` 物理删除，因此**包含文件/图片/富文本字段的业务模块必须在保存后确认临时文件**，否则上传的图片会莫名其妙消失。
