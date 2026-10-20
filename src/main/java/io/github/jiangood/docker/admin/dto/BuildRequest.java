@@ -25,7 +25,7 @@ public class BuildRequest {
 
     /**
      * 分支名；仅 {@code refType=BRANCH} 时使用，克隆该分支最新代码，
-     * 镜像版本号由「分支名 + 提交短 id」生成（见 ProjectService#buildBranchImageTag）。
+     * 镜像版本号由「分支名 + 构建时间（yyyyMMdd-HHmm）+ 提交短 id」生成（见 ProjectService#buildBranchImageTag）。
      */
     String branch;
 

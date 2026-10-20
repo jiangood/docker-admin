@@ -55,6 +55,7 @@ import java.io.IOException;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
@@ -244,16 +245,22 @@ public class ProjectService extends BaseService<Project> {
     private static final int DOCKER_TAG_MAX_LENGTH = 128;
 
     /**
+     * 分支构建版本号中的构建时间格式：年月日-时分。
+     */
+    private static final DateTimeFormatter BUILD_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd-HHmm");
+
+    /**
      * 每次构建成功后统一追加推送的版本号。
      */
     private static final String LATEST_TAG = "latest";
 
     /**
-     * 分支构建的镜像版本号：分支名（非法字符替换为 -）+ 提交短 id，如 {@code feature-x-1a2b3c4d}。
+     * 分支构建的镜像版本号：分支名（非法字符替换为 -）+ 构建时间（yyyyMMdd-HHmm）+ 提交短 id，
+     * 如 {@code main-20261020-1530-1a2b3c4d}。
      * <p>
-     * Docker tag 不允许 {@code /} 等字符，这里做替换并按长度上限截断，保证可推送。
+     * Docker tag 不允许 {@code /} 等字符，这里做替换并按长度上限截断分支名，保证可推送。
      */
-    static String buildBranchImageTag(String branch, String commitId) {
+    static String buildBranchImageTag(String branch, String commitId, LocalDateTime buildTime) {
         String name = StrUtil.nullToEmpty(branch).trim()
                 .replaceAll("[^A-Za-z0-9_.-]", "-")
                 .replaceAll("^[-.]+", "")
@@ -261,8 +268,14 @@ public class ProjectService extends BaseService<Project> {
         if (StrUtil.isBlank(name)) {
             name = "branch";
         }
-        String suffix = StrUtil.isBlank(commitId) ? "" : "-" + commitId;
-        int maxNameLength = DOCKER_TAG_MAX_LENGTH - suffix.length();
+
+        LocalDateTime time = buildTime == null ? LocalDateTime.now() : buildTime;
+        StringBuilder suffix = new StringBuilder("-").append(BUILD_TIME_FORMATTER.format(time));
+        if (StrUtil.isNotBlank(commitId)) {
+            suffix.append("-").append(commitId);
+        }
+
+        int maxNameLength = Math.max(1, DOCKER_TAG_MAX_LENGTH - suffix.length());
         if (name.length() > maxNameLength) {
             name = name.substring(0, maxNameLength);
         }
@@ -481,11 +494,13 @@ public class ProjectService extends BaseService<Project> {
         String context = p.getContext();
         String dockerfile = p.getDockerfile();
 
-        // 分支构建：克隆分支最新代码，镜像版本号由「分支名 + 提交短 id」生成
+        // 分支构建：克隆分支最新代码，镜像版本号由「分支名 + 构建时间 + 提交短 id」生成
         boolean branchBuild = BuildRequest.REF_TYPE_BRANCH.equals(p.getRefType())
                 && StrUtil.isNotBlank(p.getBranch());
         String branch = branchBuild ? p.getBranch().trim() : null;
         String cloneRef = branchBuild ? branch : tag;
+        // 构建开始时间（服务器本地时区），用于生成分支构建版本号
+        LocalDateTime buildTime = LocalDateTime.now();
 
         Project project = projectRepository.findById(projectId).orElse(null);
         BuildLog buildLog = buildLogService.findById(logId).orElse(null);
@@ -514,8 +529,8 @@ public class ProjectService extends BaseService<Project> {
             fileLog.info("代码提交时间: {}, {}前", DateUtil.formatDateTime(commitTime), DateUtil.formatBetween(commitTime, new Date(), BetweenFormatter.Level.MINUTE));
             fileLog.info("代码文件大小: {}", DataSizeUtil.format(FileUtil.size(workDir)));
 
-            // 镜像版本号：tag 构建用所选 tag，分支构建用「分支名 + 提交短 id」
-            String versionTag = branchBuild ? buildBranchImageTag(branch, cloneResult.getCommitId()) : tag;
+            // 镜像版本号：tag 构建用所选 tag，分支构建用「分支名 + 构建时间 + 提交短 id」
+            String versionTag = branchBuild ? buildBranchImageTag(branch, cloneResult.getCommitId(), buildTime) : tag;
             fileLog.info("镜像版本号：{}", versionTag);
             buildLog.setTag(versionTag);
 

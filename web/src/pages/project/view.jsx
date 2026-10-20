@@ -381,7 +381,7 @@ export default class extends React.Component {
           </Form.Item>
           {refType === 'BRANCH' ? (
             <Form.Item name="branch" label="构建分支" rules={[{required: true, message: '请选择分支'}]}
-                       help="使用该分支最新代码构建，镜像版本为「分支名 + 提交 id」">
+                       help="使用该分支最新代码构建，镜像版本为「分支名-年月日-时分-提交 id」">
               <Select options={branchOptions} showSearch placeholder='请选择远程分支'/>
             </Form.Item>
           ) : (
@@ -506,7 +506,7 @@ export default class extends React.Component {
             showIcon
             className='mb-4'
             title='推送 tag / 分支自动构建'
-            description='推送形如 vX.Y.Z 的 tag 会构建对应版本；开启「分支推送构建」并配置分支后，仅推送这些分支会构建该分支最新代码（镜像版本为「分支名 + 提交 id」并更新 latest）。均使用系统默认构建节点。'
+            description='推送形如 vX.Y.Z 的 tag 会构建对应版本；开启「分支推送构建」并配置分支后，仅推送这些分支会构建该分支最新代码（镜像版本为「分支名-年月日-时分-提交 id」并更新 latest）。均使用系统默认构建节点。'
           />
           <Descriptions column={1} size='small' bordered>
             <Descriptions.Item label='自动配置'>

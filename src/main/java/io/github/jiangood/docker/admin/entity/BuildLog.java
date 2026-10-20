@@ -32,7 +32,8 @@ public class BuildLog extends BaseEntity {
     String imageUrl;
 
     /**
-     * 镜像版本号：tag 构建即所选 tag（如 v1.0.1）；分支构建为「分支名 + 提交短 id」。
+     * 镜像版本号：tag 构建即所选 tag（如 v1.0.1）；分支构建为「分支名 + 构建时间 + 提交短 id」，
+     * 如 {@code main-20261020-1530-1a2b3c4d}。
      */
     String tag;
 
