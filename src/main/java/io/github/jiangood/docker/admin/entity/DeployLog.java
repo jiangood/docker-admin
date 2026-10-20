@@ -2,6 +2,8 @@ package io.github.jiangood.docker.admin.entity;
 
 import io.github.jiangood.openadmin.framework.data.BaseEntity;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
 import jakarta.persistence.Transient;
 import lombok.Getter;
@@ -25,6 +27,12 @@ public class DeployLog extends BaseEntity {
      * 本次部署的镜像版本（tag），发起部署时的快照，便于在部署列表里区分各次部署。
      */
     String imageTag;
+
+    /**
+     * 触发方式：手动部署、配置变更、构建成功自动部署等。更早的记录没有该字段，为空。
+     */
+    @Enumerated(EnumType.STRING)
+    DeployTrigger triggerType;
 
     LocalDateTime completeTime;
 

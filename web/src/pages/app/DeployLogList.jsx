@@ -5,7 +5,7 @@ import {
     Loading3QuartersOutlined
 } from '@ant-design/icons';
 import React from 'react';
-import {DateUtils, getToken, HttpClient, LogViewer} from '@jiangood/open-admin';
+import {DateUtils, DictUtils, getToken, HttpClient, LogViewer} from '@jiangood/open-admin';
 import LogView from '../../components/LogView';
 
 /** 部署进行中时的列表刷新间隔（毫秒）：新部署记录是 @Async 里才落库的，需要等它出现 */
@@ -160,10 +160,15 @@ export default class extends React.Component {
     renderLabel = (log) => {
         const status = statusOf(log)
         const duration = log.timeSpend != null ? DateUtils.friendlyTotalTime(log.timeSpend) : null
+        // 触发方式来自后端字典；更早的部署记录没有该字段，不显示
+        const trigger = log.triggerType
+            ? (DictUtils.dictLabel('deployTrigger', log.triggerType) || log.triggerType)
+            : null
         return <span style={{display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap'}}>
             {status.icon}
             <span>{log.createTime}</span>
             <Typography.Text type='secondary'>{status.text}</Typography.Text>
+            {trigger ? <Tag color='blue'>{trigger}</Tag> : null}
             {log.imageTag ? <Tag>{log.imageTag}</Tag> : null}
             {duration ? <Typography.Text type='secondary'>耗时 {duration}</Typography.Text> : null}
         </span>

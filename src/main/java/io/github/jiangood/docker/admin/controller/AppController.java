@@ -8,6 +8,7 @@ import io.github.jiangood.docker.admin.dao.DeployLogRepository;
 import io.github.jiangood.docker.admin.dto.ContainerVo;
 import io.github.jiangood.docker.admin.entity.App;
 import io.github.jiangood.docker.admin.entity.DeployLog;
+import io.github.jiangood.docker.admin.entity.DeployTrigger;
 import io.github.jiangood.docker.admin.service.AppService;
 import io.github.jiangood.docker.admin.service.ContainerService;
 import io.github.jiangood.docker.admin.service.TunnelService;
@@ -229,7 +230,7 @@ public class AppController {
     @RequestMapping("saveAndDeploy")
     public AjaxResult saveAndDeploy(@RequestBody App app) throws Exception {
         App saved = service.saveApp(app, null);
-        service.deploy(saved);
+        service.deploy(saved, false, DeployTrigger.CREATE);
         return AjaxResult.ok().msg("部署指令已发送");
     }
 
@@ -246,7 +247,7 @@ public class AppController {
     public AjaxResult updateConfig(String id, @RequestBody App.AppConfig appConfig) {
         assertAppAccess(id);
         App app = service.updateConfig(id, appConfig);
-        service.deploy(app);
+        service.deploy(app, false, DeployTrigger.CONFIG);
 
         return AjaxResult.ok().msg("修改成功，应用会自动重启").data(app);
     }

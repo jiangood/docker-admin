@@ -16,6 +16,7 @@ import io.github.jiangood.docker.admin.dto.ImageConfigMetaVo;
 import io.github.jiangood.docker.admin.entity.App;
 import io.github.jiangood.docker.admin.entity.BuildLog;
 import io.github.jiangood.docker.admin.entity.DeployLog;
+import io.github.jiangood.docker.admin.entity.DeployTrigger;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.entity.ImageTag;
 import io.github.jiangood.docker.admin.entity.Project;
@@ -54,6 +55,9 @@ public class AppService extends BaseService<App> {
 
     /** 隧道未关闭时业务拦截的响应码，前端据此区分业务拦截与容器故障 */
     private static final int TUNNEL_STILL_OPEN_CODE = 409;
+
+    /** 可变标签：镜像内容会随推送变化，本地同名镜像无法证明与仓库一致 */
+    private static final String LATEST_TAG = "latest";
 
     Set<String> deployingList = ConcurrentHashMap.newKeySet();
 
@@ -103,16 +107,27 @@ public class AppService extends BaseService<App> {
 
     @Async
     public void deploy(App app) {
-        deploy(app, false);
+        doDeploy(app, false, DeployTrigger.MANUAL);
+    }
+
+    @Async
+    public void deploy(App app, boolean forcePull) {
+        doDeploy(app, forcePull, DeployTrigger.MANUAL);
+    }
+
+    @Async
+    public void deploy(App app, boolean forcePull, DeployTrigger trigger) {
+        doDeploy(app, forcePull, trigger);
     }
 
     /**
      * 部署应用。
      *
-     * @param forcePull 是否强制从仓库拉取镜像；为 false 时若本地已存在同名镜像则跳过拉取，直接使用本地镜像
+     * @param forcePull 是否强制从仓库拉取镜像；为 false 时若本地已存在同名镜像则跳过拉取，直接使用本地镜像。
+     *                  但 {@code latest} 是可变标签，本地同名镜像无法证明是最新内容，因此总是重新拉取
+     * @param trigger   本次部署的触发方式，仅用于写部署记录，便于在「部署日志」里区分来源
      */
-    @Async
-    public void deploy(App app, boolean forcePull) {
+    private void doDeploy(App app, boolean forcePull, DeployTrigger trigger) {
         Assert.notNull(app, "应用不存在");
         deployingList.add(app.getId());
         DockerClient client = null;
@@ -129,6 +144,7 @@ public class AppService extends BaseService<App> {
             deployLog.setAppId(app.getId());
             deployLog.setAppName(app.getName());
             deployLog.setImageTag(app.getImageTag());
+            deployLog.setTriggerType(trigger == null ? DeployTrigger.MANUAL : trigger);
             // saveAndFlush：立即拿到底层生成的 id，绑定日志文件时才有值（与 BuildLogService.saveLog 一致）
             deployLog = deployLogRepository.saveAndFlush(deployLog);
 
@@ -145,10 +161,17 @@ public class AppService extends BaseService<App> {
             client = getClient(host, app.getImageUrl());
 
 
-            if (!forcePull && imageExists(client, image)) {
+            // latest 是可变标签：同样的 tag 可能已经指向新镜像，跳过拉取会继续用旧内容，
+            // 构建成功后的自动部署尤其如此，因此无论是否勾选强制拉取都要重新拉取。
+            boolean mutableTag = LATEST_TAG.equals(app.getImageTag());
+            if (!forcePull && !mutableTag && imageExists(client, image)) {
                 fileLog.info("本地已存在镜像 {}，跳过拉取（如需更新请勾选强制拉取）", image);
             } else {
-                fileLog.info("开始拉取镜像 {}", image);
+                if (mutableTag && !forcePull) {
+                    fileLog.info("镜像 {} 使用可变标签 latest，强制重新拉取", image);
+                } else {
+                    fileLog.info("开始拉取镜像 {}", image);
+                }
                 // 回调的 logId 必须是本次部署记录 id：DefaultCallback 在 docker 流线程上
                 // 重新绑定 MDC，传 appId 会把拉取进度写进 appId.log（前端并不展示该文件）。
                 client.pullImageCmd(image)
@@ -403,7 +426,7 @@ public class AppService extends BaseService<App> {
         app.setName(newName);
         App saved = appRepository.save(app);
 
-        this.deploy(app);
+        this.deploy(app, false, DeployTrigger.RENAME);
 
         return saved;
     }
@@ -806,7 +829,7 @@ public class AppService extends BaseService<App> {
                 continue;
             }
             app.setImageTag(event.getTag());
-            $this.deploy(app);
+            $this.deploy(app, false, DeployTrigger.BUILD);
         }
     }
 
@@ -865,7 +888,7 @@ public class AppService extends BaseService<App> {
         App saved = appRepository.save(app);
 
         // 3. 在目标主机重新部署（通过代理调用，保证 @Async 生效）
-        SpringUtil.getBean(getClass()).deploy(saved);
+        SpringUtil.getBean(getClass()).deploy(saved, false, DeployTrigger.MIGRATE);
         return saved;
     }
 
