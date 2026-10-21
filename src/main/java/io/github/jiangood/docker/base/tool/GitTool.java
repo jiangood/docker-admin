@@ -1,6 +1,5 @@
 package io.github.jiangood.docker.base.tool;
 
-import cn.hutool.core.date.DateUtil;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
@@ -58,6 +57,17 @@ public class GitTool {
         String commitId;
     }
 
+    /** 克隆目录清理结果。 */
+    @AllArgsConstructor
+    @Data
+    public static class CleanupResult {
+        /** 删除的目录数。 */
+        int deletedDirs;
+
+        /** 回收的字节数。 */
+        long releasedBytes;
+    }
+
     /** GitLab 等平台使用访问令牌时，用户名可填任意非空值，统一使用 oauth2。 */
     private static final String TOKEN_USERNAME = "oauth2";
 
@@ -69,13 +79,17 @@ public class GitTool {
     private static final String DEFAULT_COMMIT_MESSAGE = "chore: 更新 Dockerfile";
 
     /**
-     * 代码克隆根目录，每次克隆在其下按 仓库名/时间戳-uuid 新建工作目录。
+     * 代码克隆根目录，每个构建在其下使用固定目录 {@code <项目名>}（见 {@link #cloneDir(String)}）。
      * <p>
-     * 放在系统临时目录（容器内即 /tmp），不占用持久化的 /data：正常构建结束后目录会被
-     * {@code ProjectService#buildImageJob} 立即删除，容器重建时残留也随之消失；
-     * 进程异常退出留下的目录由 {@code CleanGitCodeJob} 定时兜底清理。
+     * 放在系统临时目录（容器内即 /tmp），不占用持久化的 /data：构建结束即删除目录，
+     * 容器重建时残留也随之消失；进程异常退出留下的目录由 {@link #cleanupCloneDirs()} 兜底清理。
      */
     public static final String CLONE_BASE_DIR = new File(FileUtil.getTmpDir(), "gitcode").getAbsolutePath();
+
+    /** 残留代码目录的最长保留天数；正常构建结束会立即删除，这里只兜底异常退出留下的目录。 */
+    private static final int RETAIN_DAYS = 10;
+
+    private static final long ONE_DAY_MILLIS = 24L * 60 * 60 * 1000;
 
     /**
      * 接受任意 SSH 主机密钥：代码源可配置的是私钥而非 known_hosts，
@@ -235,13 +249,39 @@ public class GitTool {
         }
     }
 
-    public static CloneResult clone(String url, GitCredential credential, String branchOrTag) throws GitAPIException {
+    /**
+     * 项目固定的代码目录：{@code <临时目录>/gitcode/<项目名>}。
+     * <p>
+     * 用项目名而非 id，便于直接在磁盘上认出是哪个项目（项目名在 {@code Project#name} 上唯一）。
+     * 名称里的路径分隔符、文件系统非法字符与空白统一替换为下划线，避免生成畸形路径。
+     */
+    public static File cloneDir(String projectName) {
+        return new File(CLONE_BASE_DIR, sanitizeDirName(projectName));
+    }
 
-        String dirName = url.substring(url.lastIndexOf("/") + 1);
-        dirName = dirName.replace(".git", "");
+    static String sanitizeDirName(String projectName) {
+        String name = StrUtil.blankToDefault(projectName, "project").trim();
+        name = name.replaceAll("[\\\\/:*?\"<>|\\s]+", "_");
+        // 防止 "." / ".." 之类名称把目录指到克隆根目录之外
+        if (name.replace(".", "").isEmpty()) {
+            return "project";
+        }
+        return name;
+    }
 
-        File workDir = new File(CLONE_BASE_DIR,
-                dirName + "/" + DateUtil.date().toString("yyyyMMddHHmmss") + "-" + IdUtil.fastSimpleUUID());
+    public static CloneResult clone(String projectName, String url, GitCredential credential, String branchOrTag)
+            throws GitAPIException {
+
+        // 固定目录会被复用，克隆前先清空：换分支/tag 后残留的旧文件会让构建上下文不干净
+        File workDir = cloneDir(projectName);
+        if (workDir.exists()) {
+            long size = FileUtil.size(workDir);
+            if (!FileUtil.del(workDir)) {
+                throw new IllegalStateException("清理代码目录失败，请手动删除后重试：" + workDir.getAbsolutePath());
+            }
+            fileLog.info("已清空上次的代码目录 {}（{}）", workDir.getAbsolutePath(), FileUtil.readableFileSize(size));
+        }
+        FileUtil.mkdir(workDir);
 
         long start = System.currentTimeMillis();
 
@@ -280,6 +320,65 @@ public class GitTool {
         } finally {
             closeQuietly(sshFactory);
         }
+    }
+
+    /**
+     * 删除构建用的代码目录。
+     *
+     * @return true 表示目录已不存在或删除成功
+     */
+    public static boolean deleteCloneDir(File workDir) {
+        if (workDir == null || !workDir.exists()) {
+            return true;
+        }
+        return FileUtil.del(workDir);
+    }
+
+    /**
+     * 全量检查一次克隆根目录 {@link #CLONE_BASE_DIR}，清理最后修改时间超过保留天数
+     * （{@link #RETAIN_DAYS}）的残留目录。
+     * <p>
+     * 每次构建结束时调用：构建自己的目录已被删除，这里处理的是进程被强杀、容器异常退出
+     * 等没走到删除逻辑留下的目录，以及改名/删除项目后遗留的旧目录。刚创建的目录（正在构建）
+     * 远未超过保留天数，不会被误删。
+     */
+    public static CleanupResult cleanupCloneDirs() {
+        try {
+            long expireTime = System.currentTimeMillis() - RETAIN_DAYS * ONE_DAY_MILLIS;
+            return cleanupCloneDirs(new File(CLONE_BASE_DIR), expireTime);
+        } catch (Exception e) {
+            fileLog.warn("清理残留代码目录失败：{}", e.getMessage(), e);
+            return new CleanupResult(0, 0);
+        }
+    }
+
+    /** 删除最后修改时间早于 {@code expireTime} 的目录；包级可见便于测试。 */
+    static CleanupResult cleanupCloneDirs(File baseDir, long expireTime) {
+        File[] dirs = baseDir.listFiles(File::isDirectory);
+        if (dirs == null || dirs.length == 0) {
+            return new CleanupResult(0, 0);
+        }
+
+        int deletedDirs = 0;
+        long releasedBytes = 0;
+        for (File dir : dirs) {
+            if (dir.lastModified() >= expireTime) {
+                continue;
+            }
+            long size = FileUtil.size(dir);
+            if (FileUtil.del(dir)) {
+                deletedDirs++;
+                releasedBytes += size;
+                fileLog.info("已清理残留代码目录 {}（{}）", dir.getAbsolutePath(), FileUtil.readableFileSize(size));
+            } else {
+                fileLog.warn("清理残留代码目录失败 {}", dir.getAbsolutePath());
+            }
+        }
+
+        if (deletedDirs > 0) {
+            fileLog.info("代码目录清理完毕，共删除 {} 个目录，回收 {}", deletedDirs, FileUtil.readableFileSize(releasedBytes));
+        }
+        return new CleanupResult(deletedDirs, releasedBytes);
     }
 
     /**

@@ -50,6 +50,9 @@ public class BuildTestService {
 
     private static final String DEFAULT_TARGET_IMAGE = "temp:latest";
 
+    /** 构建测试没有项目，使用一个固定的代码目录；同一时间只允许一个测试任务。 */
+    private static final String CLONE_DIR_NAME = "_build-test";
+
     /**
      * 构建上下文下的 Dockerfile 相对仓库根目录的路径。
      */
@@ -204,7 +207,7 @@ public class BuildTestService {
             // 凭据按地址主机自动匹配代码源，按其访问方式解析
             GitCredential credential = codeSourceService.credentialByGitUrl(gitUrl);
 
-            GitTool.CloneResult cloneResult = GitTool.clone(gitUrl, credential, null);
+            GitTool.CloneResult cloneResult = GitTool.clone(CLONE_DIR_NAME, gitUrl, credential, null);
             workDir = cloneResult.getDir();
             fileLog.info("代码下载完毕 {}", workDir);
             fileLog.info("代码提交信息: {}", cloneResult.getCodeMessage());
@@ -267,8 +270,9 @@ public class BuildTestService {
             IOUtils.closeQuietly(client);
             if (workDir != null) {
                 // 构建测试不保留代码
-                FileUtil.del(workDir);
+                GitTool.deleteCloneDir(workDir);
             }
+            GitTool.cleanupCloneDirs();
             FileLog.unbind();
             cancelRequested.remove(logId);
             taskLogRegistry.finish(logId);

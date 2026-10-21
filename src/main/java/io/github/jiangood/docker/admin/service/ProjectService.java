@@ -106,6 +106,9 @@ public class ProjectService extends BaseService<Project> {
 
     private final Map<String, DefaultCallback> buildThreadMap = new ConcurrentHashMap<>();
 
+    /** 正在构建的项目 id。项目使用固定代码目录，同一项目不允许并行构建，避免互相删目录。 */
+    private final Set<String> buildingProjects = ConcurrentHashMap.newKeySet();
+
 
     /**
      * 镜像url：registry.url/namespace/name。未配置注册中心时仅返回项目名。
@@ -444,25 +447,36 @@ public class ProjectService extends BaseService<Project> {
      * 触发构建：先同步落一条构建记录，再把真正的构建任务交给线程池异步执行。
      * 记录必须先入库，否则前端在触发接口返回后立即刷新列表时，会与异步线程写库形成竞态，
      * 出现「构建历史看不到新记录，刷新页面才有」的现象。
+     * <p>
+     * 同一项目同一时间只允许一个构建：项目使用固定代码目录，并行构建会互相删目录、串构建上下文。
      *
      * @return 构建记录 id
      */
     public String buildImage(BuildRequest p) throws IOException {
-        List<BuildLog> processing = buildLogService.findByProjectProcessing(p.getProjectId());
-
-        for (BuildLog buildLog : processing) {
-            stopBuild(buildLog.getId());
+        if (!buildingProjects.add(p.getProjectId())) {
+            throw new BusinessException("该项目正在构建中，请等待当前构建结束");
         }
 
-        BuildLog buildLog = createProcessingLog(p);
+        try {
+            // 进程重启等情况会留下 success 为空的「处理中」记录，实际并不在跑，标记为失败，避免永远卡住
+            for (BuildLog buildLog : buildLogService.findByProjectProcessing(p.getProjectId())) {
+                stopBuild(buildLog.getId());
+            }
 
-        // 任务在调度前就标记为运行中：前端触发后会立刻打开日志窗口，
-        // 若此时尚未标记，日志 WebSocket 会误判任务已结束而提前关闭连接。
-        taskLogRegistry.start(buildLog.getId());
+            BuildLog buildLog = createProcessingLog(p);
 
-        // 通过代理调用 @Async 方法，避免自调用失效
-        SpringUtil.getBean(ProjectService.class).buildImageJob(p, buildLog.getId());
-        return buildLog.getId();
+            // 任务在调度前就标记为运行中：前端触发后会立刻打开日志窗口，
+            // 若此时尚未标记，日志 WebSocket 会误判任务已结束而提前关闭连接。
+            taskLogRegistry.start(buildLog.getId());
+
+            // 通过代理调用 @Async 方法，避免自调用失效
+            SpringUtil.getBean(ProjectService.class).buildImageJob(p, buildLog.getId());
+            return buildLog.getId();
+        } catch (RuntimeException e) {
+            // 任务没派发成功（如线程池已满）时释放占用，否则该项目再也无法构建
+            buildingProjects.remove(p.getProjectId());
+            throw e;
+        }
     }
 
     /**
@@ -503,16 +517,17 @@ public class ProjectService extends BaseService<Project> {
         // 构建开始时间（服务器本地时区），用于生成分支构建版本号
         LocalDateTime buildTime = LocalDateTime.now();
 
-        Project project = projectRepository.findById(projectId).orElse(null);
-        BuildLog buildLog = buildLogService.findById(logId).orElse(null);
-        Assert.notNull(buildLog, "构建记录不存在");
-        // 任务已在 buildImage() 调度前通过 taskLogRegistry.start() 标记为运行中
-
-
+        Project project = null;
+        BuildLog buildLog = null;
         DockerClient client = null;
         File workDir = null;
         FileLog.bind(logId);
         try {
+            project = projectRepository.findById(projectId).orElse(null);
+            Assert.notNull(project, "项目不存在");
+            buildLog = buildLogService.findById(logId).orElse(null);
+            Assert.notNull(buildLog, "构建记录不存在");
+            // 任务已在 buildImage() 调度前通过 taskLogRegistry.start() 标记为运行中
 
             fileLog.info("开始构建镜像任务, 项目：{}， 仓库：{}， 来源：{}", project.getName(), project.getGitUrl(),
                     branchBuild ? "分支 " + branch : "tag " + tag);
@@ -660,15 +675,19 @@ public class ProjectService extends BaseService<Project> {
             fileLog.info("异常 {} {}", e.getClass().getName(), e.getMessage());
             fileLog.error("构建失败", e);
 
-            buildLog.setSuccess(false);
-            buildLog.setCompleteTime(LocalDateTime.now());
-            buildLog.setTimeSpend(Duration.between(buildLog.getCreateTime(), buildLog.getCompleteTime()).toMillis());
-            buildLogService.save(buildLog);
+            if (buildLog != null) {
+                buildLog.setSuccess(false);
+                buildLog.setCompleteTime(LocalDateTime.now());
+                buildLog.setTimeSpend(Duration.between(buildLog.getCreateTime(), buildLog.getCompleteTime()).toMillis());
+                buildLogService.save(buildLog);
+            }
         } finally {
             IOUtils.closeQuietly(client);
-            // 构建上下文已完整传给 Docker（成功、失败、取消都会走到这里），代码目录用后即删，
-            // 否则多次构建后历史克隆会一直堆积；进程被强杀等异常退出留下的目录由 CleanGitCodeJob 兜底。
+            // 构建上下文已完整传给 Docker（成功、失败、取消都会走到这里），代码目录用后即删；
+            // 再全量检查一次克隆根目录，清掉进程被强杀等异常退出留下的残留（保留 10 天）
             deleteWorkDir(workDir);
+            GitTool.cleanupCloneDirs();
+            buildingProjects.remove(projectId);
             FileLog.unbind();
             taskLogRegistry.finish(logId);
         }
@@ -680,7 +699,7 @@ public class ProjectService extends BaseService<Project> {
             return;
         }
         long size = FileUtil.size(workDir);
-        if (FileUtil.del(workDir)) {
+        if (GitTool.deleteCloneDir(workDir)) {
             fileLog.info("已删除代码目录 {}（{}）", workDir.getAbsolutePath(), FileUtil.readableFileSize(size));
         } else {
             fileLog.warn("删除代码目录失败 {}", workDir.getAbsolutePath());
@@ -691,7 +710,7 @@ public class ProjectService extends BaseService<Project> {
         GitCredential credential = codeSourceService.credentialByGitUrl(project.getGitUrl());
 
         fileLog.info("代码下载中...");
-        return GitTool.clone(project.getGitUrl(), credential, ref);
+        return GitTool.clone(project.getName(), project.getGitUrl(), credential, ref);
     }
 
 
@@ -723,6 +742,11 @@ public class ProjectService extends BaseService<Project> {
 
         imageTagService.deleteByImageUrl(imageUrl);
         imageService.deleteByImageUrl(imageUrl);
+        if (project != null && !buildingProjects.contains(id)) {
+            // 代码目录按项目名存放，删除项目后一并清掉（构建中的目录不删，避免打断正在跑的构建；
+            // 改名遗留的旧目录由构建结束时的兜底清理处理）
+            GitTool.deleteCloneDir(GitTool.cloneDir(project.getName()));
+        }
         projectRepository.deleteById(id);
     }
 
