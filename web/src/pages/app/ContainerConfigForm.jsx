@@ -71,10 +71,10 @@ const deviceColumns = [
 /**
  * 卷的主机路径默认根目录：最终路径为 DEFAULT_DATA_ROOT/应用名/容器路径。
  */
-const DEFAULT_DATA_ROOT = '/data/docker-volume'
+const DEFAULT_DATA_ROOT = '/docker-app-data'
 
 /**
- * 卷的默认主机路径：/data/docker-volume/<应用名>/<容器路径>。
+ * 卷的默认主机路径：/docker-app-data/<应用名>/<容器路径>。
  * 应用名为空时不生成默认值（返回空串）。
  */
 function defaultHostPath(appName, privateVolume) {
