@@ -1,4 +1,4 @@
-import {Alert, AutoComplete, Button, Form, Modal, Select, Typography} from 'antd'
+import {Alert, AutoComplete, Button, Col, Form, Input, Modal, Row, Select, Typography} from 'antd'
 import React from 'react'
 import {HttpClient} from '@jiangood/open-admin'
 import LogView from './LogView'
@@ -57,7 +57,7 @@ export const MODE_RELAY = 'relay'
 const MODE_META = {
     [MODE_REGISTRY]: {
         title: '同步到注册中心',
-        tip: '执行主机拉取源镜像，打上注册中心前缀后推送，并登记到镜像列表。',
+        tip: '执行主机拉取源镜像，打上注册中心前缀后推送，并登记到镜像列表；镜像名与版本可手动修改。',
     },
     [MODE_HOST]: {
         title: '同步到主机',
@@ -165,6 +165,8 @@ export default class ImageSyncModal extends React.Component {
      * 打开弹窗：mode 决定同步方式，表单由 destroyOnHidden 保证每次都是空的。
      */
     show = mode => {
+        this.autoName = ''
+        this.autoTag = ''
         this.setState({
             open: true,
             mode,
@@ -230,6 +232,7 @@ export default class ImageSyncModal extends React.Component {
 
     /**
      * 目标镜像预览：镜像在平台注册中心上的完整地址（与后端默认命名规则保持一致）。
+     * 镜像名/版本留空时按源镜像推导，填写后以填写的为准。
      */
     recalcPreview = () => {
         const {mode, registry, registryOptions} = this.state
@@ -238,12 +241,48 @@ export default class ImageSyncModal extends React.Component {
             return
         }
         const values = this.formRef.current?.getFieldsValue() || {}
-        const name = targetNameOf(values.sourceImage)
+        const name = (values.targetName || '').trim() || targetNameOf(values.sourceImage)
+        const tag = (values.targetTag || '').trim() || tagOf(values.sourceImage)
         const option = registryOptions.find(o => o.value === values.targetRegistryId)
         const base = option ? option.label : registryBaseOf(registry)
         this.setState({
-            registryPreview: name && base ? base + '/' + name + ':' + tagOf(values.sourceImage) : '',
+            registryPreview: name && base ? base + '/' + name + ':' + tag : '',
         })
+    }
+
+    /**
+     * 源镜像变化时给「镜像名 / 版本」补默认值：
+     * 用户改过的字段保持不动（用「当前值是否还等于上次自动填入的值」判断），没改过的跟着源镜像走。
+     */
+    fillTargetDefaults = () => {
+        const form = this.formRef.current
+        if (!form) {
+            return
+        }
+        const sourceImage = form.getFieldValue('sourceImage')
+        const autoName = targetNameOf(sourceImage)
+        const autoTag = sourceImage ? tagOf(sourceImage) : ''
+        const currentName = (form.getFieldValue('targetName') || '').trim()
+        const currentTag = (form.getFieldValue('targetTag') || '').trim()
+        const patch = {}
+        if (!currentName || currentName === this.autoName) {
+            patch.targetName = autoName
+        }
+        if (!currentTag || currentTag === this.autoTag) {
+            patch.targetTag = autoTag
+        }
+        this.autoName = autoName
+        this.autoTag = autoTag
+        if (Object.keys(patch).length) {
+            form.setFieldsValue(patch)
+        }
+    }
+
+    onValuesChange = changed => {
+        if ('sourceImage' in changed) {
+            this.fillTargetDefaults()
+        }
+        this.recalcPreview()
     }
 
     submit = values => {
@@ -256,6 +295,9 @@ export default class ImageSyncModal extends React.Component {
             hostId: mode === MODE_HOST ? null : values.hostId,
             targetRegistryId: mode === MODE_REGISTRY ? values.targetRegistryId : null,
             targetHostId: mode === MODE_REGISTRY ? null : values.targetHostId,
+            // 留空交给后端按源镜像推导
+            targetName: mode === MODE_REGISTRY ? ((values.targetName || '').trim() || null) : null,
+            targetTag: mode === MODE_REGISTRY ? ((values.targetTag || '').trim() || null) : null,
         }
         this.setState({submitting: true})
         HttpClient.post('admin/image-sync/sync', payload).then(rs => {
@@ -271,8 +313,6 @@ export default class ImageSyncModal extends React.Component {
             this.setState({submitting: false})
         })
     }
-
-    recalcPreviewOnChange = () => this.recalcPreview()
 
     footer = () => {
         const {logId, submitting, mode, registryOptions} = this.state
@@ -308,7 +348,7 @@ export default class ImageSyncModal extends React.Component {
         const registryConfigured = registryOptions.length > 0
 
         return <Form ref={this.formRef} layout='vertical' preserve={false}
-                     onValuesChange={this.recalcPreviewOnChange}
+                     onValuesChange={this.onValuesChange}
                      onFinish={this.submit}>
             <Typography.Text type='secondary'>{MODE_META[mode].tip}</Typography.Text>
 
@@ -332,8 +372,33 @@ export default class ImageSyncModal extends React.Component {
                 </Form.Item>
             )}
 
+            {isRegistry && (
+                <Row gutter={16}>
+                    <Col span={13}>
+                        <Form.Item label='镜像名' name='targetName'
+                                   tooltip='推送到注册中心后的镜像名，注册中心前缀不变；留空按源镜像的镜像名推导'
+                                   rules={[{
+                                       pattern: /^[a-z0-9]+(?:[._-][a-z0-9]+)*$/,
+                                       message: '只能包含小写字母、数字与 _ . -，且不能以分隔符开头或结尾',
+                                   }]}>
+                            <Input allowClear placeholder='留空按源镜像推导'/>
+                        </Form.Item>
+                    </Col>
+                    <Col span={11}>
+                        <Form.Item label='版本' name='targetTag'
+                                   tooltip='推送到注册中心后的版本号；留空沿用源镜像的版本'
+                                   rules={[{
+                                       pattern: /^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$/,
+                                       message: '只能包含字母、数字与 _ . -，且不能以 . 或 - 开头',
+                                   }]}>
+                            <Input allowClear placeholder='留空沿用源镜像版本'/>
+                        </Form.Item>
+                    </Col>
+                </Row>
+            )}
+
             {isRegistry && registryPreview && (
-                <Form.Item label='目标镜像' tooltip='镜像在平台注册中心上的完整地址，由源镜像自动生成'>
+                <Form.Item label='目标镜像' tooltip='推送后在平台注册中心上的完整地址，由上一步的镜像名与版本拼成'>
                     <Typography.Text copyable code>{registryPreview}</Typography.Text>
                 </Form.Item>
             )}

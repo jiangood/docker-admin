@@ -29,6 +29,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.regex.Pattern;
 
 /**
  * 镜像同步：借助一台网络通畅的主机拉取公共镜像，推送到平台注册中心，
@@ -44,6 +45,16 @@ import java.io.OutputStream;
 public class ImageSyncService {
 
     private static final Logger fileLog = FileLog.logger();
+
+    /**
+     * 注册中心镜像名规则（与 Docker 的仓库名一致）：小写字母/数字，分隔符不可连续或结尾。
+     */
+    private static final Pattern TARGET_NAME_PATTERN = Pattern.compile("[a-z0-9]+(?:[._-][a-z0-9]+)*");
+
+    /**
+     * 版本号规则（与 Docker 的 tag 一致），最长 128。
+     */
+    private static final Pattern TARGET_TAG_PATTERN = Pattern.compile("[A-Za-z0-9_][A-Za-z0-9._-]{0,127}");
 
     @Resource
     TaskLogRegistry taskLogRegistry;
@@ -79,12 +90,40 @@ public class ImageSyncService {
         String syncType = syncTypeOf(p);
         if (ImageSyncLog.TYPE_REGISTRY.equals(syncType)) {
             Assert.hasText(StrUtil.trim(p.getHostId()), "请选择执行主机");
+            // 目标镜像名/版本允许手动指定，提前校验，避免推送到一半才被 docker 拒绝
+            validateTargetName(p.getTargetName());
+            validateTargetTag(p.getTargetTag());
             return;
         }
         Assert.hasText(StrUtil.trim(p.getTargetHostId()), "请选择目标主机");
         if (ImageSyncLog.TYPE_RELAY.equals(syncType)) {
             Assert.hasText(StrUtil.trim(p.getHostId()), "请选择中转的执行主机");
         }
+    }
+
+    /**
+     * 目标镜像名：留空时按源镜像推导，填写时必须是合法的仓库名
+     * （registry 会拒绝大写字母等，提前给出可读的提示）。
+     */
+    private static void validateTargetName(String name) {
+        String value = StrUtil.trim(name);
+        if (StrUtil.isBlank(value)) {
+            return;
+        }
+        Assert.isTrue(TARGET_NAME_PATTERN.matcher(value).matches(),
+                "镜像名只能包含小写字母、数字与 _ . -，且不能以分隔符开头或结尾");
+    }
+
+    /**
+     * 目标版本号：留空时沿用源镜像的 tag。
+     */
+    private static void validateTargetTag(String tag) {
+        String value = StrUtil.trim(tag);
+        if (StrUtil.isBlank(value)) {
+            return;
+        }
+        Assert.isTrue(TARGET_TAG_PATTERN.matcher(value).matches(),
+                "版本号只能包含字母、数字与 _ . -，不能以 . 或 - 开头");
     }
 
     /**
@@ -158,10 +197,13 @@ public class ImageSyncService {
 
         fileLog.info("同步主机: {} ({})", host.getName(), StrUtil.blankToDefault(host.getDockerHost(), "本机"));
 
-        // 拆分源镜像的 repo 与 tag（默认 latest），处理 registry 带端口的情况
+        // 拆分源镜像的 repo 与 tag（默认 latest），处理 registry 带端口的情况；
+        // 目标镜像名与版本允许手动指定（如把 nginx 改名成 my-gateway），留空时按源镜像推导。
+        // 注意源 tag 与目标 tag 是两回事：拉取源镜像必须用源 tag。
         String repo = repoOf(source);
-        String tag = tagOf(source);
-        String targetName = lastSegment(repo);
+        String sourceTag = tagOf(source);
+        String tag = StrUtil.blankToDefault(StrUtil.trim(p.getTargetTag()), sourceTag);
+        String targetName = StrUtil.blankToDefault(StrUtil.trim(p.getTargetName()), lastSegment(repo));
 
         String registryBase = StrUtil.removeSuffix(StrUtil.nullToEmpty(registry.getFullUrl()), "/");
         Assert.hasText(registryBase, "注册中心地址未配置，请先在【设置-镜像注册中心】中配置地址与命名空间");
@@ -181,13 +223,13 @@ public class ImageSyncService {
             // 注意：docker-java 的 pullImageCmd 不会拆分 tag——传入 "nginx" 时，
             // 请求为 fromImage=nginx&tag=（空），Docker 侧会把「空 tag」理解为
             // 「拉取该仓库的全部 tag」，于是逐个拉取 nginx:1、nginx:1-alpine……
-            // 这里显式传入已解析出的 repo 与 tag，只拉取指定版本。
-            String sourceRef = repo + ":" + tag;
+            // 这里显式传入已解析出的 repo 与源 tag，只拉取指定版本。
+            String sourceRef = repo + ":" + sourceTag;
             fileLog.info("拉取源镜像 {}", sourceRef);
             // 源镜像凭据由镜像地址自动推导：地址与本平台某个注册中心同 host（且命名空间前缀匹配）时
             // 带上该注册中心的账号密码，Docker Hub 等公共镜像则匿名拉取——
             // 与部署时拉取镜像的规则一致（见 RegistryService#forImageUrl）。
-            PullImageCmd pullCmd = client.pullImageCmd(repo).withTag(tag);
+            PullImageCmd pullCmd = client.pullImageCmd(repo).withTag(sourceTag);
             Registry sourceRegistry = registryService.forImageUrl(source);
             AuthConfig sourceAuth = authOf(sourceRegistry);
             if (sourceAuth != null) {

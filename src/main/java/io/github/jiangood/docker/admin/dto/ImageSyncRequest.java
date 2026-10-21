@@ -34,6 +34,18 @@ public class ImageSyncRequest {
     String sourceImage;
 
     /**
+     * 推送后在注册中心上的镜像名，如 my-nginx；留空按源镜像自动推导。
+     * 仅 registry 模式使用，只允许小写字母、数字与 _ . -。
+     */
+    String targetName;
+
+    /**
+     * 推送后在注册中心上的版本号，如 1.25.3；留空沿用源镜像的 tag。
+     * 仅 registry 模式使用。
+     */
+    String targetTag;
+
+    /**
      * 目标主机 id：host / relay 模式下镜像最终要落到的主机；registry 模式不使用。
      */
     String targetHostId;
