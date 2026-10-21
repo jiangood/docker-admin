@@ -1,6 +1,6 @@
 import {
-  Alert, Button, Card, Descriptions, Form, Input,
-  Modal, Segmented, Select, Space, Spin, Switch, Table, Tabs, Tooltip, Typography
+  Button, Card, Checkbox, Col, Descriptions, Form, Input,
+  Modal, Popconfirm, Row, Segmented, Select, Space, Spin, Switch, Table, Tabs, Tag, Tooltip, Typography
 } from 'antd';
 import React from 'react';
 import {
@@ -29,6 +29,47 @@ function getIcon(key, index) {
 }
 
 
+/**
+ * 提取地址的主机标识（host[:port]，小写），与后端 CodeSourceService.hostKey 保持一致，
+ * 用于判断项目与哪个代码源匹配。兼容 http(s)://、ssh://、scp 形式（user@host:path）。
+ */
+function hostKey(address) {
+  if (!address) return null
+  const value = address.trim()
+  if (value.includes('://')) {
+    try {
+      const url = new URL(value)
+      if (!url.hostname) return null
+      return (url.port ? url.hostname + ':' + url.port : url.hostname).toLowerCase()
+    } catch (e) {
+      return null
+    }
+  }
+  let rest = value
+  const at = rest.indexOf('@')
+  if (at >= 0) rest = rest.substring(at + 1)
+  const slash = rest.indexOf('/')
+  if (slash >= 0) rest = rest.substring(0, slash)
+  const colon = rest.indexOf(':')
+  if (colon >= 0 && !/^\d+$/.test(rest.substring(colon + 1))) {
+    rest = rest.substring(0, colon)
+  }
+  rest = rest.trim()
+  return rest ? rest.toLowerCase() : null
+}
+
+/**
+ * 找出与项目仓库地址匹配的 GitLab 代码源；未匹配或类型不是 GitLab 时返回 null。
+ * 自动配置 Webhook 只支持 GitLab，非 GitLab 项目不展示该功能。
+ */
+function findGitLabSource(gitUrl, codeSources) {
+  const host = hostKey(gitUrl)
+  if (!host) return null
+  const matched = (codeSources || []).find(o => hostKey(o.data?.url) === host)
+  return matched?.data?.type === 'GITLAB' ? matched : null
+}
+
+
 export default class extends React.Component {
 
   state = {
@@ -45,10 +86,13 @@ export default class extends React.Component {
     refType: 'BRANCH',
     versions: [],
     apps: [],
-    webhookLoading: false,
+    // 自动配置 Webhook 的开关 loading
+    webhookAutoLoading: false,
     webhookBranchLoading: false,
     // 分支推送构建的分支输入框（null 表示跟随 project.webhookBranches）
-    webhookBranchesText: null
+    webhookBranchesText: null,
+    // 代码源选项（含类型），用于判断当前项目能否使用 GitLab 自动配置；null 表示尚未加载
+    codeSources: null
   }
   actionRef = React.createRef();
   formRef = React.createRef();
@@ -67,6 +111,10 @@ export default class extends React.Component {
     if (PermUtils.hasPermission('registry:view')) {
       HttpClient.get('admin/registry/options').then(rs => this.setState({registryOptions: rs.data || []}))
     }
+    // 代码源类型决定是否展示「GitLab 自动配置」（该接口仅要求登录）
+    HttpClient.get('admin/code-source/options')
+      .then(rs => this.setState({codeSources: rs.data || []}))
+      .catch(() => this.setState({codeSources: []}))
 
     this.timer = setInterval(() => {
       if (document.hidden) return;
@@ -200,19 +248,23 @@ export default class extends React.Component {
     if (checked && !this.webhookUrl()) {
       return
     }
-    this.setState({webhookLoading: true})
+    this.setState({webhookAutoLoading: true})
     const request = checked
       ? HttpClient.get('admin/project/enableWebhook', {id, hookUrl: this.webhookUrl()})
       : HttpClient.get('admin/project/disableWebhook', {id})
     request.then(() => this.loadProject())
-      .finally(() => this.setState({webhookLoading: false}))
+      .finally(() => this.setState({webhookAutoLoading: false}))
   }
 
   toggleBranchBuild = (checked) => {
-    this.setState({webhookLoading: true})
+    this.setState({webhookBranchLoading: true})
     HttpClient.get('admin/project/setWebhookBranch', {id: this.state.project.id, enabled: checked})
-      .then(() => this.loadProject())
-      .finally(() => this.setState({webhookLoading: false}))
+      .then(() => {
+        // 开关状态变了，丢弃未保存的输入，避免显示的配置与实际生效的不一致
+        this.setState({webhookBranchesText: null})
+        this.loadProject()
+      })
+      .finally(() => this.setState({webhookBranchLoading: false}))
   }
 
   // 输入框当前值；未编辑时回退到项目配置，项目未配置时回退到默认 master,main
@@ -416,7 +468,7 @@ export default class extends React.Component {
   }
 
   renderTabs = () => {
-    const {project, versions, apps, webhookLoading, webhookBranchLoading} = this.state;
+    const {project, versions, apps} = this.state;
 
     const items = [
       {
@@ -500,80 +552,138 @@ export default class extends React.Component {
       {
         key: 'webhook',
         label: 'Webhook',
-        children: <div className='page-card'>
-          <Alert
-            type='info'
-            showIcon
-            className='mb-4'
-            title='推送 tag / 分支自动构建'
-            description='推送形如 vX.Y.Z 的 tag 会构建对应版本；开启「分支推送构建」并配置分支后，仅推送这些分支会构建该分支最新代码（镜像版本为「分支名-年月日-时分-提交 id」并更新 latest）。均使用系统默认构建节点。'
-          />
-          <Descriptions column={1} size='small' bordered>
-            <Descriptions.Item label='自动配置'>
-              <Space wrap>
-                <Switch
-                  checked={!!project.webhookAuto}
-                  loading={webhookLoading}
-                  onChange={this.toggleWebhook}
-                />
-                <Typography.Text type='secondary'>
-                  开启后在当前代码仓库（GitLab）自动创建上面的 Webhook 地址；关闭时自动删除。
-                  需在【设置-代码源】中配置 GitLab 类型与访问令牌（api 权限）。
-                </Typography.Text>
-              </Space>
-            </Descriptions.Item>
-            <Descriptions.Item label='分支推送构建'>
-              <Space direction='vertical' size='small' style={{width: '100%'}}>
-                <Space wrap>
-                  <Switch
-                    checked={!!project.webhookBranch}
-                    loading={webhookLoading}
-                    onChange={this.toggleBranchBuild}
-                  />
-                  <Typography.Text type='secondary'>
-                    开启后，仅推送下列分支时才会构建该分支最新代码并更新 latest；tag push 始终构建，不受此开关影响。
-                  </Typography.Text>
-                </Space>
-                <Space.Compact style={{maxWidth: 480, width: '100%'}}>
-                  <Input
-                    value={this.branchText()}
-                    disabled={!project.webhookBranch}
-                    placeholder='默认 master,main'
-                    onChange={e => this.setState({webhookBranchesText: e.target.value})}
-                    onPressEnter={this.saveBranches}
-                  />
-                  <Button
-                    onClick={this.saveBranches}
-                    loading={webhookBranchLoading}
-                    disabled={!project.webhookBranch}
-                  >保存</Button>
-                </Space.Compact>
-                <Typography.Text type='secondary'>
-                  多个分支用英文逗号分隔，留空默认 master,main。
-                </Typography.Text>
-              </Space>
-            </Descriptions.Item>
-            <Descriptions.Item label='Webhook 地址'>
-              <Space wrap>
-                <Typography.Text copyable={{text: this.webhookUrl()}} code
-                                 style={{wordBreak: 'break-all'}}>
-                  {this.webhookUrl()}
-                </Typography.Text>
-                <Button size='small' onClick={this.resetWebhook}>重置令牌</Button>
-              </Space>
-            </Descriptions.Item>
-            <Descriptions.Item label='说明'>
-              <Typography.Text type='secondary'>
-                重置令牌后旧地址立即失效，需要同步更新代码仓库中的 Webhook 配置；
-                若已开启自动配置，重置令牌会自动删除仓库上的旧 Webhook，需要重新开启。
-              </Typography.Text>
-            </Descriptions.Item>
-          </Descriptions>
-        </div>
+        children: this.renderWebhook()
       }
     ]
 
     return <Tabs items={items}/>
+  }
+
+  renderWebhook = () => {
+    const {project, codeSources, webhookAutoLoading, webhookBranchLoading} = this.state
+    const canManage = PermUtils.hasPermission('project:webhook')
+    // 自动配置只支持 GitLab：匹配不到 GitLab 代码源时不展示；历史上已开启过的仍展示，否则没有入口关闭
+    const gitlabSource = findGitLabSource(project.gitUrl, codeSources)
+    const sshOnly = gitlabSource?.data?.authType === 'SSH_KEY'
+    const showAutoConfig = !!gitlabSource || !!project.webhookAuto
+
+    return (<div className='page-card'>
+      <Row gutter={16} align='top'>
+        <Col flex='auto' style={{minWidth: 0}}>
+          <Descriptions column={1} size='small' bordered>
+            <Descriptions.Item label='Webhook 地址'>
+              <Space wrap>
+                <Typography.Text copyable={{text: this.webhookUrl()}} code style={{wordBreak: 'break-all'}}>
+                  {this.webhookUrl()}
+                </Typography.Text>
+                <Popconfirm
+                  title='重置 Webhook 令牌？'
+                  description='旧地址会立即失效，需要同步更新代码仓库中的 Webhook；若已开启自动配置，会同时删除仓库上的旧 Webhook 并关闭自动配置。'
+                  okText='重置'
+                  cancelText='取消'
+                  onConfirm={this.resetWebhook}>
+                  <Button size='small' disabled={!canManage}>重置令牌</Button>
+                </Popconfirm>
+              </Space>
+            </Descriptions.Item>
+
+            <Descriptions.Item label='说明'>
+              <Space direction='vertical' size={4}>
+                <Typography.Text type='secondary'>
+                  推送形如 vX.Y.Z 的 tag 会构建对应版本，镜像版本即 tag 名。
+                </Typography.Text>
+                <Typography.Text type='secondary'>
+                  勾选「分支推送」后，仅推送所配置的分支才会构建该分支最新代码，镜像版本为
+                  「分支名-年月日-时分-提交 id」并更新 latest。
+                </Typography.Text>
+                <Typography.Text type='secondary'>
+                  所有 Webhook 触发的构建均使用系统默认构建节点。
+                </Typography.Text>
+                <Typography.Text type='secondary'>
+                  手动配置时，把上面的地址填入代码仓库的 Webhook，事件勾选 Push 与 Tag push。
+                </Typography.Text>
+              </Space>
+            </Descriptions.Item>
+
+            <Descriptions.Item label='推送触发'>
+              <Space direction='vertical' size='small' style={{width: '100%'}}>
+                <Space wrap>
+                  <Checkbox checked disabled readOnly>tag 推送</Checkbox>
+                  <Typography.Text type='secondary'>vX.Y.Z 形式的 tag 始终构建，暂不支持关闭</Typography.Text>
+                </Space>
+                <Space wrap>
+                  <Checkbox
+                    checked={!!project.webhookBranch}
+                    disabled={!canManage || webhookBranchLoading}
+                    onChange={e => this.toggleBranchBuild(e.target.checked)}
+                  >分支推送</Checkbox>
+                  <Typography.Text type='secondary'>仅构建下列分支的最新代码</Typography.Text>
+                </Space>
+                {project.webhookBranch && (
+                  <div style={{paddingLeft: 24}}>
+                    <Space.Compact style={{maxWidth: 480, width: '100%'}}>
+                      <Input
+                        value={this.branchText()}
+                        disabled={!canManage}
+                        placeholder='默认 master,main'
+                        onChange={e => this.setState({webhookBranchesText: e.target.value})}
+                        onPressEnter={this.saveBranches}
+                      />
+                      <Button
+                        onClick={this.saveBranches}
+                        loading={webhookBranchLoading}
+                        disabled={!canManage}
+                      >保存</Button>
+                    </Space.Compact>
+                  </div>
+                )}
+                <Typography.Text type='secondary'>
+                  多个分支用英文逗号分隔，留空默认 master,main。
+                </Typography.Text>
+                {!canManage && (
+                  <Typography.Text type='secondary'>缺少 Webhook 权限，仅可查看。</Typography.Text>
+                )}
+              </Space>
+            </Descriptions.Item>
+          </Descriptions>
+        </Col>
+
+        {showAutoConfig && (
+          <Col xs={24} lg={9} xl={7} xxl={6}>
+            <Card
+              size='small'
+              title='GitLab 自动配置'
+              extra={<Tag color={project.webhookAuto ? 'success' : 'default'}>
+                {project.webhookAuto ? '已开启' : '未开启'}
+              </Tag>}>
+              <Space direction='vertical' size='small' style={{width: '100%'}}>
+                <Space wrap>
+                  <Switch
+                    checked={!!project.webhookAuto}
+                    loading={webhookAutoLoading}
+                    disabled={!canManage || (sshOnly && !project.webhookAuto)}
+                    onChange={this.toggleWebhook}
+                  />
+                  <Typography.Text type='secondary'>
+                    {project.webhookAuto ? '已在本项目的 GitLab 仓库上创建' : '开启后自动创建，关闭时删除'}
+                  </Typography.Text>
+                </Space>
+                <Typography.Text type='secondary' style={{fontSize: 12}}>
+                  {sshOnly
+                    ? '当前代码源使用 SSH 私钥，无法调用 GitLab API，请改为访问令牌或账号密码。'
+                    : '需要代码源访问令牌（api 权限）或账号密码。其他类型代码源请手动添加 Webhook。'}
+                </Typography.Text>
+                {!gitlabSource && (
+                  <Typography.Text type='warning' style={{fontSize: 12}}>
+                    未匹配到 GitLab 代码源，建议关闭并到【设置-代码源】检查。
+                  </Typography.Text>
+                )}
+              </Space>
+            </Card>
+          </Col>
+        )}
+      </Row>
+    </div>)
   }
 
 }
