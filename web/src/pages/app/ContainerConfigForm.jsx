@@ -9,8 +9,10 @@ import {HttpClient} from "@jiangood/open-admin";
  * 直接绑定父 Form 中以 namePrefix 为前缀的字段，放在父 Form 内使用：
  *   <ContainerConfigForm namePrefix={['config']} imageUrl={...} imageTag={...}/>
  *
- * 传 appId 时读取 admin/app/configMeta（合并已保存映射，详情页用）；
+ * 传 appId 时读取 admin/app/configMeta（详情页用）；
  * 否则按 imageUrl + imageTag 读取 admin/app/configMetaByImage（新建应用 / docker run 用）。
+ * 两处返回的只是镜像声明的端口/卷，用于在配置里还没有对应字段时预填默认值，
+ * 端口与文件映射始终可自由增删改。
  *
  * 传 twoColumn 时网络模式单独一行，启动命令 / extraHosts 排在最后（两列），表格仍整行；
  * 不传则维持单列纵向，详情页保持原样。
@@ -22,20 +24,13 @@ const NETWORK_OPTIONS = [
     {label: '无需网络', value: 'none'},
 ]
 
-const portsColumns = (strict) => strict ? [
-    {title: '主机端口', dataIndex: 'publicPort', dataType: 'InputNumber', width: 160},
-    {title: '容器端口', dataIndex: 'privatePort', readonly: true, width: 160},
-    {title: '协议', dataIndex: 'protocol', readonly: true, width: 120},
-] : [
+const portsColumns = [
     {title: '主机端口', dataIndex: 'publicPort', dataType: 'InputNumber', width: 160},
     {title: '容器端口', dataIndex: 'privatePort', dataType: 'InputNumber', width: 160},
     {title: '协议', dataIndex: 'protocol', dataType: 'Select', valueEnum: {TCP: 'TCP', UDP: 'UDP'}, width: 120},
 ]
 
-const bindsColumns = (strict) => strict ? [
-    {title: '主机路径', dataIndex: 'publicVolume', dataType: 'Input'},
-    {title: '容器路径', dataIndex: 'privateVolume', readonly: true},
-] : [
+const bindsColumns = [
     {title: '主机路径', dataIndex: 'publicVolume', dataType: 'Input'},
     {title: '容器路径', dataIndex: 'privateVolume', dataType: 'Input'},
 ]
@@ -84,10 +79,10 @@ function defaultHostPath(appName, privateVolume) {
 }
 
 /**
- * 按镜像声明（meta）归一化配置：
- * 严格维度（镜像声明了端口/卷）按声明重建容器侧，仅保留已填的主机侧映射；
- * 未填的主机侧使用默认值 —— 端口默认等于容器端口，卷默认 DEFAULT_DATA_ROOT/应用名/容器路径。
- * 非严格维度保留用户填写/解析得到的值。
+ * 归一化配置：
+ * 网络模式 / 环境变量 / 设备请求补默认值；
+ * 端口 / 卷以配置为准，镜像声明只在配置里还没有该字段时作为默认值预填
+ * （新建应用选择镜像），之后完全由用户编辑：改哪行、删哪行、加几行都不会被声明覆盖。
  */
 function normalize(meta, cfg, appName) {
     const next = {...(cfg || {})}
@@ -95,33 +90,21 @@ function normalize(meta, cfg, appName) {
     next.envs = next.envs || []
     next.deviceRequests = next.deviceRequests || []
 
-    if (meta && meta.strictPorts) {
-        const saved = cfg?.ports || []
-        next.ports = (meta.ports || []).map(p => {
-            const hit = saved.find(x => x.privatePort === p.privatePort
-                && (x.protocol || 'TCP').toUpperCase() === p.protocol)
-            return {
-                publicPort: hit?.publicPort ?? p.publicPort ?? p.privatePort,
-                privatePort: p.privatePort,
-                protocol: p.protocol,
-            }
-        })
-    } else {
-        next.ports = cfg?.ports || []
+    // 字段已存在（含清空后的空数组、docker run 解析结果）就不再覆盖：
+    // 删掉的端口/卷不会被镜像声明重新加回来
+    if (next.ports == null && meta?.ports?.length) {
+        next.ports = meta.ports.map(p => ({
+            publicPort: p.privatePort,
+            privatePort: p.privatePort,
+            protocol: p.protocol,
+        }))
     }
 
-    if (meta && meta.strictVolumes) {
-        const saved = cfg?.binds || []
-        next.binds = (meta.volumes || []).map(v => {
-            const hit = saved.find(x => x.privateVolume === v.privateVolume)
-            return {
-                publicVolume: hit?.publicVolume ?? v.publicVolume ?? defaultHostPath(appName, v.privateVolume),
-                privateVolume: v.privateVolume,
-                readOnly: hit?.readOnly ?? v.readOnly ?? false,
-            }
-        })
-    } else {
-        next.binds = cfg?.binds || []
+    if (next.binds == null && meta?.volumes?.length) {
+        next.binds = meta.volumes.map(v => ({
+            publicVolume: defaultHostPath(appName, v.privateVolume),
+            privateVolume: v.privateVolume,
+        }))
     }
 
     return next
@@ -162,15 +145,16 @@ export default function ContainerConfigForm({namePrefix, imageUrl, imageTag, app
             .finally(() => setLoading(false))
     }, [appId, imageUrl, imageTag])
 
-    // meta 变化后按声明归一化并回写（同一镜像只处理一次，避免覆盖用户后续编辑）
+    // meta 变化后按声明预填默认值（同一镜像只处理一次，避免覆盖用户后续编辑）
     useEffect(() => {
         if (loading) return
         const key = appId || `${imageUrl || ''}:${imageTag || ''}`
         if (appliedKey.current === key) return
         appliedKey.current = key
         lastAppNameRef.current = effectiveAppName || null
-        const next = normalize(meta, form.getFieldValue(namePrefix), effectiveAppName)
-        if (JSON.stringify(next) !== JSON.stringify(form.getFieldValue(namePrefix) || {})) {
+        const current = form.getFieldValue(namePrefix)
+        const next = normalize(meta, current, effectiveAppName)
+        if (JSON.stringify(next) !== JSON.stringify(current || {})) {
             form.setFieldValue(namePrefix, next)
         }
     }, [loading, meta])
@@ -182,7 +166,6 @@ export default function ContainerConfigForm({namePrefix, imageUrl, imageTag, app
         const prev = lastAppNameRef.current
         if (prev === effectiveAppName) return
         lastAppNameRef.current = effectiveAppName
-        if (!meta || !meta.strictVolumes) return
         const binds = (form.getFieldValue(namePrefix) || {}).binds
         if (!binds || !binds.length) return
         let changed = false
@@ -198,15 +181,16 @@ export default function ContainerConfigForm({namePrefix, imageUrl, imageTag, app
         if (changed) {
             form.setFieldValue([...namePrefix, 'binds'], nextBinds)
         }
-    }, [effectiveAppName, loading, meta])
+    }, [effectiveAppName, loading])
 
     if (loading) {
         return <div className='center-box'><Spin/></div>
     }
 
     const name = f => [...namePrefix, f]
-    const strictPorts = !!(meta && meta.strictPorts)
-    const strictVolumes = !!(meta && meta.strictVolumes)
+    // 镜像声明只用于预填默认值，表格始终可增删改
+    const hasDeclaredPorts = !!(meta && meta.ports && meta.ports.length)
+    const hasDeclaredVolumes = !!(meta && meta.volumes && meta.volumes.length)
     // 弹窗（twoColumn）里收紧行距，减少多个配置块堆叠的纵向占用；详情页保持默认
     const itemStyle = twoColumn ? {marginBottom: 8} : undefined
 
@@ -235,17 +219,20 @@ export default function ContainerConfigForm({namePrefix, imageUrl, imageTag, app
 
     const portsItem = (!cfg.networkMode || cfg.networkMode === 'bridge') && (
         <Form.Item label='端口映射' name={name('ports')} style={itemStyle}
-                   tooltip={strictPorts ? '端口来自镜像声明，主机端口默认等于容器端口，仅可修改主机端口' : '镜像未声明端口，可自由配置'}>
-            <EditTable columns={portsColumns(strictPorts)}
-                       canAdd={!strictPorts} canRemove={!strictPorts} extra='暂无端口'/>
+                   tooltip={hasDeclaredPorts
+                       ? '已按镜像声明的端口预填，可自由增删改；主机端口留空表示不映射'
+                       : '按需添加「主机端口 → 容器端口」映射，主机端口留空表示不映射'}>
+            <EditTable columns={portsColumns}
+                       defaultRow={{protocol: 'TCP'}} extra='暂无端口'/>
         </Form.Item>
     )
 
     const bindsItem = (
         <Form.Item label='文件映射' name={name('binds')} style={itemStyle}
-                   tooltip={strictVolumes ? `卷来自镜像声明，主机路径默认 ${DEFAULT_DATA_ROOT}/应用名/...，仅可修改主机路径` : '镜像未声明卷，可自由配置'}>
-            <EditTable columns={bindsColumns(strictVolumes)}
-                       canAdd={!strictVolumes} canRemove={!strictVolumes} extra='暂无卷'/>
+                   tooltip={hasDeclaredVolumes
+                       ? `已按镜像声明的卷预填主机路径（默认 ${DEFAULT_DATA_ROOT}/应用名/...），可自由增删改`
+                       : '按需添加「主机路径 → 容器路径」映射'}>
+            <EditTable columns={bindsColumns} extra='暂无卷'/>
         </Form.Item>
     )
 

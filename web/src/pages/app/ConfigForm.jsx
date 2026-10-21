@@ -6,7 +6,7 @@ import LinkButton from "../../components/LinkButton";
 
 /**
  * 应用详情页「容器配置」标签：复用通用容器配置组件，保存后自动重启。
- * 镜像（imageUrl + tag）在镜像标签表中有声明端口/卷时，对应部分按声明只读；否则可自由配置。
+ * 端口 / 文件映射始终可自由增删改（镜像声明只作默认值）。
  * 端口 / 网络模式会改变隧道转发的目标地址，因此隧道开启时禁止修改。
  */
 export default class extends React.Component {

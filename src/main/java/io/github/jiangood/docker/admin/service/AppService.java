@@ -197,16 +197,9 @@ public class AppService extends BaseService<App> {
             fileLog.info("开始部署镜像 {}", image);
             App.AppConfig cfg = app.getConfig();
 
-            // 仅当镜像来自镜像表（平台构建/已知）且声明非空时，对应维度才严格限制
-            ImageTag imageTag = imageTagService.find(app.getImageUrl(), app.getImageTag()).orElse(null);
-            boolean strictPorts = strictPorts(imageTag);
-            boolean strictVolumes = strictVolumes(imageTag);
-            if (strictPorts || strictVolumes) {
-                validateConfig(cfg, imageTag);
-            }
-            // 严格时按镜像声明构造，否则按用户配置构造
-            List<String> declaredPorts = strictPorts ? imageTag.getExposedPorts() : portsFromConfig(cfg);
-            List<String> declaredVolumes = strictVolumes ? imageTag.getVolumes() : volumesFromConfig(cfg);
+            // 端口 / 卷完全以应用配置为准：镜像声明只在新建应用时作为默认值，用户可以自由增删改
+            List<String> portSpecs = portsFromConfig(cfg);
+            List<String> volumePaths = volumesFromConfig(cfg);
 
 
             List<Container> containers = getContainer(app.getName(), client);
@@ -243,8 +236,8 @@ public class AppService extends BaseService<App> {
                 if (StrUtil.isBlank(cfg.getNetworkMode()) || cfg.getNetworkMode().equals("bridge")) {
                     Ports ports = new Ports();
 
-                    for (String declared : declaredPorts) {
-                        ExposedPort e = ExposedPort.parse(declared);
+                    for (String spec : portSpecs) {
+                        ExposedPort e = ExposedPort.parse(spec);
                         exposedPorts.add(e);
 
                         App.PortBinding binding = findPortBinding(cfg, e);
@@ -259,17 +252,17 @@ public class AppService extends BaseService<App> {
             }
 
 
-            // 文件路径绑定：只绑定镜像声明的卷
+            // 文件路径绑定：按应用配置挂载
             List<Bind> binds = new ArrayList<>();
 
-            for (String declared : declaredVolumes) {
-                App.BindConfig bindConfig = findBindConfig(cfg, declared);
+            for (String path : volumePaths) {
+                App.BindConfig bindConfig = findBindConfig(cfg, path);
                 if (bindConfig == null || StrUtil.isBlank(bindConfig.getPublicVolume())) {
                     continue;
                 }
                 // /host:/container:ro
                 AccessMode accessMode = Boolean.TRUE.equals(bindConfig.getReadOnly()) ? AccessMode.ro : AccessMode.rw;
-                binds.add(new Bind(bindConfig.getPublicVolume(), new Volume(declared), accessMode));
+                binds.add(new Bind(bindConfig.getPublicVolume(), new Volume(path), accessMode));
             }
             hostConfig.withBinds(binds);
 
@@ -337,7 +330,7 @@ public class AppService extends BaseService<App> {
                     .withName(app.getName())
                     .withLabels(dockerManager.getAppLabelFilter(app.getName()))
                     .withHostConfig(hostConfig)
-                    .withExposedPorts(exposedPorts) // 使用镜像声明的端口
+                    .withExposedPorts(exposedPorts) // 使用应用配置中的端口
                     .withEnv(envs);
 
             String cmd = app.getConfig().getCmd();
@@ -597,10 +590,6 @@ public class AppService extends BaseService<App> {
         // 端口 / 网络模式变化会改变隧道转发的目标地址
         assertTunnelClosed(app, "修改容器配置");
         normalizeConfig(appConfig);
-        ImageTag iv = imageTagService.find(app.getImageUrl(), app.getImageTag()).orElse(null);
-        if (iv != null) {
-            validateConfig(appConfig, iv);
-        }
         app.setConfig(appConfig);
 
         app = appRepository.save(app);
@@ -608,81 +597,46 @@ public class AppService extends BaseService<App> {
     }
 
     /**
-     * 容器配置元数据：镜像表声明的端口/卷 + 已保存的主机侧映射。
-     * 镜像来自镜像表且声明非空时对应维度为严格模式（容器侧只读、不可增删），否则可自由编辑。
+     * 容器配置元数据：镜像表声明的端口/卷。
+     * 声明只用于新建应用时预填默认值，用户可自由增删改。
      */
     public ImageConfigMetaVo getConfigMeta(App app) {
-        return buildConfigMeta(app.getImageUrl(), app.getImageTag(), app.getConfig());
+        return buildConfigMeta(app.getImageUrl(), app.getImageTag());
     }
 
     /**
-     * 按镜像地址 + 版本构造容器配置元数据，不含任何已保存的主机侧映射。
-     * 供新建应用 / docker run 等尚无应用记录的场景使用。
+     * 按镜像地址 + 版本构造容器配置元数据，供新建应用 / docker run 等尚无应用记录的场景使用。
      */
     public ImageConfigMetaVo getImageConfigMeta(String imageUrl, String imageTag) {
-        return buildConfigMeta(imageUrl, imageTag, null);
+        return buildConfigMeta(imageUrl, imageTag);
     }
 
     /**
-     * 构造容器配置元数据。
-     *
-     * @param cfg 已保存的配置，用于合并主机侧映射值；新建场景可为 null
+     * 构造容器配置元数据：仅返回镜像标签表中声明的端口/卷，不含任何已保存的映射值。
      */
-    private ImageConfigMetaVo buildConfigMeta(String imageUrl, String imageTag, App.AppConfig cfg) {
+    private ImageConfigMetaVo buildConfigMeta(String imageUrl, String imageTag) {
         ImageConfigMetaVo vo = new ImageConfigMetaVo();
         vo.setImageUrl(imageUrl);
 
         ImageTag iv = imageTagService.find(imageUrl, imageTag).orElse(null);
-        boolean strictPorts = strictPorts(iv);
-        boolean strictVolumes = strictVolumes(iv);
-        vo.setStrictPorts(strictPorts);
-        vo.setStrictVolumes(strictVolumes);
+        if (iv == null) {
+            return vo;
+        }
 
-        if (strictPorts) {
+        if (iv.getExposedPorts() != null) {
             for (String declared : iv.getExposedPorts()) {
                 ExposedPort ep = ExposedPort.parse(declared);
                 ImageConfigMetaVo.PortMeta pm = new ImageConfigMetaVo.PortMeta();
                 pm.setPrivatePort(ep.getPort());
                 pm.setProtocol(ep.getProtocol().toString().toUpperCase());
-                App.PortBinding saved = cfg == null ? null : findPortBinding(cfg, ep);
-                if (saved != null) {
-                    pm.setPublicPort(saved.getPublicPort());
-                }
-                vo.getPorts().add(pm);
-            }
-        } else if (cfg != null && cfg.getPorts() != null) {
-            for (App.PortBinding p : cfg.getPorts()) {
-                if (p == null || p.getPrivatePort() == null) {
-                    continue;
-                }
-                ImageConfigMetaVo.PortMeta pm = new ImageConfigMetaVo.PortMeta();
-                pm.setPrivatePort(p.getPrivatePort());
-                pm.setProtocol(StrUtil.isBlank(p.getProtocol()) ? "TCP" : p.getProtocol().toUpperCase());
-                pm.setPublicPort(p.getPublicPort());
                 vo.getPorts().add(pm);
             }
         }
 
-        if (strictVolumes) {
+        if (iv.getVolumes() != null) {
             for (String declared : iv.getVolumes()) {
                 ImageConfigMetaVo.VolumeMeta vm = new ImageConfigMetaVo.VolumeMeta();
                 vm.setPrivateVolume(declared);
-                App.BindConfig saved = cfg == null ? null : findBindConfig(cfg, declared);
-                if (saved != null) {
-                    vm.setPublicVolume(saved.getPublicVolume());
-                    vm.setReadOnly(saved.getReadOnly());
-                }
-                vo.getVolumes().add(vm);
-            }
-        } else if (cfg != null && cfg.getBinds() != null) {
-            for (App.BindConfig b : cfg.getBinds()) {
-                if (b == null || StrUtil.isBlank(b.getPrivateVolume())) {
-                    continue;
-                }
-                ImageConfigMetaVo.VolumeMeta vm = new ImageConfigMetaVo.VolumeMeta();
-                vm.setPrivateVolume(b.getPrivateVolume());
-                vm.setPublicVolume(b.getPublicVolume());
-                vm.setReadOnly(b.getReadOnly());
                 vo.getVolumes().add(vm);
             }
         }
@@ -742,21 +696,7 @@ public class AppService extends BaseService<App> {
     }
 
     /**
-     * 是否严格限制端口：镜像来自镜像表且声明了端口。
-     */
-    private static boolean strictPorts(ImageTag iv) {
-        return iv != null && iv.getExposedPorts() != null && !iv.getExposedPorts().isEmpty();
-    }
-
-    /**
-     * 是否严格限制卷：镜像来自镜像表且声明了卷。
-     */
-    private static boolean strictVolumes(ImageTag iv) {
-        return iv != null && iv.getVolumes() != null && !iv.getVolumes().isEmpty();
-    }
-
-    /**
-     * 从用户配置推导容器端口（非严格模式的兜底）。
+     * 从应用配置中取出要暴露的端口（去重，格式 80/tcp）。
      */
     private static List<String> portsFromConfig(App.AppConfig cfg) {
         if (cfg == null || cfg.getPorts() == null) {
@@ -770,7 +710,7 @@ public class AppService extends BaseService<App> {
     }
 
     /**
-     * 从用户配置推导卷路径（非严格模式的兜底）。
+     * 从应用配置中取出要挂载的容器路径（去重）。
      */
     private static List<String> volumesFromConfig(App.AppConfig cfg) {
         if (cfg == null || cfg.getBinds() == null) {
@@ -781,44 +721,6 @@ public class AppService extends BaseService<App> {
                 .map(App.BindConfig::getPrivateVolume)
                 .distinct()
                 .toList();
-    }
-
-    /**
-     * 校验：严格维度下，配置中的端口/卷必须全部是镜像声明中存在的项。
-     */
-    private void validateConfig(App.AppConfig cfg, ImageTag iv) {
-        if (cfg == null || iv == null) {
-            return;
-        }
-        if (strictPorts(iv)) {
-            List<String> declaredPorts = iv.getExposedPorts();
-            List<App.PortBinding> ports = cfg.getPorts() == null ? List.of() : cfg.getPorts();
-            for (App.PortBinding p : ports) {
-                if (p.getPrivatePort() == null) {
-                    continue;
-                }
-                String key = portKey(p.getPrivatePort(), p.getProtocol());
-                if (!declaredPorts.contains(key)) {
-                    throw new BusinessException("端口 " + key + " 未在镜像中声明" + declaredHint(declaredPorts));
-                }
-            }
-        }
-
-        if (strictVolumes(iv)) {
-            List<String> declaredVolumes = iv.getVolumes();
-            List<App.BindConfig> binds = cfg.getBinds() == null ? List.of() : cfg.getBinds();
-            for (App.BindConfig b : binds) {
-                if (StrUtil.isBlank(b.getPrivateVolume())) {
-                    continue;
-                }
-                String path = normalizeVolumePath(b.getPrivateVolume());
-                boolean declared = declaredVolumes.stream()
-                        .anyMatch(v -> normalizeVolumePath(v).equals(path));
-                if (!declared) {
-                    throw new BusinessException("卷 " + b.getPrivateVolume() + " 未在镜像中声明" + declaredHint(declaredVolumes));
-                }
-            }
-        }
     }
 
     private App.PortBinding findPortBinding(App.AppConfig cfg, ExposedPort exposedPort) {
@@ -856,13 +758,6 @@ public class AppService extends BaseService<App> {
             s = s.substring(0, s.length() - 1);
         }
         return s;
-    }
-
-    private static String declaredHint(List<String> declared) {
-        if (declared == null || declared.isEmpty()) {
-            return "（镜像未声明任何端口/卷）";
-        }
-        return "，镜像声明：" + String.join(", ", declared);
     }
 
     @EventListener

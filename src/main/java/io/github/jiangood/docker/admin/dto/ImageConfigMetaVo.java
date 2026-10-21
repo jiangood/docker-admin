@@ -6,9 +6,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 容器配置元数据：镜像标签表（ImageTag）中声明的端口/卷，并合并已保存的主机侧映射值。
+ * 容器配置元数据：镜像标签表（ImageTag）中声明的端口/卷。
  * <p>
- * 只有当镜像来自镜像表且声明非空时，对应维度才为严格模式（容器侧只读、不可增删）。
+ * 声明只用于新建应用时预填默认值，用户可自由增删改，后端不再要求配置与声明一致。
  */
 @Data
 public class ImageConfigMetaVo {
@@ -16,22 +16,12 @@ public class ImageConfigMetaVo {
     String imageUrl;
 
     /**
-     * 端口是否严格：镜像来自镜像表且声明了端口。严格时容器端口/协议只读、不可增删。
-     */
-    boolean strictPorts;
-
-    /**
-     * 卷是否严格：镜像来自镜像表且声明了卷。严格时容器路径只读、不可增删。
-     */
-    boolean strictVolumes;
-
-    /**
-     * 端口列表。
+     * 镜像声明的端口，新建应用时作为默认映射（主机端口默认等于容器端口）。
      */
     List<PortMeta> ports = new ArrayList<>();
 
     /**
-     * 卷列表。
+     * 镜像声明的卷，新建应用时作为默认挂载（主机路径由前端补默认值）。
      */
     List<VolumeMeta> volumes = new ArrayList<>();
 
@@ -39,13 +29,10 @@ public class ImageConfigMetaVo {
     public static class PortMeta {
         Integer privatePort;
         String protocol;
-        Integer publicPort;
     }
 
     @Data
     public static class VolumeMeta {
         String privateVolume;
-        String publicVolume;
-        Boolean readOnly;
     }
 }
