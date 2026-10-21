@@ -1,8 +1,9 @@
 import {Button, Card, Descriptions, Empty, Input, Modal, Popconfirm, Result, Space, Spin, Table, Tabs, Tag, Typography} from 'antd'
 import React from 'react'
-import {DeleteOutlined, ReloadOutlined} from '@ant-design/icons'
+import {DeleteOutlined, ImportOutlined, ReloadOutlined} from '@ant-design/icons'
 import {HttpClient, Page, PageUtils, PermUtils} from "@jiangood/open-admin"
 import ContainerDetail from "../../components/container/ContainerDetail"
+import HostImageImportModal from "../../components/HostImageImportModal"
 import {formatBytes, formatTime, stateColor, stateLabel} from "../../components/container/utils"
 
 const CONNECTION_LABELS = {local: '本机', tcp: '远程 TCP', ssh: 'SSH'}
@@ -46,6 +47,8 @@ function endpointOf(host) {
  * 主机详情：主机信息 + 垂直 Tab「容器 / 镜像」，点击容器弹窗展示通用容器组件。
  */
 export default class extends React.Component {
+
+    importModalRef = React.createRef()
 
     state = {
         id: null,
@@ -220,11 +223,6 @@ export default class extends React.Component {
                    value={imageKeyword}
                    onChange={e => this.setState({imageKeyword: e.target.value})}/>
             <Button icon={<ReloadOutlined/>} onClick={() => this.loadImages(this.state.id)}>刷新</Button>
-            {canImage &&
-                <Popconfirm title='清理悬空（无标签）镜像？正在被使用的镜像不会被清理'
-                            onConfirm={this.pruneImages}>
-                    <Button danger>清理悬空镜像</Button>
-                </Popconfirm>}
         </div>
 
         const items = [
@@ -251,7 +249,17 @@ export default class extends React.Component {
         ]
 
         return <Page padding>
-            <Card className='mb-4' title={host ? host.name : '主机'}>
+            <Card className='mb-4' title={host ? host.name : '主机'}
+                  extra={canImage
+                      ? <Space size={8}>
+                          <Button icon={<ImportOutlined/>}
+                                  onClick={() => this.importModalRef.current.show()}>导入 tar 镜像</Button>
+                          <Popconfirm title='清理悬空（无标签）镜像？正在被使用的镜像不会被清理'
+                                      onConfirm={this.pruneImages}>
+                              <Button danger>清理悬空镜像</Button>
+                          </Popconfirm>
+                      </Space>
+                      : null}>
                 {infoError && <Result status='warning' title='无法连接主机' subTitle={infoError}
                                      className='mb-3' style={{padding: 0}}/>}
                 <Descriptions size='small' column={2}
@@ -279,6 +287,13 @@ export default class extends React.Component {
                 <Tabs activeKey={activeTab} items={items}
                       onChange={key => this.setState({activeTab: key})}/>
             </Card>
+
+            <HostImageImportModal ref={this.importModalRef}
+                                  hostId={this.state.id}
+                                  onSuccess={() => {
+                                      this.loadImages(this.state.id)
+                                      this.loadInfo(this.state.id)
+                                  }}/>
 
             <Modal title={`容器 - ${detail.name}`}
                    open={detail.open}

@@ -1,9 +1,11 @@
 package io.github.jiangood.docker.admin.service;
 
 import com.github.dockerjava.api.DockerClient;
+import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.exception.DockerException;
 import com.github.dockerjava.api.model.Image;
 import com.github.dockerjava.api.model.Info;
+import com.github.dockerjava.api.model.LoadResponseItem;
 import com.github.dockerjava.api.model.PruneResponse;
 import com.github.dockerjava.api.model.PruneType;
 import com.github.dockerjava.api.model.Version;
@@ -17,6 +19,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
 import org.springframework.stereotype.Service;
 
+import java.io.InputStream;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -103,6 +106,31 @@ public class HostDockerService {
         });
     }
 
+    /**
+     * 把 {@code docker save} 归档载入该主机的 docker，返回归档内识别到的镜像引用。
+     * <p>
+     * 归档内容直接从上传流送给 docker daemon，不在平台落盘；远程主机时经 SSH 传输，
+     * 大文件期间调用会持续占用当前线程，由前端提示「请稍候」。
+     * <p>
+     * 带标签的镜像返回 {@code repo:tag}，无标签镜像返回 {@code sha256:...}（docker load 的输出如此）。
+     */
+    public List<String> loadImage(Host host, InputStream tar) {
+        return withClient(host, client -> {
+            LoadImageCollector collector = new LoadImageCollector();
+            client.loadImageAsyncCmd(tar).exec(collector);
+            try {
+                collector.awaitCompletion();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new BusinessException("镜像导入被中断");
+            } catch (RuntimeException e) {
+                // docker load 失败（归档损坏、磁盘不足等）不是连接问题，不能笼统说成连不上引擎
+                throw new BusinessException("载入镜像归档失败：" + rootMessage(e));
+            }
+            return collector.refs();
+        });
+    }
+
     public HostInfoVo info(Host host) {
         return withClient(host, client -> info(client, host));
     }
@@ -153,7 +181,8 @@ public class HostDockerService {
         try {
             client = dockerClientManager.getClient(host);
             return action.apply(client);
-        } catch (DockerException e) {
+        } catch (DockerException | BusinessException e) {
+            // docker 自身的业务错误与已经友好的提示原样上抛，不再包装成连接失败
             throw e;
         } catch (Exception e) {
             log.warn("连接容器引擎失败：{}", e.toString());
@@ -186,4 +215,39 @@ public class HostDockerService {
         String s = id.startsWith("sha256:") ? id.substring(7) : id;
         return s.length() > 12 ? s.substring(0, 12) : s;
     }
+
+    /**
+     * docker load 的回调：从输出流里收集载入的镜像引用。
+     * <p>
+     * docker 对带标签的镜像输出 {@code Loaded image: repo:tag}，对无标签镜像输出
+     * {@code Loaded image ID: sha256:...}；失败信息由父类记录并在 {@code awaitCompletion()} 抛出。
+     */
+    private static final class LoadImageCollector extends ResultCallback.Adapter<LoadResponseItem> {
+
+        private static final String LOADED_IMAGE = "Loaded image: ";
+        private static final String LOADED_IMAGE_ID = "Loaded image ID: ";
+
+        private final List<String> refs = new ArrayList<>();
+
+        @Override
+        public void onNext(LoadResponseItem item) {
+            String stream = item.getStream();
+            if (stream != null) {
+                for (String line : stream.split("\\r?\\n|\\r")) {
+                    String value = line.trim();
+                    if (value.startsWith(LOADED_IMAGE)) {
+                        refs.add(value.substring(LOADED_IMAGE.length()).trim());
+                    } else if (value.startsWith(LOADED_IMAGE_ID)) {
+                        refs.add(value.substring(LOADED_IMAGE_ID.length()).trim());
+                    }
+                }
+            }
+            super.onNext(item);
+        }
+
+        List<String> refs() {
+            return refs;
+        }
+    }
+
 }

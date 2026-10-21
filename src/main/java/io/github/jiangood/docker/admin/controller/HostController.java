@@ -2,6 +2,7 @@ package io.github.jiangood.docker.admin.controller;
 
 import com.github.dockerjava.api.exception.ConflictException;
 import com.github.dockerjava.api.exception.NotFoundException;
+import cn.hutool.core.util.StrUtil;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.service.HostService;
 import io.github.jiangood.openadmin.util.dto.AjaxResult;
@@ -14,8 +15,12 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.util.Assert;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -162,6 +167,34 @@ public class HostController  {
         Host host = requireHost(id);
         long reclaimed = hostDockerService.pruneImages(host);
         return AjaxResult.ok().msg("已清理悬空镜像，回收空间 " + formatBytes(reclaimed)).data(reclaimed);
+    }
+
+    /**
+     * 导入 tar 镜像到该主机：把 {@code docker save} 归档直接载入主机 docker，不推送到注册中心。
+     * <p>
+     * 归档大小常见几 GB，上传与载入在同一请求内完成（远程主机经 SSH 传输），
+     * 因此前端需要提示「请稍候」，不要中途刷新页面。
+     */
+    @HasPermission("host:image")
+    @PostMapping("loadImage")
+    public AjaxResult loadImage(String id, @RequestParam("file") MultipartFile file) throws IOException {
+        Host host = requireHost(id);
+        Assert.notNull(file, "请选择要导入的 tar 包");
+        Assert.state(!file.isEmpty(), "tar 包为空，无法导入");
+
+        String raw = file.getOriginalFilename() == null ? "" : file.getOriginalFilename().replace('\\', '/');
+        String filename = raw.substring(raw.lastIndexOf('/') + 1);
+        Assert.state(StrUtil.endWithIgnoreCase(filename, ".tar"),
+                "仅支持 docker save 生成的 .tar 归档");
+
+        List<String> imported;
+        try (InputStream in = file.getInputStream()) {
+            imported = hostDockerService.loadImage(host, in);
+        }
+        String msg = imported.isEmpty()
+                ? "已载入镜像归档"
+                : "已载入 " + imported.size() + " 个镜像";
+        return AjaxResult.ok().msg(msg).data(imported);
     }
 
     private static String formatBytes(long bytes) {
