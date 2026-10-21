@@ -2,11 +2,18 @@ package io.github.jiangood.docker.admin.controller;
 
 import cn.hutool.core.util.RandomUtil;
 import io.github.jiangood.docker.admin.dto.ImageSyncRequest;
+import io.github.jiangood.docker.admin.entity.ImageSyncLog;
+import io.github.jiangood.docker.admin.service.ImageSyncLogService;
 import io.github.jiangood.docker.admin.service.ImageSyncService;
+import io.github.jiangood.openadmin.framework.data.specification.Spec;
 import io.github.jiangood.openadmin.framework.perm.HasPermission;
 import io.github.jiangood.openadmin.util.dto.AjaxResult;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -26,6 +33,19 @@ public class ImageSyncController {
     @Resource
     private ImageSyncService service;
 
+    @Resource
+    private ImageSyncLogService syncLogService;
+
+    /**
+     * 同步记录（最新在前），供页面下方表格回看。
+     */
+    @HasPermission("image-sync:view")
+    @RequestMapping("page")
+    public AjaxResult page(@PageableDefault(sort = "createTime", direction = Sort.Direction.DESC) Pageable pageable) {
+        Page<ImageSyncLog> page = syncLogService.findAll(Spec.of(), pageable);
+        return AjaxResult.ok().data(page);
+    }
+
     /**
      * 触发同步，立即返回 logId，供前端打开实时日志。
      */
@@ -35,7 +55,9 @@ public class ImageSyncController {
         // 参数校验同步执行，便于把错误直接返回给前端
         service.validate(request);
         String logId = "sync-" + RandomUtil.randomString(16);
-        service.sync(logId, request);
+        // 先落库记录再起异步任务：接口返回时「同步中」这条已经能在列表里看到
+        ImageSyncLog syncLog = service.startRecord(logId, request);
+        service.sync(logId, request, syncLog);
         return AjaxResult.ok().data(logId).msg("同步已开始");
     }
 

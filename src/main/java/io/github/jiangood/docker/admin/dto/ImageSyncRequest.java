@@ -2,26 +2,30 @@ package io.github.jiangood.docker.admin.dto;
 
 import lombok.Data;
 
-import java.util.List;
-
 /**
- * 镜像同步请求：把公共镜像经指定主机拉取后推送到平台注册中心；
- * 若选了目标主机，这些主机再从注册中心拉取。
- * <p>
- * 注册中心是必经环节；不选目标主机时只推送到注册中心。
+ * 镜像同步请求，按 {@link #syncType} 分三种：
+ * <ol>
+ *   <li>{@code registry}：经执行主机拉取后推送到平台注册中心，并登记镜像与标签；</li>
+ *   <li>{@code host}：各目标主机直接拉取源镜像，不经过注册中心；</li>
+ *   <li>{@code relay}：执行主机拉取后中转给各目标主机（save/load），不经过注册中心。</li>
+ * </ol>
  */
 @Data
 public class ImageSyncRequest {
 
     /**
-     * 同步主机 id（网络通畅、能访问公共镜像仓库的主机）。
+     * 同步类型：{@code registry} / {@code host} / {@code relay}，详见类注释。
+     * 为空按 {@code registry} 处理。
+     */
+    String syncType;
+
+    /**
+     * 执行主机 id：registry 为负责拉取并推送的主机，relay 为负责拉取并中转的主机；
+     * host（直连）模式不需要。
      */
     String hostId;
 
-    /** 源镜像凭据对应的注册中心 ID；用于访问私有源镜像，可留空。 */
-    String sourceRegistryId;
-
-    /** 目标注册中心 ID；留空时使用系统默认注册中心。 */
+    /** 目标注册中心 ID；留空时使用系统默认注册中心。仅 registry 模式使用。 */
     String targetRegistryId;
 
     /**
@@ -30,8 +34,8 @@ public class ImageSyncRequest {
     String sourceImage;
 
     /**
-     * 目标主机 id 列表，镜像会先推到注册中心，再由这些主机拉取。可为空。
+     * 目标主机 id：host / relay 模式下镜像最终要落到的主机；registry 模式不使用。
      */
-    List<String> targetHostIds;
+    String targetHostId;
 
 }

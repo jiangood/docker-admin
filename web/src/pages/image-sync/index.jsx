@@ -1,7 +1,7 @@
-import {Alert, AutoComplete, Button, Card, Drawer, Form, Select, Typography} from 'antd'
+import {Alert, AutoComplete, Button, Card, Drawer, Form, Segmented, Select, Tag, Tooltip, Typography} from 'antd'
 import React from 'react'
 import {FileTextOutlined} from '@ant-design/icons'
-import {HttpClient, Page, Perm} from '@jiangood/open-admin'
+import {DateUtils, HttpClient, Page, Perm, ProTable} from '@jiangood/open-admin'
 import LogView from '../../components/LogView'
 
 /**
@@ -13,6 +13,25 @@ const RECENT_KEY = 'docker-admin:image-sync-history'
  * 最近使用最多保留的条数。
  */
 const RECENT_LIMIT = 20
+
+/**
+ * 同步类型：
+ * <ul>
+ *   <li>registry：执行主机拉取后推送到注册中心；</li>
+ *   <li>host：各目标主机直接拉取；</li>
+ *   <li>relay：执行主机拉取后中转（save/load）给各目标主机。</li>
+ * </ul>
+ */
+const MODE_REGISTRY = 'registry'
+const MODE_HOST = 'host'
+const MODE_RELAY = 'relay'
+
+/** 同步类型选项：注册中心 / 直连主机 / 经执行主机中转。 */
+const MODE_OPTIONS = [
+    {label: '同步到注册中心', value: MODE_REGISTRY},
+    {label: '同步到主机', value: MODE_HOST},
+    {label: '经执行主机中转', value: MODE_RELAY},
+]
 
 /**
  * 常用镜像，按语言/用途分组，作为自动补全的候选。
@@ -66,23 +85,86 @@ const pushRecent = image => {
 }
 
 /**
- * 镜像同步：选一台网络通畅的主机拉取公共镜像，推送到平台注册中心；
- * 目标主机（可选）再从注册中心拉取。
- * <p>
- * 注册中心是必经环节，因此只有一个表单。
+ * 同步记录的状态：success 为空表示仍在进行中。
+ */
+const statusTagOf = row => {
+    if (row.success === true) {
+        return <Tag color='success'>成功</Tag>
+    }
+    if (row.success === false) {
+        return <Tag color='error'>失败</Tag>
+    }
+    return <Tag color='processing'>同步中</Tag>
+}
+
+/**
+ * 同步类型标签：注册中心 / 主机（直连）/ 主机（中转）。
+ */
+const typeTagOf = syncType => {
+    if (syncType === MODE_HOST) {
+        return <Tag color='blue'>主机</Tag>
+    }
+    if (syncType === MODE_RELAY) {
+        return <Tag color='cyan'>主机中转</Tag>
+    }
+    return <Tag>注册中心</Tag>
+}
+
+/**
+ * 镜像同步，三种类型：
+ * <ul>
+ *   <li>同步到注册中心：执行主机拉取后 push 到平台注册中心，并登记镜像；</li>
+ *   <li>同步到主机：目标主机直接 pull 源镜像，不经过注册中心；</li>
+ *   <li>经执行主机中转：执行主机 pull 后 save/load 到目标主机，不经过注册中心。</li>
+ * </ul>
+ * 一个表单，用「同步类型」切换字段。
  */
 export default class extends React.Component {
 
+    syncTable = React.createRef()
+
     state = {
+        mode: MODE_REGISTRY,
         registry: null,
         registryOptions: [],
         hostOptions: [],
         registryPreview: '',
         recentImages: [],
+        // 当前日志面板展示的日志
         logId: null,
+        // 本次正在运行的同步日志：只有它关闭才代表同步结束
+        runningLogId: null,
         logVisible: false,
         syncing: false,
     }
+
+    syncColumns = [
+        {title: '开始时间', dataIndex: 'createTime', width: 170},
+        {title: '类型', dataIndex: 'syncType', width: 90, render: typeTagOf},
+        {title: '源镜像', dataIndex: 'sourceImage', ellipsis: true},
+        {title: '目标镜像', dataIndex: 'targetImage', ellipsis: true, render: v => v || '-'},
+        {title: '执行主机', dataIndex: 'hostName', width: 140, render: v => v || '-'},
+        {
+            title: '目标主机', dataIndex: 'targetHostName', ellipsis: true,
+            render: v => v || '-',
+        },
+        {
+            title: '状态', dataIndex: 'success', width: 100,
+            render: (_, row) => row.errorMessage
+                ? <Tooltip title={row.errorMessage}>{statusTagOf(row)}</Tooltip>
+                : statusTagOf(row),
+        },
+        {
+            title: '耗时', dataIndex: 'timeSpend', width: 100,
+            render: v => v != null ? DateUtils.friendlyTotalTime(v) : '-',
+        },
+        {
+            title: '操作', key: 'option', width: 100,
+            render: (_, row) => row.logId
+                ? <Button type='link' size='small' onClick={() => this.openLog(row.logId)}>查看日志</Button>
+                : '-',
+        },
+    ]
 
     componentDidMount() {
         this.loadRegistry()
@@ -154,8 +236,13 @@ export default class extends React.Component {
 
     /**
      * 目标镜像预览：镜像在平台注册中心上的完整地址（与后端默认命名规则保持一致）。
+     * 只有「同步到注册中心」需要。
      */
     calcRegistryPreview = values => {
+        if (this.state.mode !== MODE_REGISTRY) {
+            this.setState({registryPreview: ''})
+            return
+        }
         const {registryOptions} = this.state
         const registry = registryOptions.find(r => r.id === values.targetRegistryId) || this.state.registry
         this.setState({registry})
@@ -168,60 +255,81 @@ export default class extends React.Component {
         this.setState({registryPreview: base + '/' + name + ':' + this.tagOf(values.sourceImage)})
     }
 
+    /**
+     * 切换同步类型：字段随类型增删，目标镜像预览也跟着重算。
+     */
+    changeMode = mode => {
+        this.setState({mode}, () => this.calcRegistryPreview(this.lastValues || {}))
+    }
+
     submit = values => {
+        const {mode} = this.state
         const payload = {
-            hostId: values.hostId,
+            syncType: mode,
             sourceImage: values.sourceImage,
-            sourceRegistryId: values.sourceRegistryId,
-            targetRegistryId: values.targetRegistryId,
-            targetHostIds: values.targetHostIds || [],
+            // 直连主机不需要执行主机；其余两种都要
+            hostId: mode === MODE_HOST ? null : values.hostId,
+            targetRegistryId: mode === MODE_REGISTRY ? values.targetRegistryId : null,
+            targetHostId: mode === MODE_REGISTRY ? null : values.targetHostId,
         }
         this.setState({syncing: true})
         HttpClient.post('admin/image-sync/sync', payload).then(rs => {
-            this.setState({recentImages: pushRecent(values.sourceImage.trim()), logId: rs.data, logVisible: true})
+            this.setState({
+                recentImages: pushRecent(values.sourceImage.trim()),
+                logId: rs.data,
+                runningLogId: rs.data,
+                logVisible: true,
+            })
+            // 同步开始时后端已落库一条「同步中」记录，立刻刷新列表
+            this.reloadRecords()
         }).catch(() => {
             // 请求未成功（参数校验、无权限等）不会产生日志，直接恢复按钮
             this.setState({syncing: false})
         })
     }
 
-    /**
-     * 日志流关闭即表示后台同步已结束，恢复「开始同步」按钮。
-     */
-    onSyncFinished = () => {
-        this.setState({syncing: false})
+    reloadRecords = () => {
+        this.syncTable.current?.reload()
     }
 
     /**
-     * 重新打开上一次的同步日志，避免日志面板被误关后无法再次查看。
+     * 日志流关闭即表示后台同步已结束，恢复「开始同步」按钮并刷新记录。
+     * 只有正在运行的这次同步关闭才恢复按钮——回看历史记录时关闭不影响进行中的同步。
      */
-    openLog = () => {
-        if (this.state.logId) {
-            this.setState({logVisible: true})
+    onSyncFinished = logId => {
+        if (logId === this.state.runningLogId) {
+            this.setState({syncing: false, runningLogId: null})
+        }
+        this.reloadRecords()
+    }
+
+    /**
+     * 打开某条同步记录的日志（历史记录或正在运行的同步）。
+     */
+    openLog = logId => {
+        if (logId) {
+            this.setState({logId, logVisible: true})
         }
     }
 
     render() {
-        const {registry, registryOptions, hostOptions, registryPreview, logId, logVisible, syncing} = this.state
+        const {mode, registry, registryOptions, hostOptions, registryPreview, logId, logVisible, syncing} = this.state
         const registryConfigured = registryOptions.length > 0
+        const isRegistry = mode === MODE_REGISTRY
+        const isRelay = mode === MODE_RELAY
+        const needExecHost = mode !== MODE_HOST
+        const needTargets = mode !== MODE_REGISTRY
         const formProps = {labelCol: {flex: '100px'}, preserve: false}
 
         return <Page padding>
-            <Alert
-                type='info'
-                showIcon
-                className='mb-4'
-                title='选择一台网络通畅的主机拉取公共镜像，推送到注册中心'
-                description='国内主机直连 Docker Hub 等公共仓库较慢，可借助网络通畅的主机做中转。镜像会先推送到注册中心，再按需分发到目标主机；同步过程中会从右侧弹出实时日志。'
-            />
-
             <Card title='镜像同步' className='page-card'
                   extra={logId ? (
-                      <Button type='link' size='small' icon={<FileTextOutlined/>} onClick={this.openLog}>
+                      <Button type='link' size='small' icon={<FileTextOutlined/>}
+                              onClick={() => this.openLog(logId)}>
                           查看同步日志
                       </Button>
                   ) : null}>
-                {!registryConfigured && (
+                {isRegistry && !registryConfigured && (
                     <Alert
                         type='warning'
                         showIcon
@@ -232,62 +340,77 @@ export default class extends React.Component {
 
                 <Form {...formProps}
                       disabled={logVisible}
-                      initialValues={{targetHostIds: []}}
-                      onValuesChange={(_, values) => this.calcRegistryPreview(values)}
+                      onValuesChange={(_, values) => {
+                          this.lastValues = values
+                          this.calcRegistryPreview(values)
+                      }}
                       onFinish={this.submit}>
 
-                    <Form.Item label='源镜像认证' name='sourceRegistryId'
-                               tooltip='源镜像为私有镜像时，选择对应注册中心以使用其凭据；源镜像地址仍需填写完整'>
-                        <Select allowClear showSearch optionFilterProp='label'
-                                options={registryOptions.map(r => ({value: r.id, label: r.url + '/' + r.namespace}))}
-                                placeholder='公共镜像无需选择'/>
-                    </Form.Item>
-
-                    <Form.Item label='目标注册中心' name='targetRegistryId'
-                               tooltip='默认使用全局设置中的注册中心；可在此为本次同步单独指定目标'>
-                        <Select allowClear showSearch optionFilterProp='label'
-                                options={registryOptions.map(r => ({value: r.id, label: r.url + '/' + r.namespace}))}
-                                placeholder='使用系统默认注册中心'/>
+                    <Form.Item label='同步类型'
+                               tooltip='同步到注册中心：推送到平台注册中心；同步到主机：目标主机直接拉取；经执行主机中转：执行主机拉取后导入到目标主机（目标主机无需访问镜像仓库）'>
+                        <Segmented value={mode} options={MODE_OPTIONS}
+                                   onChange={this.changeMode}/>
                     </Form.Item>
 
                     <Form.Item label='源镜像' name='sourceImage' rules={[{required: true, message: '请输入源镜像'}]}
-                               tooltip='支持完整地址，如 nginx:1.25-alpine、docker.io/library/redis:7；可从下拉列表选择常用镜像或最近同步过的镜像'>
+                               tooltip='支持完整地址，如 nginx:1.25-alpine、docker.io/library/redis:7；私有镜像会按地址自动匹配已配置的注册中心凭据，无需另行选择。可从下拉列表选择常用镜像或最近同步过的镜像'>
                         <AutoComplete options={this.imageOptions()} placeholder='nginx:1.25-alpine'
                                       filterOption={(input, option) => option.value.toLowerCase().includes(input.toLowerCase())}/>
                     </Form.Item>
 
-                    <Form.Item label='执行主机' name='hostId' rules={[{required: true, message: '请选择执行主机'}]}
-                               tooltip='网络通畅、能访问公共镜像仓库的主机，负责拉取源镜像并推送到注册中心'>
-                        <Select options={hostOptions} showSearch optionFilterProp='label'
-                                placeholder='请选择执行主机'/>
-                    </Form.Item>
+                    {isRegistry && (
+                        <Form.Item label='目标注册中心' name='targetRegistryId'
+                                   tooltip='默认使用全局设置中的注册中心；可在此为本次同步单独指定目标'>
+                            <Select allowClear showSearch optionFilterProp='label'
+                                    options={registryOptions.map(r => ({value: r.id, label: r.url + '/' + r.namespace}))}
+                                    placeholder='使用系统默认注册中心'/>
+                        </Form.Item>
+                    )}
 
-                    {registryPreview &&
+                    {needExecHost && (
+                        <Form.Item label={isRelay ? '中转主机' : '执行主机'} name='hostId'
+                                   rules={[{required: true, message: isRelay ? '请选择中转主机' : '请选择执行主机'}]}
+                                   tooltip={isRelay
+                                       ? '网络通畅的主机：负责拉取源镜像并打包，再导入到目标主机'
+                                       : '网络通畅、能访问公共镜像仓库的主机，负责拉取源镜像并推送到注册中心'}>
+                            <Select options={hostOptions} showSearch optionFilterProp='label'
+                                    placeholder={isRelay ? '请选择中转主机' : '请选择执行主机'}/>
+                        </Form.Item>
+                    )}
+
+                    {isRegistry && registryPreview &&
                         <Form.Item label='目标镜像' tooltip='镜像在平台注册中心上的完整地址，由源镜像自动生成'>
                             <Typography.Text copyable code>{registryPreview}</Typography.Text>
                         </Form.Item>
                     }
 
-                    <Form.Item label='目标主机' name='targetHostIds'
-                               dependencies={['hostId']}
-                               rules={[({getFieldValue}) => ({
-                                   validator: (_, value) => {
-                                       const hostId = getFieldValue('hostId')
-                                       if (hostId && value && value.includes(hostId)) {
-                                           return Promise.reject(new Error('目标主机不能与执行主机相同'))
-                                       }
-                                       return Promise.resolve()
-                                   },
-                               })]}
-                               tooltip='可选。执行主机把镜像推到注册中心后，这些主机会从注册中心拉取；不选则只推送到注册中心'>
-                        <Select mode='multiple' options={hostOptions} showSearch optionFilterProp='label'
-                                allowClear placeholder='留空则只推送到注册中心'/>
-                    </Form.Item>
+                    {needTargets && (
+                        <Form.Item label='目标主机' name='targetHostId'
+                                   dependencies={['hostId']}
+                                   rules={[
+                                       {required: true, message: '请选择目标主机'},
+                                       ({getFieldValue}) => ({
+                                           validator: (_, value) => {
+                                               const hostId = getFieldValue('hostId')
+                                               if (isRelay && hostId && value === hostId) {
+                                                   return Promise.reject(new Error('目标主机不能与中转主机相同'))
+                                               }
+                                               return Promise.resolve()
+                                           },
+                                       }),
+                                   ]}
+                                   tooltip={isRelay
+                                       ? '镜像由中转主机导入（save/load），该主机无需能访问镜像仓库'
+                                       : '该主机会直接拉取源镜像'}>
+                            <Select options={hostOptions} showSearch optionFilterProp='label'
+                                    allowClear placeholder='请选择目标主机'/>
+                        </Form.Item>
+                    )}
 
                     <Form.Item>
                         <Perm code='image-sync:sync'>
                             <Button type='primary' htmlType='submit'
-                                    loading={syncing} disabled={!registryConfigured}>
+                                    loading={syncing} disabled={isRegistry && !registryConfigured}>
                                 开始同步
                             </Button>
                         </Perm>
@@ -295,12 +418,19 @@ export default class extends React.Component {
                 </Form>
             </Card>
 
+            <Card title='同步记录' className='page-card mt-4'>
+                <ProTable actionRef={this.syncTable}
+                          defaultPageSize={10}
+                          request={params => HttpClient.get('admin/image-sync/page', params)}
+                          columns={this.syncColumns}/>
+            </Card>
+
             <Drawer title='同步日志' size={860} open={logVisible}
                     mask={{closable: false}}
                     onClose={() => this.setState({logVisible: false})}>
                 {logId
                     ? <LogView key={logId} url={'/admin/ws/sync-log/' + logId} websocket={true}
-                               onClose={this.onSyncFinished}/>
+                               onClose={() => this.onSyncFinished(logId)}/>
                     : null}
             </Drawer>
         </Page>

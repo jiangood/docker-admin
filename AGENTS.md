@@ -69,6 +69,9 @@ git tag vx.y.z && git push && git push origin vx.y.z
 - **领域模型：** `Project`(项目，构建定义) → `Image`(镜像，`imageUrl` 唯一) → `ImageTag`(镜像标签，`imageUrl`+`tag`)。
   项目与镜像按 `imageUrl` 相等关联；`App` 只存 `imageUrl` + `imageTag`，与项目/镜像均无 id 外键。
   菜单为「项目」(`/project`) 与「镜像」(`/image`)，权限码为 `image:*`，表名为 `t_image`。
+- **镜像同步记录**存 `t_image_sync_log`（`ImageSyncLog`，表由 `ddl-auto: update` 自动创建）：
+  控制器先落库一条 `success` 为空的「同步中」记录，`@Async` 任务结束时补全结果、耗时与失败原因。
+  记录只存快照（主机名、注册中心地址），日志正文仍在 `/data/logs/{logId}.log`，按记录里的 `logId` 回看。
 - **构建上下文：** `Project.context` 相对仓库根目录，留空表示仓库根；填写时不带前导 `/`（后端兼容历史的 `/admin`，保存时归一化）。
   `dockerfile` 同样相对仓库根目录、不带前导 `/`，且必须位于上下文内（如 `context=admin` + `dockerfile=admin/Dockerfile`）。
   前端表格/详情直接原样展示上下文（空即空，不再显示「仓库根目录」），输入框失焦时自动去掉前导 `/`。
