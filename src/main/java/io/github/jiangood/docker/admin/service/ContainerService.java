@@ -29,6 +29,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -47,6 +48,12 @@ public class ContainerService {
 
     /** 文本预览最大字节数。 */
     private static final int PREVIEW_MAX_BYTES = 262144;
+
+    /**
+     * 容器启停删的兜底超时：docker-java 的 responseTimeout 是 1 小时（拉镜像需要），
+     * 而这类命令本该秒回，宿主机存储卡住（如 bind 源目录在无响应的 NFS 上）时必须尽快失败。
+     */
+    private static final Duration CONTAINER_ACTION_TIMEOUT = Duration.ofSeconds(120);
 
     /** 无 ls 时从 archive 接口推断出的修改时间格式，与 {@code ls --time-style=long-iso} 对齐。 */
     private static final DateTimeFormatter MTIME_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
@@ -236,19 +243,19 @@ public class ContainerService {
     // ------------------------------------------------------------------ 操作
 
     public void start(Host host, String containerId) {
-        withClient(host, client -> client.startContainerCmd(containerId).exec());
+        withClient(host, "启动容器 " + containerId, client -> client.startContainerCmd(containerId).exec());
     }
 
     public void stop(Host host, String containerId) {
-        withClient(host, client -> client.stopContainerCmd(containerId).exec());
+        withClient(host, "停止容器 " + containerId, client -> client.stopContainerCmd(containerId).exec());
     }
 
     public void restart(Host host, String containerId) {
-        withClient(host, client -> client.restartContainerCmd(containerId).exec());
+        withClient(host, "重启容器 " + containerId, client -> client.restartContainerCmd(containerId).exec());
     }
 
     public void remove(Host host, String containerId, boolean force) {
-        withClient(host, client -> client.removeContainerCmd(containerId)
+        withClient(host, "删除容器 " + containerId, client -> client.removeContainerCmd(containerId)
                 .withForce(force)
                 .withRemoveVolumes(false)
                 .exec());
@@ -258,10 +265,23 @@ public class ContainerService {
         void run(DockerClient client);
     }
 
-    private void withClient(Host host, ClientAction action) {
+    /**
+     * 执行一条容器操作，并兜底超时。
+     * <p>
+     * 超时值是 docker-java 全局 responseTimeout（1 小时，拉镜像需要）之外的收紧：
+     * 宿主机存储卡住（如 bind 源目录在无响应的 NFS 上）时，这些命令不会返回，
+     * 前端请求会一直挂着，因此这里限时失败并给出可操作的错误消息。
+     */
+    private void withClient(Host host, String action, ClientAction run) {
         DockerClient client = dockerClientManager.getClient(host);
         try {
-            action.run(client);
+            dockerClientManager.callWithTimeout(CONTAINER_ACTION_TIMEOUT, action, () -> {
+                run.run(client);
+                return null;
+            });
+        } catch (IllegalStateException e) {
+            throw new IllegalStateException(e.getMessage()
+                    + "。宿主机可能卡在存储挂载或 docker 守护进程无响应，请登录宿主机检查", e);
         } finally {
             IOUtils.closeQuietly(client);
         }

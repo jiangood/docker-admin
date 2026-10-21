@@ -33,6 +33,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 @Service
 public class DockerClientManager {
@@ -178,15 +179,50 @@ public class DockerClientManager {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("测试被中断", e);
         } catch (ExecutionException e) {
-            Throwable cause = e.getCause() == null ? e : e.getCause();
-            if (cause instanceof RuntimeException runtimeException) {
-                throw runtimeException;
-            }
-            if (cause instanceof Error error) {
-                throw error;
-            }
-            throw new RuntimeException(cause);
+            throw unwrap(e);
         }
+    }
+
+    /**
+     * 对<b>已有客户端</b>执行单条命令，并限时等待返回。
+     * <p>
+     * 为什么需要：docker-java 的 {@code responseTimeout} 是全局长超时（{@link #RESPONSE_TIMEOUT}，
+     * 拉大镜像必须留这么久），但 start / stop / remove 这类命令本该秒回。宿主机一侧一旦卡住
+     * （例如 bind 源目录位于无响应的 NFS 上，宿主机内核把 stat 阻塞成 D 状态，dockerd 处理该请求的
+     * 协程也跟着不返回），调用方就会一路等到 1 小时才报错，界面只能一直显示「部署中」。
+     * <p>
+     * 超时后这里只负责抛错，<b>不关闭客户端</b>：客户端由调用方在自己的 finally 里关闭，
+     * 关闭时会一并中断在途请求（SSH 传输同样如此）。
+     *
+     * @param action 用于拼接错误消息的操作名，如「启动容器」
+     */
+    public <T> T callWithTimeout(Duration timeout, String action, Supplier<T> call) {
+        Future<T> future = CALL_EXECUTOR.submit(call::get);
+        try {
+            return future.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
+        } catch (TimeoutException e) {
+            future.cancel(true);
+            throw new IllegalStateException(action + "超时（" + timeout.toSeconds() + " 秒）：docker 守护进程未在限定时间内返回", e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(action + "被中断", e);
+        } catch (ExecutionException e) {
+            throw unwrap(e);
+        }
+    }
+
+    /**
+     * 拆掉 {@link Future} 的包装，让调用方看到 docker-java 原本抛出的异常（前端依赖其 message）。
+     */
+    private static RuntimeException unwrap(ExecutionException e) {
+        Throwable cause = e.getCause() == null ? e : e.getCause();
+        if (cause instanceof RuntimeException runtimeException) {
+            return runtimeException;
+        }
+        if (cause instanceof Error error) {
+            throw error;
+        }
+        return new RuntimeException(cause);
     }
 
     private Session openSshSession(Host host, String user, String sshHost, int port) throws Exception {

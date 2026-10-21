@@ -267,13 +267,7 @@ public class ImageDownloadService {
      * 本机主机：连接方式为本机，或没有配置远程地址（未配置 dockerHost 时客户端走平台默认端点）。
      */
     private static boolean isLocalHost(Host host) {
-        if (host == null || Host.TYPE_LOCAL.equalsIgnoreCase(host.getConnectionType())) {
-            return true;
-        }
-        String dockerHost = StrUtil.trim(host.getDockerHost());
-        return StrUtil.isBlank(dockerHost)
-                || StrUtil.startWithIgnoreCase(dockerHost, "unix:")
-                || StrUtil.startWithIgnoreCase(dockerHost, "npipe:");
+        return host == null || host.isLocalDocker();
     }
 
     private static Session openSshSession(Host host) throws Exception {

@@ -59,6 +59,17 @@ public class AppService extends BaseService<App> {
     /** 可变标签：镜像内容会随推送变化，本地同名镜像无法证明与仓库一致 */
     private static final String LATEST_TAG = "latest";
 
+    /**
+     * 容器启停删的兜底超时：docker-java 的 responseTimeout 是 1 小时（拉镜像需要），
+     * 但这类命令本该秒回，宿主机存储卡死时必须尽快失败，不能让部署线程一直挂着。
+     */
+    private static final Duration CONTAINER_START_TIMEOUT = Duration.ofSeconds(120);
+    private static final Duration CONTAINER_STOP_TIMEOUT = Duration.ofSeconds(60);
+    private static final Duration CONTAINER_REMOVE_TIMEOUT = Duration.ofSeconds(60);
+
+    /** 部署前探测 bind 源目录的超时（仅本机部署时探测） */
+    private static final Duration BIND_CHECK_TIMEOUT = Duration.ofSeconds(5);
+
     Set<String> deployingList = ConcurrentHashMap.newKeySet();
 
     private final AppRepository appRepository;
@@ -159,6 +170,8 @@ public class AppService extends BaseService<App> {
             String image = app.getImageUrl() + ":" + app.getImageTag();
 
             client = getClient(host, app.getImageUrl());
+            // 供 lambda 捕获：client 在 try 里赋值，本身不是 effectively final
+            final DockerClient dc = client;
 
 
             // latest 是可变标签：同样的 tag 可能已经指向新镜像，跳过拉取会继续用旧内容，
@@ -201,12 +214,19 @@ public class AppService extends BaseService<App> {
 
             for (Container container : containers) {
                 fileLog.info("容器状态 {}", container.getState());
+                String oldContainerId = container.getId();
                 if (container.getState().equals("running")) {
                     fileLog.info("停止容器{}", container.getNames());
-                    client.stopContainerCmd(container.getId()).exec();
+                    dockerManager.callWithTimeout(CONTAINER_STOP_TIMEOUT, "停止容器 " + oldContainerId, () -> {
+                        dc.stopContainerCmd(oldContainerId).exec();
+                        return null;
+                    });
                 }
                 fileLog.info("删除容器{}", container.getNames());
-                client.removeContainerCmd(container.getId()).exec();
+                dockerManager.callWithTimeout(CONTAINER_REMOVE_TIMEOUT, "删除容器 " + oldContainerId, () -> {
+                    dc.removeContainerCmd(oldContainerId).exec();
+                    return null;
+                });
             }
 
 
@@ -252,6 +272,13 @@ public class AppService extends BaseService<App> {
                 binds.add(new Bind(bindConfig.getPublicVolume(), new Volume(declared), accessMode));
             }
             hostConfig.withBinds(binds);
+
+            // 本机部署时先探测 bind 源目录：目录若位于无响应的网络存储（NFS 等）上，宿主机内核会把
+            // stat 阻塞成 D 状态，docker start 也跟着永远不返回。远端主机看不到对方的文件系统，
+            // 只能靠下面启动命令的超时兜底。
+            if (host == null || host.isLocalDocker()) {
+                checkBindSources(binds);
+            }
 
 
             // 环境变量
@@ -327,7 +354,18 @@ public class AppService extends BaseService<App> {
 
             String containerId = response.getId();
 
-            client.startContainerCmd(containerId).exec();
+            // 先打日志再启动：宿主机存储卡住时 start 不会返回，日志停在哪一步就是卡在哪一步
+            fileLog.info("开始启动容器 {}", containerId);
+            try {
+                dockerManager.callWithTimeout(CONTAINER_START_TIMEOUT, "启动容器 " + containerId, () -> {
+                    dc.startContainerCmd(containerId).exec();
+                    return null;
+                });
+            } catch (IllegalStateException e) {
+                throw new IllegalStateException(e.getMessage()
+                        + "。宿主机很可能卡在 bind 挂载（" + hostConfig.getBinds() + "）或 docker 守护进程无响应，"
+                        + "请登录宿主机检查该目录所在存储（如 NFS 挂载）与 docker 状态", e);
+            }
 
 
             fileLog.info("启动容器");
@@ -664,6 +702,28 @@ public class AppService extends BaseService<App> {
      */
     public DockerClient getClient(Host host, String imageUrl) {
         return dockerManager.getClient(host, registryService.forImageUrl(imageUrl));
+    }
+
+    /**
+     * 部署前探测 bind 源目录是否可访问。
+     * <p>
+     * 返回值不参与判断：目录不存在时 docker 会自行创建，这里只借这次 stat 探测「会不会卡住」——
+     * 目录位于无响应的网络存储（NFS 等）上时，stat 会阻塞在宿主机内核态，探测超时即为异常。
+     */
+    private void checkBindSources(List<Bind> binds) {
+        for (Bind bind : binds) {
+            String source = bind.getPath();
+            if (StrUtil.isBlank(source)) {
+                continue;
+            }
+            try {
+                dockerManager.callWithTimeout(BIND_CHECK_TIMEOUT, "检查宿主机目录 " + source,
+                        () -> new File(source).exists());
+            } catch (IllegalStateException e) {
+                throw new IllegalStateException(e.getMessage()
+                        + "。该目录很可能位于无响应的网络存储（如 NFS）上，请先在宿主机上检查挂载状态", e);
+            }
+        }
     }
 
     private void normalizeConfig(App.AppConfig cfg) {

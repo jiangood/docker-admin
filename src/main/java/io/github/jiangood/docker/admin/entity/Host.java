@@ -1,5 +1,6 @@
 package io.github.jiangood.docker.admin.entity;
 
+import cn.hutool.core.util.StrUtil;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.github.jiangood.openadmin.util.annotation.Remark;
@@ -130,6 +131,22 @@ public class Host extends BaseEntity {
     @JsonIgnore
     public boolean isSsh() {
         return TYPE_SSH.equalsIgnoreCase(connectionType);
+    }
+
+    /**
+     * 是否为本机 docker：连接方式是本机，或没有配置远程地址（未配置 dockerHost 时客户端走平台默认端点）。
+     * <p>
+     * 只有本机部署时平台才看得到 bind 源目录的真实文件系统，部署前的目录探测依赖这个判断。
+     */
+    @JsonIgnore
+    public boolean isLocalDocker() {
+        if (TYPE_LOCAL.equalsIgnoreCase(connectionType)) {
+            return true;
+        }
+        String dockerHost = StrUtil.trim(this.dockerHost);
+        return StrUtil.isBlank(dockerHost)
+                || StrUtil.startWithIgnoreCase(dockerHost, "unix:")
+                || StrUtil.startWithIgnoreCase(dockerHost, "npipe:");
     }
 
     /**
