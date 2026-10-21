@@ -71,6 +71,7 @@ menus:
     perms:
       - {name: 查看, code: registry:view}
       - {name: 保存, code: registry:save}
+      - {name: 查看密码, code: registry:password}
   setting-code-source:
     pid: setting
     name: 代码源
@@ -109,6 +110,14 @@ menus:
       - {name: 查看, code: build-test:view}
       - {name: 构建, code: build-test:build}
       - {name: 写入仓库, code: build-test:write}
+  image-download:
+    pid: tool
+    name: 镜像下载
+    path: /image-download
+    icon: DownloadOutlined
+    perms:
+      - {name: 查看, code: image-download:view}
+      - {name: 下载, code: image-download:download}
   tunnel:
     pid: tool
     name: 隧道管理

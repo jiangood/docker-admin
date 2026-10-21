@@ -4,6 +4,7 @@ import io.github.jiangood.docker.admin.entity.Registry;
 import io.github.jiangood.docker.admin.service.RegistryService;
 import io.github.jiangood.openadmin.framework.log.Log;
 import io.github.jiangood.openadmin.framework.perm.HasPermission;
+import io.github.jiangood.openadmin.util.BusinessException;
 import io.github.jiangood.openadmin.util.dto.AjaxResult;
 import io.github.jiangood.openadmin.util.dto.Option;
 import jakarta.annotation.Resource;
@@ -39,6 +40,19 @@ public class RegistryController {
     @RequestMapping("list")
     public AjaxResult list() {
         return AjaxResult.ok().data(service.findAll(Sort.by(Sort.Direction.DESC, "updateTime")));
+    }
+
+    /**
+     * 查看明文密码：列表接口只返回打码后的密码，这里按需单独读取。
+     * 单独用 registry:password 权限，避免能看列表的人都能看到凭据。
+     */
+    @Log("镜像注册中心-查看密码")
+    @HasPermission("registry:password")
+    @RequestMapping("password")
+    public AjaxResult password(String id) {
+        Registry registry = service.findById(id)
+                .orElseThrow(() -> new BusinessException("注册中心不存在"));
+        return AjaxResult.ok().data(registry.getPassword());
     }
 
     @Log("镜像注册中心-保存")

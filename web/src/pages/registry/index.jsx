@@ -1,10 +1,10 @@
-import {Button, Card, Form, Input, Modal, Popconfirm, Space, Table, message} from 'antd'
+import {Button, Card, Form, Input, Modal, Popconfirm, Space, Spin, Table, Typography, message} from 'antd'
 import React from 'react'
-import {HttpClient, Page, PermActions} from '@jiangood/open-admin'
+import {HttpClient, Page, PermActions, PermUtils} from '@jiangood/open-admin'
 
 /** 镜像注册中心实例管理。 */
 export default class extends React.Component {
-    state = {loading: true, rows: [], modalOpen: false, editing: false, formValues: {}}
+    state = {loading: true, rows: [], modalOpen: false, editing: false, formValues: {}, pwdOpen: false, pwdLoading: false, pwdRow: null, pwdValue: ''}
     formRef = React.createRef()
 
     // 首次加载由 onShow 触发（PageFrame 挂载时会调一次），这里不再重复请求
@@ -42,14 +42,25 @@ export default class extends React.Component {
             .then(() => { message.success('删除成功'); this.load() })
     }
 
+    // 列表只返回打码密码，明文按需单独请求（后端另有 registry:password 权限）
+    viewPassword = row => {
+        this.setState({pwdOpen: true, pwdLoading: true, pwdRow: row, pwdValue: ''})
+        HttpClient.get('admin/registry/password?id=' + encodeURIComponent(row.id))
+            .then(rs => this.setState({pwdValue: rs.data || '', pwdLoading: false}))
+            .catch(() => this.setState({pwdLoading: false}))
+    }
+
     render() {
-        const {loading, rows, modalOpen, editing, formValues} = this.state
+        const {loading, rows, modalOpen, editing, formValues, pwdOpen, pwdLoading, pwdRow, pwdValue} = this.state
+        const canViewPassword = PermUtils.hasPermission('registry:password')
         const columns = [
             {title: '地址', dataIndex: 'url'},
             {title: '命名空间', dataIndex: 'namespace'},
             {title: '用户名', dataIndex: 'username'},
             {title: '凭据', dataIndex: 'passwordMasked', render: v => v ? '已配置' : '未配置'},
             {title: '操作', key: 'action', render: (_, row) => <Space>
+                {canViewPassword && row.passwordMasked &&
+                    <Button type='link' onClick={() => this.viewPassword(row)}>查看密码</Button>}
                 <Button type='link' onClick={() => this.edit(row)}>编辑</Button>
                 <Popconfirm title='确定删除该注册中心？' description='默认注册中心需先到设置-全局设置中更换；已被项目使用的注册中心需先解除绑定。'
                             onConfirm={() => this.remove(row.id)}>
@@ -82,6 +93,20 @@ export default class extends React.Component {
                         <Input.Password autoComplete='new-password' placeholder={editing ? '留空不修改' : ''}/>
                     </Form.Item>
                 </Form>
+            </Modal>
+            <Modal title='查看密码' open={pwdOpen} destroyOnHidden
+                   onCancel={() => this.setState({pwdOpen: false})}
+                   footer={<Button onClick={() => this.setState({pwdOpen: false})}>关闭</Button>}>
+                <div style={{marginBottom: 8}}>
+                    <Typography.Text type='secondary'>
+                        {pwdRow ? pwdRow.url + '/' + pwdRow.namespace : ''}
+                    </Typography.Text>
+                </div>
+                {pwdLoading
+                    ? <Spin/>
+                    : pwdValue
+                        ? <Typography.Text copyable code style={{wordBreak: 'break-all'}}>{pwdValue}</Typography.Text>
+                        : <Typography.Text type='secondary'>未配置密码</Typography.Text>}
             </Modal>
         </Page>
     }
