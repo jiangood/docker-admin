@@ -262,10 +262,8 @@ export default class extends React.Component {
       dataIndex: 'tag',
     },
     {
-      title: '目录',
+      title: '构建上下文',
       dataIndex: 'context',
-      // 历史构建记录里仓库根目录存的是 "/"，一并显示为「仓库根目录」
-      render: (context) => !context || context === '/' ? '仓库根目录' : context,
     },
     {
       title: 'Dockerfile',
@@ -342,7 +340,7 @@ export default class extends React.Component {
           <Descriptions.Item label='目标注册中心'>{this.registryLabel()}</Descriptions.Item>
           <Descriptions.Item label='代码源'>{project.gitUrl}</Descriptions.Item>
           <Descriptions.Item label='dockerfile'>{project.dockerfile}</Descriptions.Item>
-          <Descriptions.Item label='构建上下文'>{project.context || '仓库根目录'}</Descriptions.Item>
+          <Descriptions.Item label='构建上下文'>{project.context}</Descriptions.Item>
           <Descriptions.Item label='创建时间'>{project.createTime}</Descriptions.Item>
         </Descriptions>
 

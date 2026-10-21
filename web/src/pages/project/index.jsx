@@ -85,7 +85,6 @@ export default class extends React.Component {
         {
             title: '构建上下文',
             dataIndex: 'context',
-            render: (context) => context || '仓库根目录',
         },
 
 

@@ -480,7 +480,7 @@ public class ProjectService extends BaseService<Project> {
         buildLog.setProjectId(project.getId());
         buildLog.setProjectName(project.getName());
         buildLog.setDockerfile(BuildContextUtils.normalizeDockerfile(project.getDockerfile()));
-        buildLog.setContext(BuildContextUtils.display(project.getContext()));
+        buildLog.setContext(BuildContextUtils.normalize(project.getContext()));
         buildLog.setTag(branchBuild ? branch : p.getTag());
         buildLog.setBranch(branch);
         return buildLogService.saveLog(buildLog);

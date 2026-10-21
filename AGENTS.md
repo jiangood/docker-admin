@@ -71,7 +71,7 @@ git tag vx.y.z && git push && git push origin vx.y.z
   菜单为「项目」(`/project`) 与「镜像」(`/image`)，权限码为 `image:*`，表名为 `t_image`。
 - **构建上下文：** `Project.context` 相对仓库根目录，留空表示仓库根；填写时不带前导 `/`（后端兼容历史的 `/admin`，保存时归一化）。
   `dockerfile` 同样相对仓库根目录、不带前导 `/`，且必须位于上下文内（如 `context=admin` + `dockerfile=admin/Dockerfile`）。
-  前端表格/详情把空的上下文显示为「仓库根目录」，输入框失焦时自动去掉前导 `/`。
+  前端表格/详情直接原样展示上下文（空即空，不再显示「仓库根目录」），输入框失焦时自动去掉前导 `/`。
   归一化与校验集中在 `BuildContextUtils`（`normalize` / `normalizeDockerfile`），构建测试页也支持同样的上下文参数。
 - **Tests** 大多是 `main()` 方法（如 `DockerSdkTest`、`PrintTest`），无法通过 `mvn test` 运行，
   需要在 IDE 里单独执行；`src/test/java` 下另有少量 JUnit 测试（如 `VersionUtilsTest`、
