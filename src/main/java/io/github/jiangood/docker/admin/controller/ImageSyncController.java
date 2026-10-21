@@ -37,12 +37,15 @@ public class ImageSyncController {
     private ImageSyncLogService syncLogService;
 
     /**
-     * 同步记录（最新在前），供页面下方表格回看。
+     * 同步记录（最新在前），页面表格展示；searchText 按镜像地址与主机名模糊搜索。
      */
     @HasPermission("image-sync:view")
     @RequestMapping("page")
-    public AjaxResult page(@PageableDefault(sort = "createTime", direction = Sort.Direction.DESC) Pageable pageable) {
-        Page<ImageSyncLog> page = syncLogService.findAll(Spec.of(), pageable);
+    public AjaxResult page(String searchText, @PageableDefault(sort = "createTime", direction = Sort.Direction.DESC) Pageable pageable) {
+        Spec<ImageSyncLog> q = Spec.of();
+        q.orLike(searchText, ImageSyncLog.Fields.sourceImage, ImageSyncLog.Fields.targetImage,
+                ImageSyncLog.Fields.hostName, ImageSyncLog.Fields.targetHostName);
+        Page<ImageSyncLog> page = syncLogService.findAll(q, pageable);
         return AjaxResult.ok().data(page);
     }
 
