@@ -76,17 +76,18 @@ export default class extends React.Component {
         },
 
         {
-            title: '最近更新',
-            dataIndex: 'updateTime',
-        },
-        {
             title: '备注',
             dataIndex: 'remark',
+        },
+        {
+            title: '最近更新',
+            dataIndex: 'updateTime',
         },
         {
             title: '操作',
             dataIndex: 'option',
             valueType: 'option',
+            fixed: 'right',
             render: (_, record) => (
                 <PermActions size='small' actions={[
                     {label: '修改', perm: 'app:save', onClick: () => this.handleEdit(record)},
