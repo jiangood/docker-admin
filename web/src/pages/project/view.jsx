@@ -567,10 +567,10 @@ export default class extends React.Component {
     const sshOnly = gitlabSource?.data?.authType === 'SSH_KEY'
     const showAutoConfig = !!gitlabSource || !!project.webhookAuto
 
-    return (<div className='page-card'>
+    return (<div className='page-card page-card-wide'>
       <Row gutter={16} align='top'>
-        <Col flex='auto' style={{minWidth: 0}}>
-          <Descriptions column={1} size='small' bordered>
+        <Col xs={24} lg={15} xl={17} xxl={18}>
+          <Descriptions column={1} size='small' bordered styles={{label: {whiteSpace: 'nowrap'}}}>
             <Descriptions.Item label='Webhook 地址'>
               <Space wrap>
                 <Typography.Text copyable={{text: this.webhookUrl()}} code style={{wordBreak: 'break-all'}}>

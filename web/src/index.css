@@ -39,6 +39,11 @@
     margin-right: auto;
 }
 
+/* 信息较多的页签（如项目详情的 Webhook）放宽，避免左右两栏被 960 挤压后换行 */
+.page-card-wide {
+    max-width: 1200px;
+}
+
 /*
  * 间距工具类：后缀为刻度序号（.mt-2 = 8px、.mb-4 = 16px）。
  * 页面用它替代散落的 style={{marginTop/marginBottom: N}}，保证间距成体系。
