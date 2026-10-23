@@ -126,6 +126,12 @@
             <artifactId>spring-boot-starter-websocket</artifactId>
         </dependency>
 
+        <!-- 构建结果邮件通知（SMTP 账号在「全局设置」中配置，运行时动态创建发送器） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+
 
 
         <dependency>

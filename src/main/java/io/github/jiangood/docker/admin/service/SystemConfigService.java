@@ -24,6 +24,19 @@ public class SystemConfigService extends BaseService<SystemConfig> {
     public static final String DEFAULT_REGISTRY_ID = "default.registry.id";
     public static final String DEFAULT_BUILD_HOST_ID = "default.build.host.id";
 
+    /** 构建结果邮件通知 */
+    public static final String EMAIL_ENABLED = "email.enabled";
+    public static final String EMAIL_SMTP_HOST = "email.smtp.host";
+    public static final String EMAIL_SMTP_PORT = "email.smtp.port";
+    public static final String EMAIL_USERNAME = "email.username";
+    public static final String EMAIL_PASSWORD = "email.password";
+    public static final String EMAIL_FROM_NAME = "email.from.name";
+    public static final String EMAIL_TO = "email.to";
+
+    /** 目前只支持 QQ 邮箱，SMTP 默认值即 QQ 邮箱参数 */
+    public static final String DEFAULT_SMTP_HOST = "smtp.qq.com";
+    public static final int DEFAULT_SMTP_PORT = 465;
+
     private final SystemConfigRepository repository;
     private final RegistryRepository registryRepository;
     private final HostRepository hostRepository;
@@ -71,5 +84,102 @@ public class SystemConfigService extends BaseService<SystemConfig> {
         } else {
             repository.save(config);
         }
+    }
+
+    public boolean isEmailEnabled() {
+        return Boolean.parseBoolean(getValue(EMAIL_ENABLED));
+    }
+
+    public String getEmailSmtpHost() {
+        return StrUtil.blankToDefault(StrUtil.trimToNull(getValue(EMAIL_SMTP_HOST)), DEFAULT_SMTP_HOST);
+    }
+
+    public int getEmailSmtpPort() {
+        String value = StrUtil.trimToNull(getValue(EMAIL_SMTP_PORT));
+        if (value == null) {
+            return DEFAULT_SMTP_PORT;
+        }
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException e) {
+            return DEFAULT_SMTP_PORT;
+        }
+    }
+
+    public String getEmailUsername() {
+        return StrUtil.trimToNull(getValue(EMAIL_USERNAME));
+    }
+
+    public String getEmailPassword() {
+        return StrUtil.trimToNull(getValue(EMAIL_PASSWORD));
+    }
+
+    public String getEmailFromName() {
+        return StrUtil.trimToNull(getValue(EMAIL_FROM_NAME));
+    }
+
+    public String getEmailTo() {
+        return StrUtil.trimToNull(getValue(EMAIL_TO));
+    }
+
+    /** 邮件设置（不含授权码明文，只返回是否已设置）。 */
+    public Map<String, Object> getEmailSettings() {
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("enabled", isEmailEnabled());
+        values.put("smtpHost", getEmailSmtpHost());
+        values.put("smtpPort", getEmailSmtpPort());
+        values.put("username", getEmailUsername());
+        values.put("fromName", getEmailFromName());
+        values.put("to", getEmailTo());
+        values.put("passwordSet", StrUtil.isNotBlank(getEmailPassword()));
+        return values;
+    }
+
+    /**
+     * 保存邮件通知设置。授权码留空表示沿用已保存的值，避免每次改其他项都要重填。
+     */
+    @Transactional
+    public void saveEmailSettings(Boolean enabled, String smtpHost, Integer smtpPort, String username,
+                                  String password, String fromName, String to) {
+        boolean on = Boolean.TRUE.equals(enabled);
+        String host = StrUtil.blankToDefault(StrUtil.trimToNull(smtpHost), DEFAULT_SMTP_HOST);
+        int port = smtpPort == null ? DEFAULT_SMTP_PORT : smtpPort;
+        Assert.isTrue(port > 0 && port <= 65535, "SMTP 端口不正确");
+
+        String user = StrUtil.trimToNull(username);
+        String recipients = StrUtil.trimToNull(to);
+        String passwordToSave = StrUtil.trimToNull(password);
+
+        if (on) {
+            Assert.hasText(user, "请填写发件邮箱（QQ 邮箱地址）");
+            Assert.hasText(recipients, "请填写接收构建结果的邮箱");
+            Assert.hasText(StrUtil.blankToDefault(passwordToSave, getEmailPassword()), "请填写邮箱授权码");
+        }
+        if (recipients != null) {
+            for (String address : splitRecipients(recipients)) {
+                Assert.isTrue(address.contains("@"), "收件邮箱格式不正确：" + address);
+            }
+        }
+
+        saveValue(EMAIL_ENABLED, String.valueOf(on), "构建结果邮件通知开关");
+        saveValue(EMAIL_SMTP_HOST, host, "邮件 SMTP 服务器");
+        saveValue(EMAIL_SMTP_PORT, String.valueOf(port), "邮件 SMTP 端口");
+        saveValue(EMAIL_USERNAME, user, "发件邮箱（QQ 邮箱）");
+        if (passwordToSave != null) {
+            saveValue(EMAIL_PASSWORD, passwordToSave, "发件邮箱授权码");
+        }
+        saveValue(EMAIL_FROM_NAME, StrUtil.trimToNull(fromName), "发件人名称");
+        saveValue(EMAIL_TO, recipients, "构建结果收件邮箱");
+    }
+
+    /** 收件邮箱支持用英文/中文逗号、分号或空白分隔。 */
+    public static java.util.List<String> splitRecipients(String recipients) {
+        if (StrUtil.isBlank(recipients)) {
+            return java.util.List.of();
+        }
+        return java.util.Arrays.stream(recipients.split("[,，;；\\s]+"))
+                .map(String::trim)
+                .filter(StrUtil::isNotBlank)
+                .toList();
     }
 }

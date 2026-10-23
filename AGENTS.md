@@ -87,6 +87,10 @@ git tag vx.y.z && git push && git push origin vx.y.z
   需要在 IDE 里单独执行；`src/test/java` 下另有少量 JUnit 测试（如 `VersionUtilsTest`、
   `BuildContextUtilsTest`），可用 `mvn test -Dtest=<类名>` 单独跑。
 - **权限**用 open-admin 的 `@HasPermission("app:view")`，不是标准 Spring Security 注解。
+- **构建结果邮件通知：** 在「设置 - 全局设置」页配置，键为 `t_system_config` 的 `email.*`
+  （`email.enabled` 为总开关，QQ 邮箱 SMTP 默认 `smtp.qq.com:465`，授权码不回显、留空表示不修改）。
+  `ProjectService` 在构建成功与失败时都发布 `BuildResultEvent`，`MailService` 异步发送；
+  邮件失败只记日志，不影响构建结果。收件邮箱可任意，多个用逗号分隔。
 - **前端**是 `@jiangood/open-admin` 之上的薄层，页面在 `web/src/pages/`，构建配置 `web/vite.config.js`。
 - **静态文件**从 JAR 提供；开发时前端通过 Vite 代理访问后端。
 - **CodeMirror 5** 被锁定在 5.x（`codemirror@^5.0.0`）。CM6 是破坏性重写，

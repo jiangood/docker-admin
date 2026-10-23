@@ -15,6 +15,7 @@ import com.github.dockerjava.api.model.BuildResponseItem;
 import io.github.jiangood.docker.base.FileLog;
 import io.github.jiangood.docker.base.tool.GitCredential;
 import io.github.jiangood.docker.base.tool.GitTool;
+import io.github.jiangood.docker.admin.BuildResultEvent;
 import io.github.jiangood.docker.admin.BuildSuccessEvent;
 import io.github.jiangood.docker.admin.dao.AppRepository;
 import io.github.jiangood.docker.admin.dao.ProjectRepository;
@@ -670,6 +671,7 @@ public class ProjectService extends BaseService<Project> {
             applicationEventPublisher.publishEvent(event);
             fileLog.info("抛出构建事件 {}", event.getBuildLog().getProjectName());
 
+            publishBuildResult(buildLog);
             fileLog.info("构建阶段结束");
         } catch (Exception e) {
             fileLog.info("异常 {} {}", e.getClass().getName(), e.getMessage());
@@ -679,7 +681,8 @@ public class ProjectService extends BaseService<Project> {
                 buildLog.setSuccess(false);
                 buildLog.setCompleteTime(LocalDateTime.now());
                 buildLog.setTimeSpend(Duration.between(buildLog.getCreateTime(), buildLog.getCompleteTime()).toMillis());
-                buildLogService.save(buildLog);
+                buildLog = buildLogService.save(buildLog);
+                publishBuildResult(buildLog);
             }
         } finally {
             IOUtils.closeQuietly(client);
@@ -691,6 +694,16 @@ public class ProjectService extends BaseService<Project> {
             FileLog.unbind();
             taskLogRegistry.finish(logId);
         }
+    }
+
+    /** 抛出构建结束事件（成功/失败），邮件通知等旁路逻辑监听此事件。 */
+    private void publishBuildResult(BuildLog buildLog) {
+        if (buildLog == null) {
+            return;
+        }
+        BuildResultEvent resultEvent = new BuildResultEvent(this);
+        resultEvent.setBuildLog(buildLog);
+        applicationEventPublisher.publishEvent(resultEvent);
     }
 
     /** 删除本次构建的代码目录，并记入构建日志。 */
