@@ -35,6 +35,7 @@ import io.github.jiangood.docker.sdk.engine.DefaultCallback;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import io.github.jiangood.openadmin.framework.data.BaseService;
 import io.github.jiangood.openadmin.framework.data.specification.Spec;
+import io.github.jiangood.openadmin.modules.system.repository.SysUserRepository;
 import io.github.jiangood.openadmin.util.BusinessException;
 import jakarta.annotation.Resource;
 import jakarta.transaction.Transactional;
@@ -105,10 +106,27 @@ public class ProjectService extends BaseService<Project> {
     @Resource
     TaskLogRegistry taskLogRegistry;
 
+    @Resource
+    SysUserRepository sysUserRepository;
+
     private final Map<String, DefaultCallback> buildThreadMap = new ConcurrentHashMap<>();
 
-    /** 正在构建的项目 id。项目使用固定代码目录，同一项目不允许并行构建，避免互相删目录。 */
+    /**
+     * 正在构建的项目 id。项目使用固定代码目录，同一项目不允许并行构建，避免互相删目录。
+     * <p>
+     * 并发策略是「新的覆盖旧的」：新构建先取消旧构建，再等它释放代码目录后开始；
+     * 不像以前那样直接报错拒绝，也不排队执行。
+     */
     private final Set<String> buildingProjects = ConcurrentHashMap.newKeySet();
+
+    /** 已被取消的构建日志 id：手动停止、被新构建覆盖等，构建线程在每个检查点据此放弃。 */
+    private final Set<String> cancelledBuilds = ConcurrentHashMap.newKeySet();
+
+    /** 新构建等待旧构建退出的上限：克隆大仓库时旧构建要等克隆结束才能看到取消标记。 */
+    private static final long BUILD_SLOT_WAIT_MILLIS = 10 * 60 * 1000L;
+
+    /** 等待旧构建退出时的轮询间隔。 */
+    private static final long BUILD_SLOT_POLL_MILLIS = 200L;
 
 
     /**
@@ -131,6 +149,25 @@ public class ProjectService extends BaseService<Project> {
     }
 
     /**
+     * 填充项目创建人邮箱（不持久化），供详情页展示构建结果邮件收件人。
+     */
+    public void fillCreateUserEmail(Project project) {
+        if (project != null) {
+            project.setCreateUserEmail(findCreateUserEmail(project));
+        }
+    }
+
+    /** 项目创建人的邮箱；创建人不存在或未配置邮箱时返回 null。 */
+    public String findCreateUserEmail(Project project) {
+        if (project == null || StrUtil.isBlank(project.getCreateUser())) {
+            return null;
+        }
+        return sysUserRepository.findById(project.getCreateUser())
+                .map(user -> StrUtil.trimToNull(user.getEmail()))
+                .orElse(null);
+    }
+
+    /**
      * 保存项目：新建走 create，编辑走 update。
      */
     @Transactional
@@ -147,22 +184,104 @@ public class ProjectService extends BaseService<Project> {
 
 
     public void stopBuild(String logId) throws IOException {
+        // 先登记取消标记并关闭 docker 构建流：构建线程即使没被立刻打断，也会在下一个检查点放弃。
+        // 只有真正在跑的任务才需要取消标记；进程重启遗留的记录没有对应线程。
+        if (taskLogRegistry.isRunning(logId)) {
+            cancelledBuilds.add(logId);
+        }
         DefaultCallback callback = buildThreadMap.remove(logId);
         if (callback != null) {
             callback.close();
         }
 
+        if (!markBuildFailed(logId)) {
+            // 已经结束的构建不回写状态，也不需要保留取消标记
+            cancelledBuilds.remove(logId);
+        }
+    }
+
+    /**
+     * 把仍在「处理中」（success 为空）的构建记录标记为失败，已结束的记录保持原样。
+     *
+     * @return true 表示本次确实做了标记
+     */
+    private boolean markBuildFailed(String logId) {
         BuildLog buildLog = buildLogService.findById(logId).orElse(null);
-        if (buildLog == null) {
-            return;
+        if (buildLog == null || buildLog.getSuccess() != null) {
+            return false;
         }
 
         buildLog.setSuccess(false);
         buildLog.setCompleteTime(LocalDateTime.now());
         buildLog.setTimeSpend(Duration.between(buildLog.getCreateTime(), buildLog.getCompleteTime()).toMillis());
         buildLogService.save(buildLog);
+        return true;
+    }
 
+    /**
+     * 取消项目下所有仍在「处理中」的构建（正在跑的、排队等槽位的，以及进程重启后遗留的记录）。
+     *
+     * @param excludeLogId 需要保留的构建记录 id（正在抢槽位的本次构建），可为 null
+     */
+    private void cancelProcessingBuilds(String projectId, String excludeLogId) {
+        if (StrUtil.isBlank(projectId)) {
+            return;
+        }
+        for (BuildLog item : buildLogService.findByProjectProcessing(projectId)) {
+            if (item.getId().equals(excludeLogId)) {
+                continue;
+            }
+            try {
+                stopBuild(item.getId());
+            } catch (IOException e) {
+                log.warn("取消构建 {} 失败：{}", item.getId(), e.getMessage());
+            }
+        }
+    }
 
+    /**
+     * 抢占项目构建槽位：同一项目使用固定代码目录，必须等上一轮构建（已被取消）彻底退出。
+     * <p>
+     * 等待发生在异步构建线程里，不阻塞触发接口（Webhook 立即返回）。等待期间若本次构建也被
+     * 更新的构建取代，则直接放弃。
+     *
+     * @return true 表示抢到槽位；false 表示被取代或等待超时
+     */
+    private boolean acquireBuildSlot(String projectId, String logId) {
+        long deadline = System.currentTimeMillis() + BUILD_SLOT_WAIT_MILLIS;
+        boolean waiting = false;
+
+        while (!cancelledBuilds.contains(logId)) {
+            if (buildingProjects.add(projectId)) {
+                if (waiting) {
+                    fileLog.info("旧构建已退出，开始本次构建");
+                }
+                // 抢到槽位后取消同项目其它仍在排队的构建，只保留最新一次；
+                // 这一步失败（如数据库异常）不能影响本次构建，否则槽位会一直占着
+                try {
+                    cancelProcessingBuilds(projectId, logId);
+                } catch (Exception e) {
+                    fileLog.warn("取消同项目排队构建失败：{}", e.getMessage());
+                }
+                return true;
+            }
+
+            if (!waiting) {
+                waiting = true;
+                fileLog.info("该项目已有构建在进行，已停止旧构建，等待其释放代码目录");
+            }
+
+            if (System.currentTimeMillis() >= deadline) {
+                return false;
+            }
+            try {
+                Thread.sleep(BUILD_SLOT_POLL_MILLIS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
+        return false;
     }
 
 
@@ -450,32 +569,29 @@ public class ProjectService extends BaseService<Project> {
      * 出现「构建历史看不到新记录，刷新页面才有」的现象。
      * <p>
      * 同一项目同一时间只允许一个构建：项目使用固定代码目录，并行构建会互相删目录、串构建上下文。
+     * 采用「新的覆盖旧的」：本次触发会先停掉正在跑的旧构建（以及进程重启遗留的「处理中」记录），
+     * 新构建在异步线程里等旧构建释放代码目录后再开始，触发接口本身立即返回。
      *
      * @return 构建记录 id
      */
     public String buildImage(BuildRequest p) throws IOException {
-        if (!buildingProjects.add(p.getProjectId())) {
-            throw new BusinessException("该项目正在构建中，请等待当前构建结束");
-        }
+        // 新的覆盖旧的：旧构建被取消，它的构建线程会在下一个检查点退出
+        cancelProcessingBuilds(p.getProjectId(), null);
+
+        BuildLog buildLog = createProcessingLog(p);
+
+        // 任务在调度前就标记为运行中：前端触发后会立刻打开日志窗口，
+        // 若此时尚未标记，日志 WebSocket 会误判任务已结束而提前关闭连接。
+        taskLogRegistry.start(buildLog.getId());
 
         try {
-            // 进程重启等情况会留下 success 为空的「处理中」记录，实际并不在跑，标记为失败，避免永远卡住
-            for (BuildLog buildLog : buildLogService.findByProjectProcessing(p.getProjectId())) {
-                stopBuild(buildLog.getId());
-            }
-
-            BuildLog buildLog = createProcessingLog(p);
-
-            // 任务在调度前就标记为运行中：前端触发后会立刻打开日志窗口，
-            // 若此时尚未标记，日志 WebSocket 会误判任务已结束而提前关闭连接。
-            taskLogRegistry.start(buildLog.getId());
-
             // 通过代理调用 @Async 方法，避免自调用失效
             SpringUtil.getBean(ProjectService.class).buildImageJob(p, buildLog.getId());
             return buildLog.getId();
         } catch (RuntimeException e) {
-            // 任务没派发成功（如线程池已满）时释放占用，否则该项目再也无法构建
-            buildingProjects.remove(p.getProjectId());
+            // 任务没派发成功（如线程池已满）时把记录标记为失败，否则会一直显示「构建中」
+            taskLogRegistry.finish(buildLog.getId());
+            stopBuild(buildLog.getId());
             throw e;
         }
     }
@@ -515,13 +631,14 @@ public class ProjectService extends BaseService<Project> {
                 && StrUtil.isNotBlank(p.getBranch());
         String branch = branchBuild ? p.getBranch().trim() : null;
         String cloneRef = branchBuild ? branch : tag;
-        // 构建开始时间（服务器本地时区），用于生成分支构建版本号
-        LocalDateTime buildTime = LocalDateTime.now();
+        // 构建开始时间（服务器本地时区），用于生成分支构建版本号；抢到槽位后再取，避免等待期间时间戳过期
+        LocalDateTime buildTime = null;
 
         Project project = null;
         BuildLog buildLog = null;
         DockerClient client = null;
         File workDir = null;
+        boolean slotAcquired = false;
         FileLog.bind(logId);
         try {
             project = projectRepository.findById(projectId).orElse(null);
@@ -529,6 +646,15 @@ public class ProjectService extends BaseService<Project> {
             buildLog = buildLogService.findById(logId).orElse(null);
             Assert.notNull(buildLog, "构建记录不存在");
             // 任务已在 buildImage() 调度前通过 taskLogRegistry.start() 标记为运行中
+
+            // 同一项目串行构建：旧构建（已被 cancelProcessingBuilds 取消）退出后才能复用代码目录
+            if (!acquireBuildSlot(projectId, logId)) {
+                fileLog.info("未开始构建：已被更新的构建取代，或等待旧构建释放代码目录超时");
+                markBuildFailed(logId);
+                return;
+            }
+            slotAcquired = true;
+            buildTime = LocalDateTime.now();
 
             fileLog.info("开始构建镜像任务, 项目：{}， 仓库：{}， 来源：{}", project.getName(), project.getGitUrl(),
                     branchBuild ? "分支 " + branch : "tag " + tag);
@@ -540,6 +666,11 @@ public class ProjectService extends BaseService<Project> {
 
             GitTool.CloneResult cloneResult = gitClone(project, cloneRef);
             workDir = cloneResult.getDir();
+            // 克隆期间可能已被新构建取消（克隆无法中断），这里尽早放弃，避免继续占用代码目录
+            if (isBuildCancelled(logId)) {
+                fileLog.info("构建已取消，丢弃本次克隆的代码");
+                return;
+            }
             fileLog.info("代码下载完毕 " + workDir);
             fileLog.info("代码提交信息: {}", cloneResult.getCodeMessage());
             Date commitTime = Date.from(cloneResult.getCommitTime().atZone(ZoneId.systemDefault()).toInstant());
@@ -627,10 +758,9 @@ public class ProjectService extends BaseService<Project> {
             fileLog.info("构建命令执行完毕");
 
 
-            // 判断是构建被中途取消，如手动取消，重复构建取消
-            if (!buildThreadMap.containsKey(logId)) {
-                fileLog.info("构建被取消");
-                FileLog.unbind();
+            // 判断是构建被中途取消（手动停止、被新构建覆盖）：关闭 docker 流后从这里退出
+            if (isBuildCancelled(logId)) {
+                fileLog.info("构建已取消，不再推送镜像");
                 return;
             }
             fileLog.info("镜像构建结束 ");
@@ -656,6 +786,11 @@ public class ProjectService extends BaseService<Project> {
                 fileLog.warn("登记镜像失败: {}", e.getMessage());
             }
 
+            // 推送阶段被取消时镜像可能已推上去，但记录已由 stopBuild/markBuildFailed 置为失败，不要回写成成功
+            if (isBuildCancelled(logId)) {
+                fileLog.info("构建已取消，不记录成功状态");
+                return;
+            }
 
             buildLog.setSuccess(true);
             buildLog.setCompleteTime(LocalDateTime.now());
@@ -682,7 +817,10 @@ public class ProjectService extends BaseService<Project> {
                 buildLog.setCompleteTime(LocalDateTime.now());
                 buildLog.setTimeSpend(Duration.between(buildLog.getCreateTime(), buildLog.getCompleteTime()).toMillis());
                 buildLog = buildLogService.save(buildLog);
-                publishBuildResult(buildLog);
+                // 被取消的构建已经由 stopBuild 记录为失败，不再重复发结束通知
+                if (!isBuildCancelled(logId)) {
+                    publishBuildResult(buildLog);
+                }
             }
         } finally {
             IOUtils.closeQuietly(client);
@@ -690,10 +828,19 @@ public class ProjectService extends BaseService<Project> {
             // 再全量检查一次克隆根目录，清掉进程被强杀等异常退出留下的残留（保留 10 天）
             deleteWorkDir(workDir);
             GitTool.cleanupCloneDirs();
-            buildingProjects.remove(projectId);
+            if (slotAcquired) {
+                buildingProjects.remove(projectId);
+            }
+            buildThreadMap.remove(logId);
+            cancelledBuilds.remove(logId);
             FileLog.unbind();
             taskLogRegistry.finish(logId);
         }
+    }
+
+    /** 构建线程是否已被取消（手动停止、被新构建覆盖）。 */
+    private boolean isBuildCancelled(String logId) {
+        return cancelledBuilds.contains(logId);
     }
 
     /** 抛出构建结束事件（成功/失败），邮件通知等旁路逻辑监听此事件。 */

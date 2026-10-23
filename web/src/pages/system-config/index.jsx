@@ -1,4 +1,4 @@
-import {Button, Card, Form, Input, InputNumber, Space, Switch} from 'antd'
+import {Alert, Button, Card, Form, Input, InputNumber, Space} from 'antd'
 import React from 'react'
 import {HttpClient, Page} from '@jiangood/open-admin'
 
@@ -97,12 +97,10 @@ export default class extends React.Component {
                 </Form>
             </Card>
 
-            <Card title='构建结果邮件通知' loading={loading} className='page-card'>
+            <Card title='邮件发送服务（QQ 邮箱）' loading={loading} className='page-card'>
                 <Form initialValues={email} labelCol={{flex: '140px'}} onFinish={this.onSaveEmail}>
-                    <Form.Item label='邮件通知' name='enabled' valuePropName='checked'
-                               tooltip='开启后，每次构建结束（成功或失败）都会把构建结果发送到收件邮箱'>
-                        <Switch checkedChildren='开启' unCheckedChildren='关闭'/>
-                    </Form.Item>
+                    <Alert className='mb-4' type='info' showIcon
+                           message='这里只配置发件邮箱。是否发送构建结果邮件在「项目详情页」按项目开启，收件人为项目创建人的邮箱。'/>
                     <Form.Item label='发件邮箱' name='username'
                                rules={[{type: 'email', message: '请输入正确的邮箱地址'}]}
                                tooltip='目前支持 QQ 邮箱；请先在 QQ 邮箱「设置 - 账号」中开启 SMTP 服务并获取授权码'>
@@ -112,10 +110,6 @@ export default class extends React.Component {
                                tooltip='QQ 邮箱生成的授权码（不是 QQ 登录密码）；留空表示不修改已保存的授权码'>
                         <Input.Password autoComplete='new-password'
                                         placeholder={email.passwordSet ? '已设置，留空表示不修改' : '请输入 QQ 邮箱授权码'}/>
-                    </Form.Item>
-                    <Form.Item label='收件邮箱' name='to'
-                               tooltip='接收构建结果的邮箱，可以是任意邮箱；多个邮箱用英文逗号分隔'>
-                        <Input placeholder='如 dev@example.com；多个用英文逗号分隔' autoComplete='off'/>
                     </Form.Item>
                     <Form.Item label='发件人名称' name='fromName'
                                tooltip='可选，显示在收件人看到的发件人位置；留空则使用发件邮箱'>
@@ -132,7 +126,7 @@ export default class extends React.Component {
                         <Button type='primary' htmlType='submit' loading={savingEmail}>保存</Button>
                         <Button onClick={this.onTestEmail} loading={testing}>发送测试邮件</Button>
                         <span style={{color: 'var(--oa-color-text-secondary, #8c8c8c)'}}>
-                            测试使用已保存的配置，修改后请先保存
+                            测试邮件发到发件邮箱自己；修改后请先保存
                         </span>
                     </Space>
                 </Form>

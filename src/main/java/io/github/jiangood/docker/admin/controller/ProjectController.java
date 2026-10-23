@@ -101,6 +101,7 @@ public class ProjectController {
     public AjaxResult get(String id) {
         Project project = assertProjectAccess(id);
         service.fillImageUrl(project);
+        service.fillCreateUserEmail(project);
         return AjaxResult.ok().data(project);
     }
 
@@ -179,6 +180,26 @@ public class ProjectController {
         return AjaxResult.ok()
                 .msg(Boolean.TRUE.equals(enabled) ? "已开启分支推送构建" : "已关闭分支推送构建")
                 .data(project.getWebhookBranch());
+    }
+
+    /**
+     * 开启/关闭「构建结果邮件通知」。开启后，构建成功或失败都会发送邮件给项目创建人。
+     * 开启的前提是项目创建人已配置邮箱。
+     */
+    @HasPermission("project:save")
+    @RequestMapping("setNotifyEmail")
+    public AjaxResult setNotifyEmail(String id, Boolean enabled) {
+        Project project = assertProjectAccess(id);
+        boolean on = Boolean.TRUE.equals(enabled);
+        if (on) {
+            String email = service.findCreateUserEmail(project);
+            Assert.hasText(email, "项目创建人未配置邮箱，请先在「系统管理 - 用户管理」中补充邮箱后再开启");
+        }
+        project.setNotifyEmail(on);
+        service.save(project);
+        return AjaxResult.ok()
+                .msg(on ? "已开启构建结果邮件通知" : "已关闭构建结果邮件通知")
+                .data(project.getNotifyEmail());
     }
 
     /**

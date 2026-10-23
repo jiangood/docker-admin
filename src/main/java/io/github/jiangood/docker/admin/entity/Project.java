@@ -88,6 +88,13 @@ public class Project extends BaseEntity {
     @Remark("分支推送构建的分支")
     String webhookBranches;
 
+    /**
+     * 构建结束（成功或失败）后是否发送邮件通知。
+     * 收件人为项目创建人（{@link #createUser}）在用户管理中配置的邮箱。
+     */
+    @Remark("构建结果邮件通知")
+    Boolean notifyEmail;
+
 
     String remark;
 
@@ -97,6 +104,13 @@ public class Project extends BaseEntity {
     @Remark("镜像地址")
     @Transient
     String imageUrl;
+
+    /**
+     * 项目创建人邮箱，仅用于详情页展示与提示，不持久化。
+     */
+    @Remark("创建人邮箱")
+    @Transient
+    String createUserEmail;
 
 
     @PrePersist

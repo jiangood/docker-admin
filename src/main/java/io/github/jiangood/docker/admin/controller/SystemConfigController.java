@@ -40,12 +40,12 @@ public class SystemConfigController {
         return AjaxResult.ok().data(service.getEmailSettings());
     }
 
-    @Log("全局设置-保存邮件通知")
+    @Log("全局设置-保存邮件发送服务")
     @HasPermission("system-config:save")
     @PostMapping("email")
     public AjaxResult saveEmail(@RequestBody EmailRequest request) {
-        service.saveEmailSettings(request.enabled(), request.smtpHost(), request.smtpPort(), request.username(),
-                request.password(), request.fromName(), request.to());
+        service.saveEmailSettings(request.smtpHost(), request.smtpPort(), request.username(),
+                request.password(), request.fromName());
         return AjaxResult.ok().data(service.getEmailSettings()).msg("保存成功");
     }
 
@@ -54,11 +54,11 @@ public class SystemConfigController {
     @PostMapping("email/test")
     public AjaxResult testEmail() {
         mailService.sendTest();
-        return AjaxResult.ok().msg("测试邮件已发送，请查收");
+        return AjaxResult.ok().msg("测试邮件已发送到发件邮箱，请查收");
     }
 
     public record DefaultsRequest(String defaultRegistryId, String defaultBuildHostId) {}
 
-    public record EmailRequest(Boolean enabled, String smtpHost, Integer smtpPort, String username,
-                               String password, String fromName, String to) {}
+    public record EmailRequest(String smtpHost, Integer smtpPort, String username,
+                               String password, String fromName) {}
 }

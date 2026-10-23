@@ -89,6 +89,8 @@ export default class extends React.Component {
     // 自动配置 Webhook 的开关 loading
     webhookAutoLoading: false,
     webhookBranchLoading: false,
+    // 构建结果邮件通知开关 loading
+    notifyEmailLoading: false,
     // 分支推送构建的分支输入框（null 表示跟随 project.webhookBranches）
     webhookBranchesText: null,
     // 代码源选项（含类型），用于判断当前项目能否使用 GitLab 自动配置；null 表示尚未加载
@@ -99,7 +101,7 @@ export default class extends React.Component {
   timer = null
   // 构建历史最新一条记录的 id；只有它失败时才提供重试入口，否则表里会出现一堆重复的「重试」
   latestLogId = null
-  // 是否存在构建中的记录（success 为空）；构建中不允许重试，避免打断正在执行的构建
+  // 是否存在构建中的记录（success 为空）；后端采用「新的覆盖旧的」，构建中也可以重试（会先停掉当前构建）
   buildProcessing = false
 
   componentDidMount() {
@@ -267,6 +269,13 @@ export default class extends React.Component {
       .finally(() => this.setState({webhookBranchLoading: false}))
   }
 
+  toggleNotifyEmail = (checked) => {
+    this.setState({notifyEmailLoading: true})
+    HttpClient.get('admin/project/setNotifyEmail', {id: this.state.project.id, enabled: checked})
+      .then(() => this.loadProject())
+      .finally(() => this.setState({notifyEmailLoading: false}))
+  }
+
   // 输入框当前值；未编辑时回退到项目配置，项目未配置时回退到默认 master,main
   branchText = () => {
     const {webhookBranchesText, project} = this.state
@@ -365,9 +374,9 @@ export default class extends React.Component {
           <Button size='small' onClick={() => this.openLog(row)}>日志</Button>
           {isProcessing && <Button size='small' onClick={() => this.stop(row)}>停止</Button>}
           {canRetry && (
-            <Tooltip title={this.buildProcessing ? '构建进行中，请稍后再试' : null}>
+            <Tooltip title={this.buildProcessing ? '将停止当前构建，重新开始' : null}>
               <span>
-                <Button size='small' disabled={this.buildProcessing} onClick={() => this.retry(row)}>重试</Button>
+                <Button size='small' onClick={() => this.retry(row)}>重试</Button>
               </span>
             </Tooltip>
           )}
@@ -381,7 +390,7 @@ export default class extends React.Component {
       return <Page padding><Spin/></Page>
     }
 
-    const {project, showTrigger, logRow, tagOptions, branchOptions, buildHostOptions, refType} = this.state;
+    const {project, showTrigger, logRow, tagOptions, branchOptions, buildHostOptions, refType, notifyEmailLoading} = this.state;
 
     return (<Page padding>
 
@@ -394,6 +403,27 @@ export default class extends React.Component {
           <Descriptions.Item label='dockerfile'>{project.dockerfile}</Descriptions.Item>
           <Descriptions.Item label='构建上下文'>{project.context}</Descriptions.Item>
           <Descriptions.Item label='创建时间'>{project.createTime}</Descriptions.Item>
+          <Descriptions.Item label='构建结果邮件'>
+            <Space wrap>
+              <Switch
+                checked={!!project.notifyEmail}
+                checkedChildren='开启'
+                unCheckedChildren='关闭'
+                loading={notifyEmailLoading}
+                disabled={!PermUtils.hasPermission('project:save') || (!project.notifyEmail && !project.createUserEmail)}
+                onChange={this.toggleNotifyEmail}
+              />
+              {project.notifyEmail && project.createUserEmail && (
+                <Typography.Text type='secondary'>发送至 {project.createUserEmail}</Typography.Text>
+              )}
+              {!project.createUserEmail && (
+                <Typography.Text type='warning'>
+                  项目创建人未配置邮箱，请到「系统管理 - 用户管理」补充
+                  {project.notifyEmail ? '（当前不会发送）' : '后才能开启'}
+                </Typography.Text>
+              )}
+            </Space>
+          </Descriptions.Item>
         </Descriptions>
 
         <div className='row-end'>
