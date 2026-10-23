@@ -61,6 +61,9 @@ public class WebSocketConfig implements WebSocketConfigurer {
     private ImageDownloadLogHandshakeInterceptor imageDownloadLogHandshakeInterceptor;
 
     @Resource
+    private HostImageExportLogHandshakeInterceptor hostImageExportLogHandshakeInterceptor;
+
+    @Resource
     private DeployLogHandshakeInterceptor deployLogHandshakeInterceptor;
 
     @Resource
@@ -115,6 +118,11 @@ public class WebSocketConfig implements WebSocketConfigurer {
         // 镜像下载 tar 实时日志（复用同一日志 tail 处理器）
         registry.addHandler(syncLogHandler, "/admin/ws/image-download-log/{logId}")
                 .addInterceptors(imageDownloadLogHandshakeInterceptor)
+                .setAllowedOriginPatterns(origins);
+
+        // 主机详情页镜像导出实时日志（复用同一日志 tail 处理器）
+        registry.addHandler(syncLogHandler, "/admin/ws/host-image-export-log/{logId}")
+                .addInterceptors(hostImageExportLogHandshakeInterceptor)
                 .setAllowedOriginPatterns(origins);
 
         // 部署实时日志（复用同一日志 tail 处理器，logId 即部署记录 id）

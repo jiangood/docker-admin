@@ -1,8 +1,9 @@
 import {Button, Card, Descriptions, Empty, Input, Modal, Popconfirm, Result, Space, Spin, Table, Tabs, Tag, Typography} from 'antd'
 import React from 'react'
-import {DeleteOutlined, ImportOutlined, ReloadOutlined} from '@ant-design/icons'
+import {DeleteOutlined, ExportOutlined, ImportOutlined, ReloadOutlined} from '@ant-design/icons'
 import {HttpClient, Page, PageUtils, PermUtils} from "@jiangood/open-admin"
 import ContainerDetail from "../../components/container/ContainerDetail"
+import HostImageExportModal from "../../components/HostImageExportModal"
 import HostImageImportModal from "../../components/HostImageImportModal"
 import {formatBytes, formatTime, stateColor, stateLabel} from "../../components/container/utils"
 
@@ -49,6 +50,7 @@ function endpointOf(host) {
 export default class extends React.Component {
 
     importModalRef = React.createRef()
+    exportModalRef = React.createRef()
 
     state = {
         id: null,
@@ -215,6 +217,13 @@ export default class extends React.Component {
             {title: '大小', dataIndex: 'size', width: 120, render: v => formatBytes(v)},
             {title: '创建时间', dataIndex: 'created', width: 170, render: v => formatTime(v)},
             {title: '容器数', dataIndex: 'containers', width: 90, render: v => v ?? '-'},
+            {
+                title: '操作', width: 90,
+                render: (_, record) => canImage
+                    ? <Button type='link' size='small' icon={<ExportOutlined/>}
+                              onClick={() => this.exportModalRef.current.show(record)}>导出</Button>
+                    : null
+            },
         ]
 
         const imageToolbar = <div className='mb-3' style={{display: 'flex', alignItems: 'center', gap: 8}}>
@@ -294,6 +303,8 @@ export default class extends React.Component {
                                       this.loadImages(this.state.id)
                                       this.loadInfo(this.state.id)
                                   }}/>
+
+            <HostImageExportModal ref={this.exportModalRef} hostId={this.state.id}/>
 
             <Modal title={`容器 - ${detail.name}`}
                    open={detail.open}

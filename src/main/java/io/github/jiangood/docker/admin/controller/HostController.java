@@ -3,13 +3,16 @@ package io.github.jiangood.docker.admin.controller;
 import com.github.dockerjava.api.exception.ConflictException;
 import com.github.dockerjava.api.exception.NotFoundException;
 import cn.hutool.core.util.StrUtil;
+import io.github.jiangood.docker.admin.dto.HostImageExportTaskView;
 import io.github.jiangood.docker.admin.entity.Host;
+import io.github.jiangood.docker.admin.service.HostImageExportService;
 import io.github.jiangood.docker.admin.service.HostService;
 import io.github.jiangood.openadmin.util.dto.AjaxResult;
 import io.github.jiangood.openadmin.util.dto.Option;
 import io.github.jiangood.openadmin.framework.data.specification.Spec;
 import io.github.jiangood.openadmin.framework.perm.HasPermission;
 import jakarta.annotation.Resource;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -35,6 +38,9 @@ public class HostController  {
 
     @Resource
     private io.github.jiangood.docker.admin.service.HostDockerService hostDockerService;
+
+    @Resource
+    private HostImageExportService hostImageExportService;
 
     @HasPermission("host:list")
     @RequestMapping("page")
@@ -134,6 +140,46 @@ public class HostController  {
     public AjaxResult images(String id) {
         Host host = requireHost(id);
         return AjaxResult.ok().data(hostDockerService.listImages(host));
+    }
+
+    /**
+     * 导出主机上的镜像为 tar：后台在该主机上执行 {@code docker save}，立即返回 logId。
+     * <p>
+     * 进度通过 {@code /admin/ws/host-image-export-log/{logId}} 实时查看；
+     * 完成后用 {@code exportImage/download} 下载，tar 仍保留在主机上。
+     */
+    @HasPermission("host:image")
+    @PostMapping("exportImage/start")
+    public AjaxResult exportImageStart(String id, String image) {
+        Host host = requireHost(id);
+        String logId = hostImageExportService.register(host, image);
+        hostImageExportService.export(logId, host.getId(), image);
+        return AjaxResult.ok().data(logId).msg("开始导出");
+    }
+
+    /**
+     * 某主机上某个镜像最近一次的导出状态；从未导出过时 data 为 null。
+     */
+    @HasPermission("host:image")
+    @RequestMapping("exportImage/status")
+    public AjaxResult exportImageStatus(String id, String image) {
+        return AjaxResult.ok().data(hostImageExportService.taskView(id, image));
+    }
+
+    /**
+     * 下载已导出的 tar：SSH 主机经 SFTP 流式读取，本机 / TCP 主机直接读平台文件。
+     * <p>
+     * 不删除主机上的源文件，用户可继续用弹窗里显示的主机路径取用或自行清理。
+     */
+    @HasPermission("host:image")
+    @RequestMapping("exportImage/download")
+    public void exportImageDownload(String logId, HttpServletResponse response) throws Exception {
+        HostImageExportTaskView task = hostImageExportService.readyTask(logId);
+        DownloadTool.prepareDownload(response, task.getFileName(), "application/x-tar");
+        if (task.getSize() > 0) {
+            response.setContentLengthLong(task.getSize());
+        }
+        hostImageExportService.copyTarTo(logId, response.getOutputStream());
     }
 
     /**

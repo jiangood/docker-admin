@@ -75,6 +75,10 @@ git tag vx.y.z && git push && git push origin vx.y.z
   页面（`web/src/pages/image-sync/index.jsx`）是 ProTable + 工具栏三个「增加」按钮
   （同步到注册中心 / 同步到主机 / 经执行主机中转），每个按钮打开 `ImageSyncModal` 对应模式，
   提交后弹窗原地切换为实时日志；行内「查看日志」用抽屉回看。
+- **主机详情镜像导出：** 镜像 Tab 的「导出」打开弹窗，后台在该主机上执行 `docker save`
+  （SSH 主机落到远端 `/tmp/docker-admin-image-tar/{logId}/`，本机 / TCP 主机落到平台 `image-tar/{logId}/`）。
+  弹窗展示实时日志、已写入大小与速度（每秒 / 每分钟）、保存路径与下载按钮；SSH 下载经 SFTP 流式转发，不在平台侧重复落盘。
+  任务状态只存内存（`HostImageExportService`），tar 不自动删除，由用户按路径自行清理。
 - **构建上下文：** `Project.context` 相对仓库根目录，留空表示仓库根；填写时不带前导 `/`（后端兼容历史的 `/admin`，保存时归一化）。
   `dockerfile` 同样相对仓库根目录、不带前导 `/`，且必须位于上下文内（如 `context=admin` + `dockerfile=admin/Dockerfile`）。
   前端表格/详情直接原样展示上下文（空即空，不再显示「仓库根目录」），输入框失焦时自动去掉前导 `/`。
