@@ -28,6 +28,17 @@ function getIcon(key, index) {
   return iconDict[key]
 }
 
+/**
+ * 构建实际推送的镜像版本：开启「仅构建 latest」时 tag 里的版本号只是内部追踪用，
+ * 不会推送为镜像标签，真实标签是 latest。
+ * 历史记录没有 latestOnly 快照时（升级前的老数据）回退到项目当前设置。
+ */
+function imageVersion(row, projectLatestOnly) {
+  if (!row) return ''
+  const latestOnly = row.latestOnly == null ? !!projectLatestOnly : !!row.latestOnly
+  return latestOnly ? 'latest' : (row.tag || '')
+}
+
 
 /**
  * 提取地址的主机标识（host[:port]，小写），与后端 CodeSourceService.hostKey 保持一致，
@@ -230,7 +241,11 @@ export default class extends React.Component {
       this.reload()
       // 后端在触发时已同步落库并返回构建记录 id，这里直接打开日志弹窗，边构建边看输出
       if (rs.data) {
-        this.openLog({id: rs.data, tag: values.tag || values.branch})
+        this.openLog({
+          id: rs.data,
+          tag: values.tag || values.branch,
+          latestOnly: !!this.state.project?.latestOnly
+        })
       }
     })
   }
@@ -340,22 +355,39 @@ export default class extends React.Component {
     },
     {
       title: '来源',
-      dataIndex: 'branch',
-      render: (branch) => branch ? '分支 ' + branch : 'tag'
+      dataIndex: 'refName',
+      render: (refName, row) => {
+        // 老记录没有 refType/refName：用 branch 判断类型，tag 构建的 tag 即源码 tag
+        const isBranch = row.refType ? row.refType === 'BRANCH' : !!row.branch
+        const name = refName || (isBranch ? row.branch : row.tag)
+        const label = isBranch ? '分支' : 'tag'
+        return name ? label + ' ' + name : label
+      }
+    },
+    {
+      title: '提交',
+      dataIndex: 'commitId',
+      width: 110,
+      render: (commitId, row) => {
+        // 老记录没有 commitId：分支构建的版本号以「-提交短 id」结尾，从里面兜底提取
+        const id = commitId || (row.branch ? (row.tag || '').match(/-([0-9a-f]{7,40})$/)?.[1] : null)
+        return id ? <Typography.Text copyable code>{id}</Typography.Text> : '-'
+      }
     },
     {
       title: '镜像版本',
       dataIndex: 'tag',
-      render: (tag) => (
-        <Space size={4}>
-          {tag}
-          {this.state.project?.latestOnly && (
-            <Tooltip title='本项目仅构建 latest，该版本号不会作为镜像标签推送'>
-              <Tag>仅 latest</Tag>
-            </Tooltip>
-          )}
-        </Space>
-      )
+      render: (tag, row) => {
+        const latestOnly = row.latestOnly == null ? !!this.state.project?.latestOnly : !!row.latestOnly
+        if (!latestOnly) {
+          return tag
+        }
+        return (
+          <Tooltip title={`本项目仅构建 latest，本次生成的版本号 ${tag} 不会作为镜像标签推送`}>
+            <span>latest</span>
+          </Tooltip>
+        )
+      }
     },
     {
       title: '构建上下文',
@@ -540,7 +572,7 @@ export default class extends React.Component {
         </Form>
       </Modal>
 
-      <Modal open={!!logRow} title={'构建日志 - ' + (logRow?.tag || '')}
+      <Modal open={!!logRow} title={'构建日志 - ' + imageVersion(logRow, project.latestOnly)}
              width={900}
              destroyOnHidden={true}
              footer={null}

@@ -620,6 +620,10 @@ public class ProjectService extends BaseService<Project> {
         buildLog.setDockerfile(BuildContextUtils.normalizeDockerfile(project.getDockerfile()));
         buildLog.setContext(BuildContextUtils.normalize(project.getContext()));
         buildLog.setTag(branchBuild ? branch : p.getTag());
+        buildLog.setLatestOnly(Boolean.TRUE.equals(project.getLatestOnly()));
+        // 来源快照：分支名或 tag 名，触发时即落库，方便构建历史追溯源码
+        buildLog.setRefType(branchBuild ? BuildRequest.REF_TYPE_BRANCH : BuildRequest.REF_TYPE_TAG);
+        buildLog.setRefName(branchBuild ? branch : p.getTag());
         buildLog.setBranch(branch);
         return buildLogService.saveLog(buildLog);
     }
@@ -655,6 +659,8 @@ public class ProjectService extends BaseService<Project> {
             // 任务已在 buildImage() 调度前通过 taskLogRegistry.start() 标记为运行中
             // 仅构建 latest：只打并推送 latest，不产出版本号标签（省磁盘，但无法按版本回滚）
             boolean latestOnly = Boolean.TRUE.equals(project.getLatestOnly());
+            // 以实际构建时的设置为准（触发后到开始构建之间可能被切换），供历史展示区分本次真实推送的标签
+            buildLog.setLatestOnly(latestOnly);
 
             // 同一项目串行构建：旧构建（已被 cancelProcessingBuilds 取消）退出后才能复用代码目录
             if (!acquireBuildSlot(projectId, logId)) {
@@ -698,6 +704,9 @@ public class ProjectService extends BaseService<Project> {
             buildLog.setBuildHostName(host.getName());
             buildLog.setBuildHostId(host.getId());
             buildLog.setCodeMessage(cloneResult.getCodeMessage());
+            // 记录实际克隆到的提交，便于追溯（tag 构建即 tag 指向的提交，分支构建为分支最新提交）
+            buildLog.setCommitId(cloneResult.getCommitId());
+            buildLog.setCommitTime(cloneResult.getCommitTime());
             buildLog = buildLogService.saveLog(buildLog);
 
             Registry registry = registryService.requireRegistry(project.getRegistryId());

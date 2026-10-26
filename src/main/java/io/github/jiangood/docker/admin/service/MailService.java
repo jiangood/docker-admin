@@ -3,6 +3,7 @@ package io.github.jiangood.docker.admin.service;
 import cn.hutool.core.date.DateUtil;
 import cn.hutool.core.util.StrUtil;
 import io.github.jiangood.docker.admin.BuildResultEvent;
+import io.github.jiangood.docker.admin.dto.BuildRequest;
 import io.github.jiangood.docker.admin.entity.BuildLog;
 import io.github.jiangood.docker.admin.entity.Project;
 import io.github.jiangood.docker.admin.dao.ProjectRepository;
@@ -90,8 +91,9 @@ public class MailService {
     public void sendBuildResult(BuildLog buildLog, String to) {
         boolean success = Boolean.TRUE.equals(buildLog.getSuccess());
         String statusText = success ? "构建成功" : "构建失败";
+        String version = imageVersion(buildLog);
         String subject = "[容器管理平台] " + statusText + " - " + StrUtil.blankToDefault(buildLog.getProjectName(), "未知项目")
-                + (StrUtil.isNotBlank(buildLog.getTag()) ? " " + buildLog.getTag() : "");
+                + (StrUtil.isNotBlank(version) ? " " + version : "");
 
         // 附带本次构建的日志文件（${logging.file.path}/{logId}.log）
         File logFile = fileLogConfig.buildLogFile(buildLog.getId());
@@ -196,11 +198,31 @@ public class MailService {
     /** 附件文件名：构建日志-项目名-版本.log（去掉文件系统与邮件头不允许的字符）。 */
     private static String buildLogAttachmentName(BuildLog buildLog) {
         String name = StrUtil.blankToDefault(buildLog.getProjectName(), "project");
-        if (StrUtil.isNotBlank(buildLog.getTag())) {
-            name += "-" + buildLog.getTag();
+        String version = imageVersion(buildLog);
+        if (StrUtil.isNotBlank(version)) {
+            name += "-" + version;
         }
         name = name.replaceAll("[\\\\/:*?\"<>|\\s]+", "-");
         return "构建日志-" + StrUtil.maxLength(name, 80) + ".log";
+    }
+
+    /**
+     * 实际推送的镜像版本：开启「仅构建 latest」时 {@code tag} 中的版本号不会成为镜像标签，
+     * 真实标签是 latest。
+     */
+    private static String imageVersion(BuildLog buildLog) {
+        return Boolean.TRUE.equals(buildLog.getLatestOnly()) ? "latest" : buildLog.getTag();
+    }
+
+    /** 构建来源文案：分支 main / tag v1.0.1；老记录没有 refType/refName 时退回 branch/tag。 */
+    private static String sourceText(BuildLog buildLog) {
+        boolean branch = BuildRequest.REF_TYPE_BRANCH.equals(buildLog.getRefType())
+                || (buildLog.getRefType() == null && StrUtil.isNotBlank(buildLog.getBranch()));
+        String name = branch
+                ? StrUtil.blankToDefault(buildLog.getRefName(), buildLog.getBranch())
+                : StrUtil.blankToDefault(buildLog.getRefName(), buildLog.getTag());
+        String label = branch ? "分支" : "tag";
+        return StrUtil.isBlank(name) ? label : label + " " + name;
     }
 
     private JavaMailSenderImpl createSender(String username, String password, MailProxySettings proxy) {
@@ -241,9 +263,10 @@ public class MailService {
 
         appendRow(html, "项目", buildLog.getProjectName());
         appendRow(html, "镜像", buildLog.getImageUrl());
-        appendRow(html, "版本", buildLog.getTag());
-        if (StrUtil.isNotBlank(buildLog.getBranch())) {
-            appendRow(html, "分支", buildLog.getBranch());
+        appendRow(html, "版本", imageVersion(buildLog));
+        appendRow(html, "来源", sourceText(buildLog));
+        if (StrUtil.isNotBlank(buildLog.getCommitId())) {
+            appendRow(html, "提交", buildLog.getCommitId());
         }
         appendRow(html, "构建主机", buildLog.getBuildHostName());
         if (buildLog.getTimeSpend() != null && buildLog.getTimeSpend() > 0) {
