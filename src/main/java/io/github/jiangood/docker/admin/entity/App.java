@@ -51,8 +51,12 @@ public class App extends BaseEntity {
     @Column(length = 400)
     String imageUrl;
 
+    /**
+     * 镜像版本。Docker 规范里 tag 最长 128 个字符（如 {@code gogost___gost__latest}），
+     * 这里按上限放宽，避免长 tag 在保存应用时报 "Value too long"。
+     */
     @Remark("版本")
-    @Column(length = 20)
+    @Column(length = 128)
     String imageTag;
 
 
