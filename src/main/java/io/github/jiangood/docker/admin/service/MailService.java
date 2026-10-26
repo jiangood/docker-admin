@@ -6,6 +6,7 @@ import io.github.jiangood.docker.admin.BuildResultEvent;
 import io.github.jiangood.docker.admin.entity.BuildLog;
 import io.github.jiangood.docker.admin.entity.Project;
 import io.github.jiangood.docker.admin.dao.ProjectRepository;
+import io.github.jiangood.docker.admin.mail.MailProxySettings;
 import io.github.jiangood.openadmin.modules.logviewer.config.FileLogConfig;
 import io.github.jiangood.openadmin.modules.system.entity.SysUser;
 import io.github.jiangood.openadmin.modules.system.repository.SysUserRepository;
@@ -24,6 +25,7 @@ import org.springframework.web.util.HtmlUtils;
 import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.time.format.DateTimeFormatter;
+import java.util.Locale;
 import java.util.Properties;
 
 /**
@@ -125,13 +127,18 @@ public class MailService {
     private void sendHtml(String to, String subject, String html, File attachment, String attachmentName) {
         String username = systemConfigService.getEmailUsername();
         String password = systemConfigService.getEmailPassword();
+        MailProxySettings proxy = systemConfigService.getEmailProxy();
 
         Assert.hasText(username, "未配置发件邮箱，请到「设置 - 全局设置」中配置邮件发送服务");
         Assert.hasText(password, "未配置邮箱授权码，请到「设置 - 全局设置」中配置邮件发送服务");
         Assert.hasText(to, "收件邮箱不能为空");
+        if (proxy.enabled()) {
+            Assert.isTrue(proxy.configured(),
+                    "已启用邮件代理但代理地址或端口为空，请到「设置 - 全局设置」中补全");
+        }
 
         try {
-            JavaMailSenderImpl sender = createSender(username, password);
+            JavaMailSenderImpl sender = createSender(username, password, proxy);
             MimeMessage message = sender.createMimeMessage();
             boolean multipart = attachment != null;
             MimeMessageHelper helper = new MimeMessageHelper(message, multipart, StandardCharsets.UTF_8.name());
@@ -148,14 +155,42 @@ public class MailService {
                 helper.addAttachment(attachmentName, attachment);
             }
             sender.send(message);
-            log.info("邮件发送成功，收件人：{}，主题：{}，附件：{}", to, subject,
-                    multipart ? attachmentName : "无");
+            log.info("邮件发送成功，收件人：{}，主题：{}，附件：{}，代理：{}", to, subject,
+                    multipart ? attachmentName : "无", proxy.enabled() ? proxy.address() : "无");
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
             log.warn("邮件发送失败，收件人：{}，原因：{}", to, e.getMessage());
-            throw new BusinessException("邮件发送失败：" + StrUtil.blankToDefault(e.getMessage(), e.getClass().getSimpleName()));
+            throw new BusinessException(failureMessage(e, proxy));
         }
+    }
+
+    /**
+     * 代理链路失败时补一句人话：JavaMail 的原生报错是
+     * {@code connection through proxy host:port to ... failed: HTTP/1.1 407 ...}，
+     * 直接抛给用户看不出是代理的问题。
+     */
+    private static String failureMessage(Exception e, MailProxySettings proxy) {
+        String message = StrUtil.blankToDefault(e.getMessage(), e.getClass().getSimpleName());
+        if (proxy.enabled() && mentionsProxy(e)) {
+            return "邮件代理 " + proxy.address() + " 连接失败：" + message;
+        }
+        return "邮件发送失败：" + message;
+    }
+
+    private static boolean mentionsProxy(Throwable error) {
+        Throwable current = error;
+        for (int depth = 0; current != null && depth < 10; depth++) {
+            String message = current.getMessage();
+            if (message != null && message.toLowerCase(Locale.ROOT).contains("proxy")) {
+                return true;
+            }
+            if (current.getCause() == current) {
+                break;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     /** 附件文件名：构建日志-项目名-版本.log（去掉文件系统与邮件头不允许的字符）。 */
@@ -168,7 +203,7 @@ public class MailService {
         return "构建日志-" + StrUtil.maxLength(name, 80) + ".log";
     }
 
-    private JavaMailSenderImpl createSender(String username, String password) {
+    private JavaMailSenderImpl createSender(String username, String password, MailProxySettings proxy) {
         int port = systemConfigService.getEmailSmtpPort();
         JavaMailSenderImpl sender = new JavaMailSenderImpl();
         sender.setHost(systemConfigService.getEmailSmtpHost());
@@ -187,6 +222,9 @@ public class MailService {
         props.put("mail.smtp.connectiontimeout", "10000");
         props.put("mail.smtp.timeout", "20000");
         props.put("mail.smtp.writetimeout", "20000");
+        // 代理交给 JavaMail 原生实现：HTTP 走 CONNECT 隧道（可带 Basic 认证），SOCKS5 走 JDK 实现。
+        // 隧道在 TLS 之前建好，证书仍是 SMTP 服务器的，不影响 465/587 两条链路。
+        proxy.mailProperties().forEach(props::put);
         return sender;
     }
 

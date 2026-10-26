@@ -5,6 +5,8 @@ import io.github.jiangood.docker.admin.dao.HostRepository;
 import io.github.jiangood.docker.admin.dao.RegistryRepository;
 import io.github.jiangood.docker.admin.dao.SystemConfigRepository;
 import io.github.jiangood.docker.admin.entity.SystemConfig;
+import io.github.jiangood.docker.admin.mail.EmailSettingsInput;
+import io.github.jiangood.docker.admin.mail.MailProxySettings;
 import io.github.jiangood.openadmin.framework.data.BaseService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -30,6 +32,16 @@ public class SystemConfigService extends BaseService<SystemConfig> {
     public static final String EMAIL_USERNAME = "email.username";
     public static final String EMAIL_PASSWORD = "email.password";
     public static final String EMAIL_FROM_NAME = "email.from.name";
+
+    /**
+     * 邮件发送代理：宿主机不能直连外网时，经另一台能出网的主机中转。
+     * 类型为 {@code none}/{@code http}/{@code socks5}，默认 none 即直连。
+     */
+    public static final String EMAIL_PROXY_TYPE = "email.proxy.type";
+    public static final String EMAIL_PROXY_HOST = "email.proxy.host";
+    public static final String EMAIL_PROXY_PORT = "email.proxy.port";
+    public static final String EMAIL_PROXY_USERNAME = "email.proxy.username";
+    public static final String EMAIL_PROXY_PASSWORD = "email.proxy.password";
 
     /** 目前只支持 QQ 邮箱，SMTP 默认值即 QQ 邮箱参数 */
     public static final String DEFAULT_SMTP_HOST = "smtp.qq.com";
@@ -112,7 +124,25 @@ public class SystemConfigService extends BaseService<SystemConfig> {
         return StrUtil.trimToNull(getValue(EMAIL_FROM_NAME));
     }
 
-    /** 邮件发送设置（不含授权码明文，只返回是否已设置）。 */
+    /** 邮件发送代理；未启用时 {@link MailProxySettings#enabled()} 为 false，发送逻辑按直连处理。 */
+    public MailProxySettings getEmailProxy() {
+        return new MailProxySettings(
+                MailProxySettings.Type.parse(getValue(EMAIL_PROXY_TYPE)),
+                getEmailProxyHost(),
+                getEmailProxyPort(),
+                StrUtil.trimToNull(getValue(EMAIL_PROXY_USERNAME)),
+                StrUtil.trimToNull(getValue(EMAIL_PROXY_PASSWORD)));
+    }
+
+    public String getEmailProxyHost() {
+        return StrUtil.trimToNull(getValue(EMAIL_PROXY_HOST));
+    }
+
+    public Integer getEmailProxyPort() {
+        return parseIntOrNull(getValue(EMAIL_PROXY_PORT));
+    }
+
+    /** 邮件发送设置（不含授权码与代理密码明文，只返回是否已设置）。 */
     public Map<String, Object> getEmailSettings() {
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("smtpHost", getEmailSmtpHost());
@@ -120,24 +150,29 @@ public class SystemConfigService extends BaseService<SystemConfig> {
         values.put("username", getEmailUsername());
         values.put("fromName", getEmailFromName());
         values.put("passwordSet", StrUtil.isNotBlank(getEmailPassword()));
+        // 代理地址/端口按库里的原值回显：关掉代理后再打开时不用重填
+        values.put("proxyType", getEmailProxy().type().code());
+        values.put("proxyHost", getEmailProxyHost());
+        values.put("proxyPort", getEmailProxyPort());
+        values.put("proxyUsername", StrUtil.trimToNull(getValue(EMAIL_PROXY_USERNAME)));
+        values.put("proxyPasswordSet", StrUtil.isNotBlank(getValue(EMAIL_PROXY_PASSWORD)));
         return values;
     }
 
     /**
-     * 保存邮件发送设置。授权码留空表示沿用已保存的值，避免每次改其他项都要重填。
+     * 保存邮件发送设置。授权码与代理密码留空表示沿用已保存的值，避免每次改其他项都要重填。
      */
     @Transactional
-    public void saveEmailSettings(String smtpHost, Integer smtpPort, String username,
-                                  String password, String fromName) {
-        String host = StrUtil.blankToDefault(StrUtil.trimToNull(smtpHost), DEFAULT_SMTP_HOST);
-        int port = smtpPort == null ? DEFAULT_SMTP_PORT : smtpPort;
+    public void saveEmailSettings(EmailSettingsInput input) {
+        String host = StrUtil.blankToDefault(StrUtil.trimToNull(input.smtpHost()), DEFAULT_SMTP_HOST);
+        int port = input.smtpPort() == null ? DEFAULT_SMTP_PORT : input.smtpPort();
         Assert.isTrue(port > 0 && port <= 65535, "SMTP 端口不正确");
 
-        String user = StrUtil.trimToNull(username);
+        String user = StrUtil.trimToNull(input.username());
         if (user != null) {
             Assert.isTrue(user.contains("@"), "发件邮箱格式不正确：" + user);
         }
-        String passwordToSave = StrUtil.trimToNull(password);
+        String passwordToSave = StrUtil.trimToNull(input.password());
 
         saveValue(EMAIL_SMTP_HOST, host, "邮件 SMTP 服务器");
         saveValue(EMAIL_SMTP_PORT, String.valueOf(port), "邮件 SMTP 端口");
@@ -145,6 +180,51 @@ public class SystemConfigService extends BaseService<SystemConfig> {
         if (passwordToSave != null) {
             saveValue(EMAIL_PASSWORD, passwordToSave, "发件邮箱授权码");
         }
-        saveValue(EMAIL_FROM_NAME, StrUtil.trimToNull(fromName), "发件人名称");
+        saveValue(EMAIL_FROM_NAME, StrUtil.trimToNull(input.fromName()), "发件人名称");
+
+        saveEmailProxy(input);
+    }
+
+    /**
+     * 保存代理设置。类型为 none 时只记类型，地址等字段保留，方便以后切回来；
+     * 代理密码同样留空沿用旧值。
+     */
+    private void saveEmailProxy(EmailSettingsInput input) {
+        MailProxySettings.Type type = MailProxySettings.Type.parse(input.proxyType());
+        String proxyHost = StrUtil.trimToNull(input.proxyHost());
+        Integer proxyPort = input.proxyPort();
+        String proxyUser = StrUtil.trimToNull(input.proxyUsername());
+        String proxyPassword = StrUtil.trimToNull(input.proxyPassword());
+
+        if (type != MailProxySettings.Type.NONE) {
+            Assert.hasText(proxyHost, "请填写代理地址");
+            Assert.isTrue(proxyPort != null && proxyPort > 0 && proxyPort <= 65535, "代理端口不正确");
+            if (type == MailProxySettings.Type.SOCKS5) {
+                // JDK 的 SOCKS 实现拿不到账号密码（只能走全局 Authenticator），这里不落库，
+                // 避免切到 HTTP 代理时又冒出一组失效的凭据。
+                proxyUser = null;
+                proxyPassword = null;
+            }
+        }
+
+        saveValue(EMAIL_PROXY_TYPE, type.code(), "邮件代理类型（none/http/socks5）");
+        saveValue(EMAIL_PROXY_HOST, proxyHost, "邮件代理地址");
+        saveValue(EMAIL_PROXY_PORT, proxyPort == null ? null : String.valueOf(proxyPort), "邮件代理端口");
+        saveValue(EMAIL_PROXY_USERNAME, proxyUser, "邮件代理用户名");
+        if (proxyPassword != null) {
+            saveValue(EMAIL_PROXY_PASSWORD, proxyPassword, "邮件代理密码");
+        }
+    }
+
+    private static Integer parseIntOrNull(String value) {
+        String v = StrUtil.trimToNull(value);
+        if (v == null) {
+            return null;
+        }
+        try {
+            return Integer.valueOf(v);
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 }

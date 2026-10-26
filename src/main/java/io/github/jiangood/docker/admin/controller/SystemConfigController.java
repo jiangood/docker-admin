@@ -1,5 +1,6 @@
 package io.github.jiangood.docker.admin.controller;
 
+import io.github.jiangood.docker.admin.mail.EmailSettingsInput;
 import io.github.jiangood.docker.admin.service.MailService;
 import io.github.jiangood.docker.admin.service.SystemConfigService;
 import io.github.jiangood.openadmin.framework.log.Log;
@@ -43,9 +44,8 @@ public class SystemConfigController {
     @Log("全局设置-保存邮件发送服务")
     @HasPermission("system-config:save")
     @PostMapping("email")
-    public AjaxResult saveEmail(@RequestBody EmailRequest request) {
-        service.saveEmailSettings(request.smtpHost(), request.smtpPort(), request.username(),
-                request.password(), request.fromName());
+    public AjaxResult saveEmail(@RequestBody EmailSettingsInput request) {
+        service.saveEmailSettings(request);
         return AjaxResult.ok().data(service.getEmailSettings()).msg("保存成功");
     }
 
@@ -58,7 +58,4 @@ public class SystemConfigController {
     }
 
     public record DefaultsRequest(String defaultRegistryId, String defaultBuildHostId) {}
-
-    public record EmailRequest(String smtpHost, Integer smtpPort, String username,
-                               String password, String fromName) {}
 }

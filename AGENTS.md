@@ -94,6 +94,10 @@ git tag vx.y.z && git push && git push origin vx.y.z
   超时上限见 `BUILD_SLOT_WAIT_MILLIS`；等待是进程内的，多实例部署下不跨实例生效。
 - **邮件通知：** 发件账号（QQ 邮箱 SMTP，默认 `smtp.qq.com:465`）在「设置 - 全局设置」配置，
   键为 `t_system_config` 的 `email.*`，授权码不回显、留空表示不修改。
+  **邮件代理**同样在全局设置里配置（`email.proxy.*`，类型 `none`/`http`/`socks5`，默认 `none` 即直连），
+  直接复用 Angus Mail 原生的 `mail.smtp.proxy.*`（HTTP CONNECT，可带 Basic 认证）与
+  `mail.smtp.socks.*`（SOCKS5 无认证），隧道在 TLS 之前建立，465/587 都适用；
+  平台跑在容器里时**不能填 127.0.0.1**，要填宿主机网桥网关（如 `172.17.0.1`）或局域网 IP。
   是否发送在**项目详情页**的「邮件通知」开关控制（`Project.notifyEmail`），收件人为项目创建人的
   `sys_user.email`；创建人未配置邮箱时开关不可开启（后端也会校验），并提示到用户管理补充。
   `ProjectService` 在构建成功与失败时都发布 `BuildResultEvent`，`MailService` 异步发送，

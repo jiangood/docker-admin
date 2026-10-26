@@ -2,6 +2,14 @@ import {Alert, Button, Card, Form, Input, InputNumber, Select, Space} from 'antd
 import React from 'react'
 import {HttpClient, Page} from '@jiangood/open-admin'
 
+// Alert 里的代码片段：antd 的 reset 会抹掉 <code> 的默认样式，这里显式给一点区分
+const CODE_STYLE = {
+    background: 'rgba(0, 0, 0, 0.06)',
+    borderRadius: 4,
+    padding: '0 4px',
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'
+}
+
 /**
  * 系统级默认资源配置，以及邮件通知。
  */
@@ -11,6 +19,7 @@ export default class extends React.Component {
         saving: false,
         savingEmail: false,
         testing: false,
+        showProxyHelp: false,
         registries: [],
         hosts: [],
         values: {},
@@ -76,8 +85,10 @@ export default class extends React.Component {
         }
     }
 
+    toggleProxyHelp = () => this.setState(state => ({showProxyHelp: !state.showProxyHelp}))
+
     render() {
-        const {loading, saving, savingEmail, testing, registries, hosts, values, email} = this.state
+        const {loading, saving, savingEmail, testing, showProxyHelp, registries, hosts, values, email} = this.state
         return <Page padding>
             <Card title='全局设置' loading={loading} className='page-card mb-4'>
                 <Form initialValues={values} labelCol={{flex: '140px'}} onFinish={this.onFinish}>
@@ -100,7 +111,7 @@ export default class extends React.Component {
             <Card title='邮件发送服务（QQ 邮箱）' loading={loading} className='page-card'>
                 <Form initialValues={email} labelCol={{flex: '140px'}} onFinish={this.onSaveEmail}>
                     <Alert className='mb-4' type='info' showIcon
-                           message='这里只配置发件邮箱。是否发送邮件在「项目详情页」按项目开启，收件人为项目创建人的邮箱。'/>
+                           title='这里只配置发件邮箱。是否发送邮件在「项目详情页」按项目开启，收件人为项目创建人的邮箱。'/>
                     <Form.Item label='发件邮箱' name='username'
                                rules={[{type: 'email', message: '请输入正确的邮箱地址'}]}
                                tooltip='目前支持 QQ 邮箱；请先在 QQ 邮箱「设置 - 账号」中开启 SMTP 服务并获取授权码'>
@@ -121,6 +132,75 @@ export default class extends React.Component {
                     <Form.Item label='SMTP 端口' name='smtpPort'
                                tooltip='465 使用 SSL（QQ 邮箱推荐）；587 使用 STARTTLS'>
                         <InputNumber min={1} max={65535} placeholder='465' style={{width: 160}}/>
+                    </Form.Item>
+                    <Form.Item label='代理类型' name='proxyType'
+                               tooltip='宿主机不能直连外网时，经另一台能出网的主机中转邮件；默认不使用代理'
+                               extra={
+                                   <Button type='link' size='small' style={{padding: 0, height: 'auto'}}
+                                           onClick={this.toggleProxyHelp}>
+                                       {showProxyHelp ? '收起 gost 部署说明' : '没有现成代理？用 gost 容器部署一个'}
+                                   </Button>
+                               }>
+                        <Select style={{width: 200}} options={[
+                            {value: 'none', label: '不使用'},
+                            {value: 'http', label: 'HTTP 代理'},
+                            {value: 'socks5', label: 'SOCKS5 代理'}
+                        ]}/>
+                    </Form.Item>
+                    {showProxyHelp && <Alert className='mb-4' type='info' showIcon
+                                             title='在能访问外网的主机上用 gost 起一个代理'
+                                             description={<>
+                                                 <pre style={{margin: '8px 0 0', whiteSpace: 'pre-wrap'}}>{`docker run -d --name mail-proxy --restart=always \\
+  -p 192.168.1.10:8080:8080 \\
+  gogost/gost -L http://user:pass@:8080`}</pre>
+                                                 <div style={{marginTop: 8}}>
+                                                     把 <code style={CODE_STYLE}>192.168.1.10</code> 换成代理主机的内网 IP，
+                                                     <code style={CODE_STYLE}>user:pass</code> 换成自己的账号密码；
+                                                     端口只映射到内网，不要暴露到公网。
+                                                     <br/>
+                                                     平台跑在容器里时，「代理地址」要填宿主机网桥网关（如
+                                                     <code style={CODE_STYLE}>172.17.0.1</code>）或代理主机的内网 IP，不能填
+                                                     <code style={CODE_STYLE}>127.0.0.1</code>。
+                                                     <br/>
+                                                     需要 SOCKS5 就把 <code style={CODE_STYLE}>-L http://...</code> 换成
+                                                     <code style={CODE_STYLE}>-L socks5://:1080</code>（JDK 的 SOCKS 不支持账号密码，
+                                                     有认证需求时用 HTTP 代理）。
+                                                 </div>
+                                             </>}/>}
+                    <Form.Item noStyle shouldUpdate={(prev, cur) => prev.proxyType !== cur.proxyType}>
+                        {({getFieldValue}) => {
+                            const proxyType = getFieldValue('proxyType')
+                            if (!proxyType || proxyType === 'none') {
+                                return null
+                            }
+                            return <>
+                                <Form.Item label='代理地址' name='proxyHost'
+                                           rules={[{required: true, message: '请输入代理地址'}]}
+                                           tooltip='平台运行在容器里时不能填 127.0.0.1，请填宿主机网桥网关（如 172.17.0.1）或局域网 IP'>
+                                    <Input placeholder='如 192.168.1.10' autoComplete='off'/>
+                                </Form.Item>
+                                <Form.Item label='代理端口' name='proxyPort'
+                                           rules={[{required: true, message: '请输入代理端口'}]}>
+                                    <InputNumber min={1} max={65535}
+                                                 placeholder={proxyType === 'socks5' ? '1080' : '8080'}
+                                                 style={{width: 160}}/>
+                                </Form.Item>
+                                {proxyType === 'http' && <>
+                                    <Form.Item label='代理用户名' name='proxyUsername'
+                                               tooltip='可选，HTTP 代理的 Basic 认证账号'>
+                                        <Input placeholder='可选' autoComplete='off'/>
+                                    </Form.Item>
+                                    <Form.Item label='代理密码' name='proxyPassword'
+                                               tooltip='可选；留空表示不修改已保存的密码'>
+                                        <Input.Password autoComplete='new-password'
+                                                        placeholder={email.proxyPasswordSet ? '已设置，留空表示不修改' : '可选'}/>
+                                    </Form.Item>
+                                </>}
+                                {proxyType === 'socks5' &&
+                                    <Alert className='mb-4' type='warning' showIcon
+                                           title='SOCKS5 不支持账号密码认证；需要认证请改用 HTTP 代理（如 gost 的 -L http://user:pass@:8080）。'/>}
+                            </>
+                        }}
                     </Form.Item>
                     <Space>
                         <Button type='primary' htmlType='submit' loading={savingEmail}>保存</Button>
