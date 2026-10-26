@@ -10,7 +10,6 @@ import cn.hutool.core.util.StrUtil;
 import cn.hutool.extra.spring.SpringUtil;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.command.BuildImageCmd;
-import com.github.dockerjava.api.command.PushImageCmd;
 import com.github.dockerjava.api.model.BuildResponseItem;
 import io.github.jiangood.docker.base.FileLog;
 import io.github.jiangood.docker.base.tool.GitCredential;
@@ -149,7 +148,7 @@ public class ProjectService extends BaseService<Project> {
     }
 
     /**
-     * 填充项目创建人邮箱（不持久化），供详情页展示构建结果邮件收件人。
+     * 填充项目创建人邮箱（不持久化），供详情页展示邮件通知收件人。
      */
     public void fillCreateUserEmail(Project project) {
         if (project != null) {
@@ -376,6 +375,14 @@ public class ProjectService extends BaseService<Project> {
      * 每次构建成功后统一追加推送的版本号。
      */
     private static final String LATEST_TAG = "latest";
+
+    /**
+     * 本次构建要打并推送的镜像标签：开启「仅构建 latest」时只有 latest，
+     * 否则为版本号 + latest（保持先推版本号、后推 latest 的顺序）。
+     */
+    static List<String> pushTags(boolean latestOnly, String imageTag, String latestImageTag) {
+        return latestOnly ? List.of(latestImageTag) : List.of(imageTag, latestImageTag);
+    }
 
     /**
      * 分支构建的镜像版本号：分支名（非法字符替换为 -）+ 构建时间（yyyyMMdd-HHmm）+ 提交短 id，
@@ -646,6 +653,8 @@ public class ProjectService extends BaseService<Project> {
             buildLog = buildLogService.findById(logId).orElse(null);
             Assert.notNull(buildLog, "构建记录不存在");
             // 任务已在 buildImage() 调度前通过 taskLogRegistry.start() 标记为运行中
+            // 仅构建 latest：只打并推送 latest，不产出版本号标签（省磁盘，但无法按版本回滚）
+            boolean latestOnly = Boolean.TRUE.equals(project.getLatestOnly());
 
             // 同一项目串行构建：旧构建（已被 cancelProcessingBuilds 取消）退出后才能复用代码目录
             if (!acquireBuildSlot(projectId, logId)) {
@@ -701,8 +710,14 @@ public class ProjectService extends BaseService<Project> {
             String imageTag = ImageUrlUtils.full(imageUrl, versionTag);
             // 构建成功后统一追加的 latest 版本
             String latestImageTag = ImageUrlUtils.full(imageUrl, LATEST_TAG);
+            List<String> tagsToPush = pushTags(latestOnly, imageTag, latestImageTag);
 
-            fileLog.info("目标镜像： {}", imageTag);
+            if (latestOnly) {
+                fileLog.info("本项目已开启「仅构建 latest」，版本号 {} 不会作为镜像标签推送", versionTag);
+                fileLog.info("目标镜像： {}", latestImageTag);
+            } else {
+                fileLog.info("目标镜像： {}", imageTag);
+            }
             Assert.state(!StrUtil.containsBlank(imageUrl), "镜像路径不能包含空格");
 
 
@@ -739,8 +754,8 @@ public class ProjectService extends BaseService<Project> {
                     .withForcerm(true)
                     .withPull(p.isPull())
                     .withNetworkMode("host")
-                    // 一次构建同时打上版本号与 latest，随后一起推送
-                    .withTags(new LinkedHashSet<>(List.of(imageTag, latestImageTag)))
+                    // 一次构建同时打上版本号与 latest（仅构建 latest 时只打 latest），随后一起推送
+                    .withTags(new LinkedHashSet<>(tagsToPush))
                     .withNoCache(!p.isUseCache())
                     .withDockerfile(dockerfileFile);
 
@@ -766,21 +781,19 @@ public class ProjectService extends BaseService<Project> {
             fileLog.info("镜像构建结束 ");
             buildThreadMap.remove(logId);
 
-            // 推送版本号与 latest
-            fileLog.info("推送镜像 {}", imageTag);
-            PushImageCmd pushImageCmd = client.pushImageCmd(imageTag);
-            pushImageCmd.exec(new DefaultCallback<>(logId)).awaitCompletion();
-            fileLog.info("推送镜像结束 {}", imageTag);
+            // 推送版本号与 latest（开启「仅构建 latest」时只推 latest）
+            for (String pushTag : tagsToPush) {
+                fileLog.info("推送镜像 {}", pushTag);
+                client.pushImageCmd(pushTag).exec(new DefaultCallback<>(logId)).awaitCompletion();
+                fileLog.info("推送镜像结束 {}", pushTag);
+            }
 
-            fileLog.info("推送镜像 {}", latestImageTag);
-            pushImageCmd = client.pushImageCmd(latestImageTag);
-            pushImageCmd.exec(new DefaultCallback<>(logId)).awaitCompletion();
-            fileLog.info("推送镜像结束 {}", latestImageTag);
-
-            // 登记镜像与标签，并记录镜像声明的端口与卷（版本号与 latest 各登记一条）
+            // 登记镜像与标签，并记录镜像声明的端口与卷（未开启仅 latest 时，版本号与 latest 各登记一条）
             try {
                 imageService.upsert(imageUrl, project.getName(), "BUILD", registry.getId(), project.getSysOrg());
-                imageTagService.inspect(client, imageTag, imageUrl, versionTag, buildLog.getId(), "BUILD");
+                if (!latestOnly) {
+                    imageTagService.inspect(client, imageTag, imageUrl, versionTag, buildLog.getId(), "BUILD");
+                }
                 imageTagService.inspect(client, latestImageTag, imageUrl, LATEST_TAG, buildLog.getId(), "BUILD");
             } catch (Exception e) {
                 fileLog.warn("登记镜像失败: {}", e.getMessage());
@@ -801,7 +814,8 @@ public class ProjectService extends BaseService<Project> {
 
             BuildSuccessEvent event = new BuildSuccessEvent(this);
             event.setBuildLog(buildLog);
-            event.setTag(versionTag);
+            // 自动部署会用该 tag 拉镜像：仅构建 latest 时版本号标签并不存在，必须用 latest
+            event.setTag(latestOnly ? LATEST_TAG : versionTag);
 
             applicationEventPublisher.publishEvent(event);
             fileLog.info("抛出构建事件 {}", event.getBuildLog().getProjectName());

@@ -1,5 +1,5 @@
 import {
-  Button, Card, Checkbox, Col, Descriptions, Form, Input,
+  Alert, Button, Card, Checkbox, Col, Descriptions, Form, Input,
   Modal, Popconfirm, Row, Segmented, Select, Space, Spin, Switch, Table, Tabs, Tag, Tooltip, Typography
 } from 'antd';
 import React from 'react';
@@ -89,8 +89,10 @@ export default class extends React.Component {
     // 自动配置 Webhook 的开关 loading
     webhookAutoLoading: false,
     webhookBranchLoading: false,
-    // 构建结果邮件通知开关 loading
+    // 邮件通知开关 loading
     notifyEmailLoading: false,
+    // 仅构建 latest 开关 loading
+    latestOnlyLoading: false,
     // 分支推送构建的分支输入框（null 表示跟随 project.webhookBranches）
     webhookBranchesText: null,
     // 代码源选项（含类型），用于判断当前项目能否使用 GitLab 自动配置；null 表示尚未加载
@@ -276,6 +278,29 @@ export default class extends React.Component {
       .finally(() => this.setState({notifyEmailLoading: false}))
   }
 
+  toggleLatestOnly = (checked) => {
+    // 开启会丢掉版本号标签、无法按版本回滚，先确认；关闭直接生效
+    if (checked) {
+      Modal.confirm({
+        title: '开启「仅构建 latest」？',
+        content: '开启后每次构建只打并推送 latest，不再保留版本号标签，无法按版本回滚或固定部署；'
+          + '已固定版本号的应用不会自动更新，下次构建成功后会切到 latest。',
+        okText: '开启',
+        cancelText: '取消',
+        onOk: () => this.saveLatestOnly(true)
+      })
+      return
+    }
+    this.saveLatestOnly(false)
+  }
+
+  saveLatestOnly = (checked) => {
+    this.setState({latestOnlyLoading: true})
+    HttpClient.get('admin/project/setLatestOnly', {id: this.state.project.id, enabled: checked})
+      .then(() => this.loadProject())
+      .finally(() => this.setState({latestOnlyLoading: false}))
+  }
+
   // 输入框当前值；未编辑时回退到项目配置，项目未配置时回退到默认 master,main
   branchText = () => {
     const {webhookBranchesText, project} = this.state
@@ -321,6 +346,16 @@ export default class extends React.Component {
     {
       title: '镜像版本',
       dataIndex: 'tag',
+      render: (tag) => (
+        <Space size={4}>
+          {tag}
+          {this.state.project?.latestOnly && (
+            <Tooltip title='本项目仅构建 latest，该版本号不会作为镜像标签推送'>
+              <Tag>仅 latest</Tag>
+            </Tooltip>
+          )}
+        </Space>
+      )
     },
     {
       title: '构建上下文',
@@ -390,7 +425,7 @@ export default class extends React.Component {
       return <Page padding><Spin/></Page>
     }
 
-    const {project, showTrigger, logRow, tagOptions, branchOptions, buildHostOptions, refType, notifyEmailLoading} = this.state;
+    const {project, showTrigger, logRow, tagOptions, branchOptions, buildHostOptions, refType, notifyEmailLoading, latestOnlyLoading} = this.state;
 
     return (<Page padding>
 
@@ -403,7 +438,7 @@ export default class extends React.Component {
           <Descriptions.Item label='dockerfile'>{project.dockerfile}</Descriptions.Item>
           <Descriptions.Item label='构建上下文'>{project.context}</Descriptions.Item>
           <Descriptions.Item label='创建时间'>{project.createTime}</Descriptions.Item>
-          <Descriptions.Item label='构建结果邮件'>
+          <Descriptions.Item label='邮件通知'>
             <Space wrap>
               <Switch
                 checked={!!project.notifyEmail}
@@ -422,6 +457,23 @@ export default class extends React.Component {
                   {project.notifyEmail ? '（当前不会发送）' : '后才能开启'}
                 </Typography.Text>
               )}
+            </Space>
+          </Descriptions.Item>
+          <Descriptions.Item label='仅构建 latest'>
+            <Space wrap>
+              <Switch
+                checked={!!project.latestOnly}
+                checkedChildren='开启'
+                unCheckedChildren='关闭'
+                loading={latestOnlyLoading}
+                disabled={!PermUtils.hasPermission('project:save')}
+                onChange={this.toggleLatestOnly}
+              />
+              <Typography.Text type='secondary'>
+                {project.latestOnly
+                  ? '构建只推送 latest，不保留版本号，无法按版本回滚'
+                  : '版本号 + latest 双标签'}
+              </Typography.Text>
             </Space>
           </Descriptions.Item>
         </Descriptions>
@@ -463,12 +515,16 @@ export default class extends React.Component {
           </Form.Item>
           {refType === 'BRANCH' ? (
             <Form.Item name="branch" label="构建分支" rules={[{required: true, message: '请选择分支'}]}
-                       tooltip="使用该分支最新代码构建，镜像版本为「分支名-年月日-时分-提交 id」">
+                       tooltip={project.latestOnly
+                         ? '使用该分支最新代码构建，仅更新 latest（不产出版本号镜像）'
+                         : '使用该分支最新代码构建，镜像版本为「分支名-年月日-时分-提交 id」'}>
               <Select options={branchOptions} showSearch placeholder='请选择远程分支'/>
             </Form.Item>
           ) : (
             <Form.Item name="tag" label="构建 tag" rules={[{required: true, message: '请选择 tag'}]}
-                       tooltip="只支持 vX.Y.Z 形式的 tag">
+                       tooltip={project.latestOnly
+                         ? '只支持 vX.Y.Z 形式的 tag；本项目仅构建 latest，该版本号不会作为镜像标签'
+                         : '只支持 vX.Y.Z 形式的 tag'}>
               <Select options={tagOptions} showSearch placeholder='请选择远程 tag'/>
             </Form.Item>
           )}
@@ -530,33 +586,43 @@ export default class extends React.Component {
       {
         key: 'version',
         label: '构建版本',
-        children: <Table
-          size='small'
-          rowKey='id'
-          pagination={false}
-          dataSource={versions}
-          columns={[
-            {title: 'tag', dataIndex: 'tag'},
-            {
-              title: '完整地址', dataIndex: 'fullUrl',
-              render: (v) => <Typography.Text copyable code>{v}</Typography.Text>
-            },
-            {title: '来源', dataIndex: 'source', width: 90, render: (s) => sourceTag(s)},
-            {title: '构建时间', dataIndex: 'buildTime', width: 160, render: (v) => formatTime(v)},
-            {
-              title: '大小', dataIndex: 'size', width: 100,
-              render: (v) => v ? formatBytes(v) : '-'
-            },
-            {
-              title: '声明端口', dataIndex: 'exposedPorts',
-              render: (list) => (list && list.length) ? list.join(', ') : '-'
-            },
-            {
-              title: '声明卷', dataIndex: 'volumes',
-              render: (list) => (list && list.length) ? list.join(', ') : '-'
-            },
-          ]}
-        />
+        children: <div>
+          {project.latestOnly && (
+            <Alert
+              type='info'
+              showIcon
+              style={{marginBottom: 12}}
+              message='本项目仅构建 latest，历史版本号不会保留为镜像标签'
+            />
+          )}
+          <Table
+            size='small'
+            rowKey='id'
+            pagination={false}
+            dataSource={versions}
+            columns={[
+              {title: 'tag', dataIndex: 'tag'},
+              {
+                title: '完整地址', dataIndex: 'fullUrl',
+                render: (v) => <Typography.Text copyable code>{v}</Typography.Text>
+              },
+              {title: '来源', dataIndex: 'source', width: 90, render: (s) => sourceTag(s)},
+              {title: '构建时间', dataIndex: 'buildTime', width: 160, render: (v) => formatTime(v)},
+              {
+                title: '大小', dataIndex: 'size', width: 100,
+                render: (v) => v ? formatBytes(v) : '-'
+              },
+              {
+                title: '声明端口', dataIndex: 'exposedPorts',
+                render: (list) => (list && list.length) ? list.join(', ') : '-'
+              },
+              {
+                title: '声明卷', dataIndex: 'volumes',
+                render: (list) => (list && list.length) ? list.join(', ') : '-'
+              },
+            ]}
+          />
+        </div>
       },
       {
         key: 'apps',
@@ -581,7 +647,7 @@ export default class extends React.Component {
       },
       {
         key: 'webhook',
-        label: 'Webhook',
+        label: '自动触发',
         children: this.renderWebhook()
       }
     ]
@@ -626,6 +692,11 @@ export default class extends React.Component {
                   勾选「分支推送」后，仅推送所配置的分支才会构建该分支最新代码，镜像版本为
                   「分支名-年月日-时分-提交 id」并更新 latest。
                 </Typography.Text>
+                {project.latestOnly && (
+                  <Typography.Text type='secondary'>
+                    已开启「仅构建 latest」：tag 推送与分支推送都只更新 latest，不产出版本号标签。
+                  </Typography.Text>
+                )}
                 <Typography.Text type='secondary'>
                   所有 Webhook 触发的构建均使用系统默认构建节点。
                 </Typography.Text>

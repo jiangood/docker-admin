@@ -3,6 +3,7 @@ package io.github.jiangood.docker.admin.service;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -51,5 +52,17 @@ class ProjectServiceTest {
     void nullBuildTimeFallsBackToNow() {
         String tag = ProjectService.buildBranchImageTag("main", "1a2b3c4d", null);
         assertTrue(tag.matches("main-\\d{8}-\\d{4}-1a2b3c4d"), tag);
+    }
+
+    @Test
+    void pushBothVersionAndLatestByDefault() {
+        assertEquals(List.of("repo:1.0.0", "repo:latest"),
+                ProjectService.pushTags(false, "repo:1.0.0", "repo:latest"));
+    }
+
+    @Test
+    void pushOnlyLatestWhenLatestOnlyEnabled() {
+        assertEquals(List.of("repo:latest"),
+                ProjectService.pushTags(true, "repo:1.0.0", "repo:latest"));
     }
 }

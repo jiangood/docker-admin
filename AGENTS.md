@@ -92,9 +92,9 @@ git tag vx.y.z && git push && git push origin vx.y.z
   等旧构建退出代码目录后再开始，触发接口立即返回。取消靠 `cancelledBuilds` 标记 + 检查点
   （克隆后、docker build 后、推送后），克隆阶段无法中断，只能等克隆结束后放弃。
   超时上限见 `BUILD_SLOT_WAIT_MILLIS`；等待是进程内的，多实例部署下不跨实例生效。
-- **构建结果邮件通知：** 发件账号（QQ 邮箱 SMTP，默认 `smtp.qq.com:465`）在「设置 - 全局设置」配置，
+- **邮件通知：** 发件账号（QQ 邮箱 SMTP，默认 `smtp.qq.com:465`）在「设置 - 全局设置」配置，
   键为 `t_system_config` 的 `email.*`，授权码不回显、留空表示不修改。
-  是否发送在**项目详情页**的「构建结果邮件」开关控制（`Project.notifyEmail`），收件人为项目创建人的
+  是否发送在**项目详情页**的「邮件通知」开关控制（`Project.notifyEmail`），收件人为项目创建人的
   `sys_user.email`；创建人未配置邮箱时开关不可开启（后端也会校验），并提示到用户管理补充。
   `ProjectService` 在构建成功与失败时都发布 `BuildResultEvent`，`MailService` 异步发送，
   正文为构建摘要并附带日志文件 `${logging.file.path}/{logId}.log`；邮件失败不影响构建结果。

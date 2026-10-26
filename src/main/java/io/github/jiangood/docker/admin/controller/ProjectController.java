@@ -183,7 +183,7 @@ public class ProjectController {
     }
 
     /**
-     * 开启/关闭「构建结果邮件通知」。开启后，构建成功或失败都会发送邮件给项目创建人。
+     * 开启/关闭「邮件通知」。开启后，构建成功或失败都会发送邮件给项目创建人。
      * 开启的前提是项目创建人已配置邮箱。
      */
     @HasPermission("project:save")
@@ -198,8 +198,23 @@ public class ProjectController {
         project.setNotifyEmail(on);
         service.save(project);
         return AjaxResult.ok()
-                .msg(on ? "已开启构建结果邮件通知" : "已关闭构建结果邮件通知")
+                .msg(on ? "已开启邮件通知" : "已关闭邮件通知")
                 .data(project.getNotifyEmail());
+    }
+
+    /**
+     * 开启/关闭「仅构建 latest」。开启后每次构建只打并推送 latest，不保留版本号标签。
+     */
+    @HasPermission("project:save")
+    @RequestMapping("setLatestOnly")
+    public AjaxResult setLatestOnly(String id, Boolean enabled) {
+        Project project = assertProjectAccess(id);
+        boolean on = Boolean.TRUE.equals(enabled);
+        project.setLatestOnly(on);
+        service.save(project);
+        return AjaxResult.ok()
+                .msg(on ? "已开启：后续构建只推送 latest" : "已关闭：恢复「版本号 + latest」双标签")
+                .data(project.getLatestOnly());
     }
 
     /**

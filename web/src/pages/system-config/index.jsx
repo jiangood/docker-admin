@@ -3,7 +3,7 @@ import React from 'react'
 import {HttpClient, Page} from '@jiangood/open-admin'
 
 /**
- * 系统级默认资源配置，以及构建结果邮件通知。
+ * 系统级默认资源配置，以及邮件通知。
  */
 export default class extends React.Component {
     state = {
@@ -100,7 +100,7 @@ export default class extends React.Component {
             <Card title='邮件发送服务（QQ 邮箱）' loading={loading} className='page-card'>
                 <Form initialValues={email} labelCol={{flex: '140px'}} onFinish={this.onSaveEmail}>
                     <Alert className='mb-4' type='info' showIcon
-                           message='这里只配置发件邮箱。是否发送构建结果邮件在「项目详情页」按项目开启，收件人为项目创建人的邮箱。'/>
+                           message='这里只配置发件邮箱。是否发送邮件在「项目详情页」按项目开启，收件人为项目创建人的邮箱。'/>
                     <Form.Item label='发件邮箱' name='username'
                                rules={[{type: 'email', message: '请输入正确的邮箱地址'}]}
                                tooltip='目前支持 QQ 邮箱；请先在 QQ 邮箱「设置 - 账号」中开启 SMTP 服务并获取授权码'>

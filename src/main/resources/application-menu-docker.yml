@@ -14,7 +14,7 @@ menus:
       - {name: 保存, code: project:save}
       - {name: 删除, code: project:delete}
       - {name: 构建, code: project:build}
-      - {name: Webhook, code: project:webhook}
+      - {name: 自动触发, code: project:webhook}
 
   app:
     pid: biz

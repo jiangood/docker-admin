@@ -92,8 +92,18 @@ public class Project extends BaseEntity {
      * 构建结束（成功或失败）后是否发送邮件通知。
      * 收件人为项目创建人（{@link #createUser}）在用户管理中配置的邮箱。
      */
-    @Remark("构建结果邮件通知")
+    @Remark("邮件通知")
     Boolean notifyEmail;
+
+    /**
+     * 仅构建 latest：每次构建只打并推送 latest 标签，不产出版本号标签。
+     * <p>
+     * 用于节省磁盘：旧构建的镜像不再被版本号引用，会变成 dangling 镜像，可被常规清理回收；
+     * 注册中心也不再累积历史版本 manifest。代价是无法按版本号回滚或固定部署。
+     * 为空或 false 时保持原有行为（版本号 + latest 双标签）。
+     */
+    @Remark("仅构建 latest")
+    Boolean latestOnly;
 
 
     String remark;

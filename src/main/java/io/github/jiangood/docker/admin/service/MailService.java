@@ -30,7 +30,7 @@ import java.util.Properties;
  * 全局邮件发送服务（目前为 QQ 邮箱 SMTP）。
  * <p>
  * SMTP 账号在「设置 - 全局设置」中维护，每次发送时按当前配置创建 {@link JavaMailSenderImpl}，
- * 修改配置后无需重启服务。构建结果通知由项目详情页的开关控制，收件人为项目创建人的邮箱，
+ * 修改配置后无需重启服务。邮件通知由项目详情页的开关控制，收件人为项目创建人的邮箱，
  * 邮件会附带该次构建的日志文件。
  */
 @Service
@@ -63,14 +63,14 @@ public class MailService {
 
         String to = createUserEmail(project);
         if (StrUtil.isBlank(to)) {
-            log.info("项目 {} 已开启构建结果邮件通知，但创建人未配置邮箱，跳过发送", project.getName());
+            log.info("项目 {} 已开启邮件通知，但创建人未配置邮箱，跳过发送", project.getName());
             return;
         }
 
         try {
             sendBuildResult(buildLog, to);
         } catch (Exception e) {
-            log.warn("构建结果邮件发送失败，项目：{}，收件人：{}，原因：{}", project.getName(), to, e.getMessage());
+            log.warn("邮件发送失败，项目：{}，收件人：{}，原因：{}", project.getName(), to, e.getMessage());
         }
     }
 
@@ -109,14 +109,14 @@ public class MailService {
         String html = "<div style=\"font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;"
                 + "color:#1f2937;font-size:14px;line-height:1.7\">"
                 + "<h2 style=\"font-size:18px;margin:0 0 12px;color:#16a34a\">邮件发送服务可用</h2>"
-                + "<p>如果你收到这封邮件，说明 SMTP 配置正确。在项目详情页打开「构建结果邮件」后，"
+                + "<p>如果你收到这封邮件，说明 SMTP 配置正确。在项目详情页打开「邮件通知」后，"
                 + "每次构建结束都会给项目创建人发送结果邮件。</p>"
                 + "</div>";
         sendHtml(systemConfigService.getEmailUsername(), "[容器管理平台] 邮件通知测试", html);
     }
 
     /**
-     * 通用 HTML 邮件发送入口，供构建结果通知之外的业务复用。
+     * 通用 HTML 邮件发送入口，供邮件通知之外的业务复用。
      */
     public void sendHtml(String to, String subject, String html) {
         sendHtml(to, subject, html, null, null);
