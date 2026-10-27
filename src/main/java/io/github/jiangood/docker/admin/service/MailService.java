@@ -252,21 +252,27 @@ public class MailService {
 
     private String buildResultHtml(BuildLog buildLog, boolean success, String statusText, String attachmentName) {
         String statusColor = success ? "#16a34a" : "#dc2626";
+        String version = imageVersion(buildLog);
         StringBuilder html = new StringBuilder();
         html.append("<div style=\"font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;")
                 .append("color:#1f2937;font-size:14px;line-height:1.7\">");
-        html.append("<h2 style=\"font-size:18px;margin:0 0 16px;color:").append(statusColor).append("\">")
-                .append(escape(statusText)).append(" - ").append(escape(buildLog.getProjectName()))
-                .append("</h2>");
+        // 标题只放结果状态，项目与版本作为副标题，避免与邮件主题重复一遍
+        html.append("<h2 style=\"font-size:18px;margin:0 0 4px;color:").append(statusColor).append("\">")
+                .append(escape(statusText)).append("</h2>");
+        html.append("<p style=\"margin:0 0 16px;color:#6b7280\">")
+                .append(escape(buildLog.getProjectName()))
+                .append(StrUtil.isBlank(version) ? "" : " · " + escape(version))
+                .append("</p>");
         html.append("<table cellpadding=\"8\" cellspacing=\"0\" style=\"border-collapse:collapse;width:100%;")
                 .append("max-width:680px;border:1px solid #e5e7eb\">");
 
         appendRow(html, "项目", buildLog.getProjectName());
         appendRow(html, "镜像", buildLog.getImageUrl());
-        appendRow(html, "版本", imageVersion(buildLog));
+        appendRow(html, "版本", version);
         appendRow(html, "来源", sourceText(buildLog));
-        if (StrUtil.isNotBlank(buildLog.getCommitId())) {
-            appendRow(html, "提交", buildLog.getCommitId());
+        String commit = commitText(buildLog);
+        if (StrUtil.isNotBlank(commit)) {
+            appendRow(html, "提交", commit);
         }
         appendRow(html, "构建主机", buildLog.getBuildHostName());
         if (buildLog.getTimeSpend() != null && buildLog.getTimeSpend() > 0) {
@@ -275,21 +281,43 @@ public class MailService {
         if (buildLog.getCompleteTime() != null) {
             appendRow(html, "完成时间", buildLog.getCompleteTime().format(DATE_TIME_FORMATTER));
         }
-        if (StrUtil.isNotBlank(buildLog.getCodeMessage())) {
-            appendRow(html, "提交信息", StrUtil.maxLength(buildLog.getCodeMessage().trim(), 300));
-        }
 
         html.append("</table>");
-        html.append("<p style=\"margin:16px 0 0;color:#6b7280\">")
-                .append(success ? "镜像已构建并推送完成。" : "请登录容器管理平台查看完整构建日志。")
+        html.append("<p style=\"margin:16px 0 0;color:#4b5563\">")
+                .append(success
+                        ? "镜像已推送至 " + escape(pushedImage(buildLog)) + "。"
+                        : "构建未完成，请按日志中的错误处理后重新构建。")
                 .append("</p>");
         if (StrUtil.isNotBlank(attachmentName)) {
-            html.append("<p style=\"margin:8px 0 0;color:#6b7280\">本次构建日志见附件：")
+            html.append("<p style=\"margin:8px 0 0;color:#6b7280\">完整构建日志见附件：")
                     .append(escape(attachmentName))
                     .append("</p>");
         }
         html.append("</div>");
         return html.toString();
+    }
+
+    /** 提交信息行：短 id + 提交说明（主干信息，超长截断）。 */
+    private static String commitText(BuildLog buildLog) {
+        String commitId = StrUtil.trimToNull(buildLog.getCommitId());
+        String message = StrUtil.trimToNull(buildLog.getCodeMessage());
+        if (message != null) {
+            message = StrUtil.maxLength(message, 120);
+        }
+        if (commitId == null) {
+            return message;
+        }
+        return message == null ? commitId : commitId + " " + message;
+    }
+
+    /** 本次实际推送的镜像全名：镜像地址 + 版本。 */
+    private static String pushedImage(BuildLog buildLog) {
+        String image = StrUtil.trimToNull(buildLog.getImageUrl());
+        String version = imageVersion(buildLog);
+        if (image == null) {
+            return StrUtil.blankToDefault(version, "-");
+        }
+        return StrUtil.isBlank(version) ? image : image + ":" + version;
     }
 
     private static void appendRow(StringBuilder html, String label, String value) {
