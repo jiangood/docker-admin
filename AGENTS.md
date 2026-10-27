@@ -94,8 +94,12 @@ git tag vx.y.z && git push && git push origin vx.y.z
   超时上限见 `BUILD_SLOT_WAIT_MILLIS`；等待是进程内的，多实例部署下不跨实例生效。
 - **邮件通知：** 发件账号（QQ 邮箱 SMTP，默认 `smtp.qq.com:465`）在「设置 - 全局设置」配置，
   键为 `t_system_config` 的 `email.*`，授权码不回显、留空表示不修改。
-  **邮件代理**同样在全局设置里配置（`email.proxy.*`，类型 `none`/`http`/`socks5`，默认 `none` 即直连），
-  直接复用 Angus Mail 原生的 `mail.smtp.proxy.*`（HTTP CONNECT，可带 Basic 认证）与
+  **邮件代理**同样在全局设置里配置，界面只填一行地址（`http://192.168.1.10:8080`、
+  `http://user:pass@192.168.1.10:8080`、`socks5://192.168.1.10:1080`，不写 scheme 按 http，
+  端口必填，留空即不使用代理；密码回显为 `***`、保存时保持原样表示沿用已存密码，清空地址则把
+  `email.proxy.*` 全部清掉）。落库仍是 `email.proxy.type/host/port/username/password` 五个键，
+  由 `MailProxySettings.parse` / `displayUrl` 双向转换，旧数据无需迁移。
+  发送时直接复用 Angus Mail 原生的 `mail.smtp.proxy.*`（HTTP CONNECT，可带 Basic 认证）与
   `mail.smtp.socks.*`（SOCKS5 无认证），隧道在 TLS 之前建立，465/587 都适用；
   平台跑在容器里时**不能填 127.0.0.1**，要填宿主机网桥网关（如 `172.17.0.1`）或局域网 IP。
   是否发送在**项目详情页**的「邮件通知」开关控制（`Project.notifyEmail`），收件人为项目创建人的

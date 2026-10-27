@@ -35,6 +35,8 @@ public class SystemConfigService extends BaseService<SystemConfig> {
 
     /**
      * 邮件发送代理：宿主机不能直连外网时，经另一台能出网的主机中转。
+     * 界面只填一行地址（{@code http://user:pass@192.168.1.10:8080}），
+     * 解析后仍按 type/host/port/username/password 五个键落库，旧数据无需迁移。
      * 类型为 {@code none}/{@code http}/{@code socks5}，默认 none 即直连。
      */
     public static final String EMAIL_PROXY_TYPE = "email.proxy.type";
@@ -150,12 +152,8 @@ public class SystemConfigService extends BaseService<SystemConfig> {
         values.put("username", getEmailUsername());
         values.put("fromName", getEmailFromName());
         values.put("passwordSet", StrUtil.isNotBlank(getEmailPassword()));
-        // 代理地址/端口按库里的原值回显：关掉代理后再打开时不用重填
-        values.put("proxyType", getEmailProxy().type().code());
-        values.put("proxyHost", getEmailProxyHost());
-        values.put("proxyPort", getEmailProxyPort());
-        values.put("proxyUsername", StrUtil.trimToNull(getValue(EMAIL_PROXY_USERNAME)));
-        values.put("proxyPasswordSet", StrUtil.isNotBlank(getValue(EMAIL_PROXY_PASSWORD)));
+        // 代理只回显一行地址；已保存的密码显示为 ***，不再单独回传
+        values.put("proxyUrl", getEmailProxy().displayUrl());
         return values;
     }
 
@@ -186,34 +184,37 @@ public class SystemConfigService extends BaseService<SystemConfig> {
     }
 
     /**
-     * 保存代理设置。类型为 none 时只记类型，地址等字段保留，方便以后切回来；
-     * 代理密码同样留空沿用旧值。
+     * 保存代理设置：界面只填一行地址，这里解析后仍按 type/host/port/username/password 落库。
+     * 留空表示不使用代理，同时清掉已保存的地址与凭据；
+     * 密码写 {@code ***} 或省略表示沿用已保存的密码。
      */
     private void saveEmailProxy(EmailSettingsInput input) {
-        MailProxySettings.Type type = MailProxySettings.Type.parse(input.proxyType());
-        String proxyHost = StrUtil.trimToNull(input.proxyHost());
-        Integer proxyPort = input.proxyPort();
-        String proxyUser = StrUtil.trimToNull(input.proxyUsername());
-        String proxyPassword = StrUtil.trimToNull(input.proxyPassword());
-
-        if (type != MailProxySettings.Type.NONE) {
-            Assert.hasText(proxyHost, "请填写代理地址");
-            Assert.isTrue(proxyPort != null && proxyPort > 0 && proxyPort <= 65535, "代理端口不正确");
-            if (type == MailProxySettings.Type.SOCKS5) {
-                // JDK 的 SOCKS 实现拿不到账号密码（只能走全局 Authenticator），这里不落库，
-                // 避免切到 HTTP 代理时又冒出一组失效的凭据。
-                proxyUser = null;
-                proxyPassword = null;
-            }
+        String raw = StrUtil.trimToNull(input.proxyUrl());
+        if (raw == null) {
+            saveValue(EMAIL_PROXY_TYPE, MailProxySettings.Type.NONE.code(), "邮件代理类型（none/http/socks5）");
+            saveValue(EMAIL_PROXY_HOST, null, "邮件代理地址");
+            saveValue(EMAIL_PROXY_PORT, null, "邮件代理端口");
+            saveValue(EMAIL_PROXY_USERNAME, null, "邮件代理用户名");
+            saveValue(EMAIL_PROXY_PASSWORD, null, "邮件代理密码");
+            return;
         }
 
-        saveValue(EMAIL_PROXY_TYPE, type.code(), "邮件代理类型（none/http/socks5）");
-        saveValue(EMAIL_PROXY_HOST, proxyHost, "邮件代理地址");
-        saveValue(EMAIL_PROXY_PORT, proxyPort == null ? null : String.valueOf(proxyPort), "邮件代理端口");
+        MailProxySettings parsed = MailProxySettings.parse(raw);
+        String proxyUser = parsed.username();
+        String proxyPassword = parsed.password();
+        if (proxyUser == null) {
+            // 没写用户名就没有认证
+            proxyPassword = null;
+        } else if (proxyPassword == null || MailProxySettings.PASSWORD_MASK.equals(proxyPassword)) {
+            // 回显的 *** 只是占位；没填新密码就沿用已存的
+            proxyPassword = StrUtil.trimToNull(getValue(EMAIL_PROXY_PASSWORD));
+        }
+
+        saveValue(EMAIL_PROXY_TYPE, parsed.type().code(), "邮件代理类型（none/http/socks5）");
+        saveValue(EMAIL_PROXY_HOST, parsed.host(), "邮件代理地址");
+        saveValue(EMAIL_PROXY_PORT, String.valueOf(parsed.port()), "邮件代理端口");
         saveValue(EMAIL_PROXY_USERNAME, proxyUser, "邮件代理用户名");
-        if (proxyPassword != null) {
-            saveValue(EMAIL_PROXY_PASSWORD, proxyPassword, "邮件代理密码");
-        }
+        saveValue(EMAIL_PROXY_PASSWORD, proxyPassword, "邮件代理密码");
     }
 
     private static Integer parseIntOrNull(String value) {
