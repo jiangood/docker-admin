@@ -6,7 +6,7 @@ import io.github.jiangood.docker.admin.dao.RegistryRepository;
 import io.github.jiangood.docker.admin.dao.SystemConfigRepository;
 import io.github.jiangood.docker.admin.entity.SystemConfig;
 import io.github.jiangood.docker.admin.mail.EmailSettingsInput;
-import io.github.jiangood.docker.admin.mail.MailProxySettings;
+import io.github.jiangood.docker.admin.proxy.ProxySettings;
 import io.github.jiangood.openadmin.framework.data.BaseService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -126,10 +126,10 @@ public class SystemConfigService extends BaseService<SystemConfig> {
         return StrUtil.trimToNull(getValue(EMAIL_FROM_NAME));
     }
 
-    /** 邮件发送代理；未启用时 {@link MailProxySettings#enabled()} 为 false，发送逻辑按直连处理。 */
-    public MailProxySettings getEmailProxy() {
-        return new MailProxySettings(
-                MailProxySettings.Type.parse(getValue(EMAIL_PROXY_TYPE)),
+    /** 邮件发送代理；未启用时 {@link ProxySettings#enabled()} 为 false，发送逻辑按直连处理。 */
+    public ProxySettings getEmailProxy() {
+        return ProxySettings.of(
+                getValue(EMAIL_PROXY_TYPE),
                 getEmailProxyHost(),
                 getEmailProxyPort(),
                 StrUtil.trimToNull(getValue(EMAIL_PROXY_USERNAME)),
@@ -187,34 +187,34 @@ public class SystemConfigService extends BaseService<SystemConfig> {
      * 保存代理设置：界面只填一行地址，这里解析后仍按 type/host/port/username/password 落库。
      * 留空表示不使用代理，同时清掉已保存的地址与凭据；
      * 密码写 {@code ***} 或省略表示沿用已保存的密码。
+     * <p>
+     * 邮件侧用的 SOCKS 实现（JavaMail / JDK）不支持账号密码，在保存时就拒绝，
+     * 不要等到发送时才报错。
      */
     private void saveEmailProxy(EmailSettingsInput input) {
         String raw = StrUtil.trimToNull(input.proxyUrl());
         if (raw == null) {
-            saveValue(EMAIL_PROXY_TYPE, MailProxySettings.Type.NONE.code(), "邮件代理类型（none/http/socks5）");
-            saveValue(EMAIL_PROXY_HOST, null, "邮件代理地址");
-            saveValue(EMAIL_PROXY_PORT, null, "邮件代理端口");
-            saveValue(EMAIL_PROXY_USERNAME, null, "邮件代理用户名");
-            saveValue(EMAIL_PROXY_PASSWORD, null, "邮件代理密码");
+            clearEmailProxy();
             return;
         }
 
-        MailProxySettings parsed = MailProxySettings.parse(raw);
-        String proxyUser = parsed.username();
-        String proxyPassword = parsed.password();
-        if (proxyUser == null) {
-            // 没写用户名就没有认证
-            proxyPassword = null;
-        } else if (proxyPassword == null || MailProxySettings.PASSWORD_MASK.equals(proxyPassword)) {
-            // 回显的 *** 只是占位；没填新密码就沿用已存的
-            proxyPassword = StrUtil.trimToNull(getValue(EMAIL_PROXY_PASSWORD));
-        }
+        ProxySettings parsed = ProxySettings.parse(raw);
+        Assert.isTrue(parsed.type() != ProxySettings.Type.SOCKS5 || parsed.username() == null,
+                "SOCKS5 代理不支持账号密码，需要认证请改用 http://用户名:密码@主机:端口");
 
         saveValue(EMAIL_PROXY_TYPE, parsed.type().code(), "邮件代理类型（none/http/socks5）");
         saveValue(EMAIL_PROXY_HOST, parsed.host(), "邮件代理地址");
         saveValue(EMAIL_PROXY_PORT, String.valueOf(parsed.port()), "邮件代理端口");
-        saveValue(EMAIL_PROXY_USERNAME, proxyUser, "邮件代理用户名");
-        saveValue(EMAIL_PROXY_PASSWORD, proxyPassword, "邮件代理密码");
+        saveValue(EMAIL_PROXY_USERNAME, parsed.username(), "邮件代理用户名");
+        saveValue(EMAIL_PROXY_PASSWORD, parsed.resolvePassword(getValue(EMAIL_PROXY_PASSWORD)), "邮件代理密码");
+    }
+
+    private void clearEmailProxy() {
+        saveValue(EMAIL_PROXY_TYPE, ProxySettings.Type.NONE.code(), "邮件代理类型（none/http/socks5）");
+        saveValue(EMAIL_PROXY_HOST, null, "邮件代理地址");
+        saveValue(EMAIL_PROXY_PORT, null, "邮件代理端口");
+        saveValue(EMAIL_PROXY_USERNAME, null, "邮件代理用户名");
+        saveValue(EMAIL_PROXY_PASSWORD, null, "邮件代理密码");
     }
 
     private static Integer parseIntOrNull(String value) {

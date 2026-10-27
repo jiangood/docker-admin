@@ -2,6 +2,8 @@ import {Alert, Button, Card, Form, Input, InputNumber, Select, Space} from 'antd
 import React from 'react'
 import {HttpClient, Page} from '@jiangood/open-admin'
 
+import {validateProxyUrl} from '../../utils/proxyUrl'
+
 // Alert 里的代码片段：antd 的 reset 会抹掉 <code> 的默认样式，这里显式给一点区分
 const CODE_STYLE = {
     background: 'rgba(0, 0, 0, 0.06)',
@@ -96,16 +98,6 @@ export default class extends React.Component {
 
     emailFormRef = React.createRef()
 
-    // 前端只挡明显写错的格式，scheme / 端口 / SOCKS5 认证等细节以后端解析为准
-    validateProxyUrl = (_, value) => {
-        const v = (value || '').trim()
-        if (!v) {
-            return Promise.resolve()
-        }
-        const ok = /^[a-z][a-z0-9+.-]*:\/\/\S+$/i.test(v) || /^(\S+@)?[\w.-]+:\d+$/.test(v)
-        return ok ? Promise.resolve() : Promise.reject(new Error('格式如 http://192.168.1.10:8080'))
-    }
-
     render() {
         const {loading, saving, savingEmail, testing, showProxyHelp, registries, hosts, values, email} = this.state
         return <Page padding>
@@ -162,7 +154,7 @@ export default class extends React.Component {
                                    <div style={{marginTop: 6}}>不写前缀按 http 处理；端口必填。</div>
                                    <div>密码写成 *** 表示沿用已保存的密码。</div>
                                </>}
-                               rules={[{validator: this.validateProxyUrl}]}
+                               rules={[{validator: validateProxyUrl}]}
                                extra={<>
                                    <div style={{marginTop: 4}}>
                                        一行填完，如 <code style={CODE_STYLE}>http://192.168.1.10:8080</code>；

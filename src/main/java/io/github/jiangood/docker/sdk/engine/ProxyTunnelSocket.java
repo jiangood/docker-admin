@@ -1,7 +1,7 @@
 package io.github.jiangood.docker.sdk.engine;
 
 import cn.hutool.core.util.StrUtil;
-import io.github.jiangood.docker.admin.entity.HostProxySettings;
+import io.github.jiangood.docker.admin.proxy.ProxySettings;
 
 import java.io.ByteArrayOutputStream;
 import java.io.EOFException;
@@ -45,9 +45,9 @@ class ProxyTunnelSocket extends Socket {
     private static final int MAX_LINE_LENGTH = 8 * 1024;
     private static final int MAX_HEADER_LINES = 100;
 
-    private final HostProxySettings proxy;
+    private final ProxySettings proxy;
 
-    ProxyTunnelSocket(HostProxySettings proxy) {
+    ProxyTunnelSocket(ProxySettings proxy) {
         this.proxy = proxy;
     }
 
@@ -80,7 +80,7 @@ class ProxyTunnelSocket extends Socket {
         int previousTimeout = getSoTimeout();
         try {
             setSoTimeout(timeout > 0 ? timeout : DEFAULT_HANDSHAKE_TIMEOUT_MILLIS);
-            if (proxy.type() == HostProxySettings.Type.SOCKS5) {
+            if (proxy.type() == ProxySettings.Type.SOCKS5) {
                 socks5Handshake(targetHost, targetPort);
             } else {
                 httpConnect(targetHost, targetPort);

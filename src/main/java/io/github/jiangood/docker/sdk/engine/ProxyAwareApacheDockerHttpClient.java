@@ -4,7 +4,7 @@ import com.github.dockerjava.transport.DockerHttpClient;
 import com.github.dockerjava.transport.NamedPipeSocket;
 import com.github.dockerjava.transport.SSLConfig;
 import com.github.dockerjava.transport.UnixSocket;
-import io.github.jiangood.docker.admin.entity.HostProxySettings;
+import io.github.jiangood.docker.admin.proxy.ProxySettings;
 import org.apache.hc.client5.http.DnsResolver;
 import org.apache.hc.client5.http.SystemDefaultDnsResolver;
 import org.apache.hc.client5.http.classic.methods.HttpUriRequestBase;
@@ -79,7 +79,7 @@ class ProxyAwareApacheDockerHttpClient implements DockerHttpClient {
             int maxConnections,
             Duration connectionTimeout,
             Duration responseTimeout,
-            HostProxySettings proxy
+            ProxySettings proxy
     ) {
         SSLContext sslContext;
         try {
@@ -211,7 +211,7 @@ class ProxyAwareApacheDockerHttpClient implements DockerHttpClient {
     private static HttpClientConnectionOperator createConnectionOperator(
             URI dockerHost,
             SSLContext sslContext,
-            HostProxySettings proxy
+            ProxySettings proxy
     ) {
         String dockerHostScheme = dockerHost.getScheme();
         String dockerHostPath = dockerHost.getPath();

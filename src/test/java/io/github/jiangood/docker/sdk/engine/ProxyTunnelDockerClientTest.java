@@ -1,7 +1,7 @@
 package io.github.jiangood.docker.sdk.engine;
 
 import com.github.dockerjava.transport.DockerHttpClient;
-import io.github.jiangood.docker.admin.entity.HostProxySettings;
+import io.github.jiangood.docker.admin.proxy.ProxySettings;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayOutputStream;
@@ -39,8 +39,8 @@ class ProxyTunnelDockerClientTest {
     void httpProxyWithBasicAuthTunnelsDockerApi() throws Exception {
         try (FakeDocker docker = new FakeDocker();
              HttpConnectProxy proxy = new HttpConnectProxy("user", "secret")) {
-            HostProxySettings settings = new HostProxySettings(
-                    HostProxySettings.Type.HTTP, "127.0.0.1", proxy.port(), "user", "secret");
+            ProxySettings settings = new ProxySettings(
+                    ProxySettings.Type.HTTP, "127.0.0.1", proxy.port(), "user", "secret");
 
             String body = executeVersion(docker, settings);
 
@@ -57,8 +57,8 @@ class ProxyTunnelDockerClientTest {
     void socks5ProxyAuthenticatesAndTunnelsDockerApi() throws Exception {
         try (FakeDocker docker = new FakeDocker();
              Socks5Proxy proxy = new Socks5Proxy("user", "secret")) {
-            HostProxySettings settings = new HostProxySettings(
-                    HostProxySettings.Type.SOCKS5, "127.0.0.1", proxy.port(), "user", "secret");
+            ProxySettings settings = new ProxySettings(
+                    ProxySettings.Type.SOCKS5, "127.0.0.1", proxy.port(), "user", "secret");
 
             String body = executeVersion(docker, settings);
 
@@ -70,7 +70,7 @@ class ProxyTunnelDockerClientTest {
         }
     }
 
-    private static String executeVersion(FakeDocker docker, HostProxySettings settings) throws Exception {
+    private static String executeVersion(FakeDocker docker, ProxySettings settings) throws Exception {
         URI dockerHost = URI.create("tcp://127.0.0.1:" + docker.port());
         try (ProxyAwareApacheDockerHttpClient client = new ProxyAwareApacheDockerHttpClient(
                 dockerHost, null, 4, TIMEOUT, TIMEOUT, settings)) {

@@ -4,6 +4,8 @@ import React from 'react'
 
 import {PermActions, FieldBoolean, HttpClient, Page, PageUtils, ProTable} from "@jiangood/open-admin"
 
+import {validateProxyUrl} from '../../utils/proxyUrl'
+
 
 const CONNECTION_TYPES = [
     {value: 'local', label: '本机'},
@@ -194,16 +196,6 @@ export default class extends React.Component {
         }
     }
 
-    // 前端只挡明显写错的格式，scheme / 端口 / 账号密码等细节以后端解析为准
-    validateProxyUrl = (_, value) => {
-        const v = (value || '').trim()
-        if (!v) {
-            return Promise.resolve()
-        }
-        const ok = /^[a-z][a-z0-9+.-]*:\/\/\S+$/i.test(v) || /^(\S+@)?[\w.-]+:\d+$/.test(v)
-        return ok ? Promise.resolve() : Promise.reject(new Error('格式如 http://192.168.1.10:8080'))
-    }
-
     handleEdit = record => {
         const type = record.connectionType || 'local'
         const formValues = {
@@ -374,7 +366,7 @@ export default class extends React.Component {
 
                                     <Form.Item label='代理地址' name='proxyUrl'
                                                tooltip='平台与目标主机网络不通时，经一台两边都能访问的主机中转 Docker 请求；留空表示不使用代理。平台跑在容器里时不能填 127.0.0.1，要填宿主机网桥网关或局域网 IP'
-                                               rules={[{validator: this.validateProxyUrl}]}
+                                               rules={[{validator: validateProxyUrl}]}
                                                extra={<div style={{marginTop: 4}}>
                                                    一行填完，如 <code>http://192.168.1.10:8080</code>、
                                                    <code>http://user:pass@192.168.1.10:8080</code>、

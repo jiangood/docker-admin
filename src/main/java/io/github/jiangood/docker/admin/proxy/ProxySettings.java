@@ -1,29 +1,28 @@
-package io.github.jiangood.docker.admin.mail;
+package io.github.jiangood.docker.admin.proxy;
 
 import cn.hutool.core.util.StrUtil;
 import org.springframework.util.Assert;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.LinkedHashMap;
 import java.util.Locale;
-import java.util.Map;
 
 /**
- * 邮件发送代理配置。
- * <p>
- * 直接复用 Angus Mail（jakarta.mail 的实现）内置的代理能力，不自己写隧道：
+ * 连接代理配置，主机接入与邮件发送共用同一套语义：
  * <ul>
- *   <li>HTTP：{@code mail.smtp.proxy.*}，由 JavaMail 发 {@code CONNECT} 建隧道，支持 Basic 认证；</li>
- *   <li>SOCKS5：{@code mail.smtp.socks.*}，走 JDK 的 SOCKS 实现，不支持账号密码。</li>
+ *     <li>{@code HTTP}：向代理发 {@code CONNECT host:port} 建隧道，支持 Basic 认证；</li>
+ *     <li>{@code SOCKS5}：RFC 1928 握手，可选 RFC 1929 用户名密码认证。</li>
  * </ul>
- * 两者都在 SSL（465）与 STARTTLS（587）之前建好 TCP 通道，TLS 仍是端到端到 SMTP 服务器的，
- * 所以证书校验行为与直连一致（JavaMail 默认不校验主机名）。
+ * 代理只转发 TCP 字节流：TLS 仍是平台与目标端到端，证书校验行为与直连一致。
  * <p>
- * 界面只填一行地址，落库仍拆成 type/host/port/username/password 五个键
- * （见 {@link #parse(String)} 与 {@link #displayUrl()}），旧数据无需迁移。
+ * 界面只填一行地址（{@link #parse(String)}），落库由各业务自己决定：
+ * 主机拆成 host 表的五个字段，邮件拆成 {@code t_system_config} 的五个 {@code email.proxy.*} 键；
+ * 回显统一用 {@link #displayUrl()}（密码只给 {@link #PASSWORD_MASK}），旧数据无需迁移。
+ * <p>
+ * 两者的差异只在「使用方能力」，不在本类：邮件走 JavaMail / JDK 的 SOCKS 实现，不支持账号密码，
+ * 由保存邮件设置时校验（见 {@code SystemConfigService#saveEmailProxy}）。
  */
-public record MailProxySettings(Type type, String host, Integer port, String username, String password) {
+public record ProxySettings(Type type, String host, Integer port, String username, String password) {
 
     /** 回显密码用的占位符：保存时原样出现表示沿用已保存的密码。 */
     public static final String PASSWORD_MASK = "***";
@@ -46,10 +45,28 @@ public record MailProxySettings(Type type, String host, Integer port, String use
         }
     }
 
-    public static final MailProxySettings DISABLED = new MailProxySettings(Type.NONE, null, null, null, null);
+    public static final ProxySettings DISABLED = new ProxySettings(Type.NONE, null, null, null, null);
 
-    public static MailProxySettings disabled() {
+    /**
+     * 归一化：库里的原始值可能带空格、类型可能为空，这里统一处理，
+     * 让 {@link #address()} / {@link #displayUrl()} 不必再各自 trim。
+     */
+    public ProxySettings {
+        type = type == null ? Type.NONE : type;
+        host = StrUtil.trimToNull(host);
+        username = StrUtil.trimToNull(username);
+        if (port != null && port <= 0) {
+            port = null;
+        }
+    }
+
+    public static ProxySettings disabled() {
         return DISABLED;
+    }
+
+    /** 由拆分字段（主机表 / 系统配置里的五列）组装。 */
+    public static ProxySettings of(String type, String host, Integer port, String username, String password) {
+        return new ProxySettings(Type.parse(type), host, port, username, password);
     }
 
     /**
@@ -57,11 +74,13 @@ public record MailProxySettings(Type type, String host, Integer port, String use
      * <ul>
      *   <li>{@code http://192.168.1.10:8080}</li>
      *   <li>{@code http://user:pass@192.168.1.10:8080}</li>
-     *   <li>{@code socks5://192.168.1.10:1080}</li>
+     *   <li>{@code socks5://user:pass@192.168.1.10:1080}</li>
      * </ul>
      * 留空表示不使用代理；不写 scheme 时按 http 处理；端口必须显式给出。
+     * <p>
+     * 这里不限制 SOCKS5 的账号密码，因为主机侧自己实现 RFC 1929；邮件侧在保存时另行校验。
      */
-    public static MailProxySettings parse(String url) {
+    public static ProxySettings parse(String url) {
         String raw = StrUtil.trimToEmpty(url);
         if (raw.isEmpty()) {
             return DISABLED;
@@ -136,10 +155,8 @@ public record MailProxySettings(Type type, String host, Integer port, String use
             username = StrUtil.trimToNull(username);
             password = StrUtil.trimToNull(password);
         }
-        Assert.isTrue(type != Type.SOCKS5 || username == null,
-                "SOCKS5 代理不支持账号密码，需要认证请改用 http://用户名:密码@主机:端口");
 
-        return new MailProxySettings(type, host, port, username, password);
+        return new ProxySettings(type, host, port, username, password);
     }
 
     public boolean enabled() {
@@ -181,25 +198,22 @@ public record MailProxySettings(Type type, String host, Integer port, String use
         return sb.toString();
     }
 
-    /** JavaMail 需要的代理属性；未启用或配置不完整时返回空。 */
-    public Map<String, String> mailProperties() {
-        Map<String, String> props = new LinkedHashMap<>();
-        if (!configured()) {
-            return props;
+    /**
+     * 保存时的密码策略，主机与邮件共用：
+     * <ul>
+     *   <li>没有用户名就是匿名代理，密码一律清空（库里的残留也不能留）；</li>
+     *   <li>密码写成 {@link #PASSWORD_MASK} 或省略，表示沿用 {@code storedPassword}；</li>
+     *   <li>其它情况就是用户新填的密码。</li>
+     * </ul>
+     */
+    public String resolvePassword(String storedPassword) {
+        if (StrUtil.isBlank(username)) {
+            return null;
         }
-        if (type == Type.SOCKS5) {
-            props.put("mail.smtp.socks.host", host.trim());
-            props.put("mail.smtp.socks.port", String.valueOf(port));
-            return props;
+        if (password == null || PASSWORD_MASK.equals(password)) {
+            return StrUtil.trimToNull(storedPassword);
         }
-        props.put("mail.smtp.proxy.host", host.trim());
-        props.put("mail.smtp.proxy.port", String.valueOf(port));
-        if (StrUtil.isNotBlank(username)) {
-            // JavaMail 只在 user 与 password 都非 null 时才发 Proxy-Authorization
-            props.put("mail.smtp.proxy.user", username.trim());
-            props.put("mail.smtp.proxy.password", StrUtil.nullToEmpty(password));
-        }
-        return props;
+        return password;
     }
 
     /** 只处理 %XX，不把 '+' 当空格：代理密码里 '+' 很常见。 */
@@ -223,5 +237,14 @@ public record MailProxySettings(Type type, String host, Integer port, String use
             out.write(bytes, 0, bytes.length);
         }
         return out.toString(StandardCharsets.UTF_8);
+    }
+
+    /**
+     * 不打印密码：record 默认 toString 会把所有字段拼出来，日志里一旦出现就等于泄露。
+     */
+    @Override
+    public String toString() {
+        return "ProxySettings[type=" + type + ", host=" + host + ", port=" + port
+                + ", username=" + username + "]";
     }
 }

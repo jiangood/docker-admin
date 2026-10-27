@@ -83,7 +83,7 @@ git tag vx.y.z && git push && git push origin vx.y.z
   （`http://192.168.1.10:8080`、`http://user:pass@192.168.1.10:8080`、`socks5://user:pass@192.168.1.10:1080`，
   不写 scheme 按 http，端口必填，留空表示不使用；密码回显为 `***`，保存时保持 `***` 或省略密码表示沿用已存密码）。
   落库仍是 `Host.proxyType/host/port/username/password` 五列，`Host.proxyUrl` 是 `@Transient` 的出入参字段，
-  由 `HostProxySettings.parse` / `displayUrl` 双向转换，旧数据无需迁移；界面只提交 `proxyUrl`，
+  由 `ProxySettings.parse` / `displayUrl` 双向转换（主机与邮件共用），旧数据无需迁移；界面只提交 `proxyUrl`，
   `HostService.saveHost` 会把解析出的五列补进 `X-Body-Fields` 更新列表。
   用于平台与目标 docker 网络不通、但另有一台主机两边都能访问的场景：HTTP 走 CONNECT（支持 Basic 认证），
   SOCKS5 支持用户名密码（RFC 1929），目标主机名交给代理解析，`https://` 的 TLS 仍是平台到目标端到端。
@@ -109,7 +109,7 @@ git tag vx.y.z && git push && git push origin vx.y.z
   `http://user:pass@192.168.1.10:8080`、`socks5://192.168.1.10:1080`，不写 scheme 按 http，
   端口必填，留空即不使用代理；密码回显为 `***`、保存时保持原样表示沿用已存密码，清空地址则把
   `email.proxy.*` 全部清掉）。落库仍是 `email.proxy.type/host/port/username/password` 五个键，
-  由 `MailProxySettings.parse` / `displayUrl` 双向转换，旧数据无需迁移。
+  由 `ProxySettings.parse` / `displayUrl` 双向转换（与主机代理共用），旧数据无需迁移。
   发送时直接复用 Angus Mail 原生的 `mail.smtp.proxy.*`（HTTP CONNECT，可带 Basic 认证）与
   `mail.smtp.socks.*`（SOCKS5 无认证），隧道在 TLS 之前建立，465/587 都适用；
   平台跑在容器里时**不能填 127.0.0.1**，要填宿主机网桥网关（如 `172.17.0.1`）或局域网 IP。

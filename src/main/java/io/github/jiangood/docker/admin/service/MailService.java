@@ -7,7 +7,8 @@ import io.github.jiangood.docker.admin.dto.BuildRequest;
 import io.github.jiangood.docker.admin.entity.BuildLog;
 import io.github.jiangood.docker.admin.entity.Project;
 import io.github.jiangood.docker.admin.dao.ProjectRepository;
-import io.github.jiangood.docker.admin.mail.MailProxySettings;
+import io.github.jiangood.docker.admin.mail.MailProxyProperties;
+import io.github.jiangood.docker.admin.proxy.ProxySettings;
 import io.github.jiangood.openadmin.modules.logviewer.config.FileLogConfig;
 import io.github.jiangood.openadmin.modules.system.entity.SysUser;
 import io.github.jiangood.openadmin.modules.system.repository.SysUserRepository;
@@ -129,7 +130,7 @@ public class MailService {
     private void sendHtml(String to, String subject, String html, File attachment, String attachmentName) {
         String username = systemConfigService.getEmailUsername();
         String password = systemConfigService.getEmailPassword();
-        MailProxySettings proxy = systemConfigService.getEmailProxy();
+        ProxySettings proxy = systemConfigService.getEmailProxy();
 
         Assert.hasText(username, "未配置发件邮箱，请到「设置 - 全局设置」中配置邮件发送服务");
         Assert.hasText(password, "未配置邮箱授权码，请到「设置 - 全局设置」中配置邮件发送服务");
@@ -172,7 +173,7 @@ public class MailService {
      * {@code connection through proxy host:port to ... failed: HTTP/1.1 407 ...}，
      * 直接抛给用户看不出是代理的问题。
      */
-    private static String failureMessage(Exception e, MailProxySettings proxy) {
+    private static String failureMessage(Exception e, ProxySettings proxy) {
         String message = StrUtil.blankToDefault(e.getMessage(), e.getClass().getSimpleName());
         if (proxy.enabled() && mentionsProxy(e)) {
             return "邮件代理 " + proxy.address() + " 连接失败：" + message;
@@ -225,7 +226,7 @@ public class MailService {
         return StrUtil.isBlank(name) ? label : label + " " + name;
     }
 
-    private JavaMailSenderImpl createSender(String username, String password, MailProxySettings proxy) {
+    private JavaMailSenderImpl createSender(String username, String password, ProxySettings proxy) {
         int port = systemConfigService.getEmailSmtpPort();
         JavaMailSenderImpl sender = new JavaMailSenderImpl();
         sender.setHost(systemConfigService.getEmailSmtpHost());
@@ -246,7 +247,7 @@ public class MailService {
         props.put("mail.smtp.writetimeout", "20000");
         // 代理交给 JavaMail 原生实现：HTTP 走 CONNECT 隧道（可带 Basic 认证），SOCKS5 走 JDK 实现。
         // 隧道在 TLS 之前建好，证书仍是 SMTP 服务器的，不影响 465/587 两条链路。
-        proxy.mailProperties().forEach(props::put);
+        MailProxyProperties.of(proxy).forEach(props::put);
         return sender;
     }
 

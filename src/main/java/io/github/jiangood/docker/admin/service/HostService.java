@@ -3,7 +3,7 @@ package io.github.jiangood.docker.admin.service;
 import cn.hutool.core.util.StrUtil;
 import io.github.jiangood.docker.admin.dao.HostRepository;
 import io.github.jiangood.docker.admin.entity.Host;
-import io.github.jiangood.docker.admin.entity.HostProxySettings;
+import io.github.jiangood.docker.admin.proxy.ProxySettings;
 import io.github.jiangood.openadmin.framework.data.specification.Spec;
 import io.github.jiangood.openadmin.framework.data.BaseService;
 import lombok.RequiredArgsConstructor;
@@ -141,7 +141,7 @@ public class HostService extends BaseService<Host> {
     }
 
     /**
-     * 代理密码同样不回传前端：界面里显示为 {@link HostProxySettings#PASSWORD_MASK}，
+     * 代理密码同样不回传前端：界面里显示为 {@link ProxySettings#PASSWORD_MASK}，
      * 保存时保持 {@code ***}（或省略密码）表示沿用已保存的密码。
      * <p>
      * 只有「远程 TCP + 启用代理」时才去找旧值；切换连接方式或清空代理地址时
@@ -151,25 +151,25 @@ public class HostService extends BaseService<Host> {
         if (input == null || !Host.TYPE_TCP.equalsIgnoreCase(input.getConnectionType())) {
             return;
         }
-        HostProxySettings settings = HostProxySettings.of(input);
+        ProxySettings settings = proxySettingsOf(input);
         if (!settings.enabled()) {
             return;
         }
 
-        if (settings.username() == null) {
-            // 没写用户名就是匿名，库里残留的密码一并清掉
-            input.setProxyPassword(null);
-        } else if (settings.password() == null || HostProxySettings.PASSWORD_MASK.equals(settings.password())) {
-            // 占位符 / 省略密码：沿用已保存的；新增主机没有旧值就按空密码处理
-            if (StrUtil.isBlank(input.getId())) {
-                input.setProxyPassword(null);
-            } else {
-                Host old = findById(input.getId()).orElse(null);
-                input.setProxyPassword(old == null ? null : old.getProxyPassword());
-            }
+        String stored = null;
+        if (settings.username() != null && StrUtil.isNotBlank(input.getId())) {
+            // 只在「有用户名、可能沿用旧密码」时查库：匿名代理直接由 resolvePassword 清空
+            Host old = findById(input.getId()).orElse(null);
+            stored = old == null ? null : old.getProxyPassword();
         }
+        input.setProxyPassword(settings.resolvePassword(stored));
         // 密码回填后再刷新一次回显值（***），避免把明文带到后续序列化
-        input.setProxyUrl(HostProxySettings.of(input).displayUrl());
+        input.setProxyUrl(proxySettingsOf(input).displayUrl());
+    }
+
+    private static ProxySettings proxySettingsOf(Host host) {
+        return ProxySettings.of(host.getProxyType(), host.getProxyHost(), host.getProxyPort(),
+                host.getProxyUsername(), host.getProxyPassword());
     }
 
     /**
@@ -243,7 +243,7 @@ public class HostService extends BaseService<Host> {
             if (StrUtil.isBlank(rawUrl)) {
                 clearProxy(host);
             } else {
-                HostProxySettings parsed = HostProxySettings.parse(rawUrl);
+                ProxySettings parsed = ProxySettings.parse(rawUrl);
                 host.setProxyType(parsed.type().code());
                 host.setProxyHost(parsed.host());
                 host.setProxyPort(parsed.port());
@@ -253,15 +253,15 @@ public class HostService extends BaseService<Host> {
         } else {
             normalizeSplitProxyFields(host);
         }
-        host.setProxyUrl(HostProxySettings.of(host).displayUrl());
+        host.setProxyUrl(proxySettingsOf(host).displayUrl());
     }
 
     /**
      * 兼容直接提交 proxyType/proxyHost/... 的调用（旧前端或外部接口）。
      */
     private void normalizeSplitProxyFields(Host host) {
-        HostProxySettings.Type type = HostProxySettings.Type.parse(host.getProxyType());
-        if (type == HostProxySettings.Type.NONE) {
+        ProxySettings.Type type = ProxySettings.Type.parse(host.getProxyType());
+        if (type == ProxySettings.Type.NONE) {
             clearProxy(host);
             return;
         }
@@ -273,14 +273,14 @@ public class HostService extends BaseService<Host> {
             host.setProxyPort(null);
         }
 
-        HostProxySettings settings = HostProxySettings.of(host);
+        ProxySettings settings = proxySettingsOf(host);
         Assert.hasText(settings.host(), "请填写代理地址");
         Assert.notNull(settings.port(), "请填写代理端口");
         Assert.isTrue(settings.port() >= 1 && settings.port() <= 65535, "代理端口需在 1-65535 之间");
     }
 
     private void clearProxy(Host host) {
-        host.setProxyType(HostProxySettings.Type.NONE.code());
+        host.setProxyType(ProxySettings.Type.NONE.code());
         host.setProxyHost(null);
         host.setProxyPort(null);
         host.setProxyUsername(null);

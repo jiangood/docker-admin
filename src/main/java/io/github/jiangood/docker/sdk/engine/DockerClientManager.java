@@ -14,8 +14,8 @@ import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.Session;
 import com.jcraft.jsch.UserInfo;
 import io.github.jiangood.docker.admin.entity.Host;
-import io.github.jiangood.docker.admin.entity.HostProxySettings;
 import io.github.jiangood.docker.admin.entity.Registry;
+import io.github.jiangood.docker.admin.proxy.ProxySettings;
 import io.github.jiangood.docker.base.FileLog;
 import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
@@ -304,8 +304,11 @@ public class DockerClientManager {
         // 远程 TCP 可以经 HTTP / SOCKS5 代理接入：平台与目标主机网络不通时，
         // 由一台两边都能访问的主机转发（docker-java 官方 Builder 不支持代理，见 ProxyAwareApacheDockerHttpClient）。
         // 本机（unix / npipe / 本机默认端点）即使残留了代理配置也不走代理。
-        HostProxySettings proxy = HostProxySettings.of(host);
-        boolean useProxy = proxy.enabled() && host != null && !host.isLocalDocker();
+        ProxySettings proxy = host == null
+                ? ProxySettings.DISABLED
+                : ProxySettings.of(host.getProxyType(), host.getProxyHost(), host.getProxyPort(),
+                        host.getProxyUsername(), host.getProxyPassword());
+        boolean useProxy = proxy.enabled() && !host.isLocalDocker();
         DockerHttpClient httpClient;
         if (useProxy) {
             if (!proxy.configured()) {

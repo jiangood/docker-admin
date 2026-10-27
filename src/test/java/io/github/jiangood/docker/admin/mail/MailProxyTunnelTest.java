@@ -1,5 +1,6 @@
 package io.github.jiangood.docker.admin.mail;
 
+import io.github.jiangood.docker.admin.proxy.ProxySettings;
 import jakarta.mail.internet.InternetAddress;
 import jakarta.mail.internet.MimeMessage;
 import org.junit.jupiter.api.Test;
@@ -25,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 用本地的假代理 + 假 SMTP 验证 {@link MailProxySettings#mailProperties()} 真的能让 JavaMail
+ * 用本地的假代理 + 假 SMTP 验证 {@link MailProxyProperties#of(ProxySettings)} 真的能让 JavaMail
  * 走 HTTP CONNECT 隧道，不依赖外网、也不依赖真实邮箱账号。
  */
 class MailProxyTunnelTest {
@@ -36,8 +37,8 @@ class MailProxyTunnelTest {
             smtp.start();
             proxy.start();
 
-            MailProxySettings settings = new MailProxySettings(
-                    MailProxySettings.Type.HTTP, "127.0.0.1", proxy.port(), "user", "pass");
+            ProxySettings settings = new ProxySettings(
+                    ProxySettings.Type.HTTP, "127.0.0.1", proxy.port(), "user", "pass");
 
             JavaMailSenderImpl sender = new JavaMailSenderImpl();
             sender.setHost("127.0.0.1");
@@ -52,7 +53,7 @@ class MailProxyTunnelTest {
             props.put("mail.smtp.connectiontimeout", "5000");
             props.put("mail.smtp.timeout", "5000");
             props.put("mail.smtp.writetimeout", "5000");
-            settings.mailProperties().forEach(props::put);
+            MailProxyProperties.of(settings).forEach(props::put);
 
             MimeMessage message = sender.createMimeMessage();
             message.setFrom(new InternetAddress("sender@example.com"));
@@ -79,11 +80,11 @@ class MailProxyTunnelTest {
 
     @Test
     void socks5PropertiesDoNotUseHttpConnect() {
-        MailProxySettings settings = new MailProxySettings(
-                MailProxySettings.Type.SOCKS5, "127.0.0.1", 1080, null, null);
-        assertTrue(settings.mailProperties().containsKey("mail.smtp.socks.host"));
-        assertTrue(settings.mailProperties().containsKey("mail.smtp.socks.port"));
-        assertTrue(!settings.mailProperties().containsKey("mail.smtp.proxy.host"));
+        ProxySettings settings = new ProxySettings(
+                ProxySettings.Type.SOCKS5, "127.0.0.1", 1080, null, null);
+        assertTrue(MailProxyProperties.of(settings).containsKey("mail.smtp.socks.host"));
+        assertTrue(MailProxyProperties.of(settings).containsKey("mail.smtp.socks.port"));
+        assertTrue(!MailProxyProperties.of(settings).containsKey("mail.smtp.proxy.host"));
     }
 
     // ------------------------------------------------------------------ 假服务
