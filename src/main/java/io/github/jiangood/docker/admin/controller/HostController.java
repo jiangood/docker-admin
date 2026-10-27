@@ -68,6 +68,7 @@ public class HostController  {
     public AjaxResult test(@RequestBody Host input) {
         service.normalize(input);
         service.fillSshPassword(input);
+        service.fillProxyPassword(input);
         try {
             String version = hostDockerService.dockerVersion(input);
             return AjaxResult.ok().msg("连接成功，Docker 版本：" + version);

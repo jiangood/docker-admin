@@ -30,6 +30,14 @@ function headerLabel(host) {
     return `${name} ${host.headerConfigured ? '已配置' : '未配置'}`
 }
 
+/** 连接代理展示：后端回显的是掩码后的一行地址（密码为 ***） */
+function proxyLabel(host) {
+    if (!host || host.connectionType !== 'tcp') {
+        return '-'
+    }
+    return host.proxyUrl || '未使用'
+}
+
 function endpointOf(host) {
     if (!host) {
         return '-'
@@ -277,6 +285,7 @@ export default class extends React.Component {
                                   {key: 'ip', label: 'IP地址', children: host?.ip || '-'},
                                   {key: 'conn', label: '连接方式', children: connectionLabel(host)},
                                   {key: 'header', label: '自定义请求头', children: headerLabel(host)},
+                                  {key: 'proxy', label: '连接代理', children: proxyLabel(host), span: 2},
                                   {key: 'endpoint', label: '连接地址', children: endpointOf(host), span: 2},
                                   {key: 'version', label: 'Docker 版本', children: info?.dockerVersion || '-'},
                                   {key: 'api', label: 'API 版本', children: info?.apiVersion || '-'},

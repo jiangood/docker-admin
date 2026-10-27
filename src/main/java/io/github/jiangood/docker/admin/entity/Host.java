@@ -7,8 +7,10 @@ import io.github.jiangood.openadmin.util.annotation.Remark;
 import io.github.jiangood.openadmin.framework.data.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.PostLoad;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.Setter;
@@ -115,6 +117,45 @@ public class Host extends BaseEntity {
     @Remark("请求头值")
     String headerValue;
 
+    /**
+     * 远程 TCP 的连接代理类型：{@code none} / {@code http} / {@code socks5}。
+     * <p>
+     * 用于平台与目标主机网络不通、但另有一台代理主机两边都能访问的场景；
+     * 只在 {@link #TYPE_TCP} 下生效，其它连接方式保存时会被清空（见 {@code HostService#normalize}）。
+     */
+    @Remark("代理类型")
+    String proxyType;
+
+    @Remark("代理地址")
+    String proxyHost;
+
+    @Remark("代理端口")
+    Integer proxyPort;
+
+    @Remark("代理用户名")
+    String proxyUsername;
+
+    /**
+     * 代理密码：HTTP 代理的 Basic 认证用。
+     * <p>
+     * 不回传前端（编辑时留空表示沿用原密码，与 SSH 密码一致）；
+     * SOCKS5 也使用账号密码认证，握手由平台自己实现（RFC 1929）。
+     */
+    @ToString.Exclude
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
+    @Remark("代理密码")
+    String proxyPassword;
+
+    /**
+     * 界面用的单行代理地址，如 {@code http://user:pass@192.168.1.10:8080}。
+     * <p>
+     * <b>不落库</b>：保存时由 {@code HostService#normalize} 解析成上面五个字段；
+     * 读取时由 {@link #fillProxyUrlForDisplay()} 填入回显值（密码只给 {@code ***}）。
+     * 这样前端只需要一个输入框，旧数据也不用迁移。
+     */
+    @Transient
+    String proxyUrl;
+
     @PrePersist
     public void prePersist() {
         if (isRunner == null) {
@@ -154,5 +195,16 @@ public class Host extends BaseEntity {
      */
     public boolean isHeaderConfigured() {
         return headerValue != null && !headerValue.isBlank();
+    }
+
+    /**
+     * 查询 / 详情回显代理地址：把库里的五个字段拼回一行，密码只给占位符。
+     * <p>
+     * 这是 JPA 生命周期回调，不是接口入参；入参的 {@code proxyUrl} 由前端表单直接写入，
+     * 在 {@code HostService#normalize} 里解析。
+     */
+    @PostLoad
+    public void fillProxyUrlForDisplay() {
+        this.proxyUrl = HostProxySettings.of(this).displayUrl();
     }
 }

@@ -14,6 +14,7 @@ import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.Session;
 import com.jcraft.jsch.UserInfo;
 import io.github.jiangood.docker.admin.entity.Host;
+import io.github.jiangood.docker.admin.entity.HostProxySettings;
 import io.github.jiangood.docker.admin.entity.Registry;
 import io.github.jiangood.docker.base.FileLog;
 import org.apache.commons.io.IOUtils;
@@ -300,13 +301,32 @@ public class DockerClientManager {
 
         DockerClientConfig config = builder.build();
 
-        DockerHttpClient httpClient =
-                new ApacheDockerHttpClient.Builder()
-                        .dockerHost(config.getDockerHost())
-                        .sslConfig(config.getSSLConfig())
-                        .connectionTimeout(CONNECTION_TIMEOUT)
-                        .responseTimeout(RESPONSE_TIMEOUT)
-                        .build();
+        // 远程 TCP 可以经 HTTP / SOCKS5 代理接入：平台与目标主机网络不通时，
+        // 由一台两边都能访问的主机转发（docker-java 官方 Builder 不支持代理，见 ProxyAwareApacheDockerHttpClient）。
+        // 本机（unix / npipe / 本机默认端点）即使残留了代理配置也不走代理。
+        HostProxySettings proxy = HostProxySettings.of(host);
+        boolean useProxy = proxy.enabled() && host != null && !host.isLocalDocker();
+        DockerHttpClient httpClient;
+        if (useProxy) {
+            if (!proxy.configured()) {
+                throw new IllegalStateException("主机「" + host.getName()
+                        + "」的代理配置不完整，请填写代理地址和端口");
+            }
+            httpClient = new ProxyAwareApacheDockerHttpClient(
+                    config.getDockerHost(),
+                    config.getSSLConfig(),
+                    Integer.MAX_VALUE,
+                    CONNECTION_TIMEOUT,
+                    RESPONSE_TIMEOUT,
+                    proxy);
+        } else {
+            httpClient = new ApacheDockerHttpClient.Builder()
+                    .dockerHost(config.getDockerHost())
+                    .sslConfig(config.getSSLConfig())
+                    .connectionTimeout(CONNECTION_TIMEOUT)
+                    .responseTimeout(RESPONSE_TIMEOUT)
+                    .build();
+        }
 
         // 用户配置的自定义请求头：名称为空就不发（不做任何兜底），值也原样发送
         String headerName = host == null ? null : StrUtil.trimToNull(host.getHeaderName());

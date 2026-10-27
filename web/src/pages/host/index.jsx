@@ -121,6 +121,13 @@ export default class extends React.Component {
             render: (v, record) => isHttps(record) ? '远程 TCP(HTTPS)' : connectionTypeLabel(v)
         },
 
+        {
+            title: '连接代理',
+            dataIndex: 'proxyUrl',
+            ellipsis: true,
+            render: v => v || '-'
+        },
+
 
         {
             title: '连接地址',
@@ -185,6 +192,16 @@ export default class extends React.Component {
             // 地址里显式写了端口，就搬到端口框（以用户写的为准）
             form.setFieldValue('tcpPort', port)
         }
+    }
+
+    // 前端只挡明显写错的格式，scheme / 端口 / 账号密码等细节以后端解析为准
+    validateProxyUrl = (_, value) => {
+        const v = (value || '').trim()
+        if (!v) {
+            return Promise.resolve()
+        }
+        const ok = /^[a-z][a-z0-9+.-]*:\/\/\S+$/i.test(v) || /^(\S+@)?[\w.-]+:\d+$/.test(v)
+        return ok ? Promise.resolve() : Promise.reject(new Error('格式如 http://192.168.1.10:8080'))
     }
 
     handleEdit = record => {
@@ -353,6 +370,19 @@ export default class extends React.Component {
                                                 <Checkbox>SSL</Checkbox>
                                             </Form.Item>
                                         </div>
+                                    </Form.Item>
+
+                                    <Form.Item label='代理地址' name='proxyUrl'
+                                               tooltip='平台与目标主机网络不通时，经一台两边都能访问的主机中转 Docker 请求；留空表示不使用代理。平台跑在容器里时不能填 127.0.0.1，要填宿主机网桥网关或局域网 IP'
+                                               rules={[{validator: this.validateProxyUrl}]}
+                                               extra={<div style={{marginTop: 4}}>
+                                                   一行填完，如 <code>http://192.168.1.10:8080</code>、
+                                                   <code>http://user:pass@192.168.1.10:8080</code>、
+                                                   <code>socks5://192.168.1.10:1080</code>；
+                                                   端口必填，密码显示为 <code>***</code> 表示沿用已保存的密码。
+                                               </div>}>
+                                        <Input placeholder='留空表示不使用代理，如 http://192.168.1.10:8080'
+                                               autoComplete='off' style={{maxWidth: 420}}/>
                                     </Form.Item>
 
                                     <Form.Item label='自定义请求头'
