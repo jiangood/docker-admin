@@ -13,24 +13,56 @@
  * }
  */
 
-/** 需要取值的参数（其后一个 token 为值） */
+/**
+ * 需要取值的参数（其后一个 token 为值）。
+ * 必须与 `docker run --help` 对齐：漏掉的参数不会吞掉自己的值，那个值就会被当成镜像，
+ * 其后的所有参数（-e / -p 等）随之退化成启动命令。
+ */
 const VALUE_FLAGS = new Set([
-    '--name', '-p', '--publish', '-v', '--volume', '-e', '--env',
-    '--network', '--net', '--add-host', '--gpus', '--restart', '--entrypoint',
-    '--workdir', '-w', '--user', '-u', '--hostname', '-h', '--label', '-l',
-    '--env-file', '--mount', '--device', '--cap-add', '--cap-drop',
-    '--memory', '-m', '--cpus', '--expose', '--pull', '--platform',
-    '--ulimit', '--sysctl', '--tmpfs', '--stop-signal', '--shm-size',
+    // 基础
+    '--name', '--hostname', '-h', '--domainname', '--user', '-u',
+    '--workdir', '-w', '--entrypoint', '--env', '-e', '--env-file',
+    '--label', '-l', '--label-file', '--annotation', '--pull', '--platform',
+    '--restart', '--stop-signal', '--stop-timeout', '--group-add', '--cidfile',
+    '--detach-keys', '--attach', '-a',
+    // 网络
+    '--network', '--net', '--network-alias', '--add-host', '--dns',
+    '--dns-option', '--dns-search', '--ip', '--ip6', '--mac-address',
+    '--link', '--link-local-ip', '--expose', '--publish', '-p',
+    // 存储
+    '--volume', '-v', '--mount', '--tmpfs', '--volume-driver',
+    '--volumes-from', '--storage-opt', '--shm-size',
+    // 资源限制
+    '--cpus', '--cpu-shares', '-c', '--cpu-period', '--cpu-quota',
+    '--cpu-rt-period', '--cpu-rt-runtime', '--cpuset-cpus', '--cpuset-mems',
+    '--cpu-count', '--cpu-percent', '--memory', '-m', '--memory-reservation',
+    '--memory-swap', '--memory-swappiness', '--kernel-memory',
+    '--blkio-weight', '--blkio-weight-device', '--io-maxbandwidth', '--io-maxiops',
+    '--pids-limit', '--oom-score-adj', '--ulimit',
+    // 权限与设备
+    '--cap-add', '--cap-drop', '--security-opt', '--device',
+    '--device-cgroup-rule', '--device-read-bps', '--device-read-iops',
+    '--device-write-bps', '--device-write-iops', '--gpus', '--runtime',
+    '--isolation', '--userns', '--uts', '--ipc', '--pid',
+    '--cgroup-parent', '--cgroupns',
+    // 日志与健康检查
+    '--log-driver', '--log-opt', '--sysctl', '--health-cmd',
+    '--health-interval', '--health-retries', '--health-start-period',
+    '--health-start-interval', '--health-timeout',
 ])
 
 /** 无需取值的布尔参数，直接忽略 */
 const BOOL_FLAGS = new Set([
     '-d', '--detach', '-i', '--interactive', '-t', '--tty',
     '--rm', '--privileged', '--init', '--read-only', '-P', '--publish-all',
+    '--disable-content-trust', '--no-healthcheck', '--oom-kill-disable', '--sig-proxy',
 ])
 
 /** 简写参数中可携带附加值（如 -p8080:80）的首字母 */
-const SHORT_ATTACHED = {p: '-p', v: '-v', e: '-e', h: '-h', u: '-u', w: '-w', m: '-m', l: '-l'}
+const SHORT_ATTACHED = {
+    p: '-p', v: '-v', e: '-e', h: '-h', u: '-u', w: '-w',
+    m: '-m', l: '-l', a: '-a', c: '-c',
+}
 
 function isNumeric(s) {
     return s !== '' && !isNaN(Number(s))
@@ -278,6 +310,11 @@ export function parseDockerRun(command) {
                 default:
                     if (BOOL_FLAGS.has(flag)) {
                         break
+                    }
+                    // 未收录的参数：如果后面跟着纯数字，几乎可以确定是它的值
+                    // （如 --stop-timeout 40）。必须吞掉，否则数字会被当成镜像。
+                    if (val === undefined && isNumeric(tokens[i + 1])) {
+                        i++
                     }
                     warnings.push(`暂不支持参数 ${flag}，已忽略`)
                     break
