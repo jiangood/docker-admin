@@ -24,20 +24,22 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * 隧道（http-tunnel）：平台通过每个客户端自身的隧道管理 API（{@code --api-port}）维护隧道。
+ * 隧道（http-tunnel）：平台通过每个客户端进程自身的本地代理管理 API 维护隧道。
  * <p>
- * http-tunnel v0.12.0 起，隧道配置在客户端侧：服务端不再读配置文件，客户端把
- * 隧道（{@code name}/{@code domain}/{@code local_addr}）写在自己的 {@code client.toml} 里。
- * 平台的改动由客户端本地校验并落盘，
- * 不再需要先连上服务端，因此不存在「未连接到服务端」的 503，也不会因域名重名被拒（重复域名以
- * 后连接的控制通道为准，运行期 last-wins）。客户端所在目录需可写，否则落盘失败会返回 500。
+ * 自 http-tunnel v1.0.0 起，服务端、客户端与中继合并为单个 {@code ht} 进程：管理 API 与访客流量
+ * 共用 {@code listen_port}，且只有 Host 等于 {@code control_host} 的请求才进入管理接口；
+ * 平台维护的隧道就是客户端本地的 {@code [[proxies]]}，改动由客户端本地校验并原子写回
+ * {@code ht.toml}。leaf/relay 会自动把本地代理镜像到 {@code [upstream]}，因此不存在
+ * 「未连接到服务端」的 503。同一进程内域名必须唯一，重名会被拒绝；跨节点同名则以实际路由为准
+ * （本地服务优先于下游 v4 路由）。客户端所在目录需可写，否则落盘失败会返回 500。
  * <p>
- * 客户端进程运行在各业务主机上，平台只保存其名称、令牌、API 地址与域名，不部署容器、不生成配置。
- * 应用在详情页「隧道」标签里显式选择客户端，完整域名 = 域名前缀 + "." + 客户端域名；
- * 目标地址在客户端主机上解析（{@code 127.0.0.1:<主机端口>}）。
+ * 客户端进程运行在各业务主机上，平台只保存其名称、令牌、API 地址、控制 Host 与域名，
+ * 不部署容器、不生成配置。应用在详情页「隧道」标签里显式选择客户端，
+ * 完整域名 = 域名前缀 + "." + 客户端域名；目标地址在客户端主机上解析（{@code <主机 IP>:<主机端口>}）。
  * <p>
- * 自 http-tunnel v0.13.0 起，隧道以 {@code name} 为标识，平台用「应用 id」作 name、完整域名作 domain：
+ * 隧道以 {@code name} 为标识，平台用「应用 id」作 name、完整域名作 domain：
  * 增删改都按 name 定位，改前缀 / 换客户端都能稳定命中，不必再从旧前缀反推旧域名。
+ * 0.x 的 {@code /api/tunnels} 仍由 {@link HttpTunnelApiClient} 自动兼容。
  */
 @Service
 @Slf4j
@@ -69,6 +71,7 @@ public class TunnelService {
         item.put("id", c.getId());
         item.put("name", c.getName());
         item.put("apiUrl", c.getApiUrl());
+        item.put("controlHost", c.getControlHost());
         item.put("domain", c.getDomain());
         item.put("remark", c.getRemark());
         item.put("hasToken", StrUtil.isNotBlank(c.getToken()));
@@ -85,13 +88,27 @@ public class TunnelService {
             }
         }
         // 在线以「客户端管理 API 可达」为准：请求成功即说明客户端进程在运行。
-        // http-tunnel 的 connected 表示「至少有一条隧道已连上隧道服务端」，
-        // 客户端 0 隧道时恒为 false，所以只作为补充信息（见「状态」列的渲染）。
+        // http-tunnel 的 connected 表示上游会话是否建立（独立入口没有上游，恒为 true），
+        // 不能当作在线状态，只作为补充信息（见「状态」列的渲染）。
         item.put("reachable", status != null);
         item.put("connected", status == null ? null : status.path("connected").asBoolean(false));
-        item.put("tunnelCount", status == null ? null : status.path("tunnels").asInt(0));
+        item.put("tunnelCount", status == null ? null : proxyCount(status));
+        // 代理列表由 HT_PROXIES 提供时客户端拒绝增删（409），界面需要提示只读
+        item.put("proxiesManaged", status == null ? null : status.path("proxies_managed").asBoolean(false));
+        item.put("version", status == null ? null : text(status, "version"));
         item.put("statusError", statusError);
         return item;
+    }
+
+    /**
+     * 客户端本地代理数量：v1.0+ 为 {@code proxies}，0.x 为 {@code tunnels}。
+     */
+    private static int proxyCount(JsonNode status) {
+        JsonNode count = status.get("proxies");
+        if (count == null) {
+            count = status.get("tunnels");
+        }
+        return count == null ? 0 : count.asInt(0);
     }
 
     /**
@@ -115,6 +132,7 @@ public class TunnelService {
 
         Assert.hasText(input.getApiUrl(), "请填写客户端 API 地址");
         c.setApiUrl(StrUtil.trim(input.getApiUrl()));
+        c.setControlHost(normalizeControlHost(input.getControlHost()));
         c.setDomain(StrUtil.trimToNull(input.getDomain()));
         c.setRemark(StrUtil.trimToNull(input.getRemark()));
         if (StrUtil.isNotBlank(input.getToken())) {
@@ -230,7 +248,11 @@ public class TunnelService {
         Assert.isTrue(client.configured(), "客户端「" + client.getName() + "」未配置 API 地址或令牌");
         Assert.hasText(name, "缺少隧道名称");
         Assert.hasText(localAddr, "请填写目标地址");
-        api.putTunnel(client, name.trim(), normalizeDomain(domain), StrUtil.trim(localAddr));
+        String normalized = normalizeDomain(domain);
+        // http-tunnel v1.0+ 会把 control_host 保留给管理入口，业务域名不能与它重叠
+        Assert.isTrue(!normalized.equalsIgnoreCase(client.controlHost()),
+                "域名不能与客户端控制 Host 相同：" + normalized);
+        api.putTunnel(client, name.trim(), normalized, StrUtil.trim(localAddr));
     }
 
     // ------------------------------------------------------------------ 应用隧道
@@ -441,6 +463,37 @@ public class TunnelService {
     }
 
     // ------------------------------------------------------------------ 工具
+
+    /**
+     * 控制 Host 归一化：允许直接粘贴 {@code http://edge.lan:7777/} 这样的地址，只保留主机部分。
+     * 留空表示使用 API 地址里的主机名（要求它本身就等于 {@code control_host}）。
+     */
+    private static String normalizeControlHost(String raw) {
+        String value = StrUtil.trimToNull(raw);
+        if (value == null) {
+            return null;
+        }
+        value = value.replaceFirst("(?i)^https?://", "");
+        int slash = value.indexOf('/');
+        if (slash >= 0) {
+            value = value.substring(0, slash);
+        }
+        // Host 头里的端口对 ht 无意义（匹配时会去掉），这里也一并去掉便于比较与展示
+        if (value.startsWith("[")) {
+            int end = value.indexOf(']');
+            if (end > 0) {
+                value = value.substring(0, end + 1);
+            }
+        } else {
+            int colon = value.lastIndexOf(':');
+            if (colon > 0 && value.indexOf(':') == colon
+                    && value.substring(colon + 1).matches("\\d+")) {
+                value = value.substring(0, colon);
+            }
+        }
+        value = StrUtil.removeSuffix(value, ".");
+        return StrUtil.trimToNull(value);
+    }
 
     /**
      * 域名规范化：去掉协议头与路径、转小写、去尾点，并做基本格式校验。

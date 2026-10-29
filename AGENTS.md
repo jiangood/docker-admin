@@ -100,6 +100,16 @@ git tag vx.y.z && git push && git push origin vx.y.z
   docker-java 3.7.1 的 Apache 传输层没有代理入口，`ProxyAwareApacheDockerHttpClient` 同步了其
   `ApacheDockerHttpClientImpl` 并改用 `ProxyTunnelSocket` 建连；**升级 docker-java 时需对照上游同步这两个类**。
   只有启用代理的 TCP 主机走它，直连主机仍用官方 `ApacheDockerHttpClient`。
+- **隧道（http-tunnel）：** 平台只是 `ht` 进程管理 API 的前端，不部署进程、不生成配置。
+  客户端登记在 `t_tunnel_client`（名称、API 地址、控制 Host、令牌、域名），令牌做
+  `Authorization: Bearer` 认证。v1.0.0 起服务端/客户端/中继合并为单个 `ht`，管理 API 与访客流量
+  共用 `listen_port`，只接受 Host 等于 `ht.toml` 的 `control_host` 的请求；平台通常按 IP 连接，
+  所以 `TunnelClient.controlHost` 用于覆盖 Host。`java.net.http` 不允许设置 Host，
+  `HttpTunnelApiClient` 因此改用 Apache HttpClient5（docker-java 传输层已引入）。
+  接口是 `GET /api/status`、`GET|PUT|DELETE /api/proxies`，0.x 的 `/api/tunnels` 在 404 时自动回退兼容；
+  `status.proxies` 是本地代理数（0.x 是 `tunnels`），`connected` 只表示上游会话状态，不是在线状态。
+  平台用应用 id 作 `name`、完整域名作 `domain`、`<主机 IP>:<主机端口>` 作 `local_addr`；
+  改动写回客户端的 `ht.toml`，客户端用 `HT_PROXIES` 提供代理时增删返回 409（页面显示只读）。
 - **构建上下文：** `Project.context` 相对仓库根目录，留空表示仓库根；填写时不带前导 `/`（后端兼容历史的 `/admin`，保存时归一化）。
   `dockerfile` 同样相对仓库根目录、不带前导 `/`，且必须位于上下文内（如 `context=admin` + `dockerfile=admin/Dockerfile`）。
   前端表格/详情直接原样展示上下文（空即空，不再显示「仓库根目录」），输入框失焦时自动去掉前导 `/`。

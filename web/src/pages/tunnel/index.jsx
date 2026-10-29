@@ -4,10 +4,11 @@ import React from 'react';
 import {HttpClient, Page, PermActions} from '@jiangood/open-admin';
 
 /**
- * 隧道（http-tunnel）：平台作为 http-tunnel 客户端管理 API 的前端，
- * 登记客户端（名称 + 令牌 + API 地址 + 域名）并只读展示隧道（域名 → 目标地址）。
+ * 隧道（http-tunnel）：平台作为 ht 进程管理 API 的前端，
+ * 登记客户端（名称 + 令牌 + API 地址 + 控制 Host + 域名）并只读展示隧道（域名 → 目标地址）。
  * 隧道由应用详情页的「隧道」标签创建与删除，应用在那里显式选择客户端。
- * 客户端进程由用户自行部署（http-tunnel --remote ... --name ... --token ... --api-port ...），平台不做部署、不生成配置。
+ * 客户端进程由用户自行部署（http-tunnel v1.0+ 只认 ht.toml，没有 --api-port 等参数），
+ * 管理 API 与访客流量共用 listen_port，只有 Host 等于 control_host 的请求才进入管理接口。
  */
 export default class extends React.Component {
 
@@ -67,6 +68,7 @@ export default class extends React.Component {
             clientFormValues: editing ? {
                 name: editing.name,
                 apiUrl: editing.apiUrl,
+                controlHost: editing.controlHost,
                 domain: editing.domain,
                 remark: editing.remark,
             } : {},
@@ -81,6 +83,7 @@ export default class extends React.Component {
                 id: editing && editing.id ? editing.id : undefined,
                 name: values.name,
                 apiUrl: values.apiUrl,
+                controlHost: values.controlHost,
                 domain: values.domain,
                 token: values.token,
                 remark: values.remark,
@@ -116,25 +119,39 @@ export default class extends React.Component {
         }
         if (!row.reachable) {
             return (
-                <Tooltip title={row.statusError || '无法连接客户端 API'}>
+                <Tooltip title={row.statusError || '无法连接客户端管理 API'}>
                     <Tag color='orange'>不可达</Tag>
                 </Tooltip>
             )
         }
-        // 管理 API 可达即在线；有隧道但都没连上隧道服务端时给出提示
-        if (row.tunnelCount > 0 && row.connected === false) {
+        const version = row.version ? '，客户端版本 ' + row.version : ''
+        // 代理列表来自 HT_PROXIES 时，管理 API 可以读但不能增删
+        if (row.proxiesManaged) {
             return (
-                <Tooltip title='客户端在线，但当前没有隧道连接到隧道服务端'>
-                    <Tag color='orange'>隧道未连</Tag>
+                <Tooltip title={'客户端在线' + version + '；代理由 HT_PROXIES 环境变量提供，平台无法增删'}>
+                    <Tag color='blue'>只读</Tag>
                 </Tooltip>
             )
         }
-        return <Tag color='green'>在线</Tag>
+        // 管理 API 可达即在线；leaf / relay 的上游会话断开时给出提示
+        if (row.tunnelCount > 0 && row.connected === false) {
+            return (
+                <Tooltip title={'客户端在线' + version + '，但到上游的隧道会话未连接'}>
+                    <Tag color='orange'>上游未连</Tag>
+                </Tooltip>
+            )
+        }
+        return (
+            <Tooltip title={'客户端在线' + version}>
+                <Tag color='green'>在线</Tag>
+            </Tooltip>
+        )
     }
 
     clientColumns = [
         {title: '客户端名称', dataIndex: 'name'},
         {title: 'API 地址', dataIndex: 'apiUrl', render: v => v || '-'},
+        {title: '控制 Host', dataIndex: 'controlHost', render: v => v || '-'},
         {title: '域名', dataIndex: 'domain', render: v => v || '-'},
         {title: '状态', dataIndex: 'reachable', width: 100, render: (_, row) => this.renderClientStatus(row)},
         {title: '隧道数', dataIndex: 'tunnelCount', width: 90, render: v => v == null ? '-' : v},
@@ -162,7 +179,7 @@ export default class extends React.Component {
             <div>
                 <div className='mb-2' style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
                     <Typography.Text type='secondary'>
-                        一个客户端 = 一台业务主机上运行的 http-tunnel client 进程，名称、令牌与 API 地址需与之匹配。
+                        一个客户端 = 一台业务主机上运行的 ht 进程（http-tunnel v1.0+），名称、令牌、API 地址与控制 Host 需与其 ht.toml 匹配。
                     </Typography.Text>
                     <Space>
                         <Button size='small' icon={<ReloadOutlined/>} onClick={this.loadClients}>刷新</Button>
@@ -214,7 +231,7 @@ export default class extends React.Component {
                        pagination={false}/>
 
                 <Typography.Text type='secondary' className='mt-2' style={{display: 'block'}}>
-                    域名需解析到隧道服务端 IP；服务端按 Host 头路由。同一域名同一时刻只服务一个隧道，重复域名以后连接的一方为准。
+                    域名需解析到入口节点 IP；入口按 Host 头路由。同一客户端内域名不能重复；多个节点声明同一域名时，本地代理优先于下游 v4 路由。
                 </Typography.Text>
             </div>
         )
@@ -231,9 +248,10 @@ export default class extends React.Component {
         return <Page padding>
             <Card className='page-card'>
                 <Alert type='info' showIcon className='mb-3'
-                       title='服务端与客户端都由你自行部署'
-                       description={'平台只登记客户端并通过其管理 API 维护隧道；改动由客户端本地校验并写回 client.toml，'
-                           + '无需先连接隧道服务端。'}/>
+                       title='入口、中继与客户端都由你自行部署'
+                       description={'平台只登记客户端并通过其管理 API 维护本地代理；改动由客户端本地校验并原子写回 ht.toml，无需重启。'
+                           + '管理 API 与访客流量共用 listen_port，只有 Host 等于 control_host 的请求才会进入管理接口；'
+                           + '客户端用 HT_PROXIES 提供代理时为只读。'}/>
                 <Tabs items={items} activeKey={activeTab} onChange={key => this.setState({activeTab: key})}/>
             </Card>
 
@@ -245,16 +263,20 @@ export default class extends React.Component {
                 <Form ref={this.clientFormRef} labelCol={{flex: '90px'}}
                       initialValues={clientFormValues} preserve={false}>
                     <Form.Item label='名称' name='name' rules={[{required: true, message: '请填写客户端名称'}]}>
-                        <Input disabled={!!clientEditing} placeholder='如 home，需与客户端 --name 一致'/>
+                        <Input disabled={!!clientEditing} placeholder='如 home，建议与 ht.toml 的 name 一致'/>
                     </Form.Item>
                     <Form.Item label='API 地址' name='apiUrl'
                                rules={[{required: true, message: '请填写客户端 API 地址'}]}
-                               tooltip='客户端管理 API 地址，对应启动命令的 --api-port，如 http://192.168.1.10:2336'>
-                        <Input placeholder='http://192.168.1.10:2336'/>
+                               tooltip='客户端的 listen_port，管理 API 与访客共用该端口（v1.0+ 没有 --api-port），如 http://192.168.1.10:7777'>
+                        <Input placeholder='http://192.168.1.10:7777'/>
+                    </Form.Item>
+                    <Form.Item label='控制 Host' name='controlHost'
+                               tooltip='ht.toml 的 control_host；管理接口只在 Host 等于它时可达。平台按 IP 连接客户端时填这里（如 control_host=127.0.0.1）；留空则用 API 地址里的主机名'>
+                        <Input allowClear placeholder='如 edge.lan 或 127.0.0.1（可留空）'/>
                     </Form.Item>
                     <Form.Item label='令牌' name='token'
                                rules={clientEditing ? [] : [{required: true, message: '请填写客户端令牌'}]}
-                               tooltip='需与客户端 --token 一致，同时也用于客户端管理 API 认证；留空时新建自动生成、编辑则沿用原令牌'>
+                               tooltip='与 ht.toml 的 token 一致（leaf / relay 也可用 [upstream].token），用于管理 API 的 Bearer 认证；留空时新建自动生成、编辑则沿用原令牌'>
                         <Input.Password autoComplete='new-password'
                                         placeholder={clientEditing && clientEditing.hasToken ? '******（留空不修改）'
                                             : '留空自动生成'}/>
