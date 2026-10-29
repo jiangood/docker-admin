@@ -102,3 +102,40 @@ export function formatTime(value) {
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} `
         + `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
 }
+
+/** 毫秒时间戳格式化为 HH:mm:ss（「更新于」这类文案用）。 */
+export function formatClock(value) {
+    if (!value) {
+        return '-'
+    }
+    const date = new Date(Number(value))
+    if (Number.isNaN(date.getTime())) {
+        return '-'
+    }
+    const pad = n => String(n).padStart(2, '0')
+    return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+}
+
+/** 百分比格式化：空值显示 -，默认保留 1 位小数。 */
+export function formatPercent(value, digits = 1) {
+    if (value === null || value === undefined || value === '') {
+        return '-'
+    }
+    const n = Number(value)
+    return Number.isFinite(n) ? n.toFixed(digits) + '%' : '-'
+}
+
+/** 用量进度条颜色：越接近上限越警示（CPU / 内存共用）。 */
+export function usageColor(percent) {
+    const n = Number(percent)
+    if (!Number.isFinite(n)) {
+        return undefined
+    }
+    if (n >= 90) {
+        return '#ff4d4f'
+    }
+    if (n >= 70) {
+        return '#faad14'
+    }
+    return '#52c41a'
+}

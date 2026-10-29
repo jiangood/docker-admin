@@ -79,6 +79,16 @@ git tag vx.y.z && git push && git push origin vx.y.z
   （SSH 主机落到远端 `/tmp/docker-admin-image-tar/{logId}/`，本机 / TCP 主机落到平台 `image-tar/{logId}/`）。
   弹窗展示实时日志、已写入大小与速度（每秒 / 每分钟）、保存路径与下载按钮；SSH 下载经 SFTP 流式转发，不在平台侧重复落盘。
   任务状态只存内存（`HostImageExportService`），tar 不自动删除，由用户按路径自行清理。
+- **首页资源概览分两条链路：** 静态容量走 `admin/home/hostSummary`（`docker info`，30 秒缓存，首屏用），
+  实时用量走 `admin/home/hostUsage`（首页）与 `admin/host/usage`（主机详情「实时资源」Tab），由 `HostUsageService` 采集。
+  实时链路每台主机复用同一个 DockerClient（SSH 一条 Session 多 Channel），逐运行中容器
+  `statsCmd(...).withNoStream(true)`——docker-java 只把它映射成 `?stream=0`，dockerd 内部要采两次样本（约 1 秒）
+  才有 CPU%，所以容器级并发 12、单机预算 6 秒、整体 8 秒兜底、结果缓存 3 秒并合并同一主机的并发请求。
+  口径对齐 docker CLI：CPU% = `(cpuDelta/systemDelta)×onlineCpus×100`，内存扣 `inactive_file`
+  （cgroup v1 `total_inactive_file` / v2 `inactive_file`），网络取各接口 rx/tx 求和，块 I/O 取
+  `io_service_bytes_recursive` 读写之和（无条目按 0 计，与 docker stats 一致）；主机级只汇总运行中容器，是「容器合计」。
+  首页 10 秒、主机页 5 秒轮询（页面隐藏时暂停），采集失败只让对应单元格显示占位，不影响静态概览。
+  **升级 docker-java 时需要回归这条链路。**
 - **主机接入代理：** 远程 TCP 可选 HTTP / SOCKS5 连接代理，界面与邮件代理一样只填一行地址
   （`http://192.168.1.10:8080`、`http://user:pass@192.168.1.10:8080`、`socks5://user:pass@192.168.1.10:1080`，
   不写 scheme 按 http，端口必填，留空表示不使用；密码回显为 `***`，保存时保持 `***` 或省略密码表示沿用已存密码）。

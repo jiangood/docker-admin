@@ -1,11 +1,19 @@
-import {Button, Card, Descriptions, Empty, Input, Modal, Popconfirm, Result, Space, Spin, Table, Tabs, Tag, Typography} from 'antd'
+import {Button, Card, Col, Descriptions, Empty, Input, Modal, Popconfirm, Progress, Result, Row, Select, Space, Spin, Statistic, Switch, Table, Tabs, Tag, Tooltip, Typography} from 'antd'
 import React from 'react'
 import {DeleteOutlined, ExportOutlined, ImportOutlined, ReloadOutlined} from '@ant-design/icons'
 import {HttpClient, Page, PageUtils, PermUtils} from "@jiangood/open-admin"
 import ContainerDetail from "../../components/container/ContainerDetail"
 import HostImageExportModal from "../../components/HostImageExportModal"
 import HostImageImportModal from "../../components/HostImageImportModal"
-import {formatBytes, formatTime, stateColor, stateLabel} from "../../components/container/utils"
+import {
+    formatBytes,
+    formatClock,
+    formatPercent,
+    formatTime,
+    stateColor,
+    stateLabel,
+    usageColor
+} from "../../components/container/utils"
 
 const CONNECTION_LABELS = {local: '本机', tcp: '远程 TCP', ssh: 'SSH'}
 
@@ -53,12 +61,15 @@ function endpointOf(host) {
 }
 
 /**
- * 主机详情：主机信息 + 垂直 Tab「容器 / 镜像」，点击容器弹窗展示通用容器组件。
+ * 主机详情：主机信息 + 垂直 Tab「容器 / 实时资源 / 镜像」，点击容器弹窗展示通用容器组件。
  */
 export default class extends React.Component {
 
     importModalRef = React.createRef()
     exportModalRef = React.createRef()
+
+    /** 「实时资源」Tab 的轮询定时器：只在 Tab 激活且开启自动刷新时存在 */
+    usageTimer = null
 
     state = {
         id: null,
@@ -75,6 +86,14 @@ export default class extends React.Component {
         imagesLoading: false,
         imageKeyword: '',
 
+        // 实时用量（docker stats）：数据量大且要连所有容器，按需加载
+        usage: null,
+        usageLoading: false,
+        usageError: null,
+        usageUpdatedAt: null,
+        usageAuto: true,
+        usageInterval: 5,
+
         detail: {open: false, containerId: null, name: ''},
         activeTab: 'containers',
     }
@@ -90,6 +109,18 @@ export default class extends React.Component {
         this.loadInfo(id)
         this.loadContainers(id)
         this.loadImages(id)
+    }
+
+    componentDidUpdate(prevProps, prevState) {
+        if (prevState.activeTab !== this.state.activeTab
+            || prevState.usageAuto !== this.state.usageAuto
+            || prevState.usageInterval !== this.state.usageInterval) {
+            this.syncUsageTimer()
+        }
+    }
+
+    componentWillUnmount() {
+        this.clearUsageTimer()
     }
 
     loadHost = id => {
@@ -121,6 +152,47 @@ export default class extends React.Component {
     }
 
     /**
+     * 采集实时用量（等价 docker stats）：后端每轮都会现连主机，单轮以秒计，
+     * 因此只在「实时资源」Tab 激活时按设定间隔轮询，页面隐藏时跳过。
+     */
+    loadUsage = (id = this.state.id, refresh = false) => {
+        if (!id) {
+            return
+        }
+        this.setState({usageLoading: true})
+        HttpClient.get('admin/host/usage', refresh ? {id, refresh: true} : {id}, {toastError: false})
+            .then(rs => this.setState({usage: rs.data, usageError: null, usageUpdatedAt: Date.now()}))
+            .catch(e => this.setState({usageError: e.message || '采集失败'}))
+            .finally(() => this.setState({usageLoading: false}))
+    }
+
+    clearUsageTimer = () => {
+        if (this.usageTimer) {
+            clearInterval(this.usageTimer)
+            this.usageTimer = null
+        }
+    }
+
+    /** 切 Tab、改刷新开关或间隔时重建定时器；首次进入该 Tab 立即采集一次 */
+    syncUsageTimer = () => {
+        this.clearUsageTimer()
+        if (this.state.activeTab !== 'stats' || !this.state.id) {
+            return
+        }
+        if (!this.state.usage) {
+            this.loadUsage(this.state.id, false)
+        }
+        if (!this.state.usageAuto) {
+            return
+        }
+        this.usageTimer = setInterval(() => {
+            if (!document.hidden) {
+                this.loadUsage(this.state.id, false)
+            }
+        }, Math.max(2, this.state.usageInterval) * 1000)
+    }
+
+    /**
      * 删除镜像：image 为 repo:tag 时删除单个标签，为镜像 ID 时删除整个镜像。
      */
     removeImage = image => {
@@ -147,6 +219,128 @@ export default class extends React.Component {
         if (this.state.id) {
             this.loadContainers(this.state.id)
         }
+    }
+
+    /**
+     * 「实时资源」Tab：docker stats 版式（主机汇总 + 逐容器 CPU / 内存 / 网络 / 块 I/O / PID）。
+     */
+    renderUsage() {
+        const {usage, usageLoading, usageError, usageAuto, usageInterval, usageUpdatedAt} = this.state
+
+        const toolbar = <div className='mb-3'
+                             style={{display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap'}}>
+            <Space size={4}>
+                <Typography.Text type='secondary'>自动刷新</Typography.Text>
+                <Switch size='small' checked={usageAuto} onChange={v => this.setState({usageAuto: v})}/>
+            </Space>
+            <Select size='small' style={{width: 96}} value={usageInterval}
+                    onChange={v => this.setState({usageInterval: v})}
+                    options={[{value: 2, label: '2 秒'}, {value: 5, label: '5 秒'}, {value: 10, label: '10 秒'}]}/>
+            <Button size='small' icon={<ReloadOutlined/>} loading={usageLoading}
+                    onClick={() => this.loadUsage(this.state.id, true)}>刷新</Button>
+            {usageUpdatedAt && <Typography.Text type='secondary' style={{fontSize: 12}}>
+                更新于 {formatClock(usageUpdatedAt)}
+                {usage && usage.durationMillis != null ? `，耗时 ${usage.durationMillis} ms` : ''}
+            </Typography.Text>}
+        </div>
+
+        if (usageError) {
+            return <>
+                {toolbar}
+                <Result status='warning' title='实时用量采集失败' subTitle={usageError} style={{padding: 0}}/>
+            </>
+        }
+        if (!usage) {
+            return <>{toolbar}<div style={{padding: 32, textAlign: 'center'}}><Spin/></div></>
+        }
+        if (!usage.reachable) {
+            return <>
+                {toolbar}
+                <Result status='warning' title='无法采集实时用量'
+                        subTitle={usage.error || '主机可能已离线'} style={{padding: 0}}/>
+            </>
+        }
+
+        const usageColumns = [
+            {
+                title: '容器', dataIndex: 'name', width: 260,
+                render: (name, record) => <Space size={4}>
+                    <Button type='link' size='small' style={{padding: 0, height: 'auto'}}
+                            onClick={() => this.openContainer(record)}>{name}</Button>
+                    {record.error &&
+                        <Tooltip title={record.error}><Tag color='red'>采集失败</Tag></Tooltip>}
+                </Space>
+            },
+            {title: 'CPU', dataIndex: 'cpuPercent', width: 90, render: v => formatPercent(v)},
+            {
+                title: '内存使用', width: 190,
+                render: (_, record) => `${formatBytes(record.memUsage)} / ${formatBytes(record.memLimit)}`
+            },
+            {
+                title: '内存%', dataIndex: 'memPercent', width: 110,
+                render: v => v == null
+                    ? '-'
+                    : <Progress percent={Math.min(100, v)} size='small' strokeColor={usageColor(v)}/>
+            },
+            {
+                title: '网络 I/O', width: 190,
+                render: (_, record) => record.netRx == null && record.netTx == null
+                    ? '-'
+                    : `↓ ${formatBytes(record.netRx)}　↑ ${formatBytes(record.netTx)}`
+            },
+            {
+                title: '块 I/O', width: 190,
+                render: (_, record) => record.blockRead == null && record.blockWrite == null
+                    ? '-'
+                    : `读 ${formatBytes(record.blockRead)}　写 ${formatBytes(record.blockWrite)}`
+            },
+            {title: 'PID', dataIndex: 'pids', width: 80, render: v => v ?? '-'},
+        ]
+
+        return <>
+            {toolbar}
+
+            <Row gutter={[16, 8]} className='mb-3'>
+                <Col span={6}>
+                    <Statistic title='CPU 使用率'
+                               value={usage.cpuPercent == null ? '-' : usage.cpuPercent.toFixed(1)}
+                               suffix={usage.cpuPercent == null ? null : '%'}/>
+                    <Progress percent={usage.cpuPercent == null ? 0 : usage.cpuPercent} showInfo={false}
+                              size='small'
+                              strokeColor={usage.cpuPercent == null ? '#d9d9d9' : usageColor(usage.cpuPercent)}/>
+                    <Typography.Text type='secondary' style={{fontSize: 12}}>
+                        {usage.cpuCoresUsed == null ? '容器合计 -' : `容器合计 ${usage.cpuCoresUsed.toFixed(2)} 核`}
+                        {usage.cpus ? ` / 主机 ${usage.cpus} 核` : ''}
+                    </Typography.Text>
+                </Col>
+                <Col span={6}>
+                    <Statistic title='容器内存合计' value={formatBytes(usage.memUsed)}
+                               suffix={usage.memoryTotal ? `/ ${formatBytes(usage.memoryTotal)}` : null}/>
+                    <Progress percent={usage.memPercent == null ? 0 : usage.memPercent} showInfo={false}
+                              size='small'
+                              strokeColor={usage.memPercent == null ? '#d9d9d9' : usageColor(usage.memPercent)}/>
+                    <Typography.Text type='secondary' style={{fontSize: 12}}>
+                        占主机 {formatPercent(usage.memPercent)}
+                    </Typography.Text>
+                </Col>
+                <Col span={6}>
+                    <Statistic title='运行容器'
+                               value={usage.containersRunning == null
+                                   ? (usage.containers || []).length
+                                   : usage.containersRunning}/>
+                </Col>
+                <Col span={6}>
+                    <Statistic title='采集耗时' value={usage.durationMillis ?? '-'} suffix='ms'/>
+                </Col>
+            </Row>
+
+            <Table rowKey='id' size='small' dataSource={usage.containers || []}
+                   columns={usageColumns}
+                   scroll={{x: 'max-content'}}
+                   pagination={{pageSize: 20, showSizeChanger: true}}
+                   locale={{emptyText: <Empty description='主机上没有运行中的容器'/>}}
+                   onRow={record => ({onDoubleClick: () => this.openContainer(record)})}/>
+        </>
     }
 
     render() {
@@ -251,6 +445,11 @@ export default class extends React.Component {
                                  pagination={{pageSize: 20, showSizeChanger: true}}
                                  locale={{emptyText: <Empty description='暂无容器'/>}}
                                  onRow={record => ({onDoubleClick: () => this.openContainer(record)})}/>
+            },
+            {
+                key: 'stats',
+                label: '实时资源',
+                children: this.renderUsage()
             },
             {
                 key: 'images',

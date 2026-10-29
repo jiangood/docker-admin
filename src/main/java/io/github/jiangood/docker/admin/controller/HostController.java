@@ -4,9 +4,12 @@ import com.github.dockerjava.api.exception.ConflictException;
 import com.github.dockerjava.api.exception.NotFoundException;
 import cn.hutool.core.util.StrUtil;
 import io.github.jiangood.docker.admin.dto.HostImageExportTaskView;
+import io.github.jiangood.docker.admin.proxy.ProxySettings;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.service.HostImageExportService;
 import io.github.jiangood.docker.admin.service.HostService;
+import io.github.jiangood.docker.admin.service.HostUsageService;
+import io.github.jiangood.docker.admin.util.ContainerPermTool;
 import io.github.jiangood.openadmin.util.dto.AjaxResult;
 import io.github.jiangood.openadmin.util.dto.Option;
 import io.github.jiangood.openadmin.framework.data.specification.Spec;
@@ -42,6 +45,9 @@ public class HostController  {
     @Resource
     private HostImageExportService hostImageExportService;
 
+    @Resource
+    private HostUsageService hostUsageService;
+
     @HasPermission("host:list")
     @RequestMapping("page")
     public AjaxResult page(Host request, String searchText, @PageableDefault(direction = Sort.Direction.DESC, sort = "updateTime") Pageable pageable) throws Exception {
@@ -62,20 +68,77 @@ public class HostController  {
 
     /**
      * 测试主机连通性。
+     * <p>
+     * 用的就是请求体里（表单上）的连接配置，只有两个密码是例外：SSH 密码与代理密码不回传前端，
+     * 界面上留空或仍是 {@code ***} 时按 {@link HostService#fillSshPassword} /
+     * {@link HostService#fillProxyPassword} 从库里沿用旧值。
+     * <p>
+     * 结果提示里带上实际测试的地址（以及是否沿用了旧密码），便于确认测的是表单里填的配置，
+     * 而不是库里保存的那份。
      */
     @HasPermission("host:save")
     @PostMapping("test")
     public AjaxResult test(@RequestBody Host input) {
         service.normalize(input);
+        // 在回填密码之前判断，用来在提示里说明密码来源
+        boolean sshPasswordReused = input.isSsh()
+                && StrUtil.isBlank(input.getSshPassword())
+                && StrUtil.isNotBlank(input.getId());
+        boolean proxyPasswordReused = proxyPasswordReused(input);
         service.fillSshPassword(input);
         service.fillProxyPassword(input);
+
+        String target = describeTarget(input);
+        StringBuilder notes = new StringBuilder();
+        if (sshPasswordReused) {
+            notes.append("，SSH 密码沿用已保存的值");
+        }
+        if (proxyPasswordReused) {
+            notes.append("，代理密码沿用已保存的值");
+        }
+
+        log.info("测试主机连接：{}{}", target, notes);
         try {
             String version = hostDockerService.dockerVersion(input);
-            return AjaxResult.ok().msg("连接成功，Docker 版本：" + version);
+            return AjaxResult.ok().msg("连接成功（" + target + notes + "），Docker 版本：" + version);
         } catch (Exception e) {
-            log.error("测试主机连接失败", e);
-            return AjaxResult.err("连接失败：" + e.getMessage());
+            log.error("测试主机连接失败：{}{}", target, notes, e);
+            String reason = StrUtil.blankToDefault(e.getMessage(), e.getClass().getSimpleName());
+            return AjaxResult.err("连接失败（" + target + notes + "）：" + reason);
         }
+    }
+
+    /**
+     * 本次测试的目标地址（不含密码），写进结果提示里。
+     */
+    private static String describeTarget(Host host) {
+        String type = host.getConnectionType();
+        if (Host.TYPE_SSH.equalsIgnoreCase(type)) {
+            String user = StrUtil.blankToDefault(host.getSshUser(), "root");
+            String sshHost = StrUtil.blankToDefault(host.getSshHost(), host.getDockerHost());
+            int port = host.getSshPort() == null ? 22 : host.getSshPort();
+            return "ssh://" + user + "@" + sshHost + ":" + port;
+        }
+        if (Host.TYPE_TCP.equalsIgnoreCase(type)) {
+            String target = StrUtil.blankToDefault(host.getDockerHost(), "远程 TCP（未填写地址）");
+            ProxySettings proxy = proxySettingsOf(host);
+            return proxy.enabled() ? target + "（经代理 " + proxy.displayUrl() + "）" : target;
+        }
+        return StrUtil.blankToDefault(host.getDockerHost(), "本机默认端点");
+    }
+
+    /**
+     * 代理密码是否会在回填时从库里沿用（界面只回显 {@code ***}）。
+     */
+    private static boolean proxyPasswordReused(Host host) {
+        return Host.TYPE_TCP.equalsIgnoreCase(host.getConnectionType())
+                && StrUtil.isNotBlank(host.getId())
+                && ProxySettings.PASSWORD_MASK.equals(proxySettingsOf(host).password());
+    }
+
+    private static ProxySettings proxySettingsOf(Host host) {
+        return ProxySettings.of(host.getProxyType(), host.getProxyHost(), host.getProxyPort(),
+                host.getProxyUsername(), host.getProxyPassword());
     }
 
     @HasPermission("host:delete")
@@ -131,6 +194,19 @@ public class HostController  {
     @RequestMapping("get")
     public AjaxResult get(String id) {
         return AjaxResult.ok().data(requireHost(id));
+    }
+
+    /**
+     * 主机实时用量（等价于 {@code docker stats}）：主机级汇总 + 逐容器明细。
+     * <p>
+     * 权限与容器列表一致（{@code host:list} 或 {@code app:view}），因为明细里就是容器名与用量。
+     *
+     * @param refresh 为 true 时忽略 3 秒缓存强制重新采集
+     */
+    @RequestMapping("usage")
+    public AjaxResult usage(String id, @RequestParam(defaultValue = "false") boolean refresh) {
+        ContainerPermTool.assertView();
+        return AjaxResult.ok().data(hostUsageService.usage(id, refresh));
     }
 
     /**

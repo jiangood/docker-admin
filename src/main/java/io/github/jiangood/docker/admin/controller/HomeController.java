@@ -4,6 +4,7 @@ import io.github.jiangood.docker.admin.entity.BuildLog;
 import io.github.jiangood.docker.admin.entity.Project;
 import io.github.jiangood.docker.admin.service.BuildLogService;
 import io.github.jiangood.docker.admin.service.HostSummaryService;
+import io.github.jiangood.docker.admin.service.HostUsageService;
 import io.github.jiangood.docker.admin.service.ProjectService;
 import io.github.jiangood.openadmin.framework.auth.LoginTool;
 import io.github.jiangood.openadmin.framework.data.specification.Spec;
@@ -35,6 +36,9 @@ public class HomeController {
     @Resource
     HostSummaryService hostSummaryService;
 
+    @Resource
+    HostUsageService hostUsageService;
+
     /**
      * 首页「主机资源汇总」看板。参考 Rancher 首页：全局概览 + 逐主机明细。
      * <p>
@@ -46,6 +50,20 @@ public class HomeController {
     @RequestMapping("hostSummary")
     public AjaxResult hostSummary(@RequestParam(defaultValue = "false") boolean refresh) {
         return AjaxResult.ok().data(hostSummaryService.summary(refresh));
+    }
+
+    /**
+     * 首页「主机实时用量」：等价于 {@code docker stats} 的主机级汇总（CPU / 内存使用率、容器合计）。
+     * <p>
+     * 与 {@link #hostSummary} 刻意分开：静态容量先出（快），实时用量后到（每台主机、每个运行中容器
+     * 各一次 {@code /stats}，单轮以秒计）。采集慢或失败都不影响首屏，前端只把用量列显示成占位。
+     *
+     * @param refresh 为 true 时忽略 3 秒缓存强制重新采集
+     */
+    @HasPermission("host:list")
+    @RequestMapping("hostUsage")
+    public AjaxResult hostUsage(@RequestParam(defaultValue = "false") boolean refresh) {
+        return AjaxResult.ok().data(hostUsageService.usageAll(refresh));
     }
 
     @HasPermission("app:view")
