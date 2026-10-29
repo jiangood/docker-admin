@@ -1,25 +1,30 @@
 package io.github.jiangood.docker.admin.websocket;
 
-import cn.hutool.core.collection.CollUtil;
-import io.github.jiangood.docker.config.Config;
 import jakarta.annotation.Resource;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.socket.config.annotation.EnableWebSocket;
 import org.springframework.web.socket.config.annotation.WebSocketConfigurer;
 import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry;
 
+/**
+ * WebSocket 端点注册。
+ * <p>
+ * <b>不做 Origin（来源）校验</b>，也不调 {@code setAllowedOriginPatterns}：一旦设了白名单，Spring 会挂上
+ * {@code OriginHandshakeInterceptor}，它按 {@code request.getScheme()/getServerName()/getServerPort()} 判同源
+ * （见 {@code WebUtils.isSameOrigin}，不看 {@code X-Forwarded-*}）。平台可能经 nginx 或 http-tunnel 隧道访问，
+ * 后端看到的是 {@code http} + 内网端口 8601，与浏览器的 {@code Origin: https://域名} 协议、端口都对不上，
+ * 握手会被判成跨域直接回 403（浏览器侧 {@code Unexpected response code: 403}）。
+ * <p>
+ * 不设白名单就等于放行所有来源，跨站防护改由两件事承担：
+ * <ul>
+ *     <li>会话 Cookie 显式 {@code SameSite=Lax}（{@code application.yml}），跨站页面的 WebSocket 握手不带 Cookie；</li>
+ *     <li>每个端点都必须挂上鉴权拦截器（登录 + 权限 + 数据权限），见 {@code *HandshakeInterceptor}。</li>
+ * </ul>
+ * 因此<b>新增端点不要漏掉鉴权拦截器</b>，也不要把 Cookie 改成 {@code SameSite=None}。
+ */
 @Configuration
 @EnableWebSocket
 public class WebSocketConfig implements WebSocketConfigurer {
-
-    /**
-     * 默认仅放行本机来源：开发时前端(8090)代理到后端(8080)属于跨域，需要放行；
-     * 生产前后端同源，Spring 会自动放行同源请求。如需其他域名，配置 {@code cfg.ws-origins}。
-     */
-    private static final String[] DEFAULT_ALLOWED_ORIGIN_PATTERNS = {
-            "http://localhost:*", "http://127.0.0.1:*",
-            "https://localhost:*", "https://127.0.0.1:*"
-    };
 
     @Resource
     private ContainerLogWebSocketHandler handler;
@@ -64,72 +69,60 @@ public class WebSocketConfig implements WebSocketConfigurer {
     private HostImageExportLogHandshakeInterceptor hostImageExportLogHandshakeInterceptor;
 
     @Resource
-    private DeployLogHandshakeInterceptor deployLogHandshakeInterceptor;
+    private HostComposeLogHandshakeInterceptor hostComposeLogHandshakeInterceptor;
 
     @Resource
-    private Config config;
+    private DeployLogHandshakeInterceptor deployLogHandshakeInterceptor;
 
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
-        String[] origins = CollUtil.isNotEmpty(config.getWsOrigins())
-                ? config.getWsOrigins().toArray(new String[0])
-                : DEFAULT_ALLOWED_ORIGIN_PATTERNS;
-
         // 容器实时日志
         registry.addHandler(handler, "/admin/ws/log/{id}")
-                .addInterceptors(handshakeInterceptor)
-                .setAllowedOriginPatterns(origins);
+                .addInterceptors(handshakeInterceptor);
 
         // 通用容器实时日志（主机 + 容器维度）
         registry.addHandler(genericContainerLogHandler, "/admin/ws/container-log/{hostId}/{containerId}")
-                .addInterceptors(genericContainerLogHandshakeInterceptor)
-                .setAllowedOriginPatterns(origins);
+                .addInterceptors(genericContainerLogHandshakeInterceptor);
 
         // 容器交互式控制台
         registry.addHandler(containerExecHandler, "/admin/ws/container-exec/{hostId}/{containerId}")
-                .addInterceptors(containerExecHandshakeInterceptor)
-                .setAllowedOriginPatterns(origins);
+                .addInterceptors(containerExecHandshakeInterceptor);
 
         // 镜像同步实时日志
         registry.addHandler(syncLogHandler, "/admin/ws/sync-log/{logId}")
-                .addInterceptors(syncLogHandshakeInterceptor)
-                .setAllowedOriginPatterns(origins);
+                .addInterceptors(syncLogHandshakeInterceptor);
 
         // 构建测试实时日志（复用同一日志 tail 处理器）
         registry.addHandler(syncLogHandler, "/admin/ws/build-test-log/{logId}")
-                .addInterceptors(buildTestLogHandshakeInterceptor)
-                .setAllowedOriginPatterns(origins);
+                .addInterceptors(buildTestLogHandshakeInterceptor);
 
         // 镜像构建实时日志（复用同一日志 tail 处理器）
         registry.addHandler(syncLogHandler, "/admin/ws/build-log/{logId}")
-                .addInterceptors(buildLogHandshakeInterceptor)
-                .setAllowedOriginPatterns(origins);
+                .addInterceptors(buildLogHandshakeInterceptor);
 
         // 镜像导出实时日志（复用同一日志 tail 处理器）
         registry.addHandler(syncLogHandler, "/admin/ws/image-export-log/{logId}")
-                .addInterceptors(imageExportLogHandshakeInterceptor)
-                .setAllowedOriginPatterns(origins);
+                .addInterceptors(imageExportLogHandshakeInterceptor);
 
         // 镜像导入实时日志（复用同一日志 tail 处理器）
         registry.addHandler(syncLogHandler, "/admin/ws/image-import-log/{logId}")
-                .addInterceptors(imageImportLogHandshakeInterceptor)
-                .setAllowedOriginPatterns(origins);
+                .addInterceptors(imageImportLogHandshakeInterceptor);
 
         // 镜像下载 tar 实时日志（复用同一日志 tail 处理器）
         registry.addHandler(syncLogHandler, "/admin/ws/image-download-log/{logId}")
-                .addInterceptors(imageDownloadLogHandshakeInterceptor)
-                .setAllowedOriginPatterns(origins);
+                .addInterceptors(imageDownloadLogHandshakeInterceptor);
 
         // 主机详情页镜像导出实时日志（复用同一日志 tail 处理器）
         registry.addHandler(syncLogHandler, "/admin/ws/host-image-export-log/{logId}")
-                .addInterceptors(hostImageExportLogHandshakeInterceptor)
-                .setAllowedOriginPatterns(origins);
+                .addInterceptors(hostImageExportLogHandshakeInterceptor);
+
+        // 主机详情页 Compose 命令实时日志（复用同一日志 tail 处理器）
+        registry.addHandler(syncLogHandler, "/admin/ws/host-compose-log/{logId}")
+                .addInterceptors(hostComposeLogHandshakeInterceptor);
 
         // 部署实时日志（复用同一日志 tail 处理器，logId 即部署记录 id）
         registry.addHandler(syncLogHandler, "/admin/ws/deploy-log/{logId}")
-                .addInterceptors(deployLogHandshakeInterceptor)
-                .setAllowedOriginPatterns(origins);
+                .addInterceptors(deployLogHandshakeInterceptor);
     }
-
 
 }

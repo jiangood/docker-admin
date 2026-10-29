@@ -118,6 +118,13 @@ git tag vx.y.z && git push && git push origin vx.y.z
   需要在 IDE 里单独执行；`src/test/java` 下另有少量 JUnit 测试（如 `VersionUtilsTest`、
   `BuildContextUtilsTest`），可用 `mvn test -Dtest=<类名>` 单独跑。
 - **权限**用 open-admin 的 `@HasPermission("app:view")`，不是标准 Spring Security 注解。
+- **WebSocket 不做 Origin 校验**：所有端点都不调 `setAllowedOriginPatterns`。一旦设了白名单，Spring 会按
+  scheme+host+port 判同源（`WebUtils.isSameOrigin` 对 servlet 请求直接取 `getScheme()/getServerPort()`，
+  不看 `X-Forwarded-*`），而平台常经 nginx / http-tunnel 隧道访问，后端看到的是 `http:8601`，
+  和浏览器 `Origin: https://域名` 对不上，握手直接 `403 Unexpected response code`（会话失效是 401，别混淆）。
+  不设白名单即放行所有来源，跨站防护改由①会话 Cookie 显式 `SameSite=Lax`（`application.yml` 的
+  `server.servlet.session.cookie.same-site`，**别改成 none**）与②每个端点的鉴权拦截器（登录+权限+数据权限）承担，
+  所以**新增 WS 端点不要漏掉鉴权拦截器**。
 - **构建并发（新的覆盖旧的）：** 同一项目用固定代码目录，不能并行构建。新的触发（手动、重试或 Webhook）
   会先取消正在跑的旧构建（`ProjectService.cancelProcessingBuilds` → `stopBuild`），新任务在 `@Async` 线程里
   等旧构建退出代码目录后再开始，触发接口立即返回。取消靠 `cancelledBuilds` 标记 + 检查点

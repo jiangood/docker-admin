@@ -7,6 +7,12 @@ server:
   port: 8601
   servlet:
     context-path: /docker-admin  # 本地开发上下文；容器部署由镜像内置的 SERVER_SERVLET_CONTEXT_PATH=/ 覆盖为根路径
+    session:
+      cookie:
+        # WebSocket 端点不做 Origin 校验（代理/隧道下 Spring 的同源判定必然失败），
+        # 跨站防护依赖这里：跨站页面发起的 WebSocket 握手不带 Cookie，因而过不了握手拦截器的鉴权。
+        # 不要改成 none。
+        same-site: lax
 spring:
   config:
     import: classpath:application-lib.yml
