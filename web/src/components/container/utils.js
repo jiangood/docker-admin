@@ -57,6 +57,15 @@ export function stateLabel(state) {
     }
 }
 
+/**
+ * 转数字：后端把包装类型 Long 序列化成字符串（避免 JS 丢精度），
+ * 直接参与 `+` 会变成字符串拼接，参与计算前必须先转成 number。
+ */
+export function toNumber(value) {
+    const n = Number(value)
+    return Number.isFinite(n) ? n : 0
+}
+
 /** 字节格式化。 */
 export function formatBytes(size) {
     if (size === null || size === undefined || size === '') {

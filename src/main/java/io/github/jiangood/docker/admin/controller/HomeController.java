@@ -57,13 +57,18 @@ public class HomeController {
      * <p>
      * 与 {@link #hostSummary} 刻意分开：静态容量先出（快），实时用量后到（每台主机、每个运行中容器
      * 各一次 {@code /stats}，单轮以秒计）。采集慢或失败都不影响首屏，前端只把用量列显示成占位。
+     * <p>
+     * 默认返回定时任务（每分钟一次）写下的内存快照，<b>不触发采集</b>，所以多标签页、多人同时看
+     * 都不会增加主机侧负载；只有 {@code refresh=true}（用户点刷新）才现采一轮。
      *
-     * @param refresh 为 true 时忽略 3 秒缓存强制重新采集
+     * @param refresh 为 true 时忽略缓存立即采集
      */
     @HasPermission("host:list")
     @RequestMapping("hostUsage")
     public AjaxResult hostUsage(@RequestParam(defaultValue = "false") boolean refresh) {
-        return AjaxResult.ok().data(hostUsageService.usageAll(refresh));
+        return AjaxResult.ok().data(refresh
+                ? hostUsageService.usageAll(true)
+                : hostUsageService.snapshotAll());
     }
 
     @HasPermission("app:view")

@@ -80,15 +80,24 @@ git tag vx.y.z && git push && git push origin vx.y.z
   弹窗展示实时日志、已写入大小与速度（每秒 / 每分钟）、保存路径与下载按钮；SSH 下载经 SFTP 流式转发，不在平台侧重复落盘。
   任务状态只存内存（`HostImageExportService`），tar 不自动删除，由用户按路径自行清理。
 - **首页资源概览分两条链路：** 静态容量走 `admin/home/hostSummary`（`docker info`，30 秒缓存，首屏用），
-  实时用量走 `admin/home/hostUsage`（首页）与 `admin/host/usage`（主机详情「实时资源」Tab），由 `HostUsageService` 采集。
-  实时链路每台主机复用同一个 DockerClient（SSH 一条 Session 多 Channel），逐运行中容器
-  `statsCmd(...).withNoStream(true)`——docker-java 只把它映射成 `?stream=0`，dockerd 内部要采两次样本（约 1 秒）
-  才有 CPU%，所以容器级并发 12、单机预算 6 秒、整体 8 秒兜底、结果缓存 3 秒并合并同一主机的并发请求。
+  实时用量走 `admin/home/hostUsage`（首页）与 `admin/host/usage`（主机详情「实时资源」Tab），
+  数据由 Quartz 定时任务「主机用量采集」（`HostUsageCollectJob`，每分钟）写进 `HostUsageService` 的内存缓存。
+  **页面只读快照**（`snapshotAll` / `snapshot`），不触发采集；只有 `refresh=true`（用户点「刷新」）才现采一轮，
+  所以开多少个标签页、多少人在看都不会增加主机侧负载（首页 30 秒、主机页 30 秒轮询，页面隐藏时暂停）。
+  逐运行中容器 `statsCmd(...).withNoStream(true)`——docker-java 只把它映射成 `?stream=0`，dockerd 内部要采两次样本（约 1 秒）
+  才有 CPU%，所以容器级并发 12、单机预算 6 秒、整体 8 秒兜底，并合并同一主机的并发采集。
+  每轮采集都新建 DockerClient（`DockerClientManager` 有意不缓存客户端，SSH 主机每轮一次握手），分钟级间隔下这点开销可以接受。
   口径对齐 docker CLI：CPU% = `(cpuDelta/systemDelta)×onlineCpus×100`，内存扣 `inactive_file`
   （cgroup v1 `total_inactive_file` / v2 `inactive_file`），网络取各接口 rx/tx 求和，块 I/O 取
   `io_service_bytes_recursive` 读写之和（无条目按 0 计，与 docker stats 一致）；主机级只汇总运行中容器，是「容器合计」。
-  首页 10 秒、主机页 5 秒轮询（页面隐藏时暂停），采集失败只让对应单元格显示占位，不影响静态概览。
-  **升级 docker-java 时需要回归这条链路。**
+  采集失败的主机按 1 → 2 → 5 → 15 分钟阶梯退避（状态在 `HostUsageService`，**不能放任务字段**：Quartz 每次触发都重建实例），成功即复位。
+- **用量历史：** 采集结果同时写 `t_host_usage_sample`（每分钟一行/主机，网络与块 I/O 存**累计计数器**原值），
+  主机详情「实时资源」Tab 顶部按 1h / 6h / 24h / 7d / 30d 展示 CPU/内存与网络/磁盘速率曲线
+  （`admin/host/usageHistory`，Java 侧分桶到 ≤500 点；速率由相邻采样求差，差值为负 = 容器重启 → 曲线断点）。
+  采样默认保留 30 天（`HostUsageSampleService` 里的默认值，需要时用 `docker.usage.retain-days` 覆盖，采集任务每小时顺带清理）；
+  30 台主机 30 天约 130 万行、200 MB。
+  定时任务记录由 `HostUsageJobInitializer` 幂等自动创建（`sys.job-enable=false` 时跳过，已存在则不覆盖用户改动），
+  日志聚合为按小时。**升级 docker-java 时需要回归这条链路。**
 - **主机接入代理：** 远程 TCP 可选 HTTP / SOCKS5 连接代理，界面与邮件代理一样只填一行地址
   （`http://192.168.1.10:8080`、`http://user:pass@192.168.1.10:8080`、`socks5://user:pass@192.168.1.10:1080`，
   不写 scheme 按 http，端口必填，留空表示不使用；密码回显为 `***`，保存时保持 `***` 或省略密码表示沿用已存密码）。
@@ -145,6 +154,12 @@ git tag vx.y.z && git push && git push origin vx.y.z
   `ProjectService` 在构建成功与失败时都发布 `BuildResultEvent`，`MailService` 异步发送，
   正文为构建摘要并附带日志文件 `${logging.file.path}/{logId}.log`；邮件失败不影响构建结果。
 - **前端**是 `@jiangood/open-admin` 之上的薄层，页面在 `web/src/pages/`，构建配置 `web/vite.config.js`。
+- **JSON 里的包装类型 `Long` 是字符串**（open-admin 的 `@JacksonComponent LongToStringSerializer`，
+  防 JS 丢精度；`long` / `Integer` / `Double` 仍是数字）。前端做加减乘除前必须 `Number()`
+  （统一走 `web/src/components/container/utils.js` 的 `toNumber`），
+  否则 `sum + item.memUsed` 会变成字符串拼接——首页内存合计曾因此显示成 `9e+33 TB`。
+- **首页资源卡的 CPU 核数**在表格 CPU 列与卡片底部都直接展示（表格第二行 `已用 / 主机 核`），
+  不再只放在悬浮提示里；核数优先取静态概览的 `cpus`，缺失时退回实时用量里的 `cpus`。
 - **静态文件**从 JAR 提供；开发时前端通过 Vite 代理访问后端。
 - **CodeMirror 5** 被锁定在 5.x（`codemirror@^5.0.0`）。CM6 是破坏性重写，
   `web/src/components/CodeMirrorEditor.jsx` 依赖 CM5 专有路径与 API，

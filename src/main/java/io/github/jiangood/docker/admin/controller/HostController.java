@@ -9,6 +9,7 @@ import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.service.HostImageExportService;
 import io.github.jiangood.docker.admin.service.HostService;
 import io.github.jiangood.docker.admin.service.HostUsageService;
+import io.github.jiangood.docker.admin.service.HostUsageSampleService;
 import io.github.jiangood.docker.admin.util.ContainerPermTool;
 import io.github.jiangood.openadmin.util.dto.AjaxResult;
 import io.github.jiangood.openadmin.util.dto.Option;
@@ -47,6 +48,9 @@ public class HostController  {
 
     @Resource
     private HostUsageService hostUsageService;
+
+    @Resource
+    private HostUsageSampleService hostUsageSampleService;
 
     @HasPermission("host:list")
     @RequestMapping("page")
@@ -200,13 +204,29 @@ public class HostController  {
      * 主机实时用量（等价于 {@code docker stats}）：主机级汇总 + 逐容器明细。
      * <p>
      * 权限与容器列表一致（{@code host:list} 或 {@code app:view}），因为明细里就是容器名与用量。
+     * <p>
+     * 默认返回定时任务（每分钟一次）写下的内存快照，<b>不触发采集</b>；{@code refresh=true}
+     * （用户点刷新）才现采一轮。
      *
-     * @param refresh 为 true 时忽略 3 秒缓存强制重新采集
+     * @param refresh 为 true 时忽略缓存立即采集
      */
     @RequestMapping("usage")
     public AjaxResult usage(String id, @RequestParam(defaultValue = "false") boolean refresh) {
         ContainerPermTool.assertView();
-        return AjaxResult.ok().data(hostUsageService.usage(id, refresh));
+        return AjaxResult.ok().data(refresh
+                ? hostUsageService.usage(id, true)
+                : hostUsageService.snapshot(id));
+    }
+
+    /**
+     * 主机用量历史曲线（只含主机级数字，不含容器明细）。
+     *
+     * @param range 时间范围：{@code 1h} / {@code 6h} / {@code 24h} / {@code 7d} / {@code 30d}
+     */
+    @RequestMapping("usageHistory")
+    public AjaxResult usageHistory(String id, @RequestParam(defaultValue = "24h") String range) {
+        ContainerPermTool.assertView();
+        return AjaxResult.ok().data(hostUsageSampleService.series(id, range));
     }
 
     /**

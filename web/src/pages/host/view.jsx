@@ -1,7 +1,9 @@
-import {Button, Card, Col, Descriptions, Empty, Input, Modal, Popconfirm, Progress, Result, Row, Select, Space, Spin, Statistic, Switch, Table, Tabs, Tag, Tooltip, Typography} from 'antd'
+import {Alert, Button, Card, Col, Descriptions, Empty, Input, Modal, Popconfirm, Progress, Result, Row, Segmented, Select, Space, Spin, Statistic, Switch, Table, Tabs, Tag, Tooltip, Typography} from 'antd'
 import React from 'react'
+import dayjs from 'dayjs'
 import {DeleteOutlined, ExportOutlined, ImportOutlined, ReloadOutlined} from '@ant-design/icons'
 import {HttpClient, Page, PageUtils, PermUtils} from "@jiangood/open-admin"
+import Chart from "../../components/Chart"
 import ContainerDetail from "../../components/container/ContainerDetail"
 import HostImageExportModal from "../../components/HostImageExportModal"
 import HostImageImportModal from "../../components/HostImageImportModal"
@@ -12,6 +14,7 @@ import {
     formatTime,
     stateColor,
     stateLabel,
+    toNumber,
     usageColor
 } from "../../components/container/utils"
 
@@ -61,6 +64,80 @@ function endpointOf(host) {
 }
 
 /**
+ * 历史曲线的可选范围，与后端 {@code HostUsageSampleService.Range} 一一对应。
+ */
+const USAGE_RANGES = [
+    {label: '1 小时', value: '1h'},
+    {label: '6 小时', value: '6h'},
+    {label: '24 小时', value: '24h'},
+    {label: '7 天', value: '7d'},
+    {label: '30 天', value: '30d'},
+]
+
+/** 分桶粒度文案：告诉用户「曲线上的一个点代表多久」。 */
+function bucketLabel(millis) {
+    const minutes = Math.max(1, Math.round((Number(millis) || 0) / 60000))
+    if (minutes < 60) {
+        return `${minutes} 分钟`
+    }
+    const hours = Math.round(minutes / 60)
+    return hours < 48 ? `${hours} 小时` : `${Math.round(hours / 24)} 天`
+}
+
+/**
+ * 曲线配置：时间轴 + 折线，值格式化交给调用方（百分比 / 字节速率）。
+ * 累计计数器在容器重启时会归零，后端已把那一小段置空，这里靠 connectNulls=false 断开。
+ */
+function buildTrendOption({points, defs, percent, axisFormatter, timePattern}) {
+    return {
+        animation: false,
+        grid: {left: 4, right: 12, top: 32, bottom: 4, containLabel: true},
+        tooltip: {
+            trigger: 'axis',
+            confine: true,
+            valueFormatter: value => value == null || value === ''
+                ? '-'
+                : (percent ? `${Number(value).toFixed(1)}%` : formatBytes(value)),
+        },
+        legend: {top: 0, left: 0, icon: 'roundRect', itemWidth: 10, itemHeight: 10, textStyle: {fontSize: 12}},
+        xAxis: {
+            type: 'time',
+            axisLabel: {fontSize: 11, hideOverlap: true, formatter: value => dayjs(value).format(timePattern)},
+            splitLine: {show: false},
+        },
+        yAxis: {
+            type: 'value',
+            min: 0,
+            max: percent ? 100 : undefined,
+            axisLabel: {fontSize: 11, formatter: axisFormatter},
+            splitLine: {lineStyle: {type: 'dashed', color: '#f0f0f0'}},
+        },
+        series: defs.map(def => ({
+            name: def.name,
+            type: 'line',
+            smooth: true,
+            showSymbol: false,
+            connectNulls: false,
+            lineStyle: {width: 1.5},
+            itemStyle: {color: def.color},
+            data: points.map(point => [point.t, point[def.key]]),
+        })),
+    }
+}
+
+const TREND_CPU_DEFS = [
+    {name: 'CPU', key: 'cpuPercent', color: '#1677ff'},
+    {name: '内存', key: 'memPercent', color: '#52c41a'},
+]
+
+const TREND_IO_DEFS = [
+    {name: '网络 ↓', key: 'netRxBps', color: '#13c2c2'},
+    {name: '网络 ↑', key: 'netTxBps', color: '#faad14'},
+    {name: '磁盘 读', key: 'readBps', color: '#722ed1'},
+    {name: '磁盘 写', key: 'writeBps', color: '#eb2f96'},
+]
+
+/**
  * 主机详情：主机信息 + 垂直 Tab「容器 / 实时资源 / 镜像」，点击容器弹窗展示通用容器组件。
  */
 export default class extends React.Component {
@@ -86,13 +163,19 @@ export default class extends React.Component {
         imagesLoading: false,
         imageKeyword: '',
 
-        // 实时用量（docker stats）：数据量大且要连所有容器，按需加载
+        // 实时用量（docker stats）：由后端每分钟的采集任务写入内存快照，页面只读
         usage: null,
         usageLoading: false,
         usageError: null,
         usageUpdatedAt: null,
         usageAuto: true,
-        usageInterval: 5,
+        usageInterval: 30,
+
+        // 历史曲线：只含主机级数字，切换范围时才请求
+        usageRange: '24h',
+        series: null,
+        seriesLoading: false,
+        seriesError: null,
 
         detail: {open: false, containerId: null, name: ''},
         activeTab: 'containers',
@@ -116,6 +199,9 @@ export default class extends React.Component {
             || prevState.usageAuto !== this.state.usageAuto
             || prevState.usageInterval !== this.state.usageInterval) {
             this.syncUsageTimer()
+        }
+        if (prevState.usageRange !== this.state.usageRange) {
+            this.loadSeries(this.state.id, this.state.usageRange)
         }
     }
 
@@ -152,8 +238,8 @@ export default class extends React.Component {
     }
 
     /**
-     * 采集实时用量（等价 docker stats）：后端每轮都会现连主机，单轮以秒计，
-     * 因此只在「实时资源」Tab 激活时按设定间隔轮询，页面隐藏时跳过。
+     * 读取实时用量：默认读后端每分钟采集好的快照（不触发采集），refresh=true 才让后端现采一轮。
+     * 因此这里的轮询间隔只影响「多久看到新数字」，不会增加主机侧负载。
      */
     loadUsage = (id = this.state.id, refresh = false) => {
         if (!id) {
@@ -161,9 +247,28 @@ export default class extends React.Component {
         }
         this.setState({usageLoading: true})
         HttpClient.get('admin/host/usage', refresh ? {id, refresh: true} : {id}, {toastError: false})
-            .then(rs => this.setState({usage: rs.data, usageError: null, usageUpdatedAt: Date.now()}))
+            .then(rs => this.setState({
+                usage: rs.data,
+                usageError: null,
+                // 用后端采集时间，而不是本地收到响应的时间：快照最多可能是一分钟前的
+                usageUpdatedAt: (rs.data && rs.data.collectedAt) || Date.now(),
+            }))
             .catch(e => this.setState({usageError: e.message || '采集失败'}))
             .finally(() => this.setState({usageLoading: false}))
+    }
+
+    /**
+     * 读取历史曲线：与实时用量分开，只在「实时资源」Tab 激活或切换时间范围时请求，不参与轮询。
+     */
+    loadSeries = (id = this.state.id, range = this.state.usageRange) => {
+        if (!id) {
+            return
+        }
+        this.setState({seriesLoading: true})
+        HttpClient.get('admin/host/usageHistory', {id, range}, {toastError: false})
+            .then(rs => this.setState({series: rs.data, seriesError: null}))
+            .catch(e => this.setState({series: null, seriesError: e.message || '读取历史数据失败'}))
+            .finally(() => this.setState({seriesLoading: false}))
     }
 
     clearUsageTimer = () => {
@@ -173,7 +278,7 @@ export default class extends React.Component {
         }
     }
 
-    /** 切 Tab、改刷新开关或间隔时重建定时器；首次进入该 Tab 立即采集一次 */
+    /** 切 Tab、改刷新开关或间隔时重建定时器；首次进入该 Tab 立即读一次快照与曲线 */
     syncUsageTimer = () => {
         this.clearUsageTimer()
         if (this.state.activeTab !== 'stats' || !this.state.id) {
@@ -182,6 +287,9 @@ export default class extends React.Component {
         if (!this.state.usage) {
             this.loadUsage(this.state.id, false)
         }
+        if (!this.state.series) {
+            this.loadSeries(this.state.id, this.state.usageRange)
+        }
         if (!this.state.usageAuto) {
             return
         }
@@ -189,7 +297,7 @@ export default class extends React.Component {
             if (!document.hidden) {
                 this.loadUsage(this.state.id, false)
             }
-        }, Math.max(2, this.state.usageInterval) * 1000)
+        }, Math.max(10, this.state.usageInterval) * 1000)
     }
 
     /**
@@ -222,9 +330,61 @@ export default class extends React.Component {
     }
 
     /**
-     * 「实时资源」Tab：docker stats 版式（主机汇总 + 逐容器 CPU / 内存 / 网络 / 块 I/O / PID）。
+     * 「实时资源」Tab：历史曲线在上，docker stats 版式（主机汇总 + 逐容器明细）在下。
      */
     renderUsage() {
+        return <>
+            {this.renderTrend()}
+            {this.renderLiveUsage()}
+        </>
+    }
+
+    /**
+     * 历史曲线卡片：只在切换时间范围时请求，不跟着实时用量轮询。
+     * 即使当前采集失败（主机离线），历史仍然能看——这正是落库的意义。
+     */
+    renderTrend() {
+        const {series, seriesLoading, seriesError, usageRange} = this.state
+        const points = (series && series.points) || []
+        const timePattern = usageRange === '7d' || usageRange === '30d' ? 'MM-DD HH:mm' : 'HH:mm'
+
+        const extra = <Space size={8}>
+            <Segmented size='small' value={usageRange} options={USAGE_RANGES}
+                       onChange={v => this.setState({usageRange: v})}/>
+            {seriesLoading && <Spin size='small'/>}
+        </Space>
+
+        let body
+        if (seriesError) {
+            body = <Alert type='warning' showIcon message='历史数据读取失败' description={seriesError}/>
+        } else if (points.length === 0) {
+            body = <Empty image={Empty.PRESENTED_IMAGE_SIMPLE}
+                          description={seriesLoading ? '加载中…' : '暂无历史数据（后台每分钟采集一次，稍后即可看到）'}/>
+        } else {
+            body = <>
+                <Chart height={220} option={buildTrendOption({
+                    points, defs: TREND_CPU_DEFS, percent: true,
+                    axisFormatter: v => `${v}%`, timePattern,
+                })}/>
+                <Chart height={200} option={buildTrendOption({
+                    points, defs: TREND_IO_DEFS, percent: false,
+                    axisFormatter: v => formatBytes(v), timePattern,
+                })}/>
+            </>
+        }
+
+        return <Card size='small' className='mb-4' title='资源趋势' extra={extra}>
+            {series && series.sampleCount > 0 && <Typography.Text type='secondary' style={{fontSize: 12}}>
+                每个点约 {bucketLabel(series.bucketMillis)}，共 {series.sampleCount} 条采样
+            </Typography.Text>}
+            {body}
+        </Card>
+    }
+
+    /**
+     * 实时用量面板：docker stats 版式（主机汇总 + 逐容器 CPU / 内存 / 网络 / 块 I/O / PID）。
+     */
+    renderLiveUsage() {
         const {usage, usageLoading, usageError, usageAuto, usageInterval, usageUpdatedAt} = this.state
 
         const toolbar = <div className='mb-3'
@@ -235,11 +395,11 @@ export default class extends React.Component {
             </Space>
             <Select size='small' style={{width: 96}} value={usageInterval}
                     onChange={v => this.setState({usageInterval: v})}
-                    options={[{value: 2, label: '2 秒'}, {value: 5, label: '5 秒'}, {value: 10, label: '10 秒'}]}/>
+                    options={[{value: 10, label: '10 秒'}, {value: 30, label: '30 秒'}, {value: 60, label: '60 秒'}]}/>
             <Button size='small' icon={<ReloadOutlined/>} loading={usageLoading}
                     onClick={() => this.loadUsage(this.state.id, true)}>刷新</Button>
             {usageUpdatedAt && <Typography.Text type='secondary' style={{fontSize: 12}}>
-                更新于 {formatClock(usageUpdatedAt)}
+                采集于 {formatClock(usageUpdatedAt)}
                 {usage && usage.durationMillis != null ? `，耗时 ${usage.durationMillis} ms` : ''}
             </Typography.Text>}
         </div>
@@ -251,7 +411,7 @@ export default class extends React.Component {
             </>
         }
         if (!usage) {
-            return <>{toolbar}<div style={{padding: 32, textAlign: 'center'}}><Spin/></div></>
+            return <>{toolbar}<Empty description='等待后台采集（每分钟一次），也可以点「刷新」立即采集'/></>
         }
         if (!usage.reachable) {
             return <>
@@ -303,14 +463,16 @@ export default class extends React.Component {
             <Row gutter={[16, 8]} className='mb-3'>
                 <Col span={6}>
                     <Statistic title='CPU 使用率'
-                               value={usage.cpuPercent == null ? '-' : usage.cpuPercent.toFixed(1)}
+                               value={usage.cpuPercent == null ? '-' : toNumber(usage.cpuPercent).toFixed(1)}
                                suffix={usage.cpuPercent == null ? null : '%'}/>
-                    <Progress percent={usage.cpuPercent == null ? 0 : usage.cpuPercent} showInfo={false}
+                    <Progress percent={usage.cpuPercent == null ? 0 : toNumber(usage.cpuPercent)} showInfo={false}
                               size='small'
                               strokeColor={usage.cpuPercent == null ? '#d9d9d9' : usageColor(usage.cpuPercent)}/>
                     <Typography.Text type='secondary' style={{fontSize: 12}}>
-                        {usage.cpuCoresUsed == null ? '容器合计 -' : `容器合计 ${usage.cpuCoresUsed.toFixed(2)} 核`}
-                        {usage.cpus ? ` / 主机 ${usage.cpus} 核` : ''}
+                        {usage.cpuCoresUsed == null
+                            ? '容器合计 -'
+                            : `容器合计 ${toNumber(usage.cpuCoresUsed).toFixed(2)} 核`}
+                        {usage.cpus ? ` / 主机 ${toNumber(usage.cpus)} 核` : ''}
                     </Typography.Text>
                 </Col>
                 <Col span={6}>
@@ -447,11 +609,7 @@ export default class extends React.Component {
                                  onRow={record => ({onDoubleClick: () => this.openContainer(record)})}/>
             },
             {
-                key: 'stats',
-                label: '实时资源',
-                children: this.renderUsage()
-            },
-            {
+                // 容器与镜像紧挨着：这两个是日常来回切的主对象，实时资源排在它们后面
                 key: 'images',
                 label: `镜像 (${images.length})`,
                 children: <>
@@ -461,6 +619,11 @@ export default class extends React.Component {
                            pagination={{pageSize: 20, showSizeChanger: true}}
                            locale={{emptyText: <Empty description={keyword ? '无匹配镜像' : '暂无镜像'}/>}}/>
                 </>
+            },
+            {
+                key: 'stats',
+                label: '实时资源',
+                children: this.renderUsage()
             },
         ]
 
