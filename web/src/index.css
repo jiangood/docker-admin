@@ -44,6 +44,11 @@
     max-width: 1200px;
 }
 
+/* 看板页（首页资源概览 / 欢迎卡）专用：表格列多，960 会横向滚动，直接铺满内容区 */
+.page-card-fluid {
+    max-width: 100%;
+}
+
 /*
  * 间距工具类：后缀为刻度序号（.mt-2 = 8px、.mb-4 = 16px）。
  * 页面用它替代散落的 style={{marginTop/marginBottom: N}}，保证间距成体系。

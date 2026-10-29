@@ -211,7 +211,7 @@ function HostResourceBoard() {
                 onClick={refreshAll}>刷新</Button>
     </Space>
 
-    return <Card className='page-card' title='资源概览' extra={extra}>
+    return <Card className='page-card page-card-fluid' title='资源概览' extra={extra}>
         {failed &&
             <Alert type='error' showIcon className='mb-4' message='读取主机资源失败'
                    description='可能是后端不可用，请稍后重试。'/>}
@@ -273,11 +273,13 @@ function HostResourceBoard() {
 
 export default function () {
     const canViewHost = PermUtils.hasPermission('host:list')
+    // 看板页铺满内容区（与表单/详情页的 960 区分开），有无资源概览都要占满
+    const cardClass = canViewHost ? 'page-card page-card-fluid mt-4' : 'page-card page-card-fluid'
 
     return <Page padding>
         {canViewHost && <HostResourceBoard/>}
 
-        <Card className={canViewHost ? 'page-card mt-4' : 'page-card'}>
+        <Card className={cardClass}>
             <Typography.Title level={4} style={{marginTop: 0}}>欢迎来到 Docker Admin</Typography.Title>
             <Typography.Text type='secondary'>版本 v{__APP_VERSION__}</Typography.Text>
         </Card>
