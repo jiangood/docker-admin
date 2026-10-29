@@ -5,6 +5,7 @@ import {DeleteOutlined, ExportOutlined, ImportOutlined, ReloadOutlined} from '@a
 import {HttpClient, Page, PageUtils, PermUtils} from "@jiangood/open-admin"
 import Chart from "../../components/Chart"
 import ContainerDetail from "../../components/container/ContainerDetail"
+import HostComposePanel from "../../components/HostComposePanel"
 import HostImageExportModal from "../../components/HostImageExportModal"
 import HostImageImportModal from "../../components/HostImageImportModal"
 import {
@@ -545,6 +546,7 @@ export default class extends React.Component {
         ]
 
         const canImage = PermUtils.hasPermission('host:image')
+        const canCompose = PermUtils.hasPermission('host:compose')
         const keyword = imageKeyword.trim().toLowerCase()
         const filteredImages = !keyword ? images : images.filter(img =>
             (img.repoTags || []).some(t => t.toLowerCase().includes(keyword)) ||
@@ -625,6 +627,14 @@ export default class extends React.Component {
                 label: '实时资源',
                 children: this.renderUsage()
             },
+            ...(canCompose ? [{
+                key: 'compose',
+                label: 'Compose',
+                // 只在切到该 Tab 时挂载：能力探测与项目列表都要连主机，没必要在打开页面时就查
+                children: activeTab === 'compose'
+                    ? <HostComposePanel hostId={this.state.id}/>
+                    : null
+            }] : []),
         ]
 
         return <Page padding>

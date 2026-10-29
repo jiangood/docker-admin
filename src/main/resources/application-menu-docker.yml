@@ -63,6 +63,7 @@ menus:
       - {name: 容器文件, code: container:file}
       - {name: 容器操作, code: container:operate}
       - {name: 镜像操作, code: host:image}
+      - {name: Compose 管理, code: host:compose}
   setting-registry:
     pid: setting
     name: 注册中心
