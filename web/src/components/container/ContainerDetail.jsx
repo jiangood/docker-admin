@@ -10,7 +10,7 @@ import ContainerConsole from "./ContainerConsole";
 import {stateColor, stateLabel, wsContainerLogPath} from "./utils";
 
 /**
- * 通用容器组件：垂直 Tab 展示概览 / 日志 / 文件 / 终端。
+ * 通用容器组件：垂直 Tab 展示日志 / 概览 / 文件 / 终端（日志在最前，方便排查）。
  * 参照 Docker Desktop，按 hostId + containerId 定位容器，可用于主机详情与应用详情。
  * 容器名称、状态、ID、操作按钮与配置信息位于「概览」Tab 内部。
  * <p>
@@ -23,7 +23,7 @@ export default class extends React.Component {
         loading: true,
         detail: null,
         error: null,
-        activeKey: 'info',
+        activeKey: 'logs',
     }
 
     componentDidMount() {
@@ -114,6 +114,11 @@ export default class extends React.Component {
 
         const items = [
             {
+                key: 'logs',
+                label: '日志',
+                children: <ContainerLogs url={logUrl} running={running} height={tabHeight}/>
+            },
+            {
                 key: 'info',
                 label: '概览',
                 children: <div style={{height: tabHeight, display: 'flex', flexDirection: 'column'}}>
@@ -125,16 +130,12 @@ export default class extends React.Component {
                 </div>
             },
             {
-                key: 'logs',
-                label: '日志',
-                children: <ContainerLogs url={logUrl} running={running} height={tabHeight}/>
-            },
-            {
                 key: 'files',
                 label: '文件',
                 children: <div style={{height: tabHeight, overflow: 'auto'}}>
                     {running
-                        ? <ContainerFiles hostId={this.props.hostId} containerId={this.props.containerId}/>
+                        ? <ContainerFiles hostId={this.props.hostId} containerId={this.props.containerId}
+                                         mounts={detail.mounts}/>
                         : <Alert type='warning' showIcon title='容器未运行，无法浏览文件'/>}
                 </div>
             },
@@ -142,7 +143,7 @@ export default class extends React.Component {
                 key: 'console',
                 label: '终端',
                 children: <ContainerConsole hostId={this.props.hostId} containerId={this.props.containerId}
-                                            running={running} height={tabHeight - 40}/>
+                                            mounts={detail.mounts} running={running} height={tabHeight}/>
             },
         ]
 

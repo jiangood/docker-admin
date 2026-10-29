@@ -88,6 +88,30 @@ export function formatBytes(size) {
     return v.toFixed(v >= 10 ? 0 : 1) + ' ' + units[i]
 }
 
+/** 规范化容器内路径：补前导斜杠、去掉末尾斜杠，根目录仍为 '/'。 */
+function normalizeContainerPath(path) {
+    const p = ('/' + String(path || '').replace(/^\/+/, '')).replace(/\/+$/, '')
+    return p || '/'
+}
+
+/**
+ * 容器内可写挂载点（mounts 的 destination）：只有这些目录下的内容在容器重建后保留。
+ * 匿名卷（type=volume 但没有名称）重建时通常会换成新卷，因此不计入。
+ */
+export function writableMountDestinations(mounts) {
+    return (mounts || [])
+        .filter(m => m && m.destination && !m.readOnly)
+        .filter(m => m.type !== 'volume' || (m.name && String(m.name).trim()))
+        .map(m => normalizeContainerPath(m.destination))
+        .filter((d, i, arr) => arr.indexOf(d) === i)
+}
+
+/** 容器内路径是否位于某个可写挂载点之下（挂载点本身也算）。 */
+export function isPersistentPath(path, mounts) {
+    const p = normalizeContainerPath(path)
+    return writableMountDestinations(mounts).some(d => d === '/' || p === d || p.startsWith(d + '/'))
+}
+
 /** docker created 时间戳（秒/ISO）格式化。 */
 export function formatTime(value) {
     if (!value) {
