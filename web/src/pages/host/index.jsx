@@ -364,24 +364,22 @@ export default class extends React.Component {
                                         </div>
                                     </Form.Item>
 
-                                    <Form.Item label='代理地址' name='proxyUrl'
-                                               tooltip='平台与目标主机网络不通时，经一台两边都能访问的主机中转 Docker 请求；留空表示不使用代理。平台跑在容器里时不能填 127.0.0.1，要填宿主机网桥网关或局域网 IP'
-                                               rules={[{validator: validateProxyUrl}]}
-                                               extra={<div style={{marginTop: 4}}>
-                                                   一行填完，如 <code>http://192.168.1.10:8080</code>、
-                                                   <code>http://user:pass@192.168.1.10:8080</code>、
-                                                   <code>socks5://192.168.1.10:1080</code>；
-                                                   端口必填，密码显示为 <code>***</code> 表示沿用已保存的密码。
-                                               </div>}>
-                                        <Input placeholder='留空表示不使用代理，如 http://192.168.1.10:8080'
-                                               autoComplete='off' style={{maxWidth: 420}}/>
-                                    </Form.Item>
-
                                     <Form.Item label='自定义请求头'
-                                               tooltip={<div style={{width: 460}}>代理要求的请求头：左边是名称
-                                                   （header name，如 Authorization），右边是值。
-                                                   <br/><b>名称为空则不发送该请求头</b>；值照原样发送，需要
-                                                   <b>Bearer</b> 自己写在值里；清空即删除。</div>}>
+                                               tooltip={<div style={{width: 460}}>每次请求 Docker 时附带的请求头
+                                                   （供代理、网关或隧道校验）：左边是名称
+                                                   （header name），右边是值。<br/>
+                                                   <b>名称为空则不发送该请求头</b>；值照原样发送，需要
+                                                   <b>Bearer</b> 自己写在值里；清空即删除。
+                                                   <br/><b>经 http-tunnel（ht）访问远端 Docker</b>：ht 用
+                                                   <code>X-HTTP-TUNNEL-TOKEN</code> 这个请求认证头校验访客，
+                                                   名称填 <code>X-HTTP-TUNNEL-TOKEN</code>，值填
+                                                   <code>ht.toml</code> 里的 <code>token</code>。</div>}
+                                               extra={<div style={{marginTop: 4}}>
+                                                   名称为空则不发送。示例：<code>Authorization</code> /
+                                                   <code>Bearer xxxxxx</code>；
+                                                   <code>X-HTTP-TUNNEL-TOKEN</code> /
+                                                   http-tunnel 令牌（<code>ht.toml</code> 的 <code>token</code>）。
+                                               </div>}>
                                         <Space.Compact style={{width: '100%'}}>
                                             <Form.Item name='headerName' noStyle
                                                        rules={[({getFieldValue}) => ({
@@ -393,7 +391,7 @@ export default class extends React.Component {
                                                            }
                                                        })]}>
                                                 <Input allowClear style={{width: '42%'}}
-                                                       placeholder='名称，如 Authorization'/>
+                                                       placeholder='名称，如 X-HTTP-TUNNEL-TOKEN'/>
                                             </Form.Item>
                                             <Form.Item name='headerValue' noStyle>
                                                 <Input.Password autoComplete='new-password'
@@ -401,6 +399,19 @@ export default class extends React.Component {
                                                                 placeholder='值，留空则不发送'/>
                                             </Form.Item>
                                         </Space.Compact>
+                                    </Form.Item>
+
+                                    <Form.Item label='代理地址' name='proxyUrl'
+                                               tooltip='平台与目标主机网络不通时，经一台两边都能访问的主机中转 Docker 请求；留空表示不使用代理。平台跑在容器里时不能填 127.0.0.1，要填宿主机网桥网关或局域网 IP'
+                                               rules={[{validator: validateProxyUrl}]}
+                                               extra={<div style={{marginTop: 4}}>
+                                                   一行填完，如 <code>http://192.168.1.10:8080</code>、
+                                                   <code>http://user:pass@192.168.1.10:8080</code>、
+                                                   <code>socks5://192.168.1.10:1080</code>；
+                                                   端口必填，密码显示为 <code>***</code> 表示沿用已保存的密码。
+                                               </div>}>
+                                        <Input placeholder='留空表示不使用代理，如 http://192.168.1.10:8080'
+                                               autoComplete='off' style={{maxWidth: 420}}/>
                                     </Form.Item>
                                 </>
                             }
