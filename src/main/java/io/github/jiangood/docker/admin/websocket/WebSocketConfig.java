@@ -76,9 +76,6 @@ public class WebSocketConfig implements WebSocketConfigurer {
     private HostImageExportLogHandshakeInterceptor hostImageExportLogHandshakeInterceptor;
 
     @Resource
-    private HostComposeLogHandshakeInterceptor hostComposeLogHandshakeInterceptor;
-
-    @Resource
     private DeployLogHandshakeInterceptor deployLogHandshakeInterceptor;
 
     @Override
@@ -114,9 +111,6 @@ public class WebSocketConfig implements WebSocketConfigurer {
 
         // 主机详情页镜像导出实时日志（复用同一日志 tail 处理器）
         register(registry, syncLogHandler, "/admin/ws/host-image-export-log/{logId}", hostImageExportLogHandshakeInterceptor);
-
-        // 主机详情页 Compose 命令实时日志（复用同一日志 tail 处理器）
-        register(registry, syncLogHandler, "/admin/ws/host-compose-log/{logId}", hostComposeLogHandshakeInterceptor);
 
         // 部署实时日志（复用同一日志 tail 处理器，logId 即部署记录 id）
         register(registry, syncLogHandler, "/admin/ws/deploy-log/{logId}", deployLogHandshakeInterceptor);

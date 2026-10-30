@@ -79,17 +79,6 @@ git tag vx.y.z && git push && git push origin vx.y.z
   （SSH 主机落到远端 `/tmp/docker-admin-image-tar/{logId}/`，本机 / TCP 主机落到平台 `image-tar/{logId}/`）。
   弹窗展示实时日志、已写入大小与速度（每秒 / 每分钟）、保存路径与下载按钮；SSH 下载经 SFTP 流式转发，不在平台侧重复落盘。
   任务状态只存内存（`HostImageExportService`），tar 不自动删除，由用户按路径自行清理。
-- **主机详情 Compose 管理：** 新增 Tab「Compose」（权限 `host:compose`），一期只做「看/改 compose 文件 + pull / up / down」。
-  平台与主机之间只有 docker API、没有 shell，所以 compose 命令由**目标主机上的临时容器**代跑：
-  镜像默认 `docker:cli`（自带 docker CLI 与 compose 插件，可通过 `cfg.compose-helper-image` 换内网地址），
-  **项目目录按同一路径 bind 挂进容器**（compose 里 `./data:/data` 按项目目录解析，挂载点不一致结果就错），
-  daemon 连接优先用平台正在用的 TCP 地址（辅助容器 `--network host` + `DOCKER_HOST`），本机/`unix:` 则挂 socket。
-  文件读写不走 shell：同一个临时容器 + Docker archive 接口（`docker cp` 的 API 形态）读、写、列目录，写入保留原权限位。
-  项目列表来自 `docker compose ls --all --format json`；没登记过的目录在页面上手工「打开目录」，路径记在浏览器 localStorage。
-  **保存流程是「mtime 冲突检测 → `docker compose config -q` 校验 → 备份 `xxx.bak.时间戳` → 覆盖」**，
-  校验不通过绝不落盘。执行输出走 `FileLog` + WebSocket `/admin/ws/host-compose-log/{logId}`，同一项目同时只允许一个任务。
-  已知边界：只支持 Linux 宿主（Windows 容器模式直接提示不支持）；TLS 主机暂不支持（辅助容器需要客户端证书）；
-  Docker Desktop 下 `./relative` 挂载可能不生效（界面有提示）；辅助容器都打 `io.jiangood.compose=1` 标签，异常时按 label 清理。
 - **首页资源概览分两条链路：** 静态容量走 `admin/home/hostSummary`（`docker info`，30 秒缓存，首屏用），
   实时用量走 `admin/home/hostUsage`（首页）与 `admin/host/usage`（主机详情「实时资源」Tab），
   数据由 Quartz 定时任务「主机用量采集」（`HostUsageCollectJob`，每分钟）写进 `HostUsageService` 的内存缓存。

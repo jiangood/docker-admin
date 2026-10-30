@@ -44,12 +44,3 @@ sys:
   # 定时任务执行记录 / 日志文件保留天数。主机用量采集一分钟一次，默认 30 天会攒下上万条记录。
   job-log-retain-days: 7
 
-cfg:
-  # Compose 管理用的辅助镜像：需要自带 docker CLI 与 compose 插件（官方 docker:cli 即是）。
-  # 内网环境可改成自己的镜像地址，平台会把它拉到目标主机上，再起临时容器代跑 docker compose。
-  compose-helper-image: docker:cli
-  # 单条 compose 命令的最长执行时间（秒），超时会结束临时容器
-  compose-timeout-seconds: 1800
-  # 本机 unix socket 模式下挂进辅助容器的 socket 路径（TCP 主机不使用）
-  compose-socket-path: /var/run/docker.sock
-
