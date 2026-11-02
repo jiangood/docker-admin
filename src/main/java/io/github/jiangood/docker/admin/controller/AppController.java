@@ -11,7 +11,6 @@ import io.github.jiangood.docker.admin.entity.DeployLog;
 import io.github.jiangood.docker.admin.entity.DeployTrigger;
 import io.github.jiangood.docker.admin.service.AppService;
 import io.github.jiangood.docker.admin.service.ContainerService;
-import io.github.jiangood.docker.admin.service.TunnelService;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import io.github.jiangood.openadmin.modules.logviewer.service.FileLogService;
 import io.github.jiangood.openadmin.util.dto.AjaxResult;
@@ -61,9 +60,6 @@ public class AppController {
 
     @Resource
     private FileLogService fileLogService;
-
-    @Resource
-    private TunnelService tunnelService;
 
     @Resource
     private ContainerService containerService;
@@ -157,28 +153,6 @@ public class AppController {
         Container container = service.getContainer(app);
         Assert.notNull(container, "容器未部署");
         return AjaxResult.ok().data(containerService.inspect(app.getHost(), container.getId()));
-    }
-
-    /**
-     * 应用详情页「隧道」标签的元数据（当前配置、可选端口、默认前缀、可选客户端）。
-     */
-    @HasPermission("app:view")
-    @RequestMapping("tunnelMeta")
-    public AjaxResult tunnelMeta(String id) {
-        assertAppAccess(id);
-        return AjaxResult.ok().data(tunnelService.appTunnelMeta(id));
-    }
-
-    /**
-     * 配置应用隧道：完整域名 = 域名前缀 + "." + 所选客户端域名。
-     */
-    @HasPermission("app:tunnel")
-    @RequestMapping("updateTunnel")
-    public AjaxResult updateTunnel(String id, Boolean enabled, String clientId, String prefix, Integer port) {
-        assertAppAccess(id);
-        boolean on = Boolean.TRUE.equals(enabled);
-        App app = tunnelService.saveAppTunnel(id, on, clientId, prefix, port);
-        return AjaxResult.ok().msg(on ? "隧道已开启" : "隧道已关闭").data(app);
     }
 
     /**
@@ -290,7 +264,7 @@ public class AppController {
         try {
             service.deleteApp(id);
         } catch (BusinessException e) {
-            // 业务校验失败（如隧道未关闭）：原样返回原因，前端据此不走「强制删除数据」兜底
+            // 业务校验失败：原样返回原因，前端据此不走「强制删除数据」兜底
             throw e;
         } catch (Exception e) {
             log.error("删除应用失败", e);

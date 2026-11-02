@@ -1,7 +1,6 @@
 import React from "react";
 import {AutoComplete, Button, Divider, Form, Input, message, Modal, Skeleton, Switch, Typography} from "antd";
 import {FieldRemoteSelect, HttpClient, PageUtils, Perm} from "@jiangood/open-admin";
-import LinkButton from "../../components/LinkButton";
 
 /**
  * 发布标签页
@@ -67,17 +66,13 @@ export default class extends React.Component {
     }
 
     migrateApp = (values) => {
-        if (this.props.tunnelEnabled) {
-            message.warning('该应用已开启隧道，请先在「隧道」标签关闭后再迁移')
-            return
-        }
         const hide = message.loading('迁移中..', 0)
         HttpClient.post('admin/app/migrateApp', {
             appId: this.id,
             hostId: values.hostId
         }).then(() => {
-            // 应用记录仍在，仅主机变化：重新部署后，容器配置（绑定路径）与隧道目标主机都要跟着刷新
-            this.props.onChange({redeploy: true, tabs: ['config', 'tunnel']})
+            // 应用记录仍在，仅主机变化：重新部署后，容器配置（绑定路径）要跟着刷新
+            this.props.onChange({redeploy: true, tabs: ['config']})
         }).finally(hide)
     }
 
@@ -102,8 +97,6 @@ export default class extends React.Component {
 
     render() {
         const {app, appLoading} = this.state;
-        const {tunnelEnabled, onOpenTunnel} = this.props;
-        const tunnelOn = !!tunnelEnabled;
 
         if (appLoading) {
             return <Skeleton active={true}/>
@@ -178,11 +171,6 @@ export default class extends React.Component {
 
             <Divider className='mt-3 mb-3'/>
 
-            {tunnelOn &&
-                <Alert type='info' showIcon className='mb-3'
-                       title='该应用已开启隧道，迁移会改变隧道转发的目标主机地址，请先关闭隧道'
-                       action={<LinkButton onClick={onOpenTunnel}>去关闭隧道</LinkButton>}/>}
-
             <div style={rowStyle}>
                 <div>
                     <div>迁移应用</div>
@@ -194,8 +182,7 @@ export default class extends React.Component {
                     </Form.Item>
 
                     <Perm code='app:migrate'>
-                        <Button danger type="primary" htmlType='submit'
-                                disabled={tunnelOn}>迁移应用</Button>
+                        <Button danger type="primary" htmlType='submit'>迁移应用</Button>
                     </Perm>
                 </Form>
             </div>

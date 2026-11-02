@@ -53,9 +53,6 @@ public class AppService extends BaseService<App> {
 
     private static final Logger fileLog = FileLog.logger();
 
-    /** 隧道未关闭时业务拦截的响应码，前端据此区分业务拦截与容器故障 */
-    private static final int TUNNEL_STILL_OPEN_CODE = 409;
-
     /** 可变标签：镜像内容会随推送变化，本地同名镜像无法证明与仓库一致 */
     private static final String LATEST_TAG = "latest";
 
@@ -87,9 +84,6 @@ public class AppService extends BaseService<App> {
 
     @Resource
     private RegistryService registryService;
-
-    @Resource
-    TunnelService tunnelService;
 
     @Resource
     FileLogConfig fileLogConfig;
@@ -451,8 +445,7 @@ public class AppService extends BaseService<App> {
         if (newName.equals(app.getName())) {
             return app;
         }
-        // 改名会重建容器，且隧道登记的应用信息随之变化，要求先关闭隧道
-        assertTunnelClosed(app, "修改应用名称");
+        // 改名会重建容器
         this.deleteContainer(app);
         app.setName(newName);
         App saved = appRepository.save(app);
@@ -509,9 +502,6 @@ public class AppService extends BaseService<App> {
     public void deleteApp(String id) {
         // 远程删除应用
         App app = appRepository.findById(id).orElse(null);
-        assertTunnelClosed(app, "删除");
-        // 隧道必然已关闭，这里仅作兜底（防止历史数据里已关闭但客户端仍残留映射）
-        tunnelService.removeAppTunnel(app);
         deleteContainer(app);
 
         appRepository.deleteById(id);
@@ -519,27 +509,10 @@ public class AppService extends BaseService<App> {
 
     /**
      * 强制删除应用数据：用于容器已不可达、无法正常删除的兜底场景。
-     * 与正常删除一样要求隧道已关闭——关闭隧道只依赖隧道客户端、不依赖 docker 主机，不会让用户卡住。
      */
     @Transactional
     public void forceDeleteApp(String id) {
-        App app = appRepository.findById(id).orElse(null);
-        assertTunnelClosed(app, "删除");
-        // 隧道必然已关闭，这里仅作兜底（防止历史数据里已关闭但客户端仍残留映射）
-        tunnelService.removeAppTunnel(app);
         deleteById(id);
-    }
-
-    /**
-     * 隧道仍开启时禁止应用名称、容器配置、迁移、删除等变更：客户端上的隧道以应用信息
-     * （名称 / 主机 IP / 主机端口）转发，直接操作会留下失效隧道或把访问地址指错，
-     * 因此要求用户先在「隧道」标签关闭。code 固定为 409，前端据此区分业务拦截与容器故障。
-     */
-    private void assertTunnelClosed(App app, String action) {
-        if (app != null && Boolean.TRUE.equals(app.getTunnelEnabled())) {
-            throw new BusinessException(TUNNEL_STILL_OPEN_CODE,
-                    "该应用已开启隧道，请先在「隧道」标签关闭后再" + action);
-        }
     }
 
 
@@ -587,8 +560,6 @@ public class AppService extends BaseService<App> {
     public App updateConfig(String id, App.AppConfig appConfig) {
         App app = appRepository.findById(id).orElse(null);
         Assert.notNull(app, "应用不存在");
-        // 端口 / 网络模式变化会改变隧道转发的目标地址
-        assertTunnelClosed(app, "修改容器配置");
         normalizeConfig(appConfig);
         app.setConfig(appConfig);
 
@@ -826,14 +797,12 @@ public class AppService extends BaseService<App> {
 
     /**
      * 迁移应用：在原主机停止并移除容器，切换到目标主机后重新部署。
-     * 应用记录（id、名称、容器配置、镜像、隧道等）保持不变。
+     * 应用记录（id、名称、容器配置、镜像等）保持不变。
      */
     public App migrateApp(String appId, String hostId) {
         App app = requireApp(appId);
         Host host = requireHost(hostId);
         Assert.isTrue(!host.getId().equals(app.getHost().getId()), "目标主机与当前主机相同，无需迁移");
-        // 隧道目标是应用所在主机的 IP，迁移后必须重新下发，因此要求先关闭隧道
-        assertTunnelClosed(app, "迁移");
 
         // 1. 在原主机停止并移除容器（此时 app.host 仍指向原主机）
         deleteContainer(app);

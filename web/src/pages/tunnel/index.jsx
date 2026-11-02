@@ -1,296 +1,175 @@
-import {Alert, Button, Card, Form, Input, Modal, Space, Table, Tabs, Tag, Tooltip, Typography} from 'antd';
-import {PlusOutlined, ReloadOutlined} from '@ant-design/icons';
+import {Alert, Card, Divider, Typography} from 'antd';
 import React from 'react';
-import {HttpClient, Page, PermActions} from '@jiangood/open-admin';
+import {Page} from '@jiangood/open-admin';
+
+const {Title, Paragraph, Text, Link} = Typography;
 
 /**
- * 隧道（http-tunnel）：平台作为 ht 进程管理 API 的前端，
- * 登记客户端（名称 + 令牌 + API 地址 + 控制 Host + 域名）并只读展示隧道（域名 → 目标地址）。
- * 隧道由应用详情页的「隧道」标签创建与删除，应用在那里显式选择客户端。
- * 客户端进程由用户自行部署（http-tunnel v1.0+ 只认 ht.toml，没有 --api-port 等参数），
- * 管理 API 与访客流量共用 listen_port，只有 Host 等于 control_host 的请求才进入管理接口。
+ * 隧道说明页。
+ *
+ * 平台不再登记客户端，也不再通过管理 API 下发代理规则：
+ * http-tunnel 已经迭代到 2.x，自带 Web 管理端，代理（[[proxies]]）直接在客户端管理，
+ * 这里只保留入口菜单和一份部署 / 使用说明，避免平台侧的版本兼容负担。
  */
+const Code = ({children}) => (
+    <pre style={{
+        margin: '8px 0 16px',
+        padding: '12px 16px',
+        background: '#f6f8fa',
+        borderRadius: 6,
+        overflowX: 'auto',
+        fontSize: 13,
+        lineHeight: 1.6,
+    }}>{children}</pre>
+);
+
 export default class extends React.Component {
 
-    state = {
-        activeTab: 'clients',
-
-        clients: [],
-        clientsLoading: false,
-        testingId: null,
-
-        tunnels: [],
-        tunnelsLoading: false,
-
-        clientModal: false,
-        clientEditing: null,
-        clientFormValues: {},
-        clientSaving: false,
-    }
-
-    clientFormRef = React.createRef()
-
-    componentDidMount() {
-        this.loadClients()
-        this.loadTunnels()
-    }
-
-    refreshAll = () => {
-        this.loadClients()
-        this.loadTunnels()
-    }
-
-    loadClients = () => {
-        this.setState({clientsLoading: true})
-        HttpClient.get('admin/tunnel/clients').then(rs => {
-            this.setState({clients: rs.data || []})
-        }).catch(() => {
-        }).finally(() => this.setState({clientsLoading: false}))
-    }
-
-    loadTunnels = () => {
-        this.setState({tunnelsLoading: true})
-        HttpClient.get('admin/tunnel/tunnels').then(rs => {
-            this.setState({tunnels: rs.data || []})
-        }).catch(() => {
-        }).finally(() => this.setState({tunnelsLoading: false}))
-    }
-
-    // ------------------------------------------------------------------ 客户端
-
-    openClientModal = row => {
-        const editing = row || null
-        // 通过 initialValues 回填：Modal 使用 destroyOnHidden，表单会随弹窗销毁/重建，
-        // 在 setState 回调里 setFieldsValue 时表单尚未挂载，数据会丢失。
-        this.setState({
-            clientModal: true,
-            clientEditing: editing,
-            clientFormValues: editing ? {
-                name: editing.name,
-                apiUrl: editing.apiUrl,
-                controlHost: editing.controlHost,
-                domain: editing.domain,
-                remark: editing.remark,
-            } : {},
-        })
-    }
-
-    saveClient = () => {
-        this.clientFormRef.current.validateFields().then(values => {
-            const editing = this.state.clientEditing
-            this.setState({clientSaving: true})
-            HttpClient.post('admin/tunnel/saveClient', {
-                id: editing && editing.id ? editing.id : undefined,
-                name: values.name,
-                apiUrl: values.apiUrl,
-                controlHost: values.controlHost,
-                domain: values.domain,
-                token: values.token,
-                remark: values.remark,
-            }).then(() => {
-                this.setState({clientModal: false})
-                this.refreshAll()
-            }).finally(() => this.setState({clientSaving: false}))
-        })
-    }
-
-    testClient = row => {
-        this.setState({testingId: row.id})
-        HttpClient.get('admin/tunnel/testClient', {id: row.id})
-            .finally(() => this.setState({testingId: null}))
-    }
-
-    deleteClient = row => {
-        Modal.confirm({
-            title: '删除客户端',
-            content: '将尽力删除该客户端上的全部隧道，并关闭引用它的应用隧道；确定删除客户端 ' + row.name + ' 的本地登记？',
-            okText: '删除',
-            okButtonProps: {danger: true},
-            cancelText: '取消',
-            onOk: () => HttpClient.post('admin/tunnel/deleteClient?id=' + encodeURIComponent(row.id)).then(() => {
-                this.refreshAll()
-            }),
-        })
-    }
-
-    renderClientStatus = row => {
-        if (!row.configured) {
-            return <Tag>未配置</Tag>
-        }
-        if (!row.reachable) {
-            return (
-                <Tooltip title={row.statusError || '无法连接客户端管理 API'}>
-                    <Tag color='orange'>不可达</Tag>
-                </Tooltip>
-            )
-        }
-        const version = row.version ? '，客户端版本 ' + row.version : ''
-        // 代理列表来自 HT_PROXIES 时，管理 API 可以读但不能增删
-        if (row.proxiesManaged) {
-            return (
-                <Tooltip title={'客户端在线' + version + '；代理由 HT_PROXIES 环境变量提供，平台无法增删'}>
-                    <Tag color='blue'>只读</Tag>
-                </Tooltip>
-            )
-        }
-        // 管理 API 可达即在线；leaf / relay 的上游会话断开时给出提示
-        if (row.tunnelCount > 0 && row.connected === false) {
-            return (
-                <Tooltip title={'客户端在线' + version + '，但到上游的隧道会话未连接'}>
-                    <Tag color='orange'>上游未连</Tag>
-                </Tooltip>
-            )
-        }
-        return (
-            <Tooltip title={'客户端在线' + version}>
-                <Tag color='green'>在线</Tag>
-            </Tooltip>
-        )
-    }
-
-    clientColumns = [
-        {title: '客户端名称', dataIndex: 'name'},
-        {title: 'API 地址', dataIndex: 'apiUrl', render: v => v || '-'},
-        {title: '控制 Host', dataIndex: 'controlHost', render: v => v || '-'},
-        {title: '域名', dataIndex: 'domain', render: v => v || '-'},
-        {title: '状态', dataIndex: 'reachable', width: 100, render: (_, row) => this.renderClientStatus(row)},
-        {title: '隧道数', dataIndex: 'tunnelCount', width: 90, render: v => v == null ? '-' : v},
-        {title: '令牌', dataIndex: 'tokenMasked', width: 90, render: v => v || '-'},
-        {title: '备注', dataIndex: 'remark', render: v => v || '-'},
-        {
-            title: '操作', dataIndex: 'option',
-            render: (_, row) => (
-                <PermActions size='small' actions={[
-                    {
-                        label: this.state.testingId === row.id ? '测试中…' : '测试连接',
-                        perm: 'tunnel:save', type: 'link', disabled: !row.configured,
-                        onClick: () => this.testClient(row)
-                    },
-                    {label: '编辑', perm: 'tunnel:save', type: 'link', onClick: () => this.openClientModal(row)},
-                    {label: '删除', perm: 'tunnel:save', type: 'link', danger: true, onClick: () => this.deleteClient(row)},
-                ]}/>
-            ),
-        },
-    ]
-
-    renderClients = () => {
-        const {clients, clientsLoading} = this.state
-        return (
-            <div>
-                <div className='mb-2' style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-                    <Typography.Text type='secondary'>
-                        一个客户端 = 一台业务主机上运行的 ht 进程（http-tunnel v1.0+），名称、令牌、API 地址与控制 Host 需与其 ht.toml 匹配。
-                    </Typography.Text>
-                    <Space>
-                        <Button size='small' icon={<ReloadOutlined/>} onClick={this.loadClients}>刷新</Button>
-                        <PermActions size='small' actions={[
-                            {
-                                label: '新增客户端', perm: 'tunnel:save', type: 'primary',
-                                icon: <PlusOutlined/>, onClick: () => this.openClientModal(null)
-                            },
-                        ]}/>
-                    </Space>
-                </div>
-
-                <Table rowKey={row => row.id || row.name} size='small' loading={clientsLoading}
-                       dataSource={clients} columns={this.clientColumns}
-                       pagination={false}/>
-            </div>
-        )
-    }
-
-    tunnelColumns = [
-        {
-            title: '访问地址', dataIndex: 'url',
-            render: v => v ? <a href={v} target='_blank' rel='noreferrer'>{v}</a> : '-'
-        },
-        {
-            title: '名称', dataIndex: 'name',
-            render: (v, row) => row.appName
-                ? <Tooltip title={v}>{row.appName}</Tooltip>
-                : (v ? <Typography.Text type='secondary'>{v}</Typography.Text> : '-')
-        },
-        {title: '域名', dataIndex: 'domain'},
-        {title: '客户端', dataIndex: 'client', render: v => v || '-'},
-        {title: '目标地址', dataIndex: 'localAddr', render: v => v || '-'},
-    ]
-
-    renderTunnels = () => {
-        const {tunnels, tunnelsLoading} = this.state
-        return (
-            <div>
-                <div className='mb-2' style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-                    <Typography.Text type='secondary'>
-                        隧道由应用详情页的「隧道」标签创建与删除，这里仅查看。
-                    </Typography.Text>
-                    <Button size='small' icon={<ReloadOutlined/>} onClick={this.loadTunnels}>刷新</Button>
-                </div>
-
-                <Table rowKey={row => row.client + '|' + row.domain} size='small' loading={tunnelsLoading}
-                       dataSource={tunnels} columns={this.tunnelColumns}
-                       pagination={false}/>
-
-                <Typography.Text type='secondary' className='mt-2' style={{display: 'block'}}>
-                    域名需解析到入口节点 IP；入口按 Host 头路由。同一客户端内域名不能重复；多个节点声明同一域名时，本地代理优先于下游 v4 路由。
-                </Typography.Text>
-            </div>
-        )
-    }
-
     render() {
-        const {activeTab, clientModal, clientSaving, clientEditing, clientFormValues} = this.state
-
-        const items = [
-            {key: 'clients', label: '客户端', forceRender: true, children: this.renderClients()},
-            {key: 'tunnels', label: '隧道', children: this.renderTunnels()},
-        ]
-
         return <Page padding>
             <Card className='page-card'>
                 <Alert type='info' showIcon className='mb-3'
-                       title='入口、中继与客户端都由你自行部署'
-                       description={'平台只登记客户端并通过其管理 API 维护本地代理；改动由客户端本地校验并原子写回 ht.toml，无需重启。'
-                           + '管理 API 与访客流量共用 listen_port，只有 Host 等于 control_host 的请求才会进入管理接口；'
-                           + '客户端用 HT_PROXIES 提供代理时为只读。'}/>
-                <Tabs items={items} activeKey={activeTab} onChange={key => this.setState({activeTab: key})}/>
-            </Card>
+                       title='隧道由 http-tunnel 自行管理'
+                       description={'平台不再登记客户端、不再调用管理 API 下发代理规则。'
+                           + '请部署最新版 http-tunnel（ht），使用它自带的 Web 管理端维护 [[proxies]]；本页只说明部署与使用方式。'}/>
 
-            <Modal title={clientEditing ? '编辑客户端' : '新增客户端'}
-                   open={clientModal} destroyOnHidden
-                   confirmLoading={clientSaving}
-                   onOk={this.saveClient}
-                   onCancel={() => this.setState({clientModal: false})}>
-                <Form ref={this.clientFormRef} labelCol={{flex: '90px'}}
-                      initialValues={clientFormValues} preserve={false}>
-                    <Form.Item label='名称' name='name' rules={[{required: true, message: '请填写客户端名称'}]}>
-                        <Input disabled={!!clientEditing} placeholder='如 home，建议与 ht.toml 的 name 一致'/>
-                    </Form.Item>
-                    <Form.Item label='API 地址' name='apiUrl'
-                               rules={[{required: true, message: '请填写客户端 API 地址'}]}
-                               tooltip='客户端的 listen_port，管理 API 与访客共用该端口（v1.0+ 没有 --api-port），如 http://192.168.1.10:7777'>
-                        <Input placeholder='http://192.168.1.10:7777'/>
-                    </Form.Item>
-                    <Form.Item label='控制 Host' name='controlHost'
-                               tooltip='ht.toml 的 control_host；管理接口只在 Host 等于它时可达。平台按 IP 连接客户端时填这里（如 control_host=127.0.0.1）；留空则用 API 地址里的主机名'>
-                        <Input allowClear placeholder='如 edge.lan 或 127.0.0.1（可留空）'/>
-                    </Form.Item>
-                    <Form.Item label='令牌' name='token'
-                               rules={clientEditing ? [] : [{required: true, message: '请填写客户端令牌'}]}
-                               tooltip='与 ht.toml 的 token 一致（leaf / relay 也可用 [upstream].token），用于管理 API 的 Bearer 认证；留空时新建自动生成、编辑则沿用原令牌'>
-                        <Input.Password autoComplete='new-password'
-                                        placeholder={clientEditing && clientEditing.hasToken ? '******（留空不修改）'
-                                            : '留空自动生成'}/>
-                    </Form.Item>
-                    <Form.Item label='域名' name='domain'
-                               tooltip='应用完整域名 = 域名前缀 + "." + 该域名，如 example.com'>
-                        <Input allowClear placeholder='如 example.com'/>
-                    </Form.Item>
-                    <Form.Item label='备注' name='remark'>
-                        <Input placeholder='如 内网 192.168.1.0/24'/>
-                    </Form.Item>
-                </Form>
-            </Modal>
+                <Typography>
+                    <Title level={4}>1. 部署 ht</Title>
+                    <Paragraph>
+                        从 <Link href='https://github.com/jiangood/http-tunnel/releases' target='_blank' rel='noreferrer'>Releases</Link> 下载
+                        <Text code>ht</Text>，或直接使用镜像 <Text code>ghcr.io/jiangood/ht:latest</Text>。
+                        入口、中继、客户端都是同一个程序，角色只由 <Text code>ht.toml</Text> 是否包含
+                        <Text code>[upstream]</Text> 决定。
+                    </Paragraph>
+                    <Code>{`docker run -d --name ht --restart unless-stopped \\
+  --stop-timeout 40 \\
+  -p 7777:7777 \\
+  -v /opt/ht:/app \\
+  ghcr.io/jiangood/ht:latest`}</Code>
+                    <Paragraph type='secondary'>
+                        容器固定读取 <Text code>/app/ht.toml</Text>；保存管理端修改需要挂载目录可写。
+                        <Text code>--stop-timeout 40</Text> 让 ht 在停止时最多 drain 30 秒，避免截断在途请求。
+                    </Paragraph>
+
+                    <Divider/>
+
+                    <Title level={4}>2. 编写入口配置</Title>
+                    <Paragraph>
+                        下面是最简单的单节点入口（入口和业务服务在同一台机器）。Token 可用
+                        <Text code>openssl rand -hex 16</Text> 生成。
+                    </Paragraph>
+                    <Code>{`name = "edge"
+listen_port = 7777
+control_host = "control.example.com"
+token = "把 openssl rand -hex 16 的输出填在这里"
+
+[[proxies]]
+name = "app"
+domain = "app.example.com"
+local_addr = "127.0.0.1:8080"`}</Code>
+                    <Paragraph>
+                        把 <Text code>app.example.com</Text> 的 A 记录指向入口 IP，访问
+                        <Text code>http://app.example.com:7777</Text>。公网部署请在入口前加
+                        Nginx / Caddy 等 TLS 终止层，把 443 反代到 <Text code>127.0.0.1:7777</Text>，
+                        并转发 <Text code>Upgrade</Text> / <Text code>Connection</Text> 头。
+                    </Paragraph>
+
+                    <Divider/>
+
+                    <Title level={4}>3. 用 Web 管理端维护代理</Title>
+                    <Paragraph>
+                        浏览器打开 <Text code>http://&lt;control_host&gt;:&lt;listen_port&gt;/</Text>
+                        （例如 <Text code>http://control.example.com:7777/</Text>），
+                        HTTP Basic 用户名填 <Text code>ht</Text>，密码填 <Text code>ht.toml</Text> 里的
+                        <Text code>token</Text>。管理页、管理 API 和访客流量共用 <Text code>listen_port</Text>，
+                        且只在 <Text code>control_host</Text> 上可达。
+                    </Paragraph>
+                    <Paragraph>
+                        在管理页里可以直接增删改本地 <Text code>[[proxies]]</Text>：
+                        <Text code>name</Text>（进程内唯一）、<Text code>domain</Text>（支持
+                        <Text code>*.example.com</Text> 泛域名）、<Text code>local_addr</Text>
+                        （原始 TCP 地址或 Unix Socket），按需设置 <Text code>auth_header</Text>。
+                        修改立即生效并原子写回 <Text code>ht.toml</Text>，无需重启。
+                    </Paragraph>
+                    <Paragraph type='secondary'>
+                        如果 <Text code>control_host</Text> 暂时没有解析到入口，可先用
+                        <Text code>curl -H "Host: control.example.com" http://127.0.0.1:7777/</Text>
+                        验证，或在本机 hosts 里补一条解析后再用浏览器打开。
+                    </Paragraph>
+
+                    <Divider/>
+
+                    <Title level={4}>4. 内网节点通过 [upstream] 接入</Title>
+                    <Paragraph>
+                        内网机器不能开放入站端口时，让客户端主动拨出入口（两个节点），
+                        或在中间再加一层中继（三个节点）。客户端配置示例：
+                    </Paragraph>
+                    <Code>{`name = "home"
+listen_port = 0
+
+[[proxies]]
+name = "app"
+domain = "app.example.com"
+local_addr = "127.0.0.1:8080"
+
+[upstream]
+url = "wss://control.example.com:443"
+token = "与服务端 token 相同"`}</Code>
+                    <Paragraph>
+                        客户端启动后会把本地 <Text code>[[proxies]]</Text> 镜像到上游，入口的 Web 管理端
+                        可以在线管理已连接下游节点的代理。多跳时每一跳都配置 <Text code>[upstream]</Text>，
+                        建议每跳使用不同的 Token；启动顺序为 服务端 → 中继 → 客户端。
+                    </Paragraph>
+
+                    <Divider/>
+
+                    <Title level={4}>5. 在平台里配合使用</Title>
+                    <Paragraph>
+                        <ul style={{margin: '8px 0 16px', paddingLeft: 20}}>
+                            <li>
+                                <b>暴露应用：</b><Text code>local_addr</Text> 填应用映射到主机侧的端口
+                                （如 <Text code>127.0.0.1:8080</Text>），<Text code>domain</Text> 填对外域名，
+                                域名解析到入口即可。
+                            </li>
+                            <li>
+                                <b>访问远端 Docker：</b><Text code>local_addr</Text> 填
+                                <Text code>unix:///var/run/docker.sock</Text>（ht 以容器运行时需挂载该 socket），
+                                并给这条代理配置 <Text code>auth_header</Text>。然后在平台「主机管理 → 连接方式 TCP →
+                                自定义请求头」填名称 <Text code>X-HTTP-TUNNEL-TOKEN</Text>、值填密钥。
+                            </li>
+                            <li>
+                                <b>容器里的地址：</b>ht 以容器运行时，<Text code>127.0.0.1</Text>
+                                指容器自己；转发宿主机服务用 <Text code>host.docker.internal:&lt;端口&gt;</Text>，
+                                转发同 compose 服务用服务名。
+                            </li>
+                        </ul>
+                    </Paragraph>
+
+                    <Divider/>
+
+                    <Title level={4}>6. 常见问题</Title>
+                    <Paragraph>
+                        <ul style={{margin: '8px 0', paddingLeft: 20}}>
+                            <li><Text code>404 No tunnel for this host</Text>：节点未连接，或域名不在任何
+                                <Text code>[[proxies]]</Text> 中。</li>
+                            <li><Text code>401</Text>：配置了 <Text code>auth_header</Text> 但访客缺少或带错
+                                <Text code>X-HTTP-TUNNEL-TOKEN</Text>；多跳时也检查两端的 Token 是否一致。</li>
+                            <li><Text code>502</Text>：隧道已匹配，但背后的本地服务连不上，检查
+                                <Text code>local_addr</Text> 是否从 ht 所在环境可达。</li>
+                            <li><Text code>control_host</Text> 不能与任何 <Text code>[[proxies]].domain</Text>
+                                相同，也不能是泛域名。</li>
+                            <li><Text code>listen_port = 0</Text> 只允许在有 <Text code>[upstream]</Text> 时使用，
+                                实际端口见启动日志。</li>
+                        </ul>
+                    </Paragraph>
+
+                    <Paragraph type='secondary' className='mt-3'>
+                        完整配置项、多跳拓扑和排查说明见
+                        <Link href='https://github.com/jiangood/http-tunnel' target='_blank' rel='noreferrer'> http-tunnel 项目文档</Link>。
+                        版本迭代较快，请以该文档和 Releases 说明为准。
+                    </Paragraph>
+                </Typography>
+            </Card>
         </Page>
     }
-
 }

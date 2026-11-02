@@ -75,35 +75,10 @@ public class App extends BaseEntity {
     @Remark("备注")
     String remark;
 
-    /**
-     * 隧道（http-tunnel）：应用详情页「隧道」标签的配置。
-     * 只需开关、域名前缀、端口与所选客户端；完整域名 = 域名前缀 + "." + 所选客户端域名，
-     * 即 tunnelPrefix + "." + {@link TunnelClient#getDomain()}，因此这里不保存域名。
-     */
-    @Remark("隧道开关")
-    Boolean tunnelEnabled;
-
-    @Remark("域名前缀")
-    String tunnelPrefix;
-
-    @Remark("隧道端口")
-    Integer tunnelPort;
-
-    /**
-     * 应用隧道使用的客户端，在应用详情页显式选择。
-     */
-    @Remark("隧道客户端")
-    @ManyToOne
-    TunnelClient tunnelClient;
-
-
    @PrePersist
     public void prePersist() {
         if (autoDeploy == null) {
             autoDeploy = true;
-        }
-        if (tunnelEnabled == null) {
-            tunnelEnabled = false;
         }
         if (config == null) {
             config = new AppConfig();

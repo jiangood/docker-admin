@@ -289,7 +289,7 @@ export default class extends React.Component {
                         <Input/>
                     </Form.Item>
                     <Form.Item label='IP地址' name='ip' rules={[{required: true, message: '请填写主机 IP 地址'}]}
-                               tooltip='隧道转发目标：目标地址 = 该 IP + 应用映射到主机侧的端口，需隧道客户端所在机器可访问'>
+                               tooltip='应用访问地址使用：地址 = 该 IP + 应用映射到主机侧的端口'>
                         <Input placeholder='192.168.1.10'/>
                     </Form.Item>
                     <Form.Item label='构建节点' name='isRunner' rules={[{required: true}]}

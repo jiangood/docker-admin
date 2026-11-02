@@ -11,8 +11,6 @@ public interface AppRepository extends BaseRepository<App, String> {
 
     List<App> findAllByHost_Id(String hostId);
 
-    List<App> findAllByTunnelClient_Id(String tunnelClientId);
-
     boolean existsByName(String name);
 
 }
