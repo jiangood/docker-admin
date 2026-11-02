@@ -90,7 +90,8 @@ git tag vx.y.z && git push && git push origin vx.y.z
   CLI 是辅助容器内的交互式 shell，权限等同于宿主机 root。
   目录只接受 Docker daemon 可见的 Linux 绝对路径，禁止 `/`、`/host`、`/tmp` 与系统目录；Windows 主机需填
   Docker Desktop 的 `/run/desktop/mnt/host/d/...` 或 WSL2 的 `/mnt/d/...`，不支持 Windows 容器主机。
-  辅助容器由 `host:save` 显式部署/删除，文件接口用 `host:file`，CLI WebSocket 用 `host:cli`；
+  辅助容器由 `host:save` 显式部署/删除，文件接口用 `host:file`（`admin/host/file` 只保留 `upload` 与 `downloadDir`，
+  路径相对于当前挂载目录，空串表示挂载目录本身），CLI WebSocket 用 `host:cli`；
   容器常驻，删除容器不会删除宿主机文件。重建 `latest` 会先尝试拉取，拉取失败但本地已有镜像时继续使用本地镜像。
   Agent 面板顶部只保留一行右上角状态（运行中 / 未部署 + 目录），同级放上传、下载、切换挂载目录、部署/删除按钮，
   去掉刷新与重建；上传写入当前挂载目录，下载把该目录打成 tar，其余文件操作（查看 / 编辑 / 删除 / 重命名 / 新建目录）走终端；

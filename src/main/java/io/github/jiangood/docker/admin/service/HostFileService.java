@@ -1,6 +1,5 @@
 package io.github.jiangood.docker.admin.service;
 
-import io.github.jiangood.docker.admin.dto.ContainerFileVo;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.util.HostRootPolicy;
 import io.github.jiangood.openadmin.util.BusinessException;
@@ -12,11 +11,10 @@ import java.io.OutputStream;
 import java.util.List;
 
 /**
- * 主机文件管理：所有操作都通过辅助容器完成。
+ * 主机文件：只保留上传与下载，所有操作都通过辅助容器完成。
  * <p>
- * 辅助容器把配置的宿主机目录挂载到 {@code /host}，所以这里只做三件事：
- * 把界面上的相对路径转成 {@code /host/...}、复用 {@link ContainerService} 的容器文件能力、
- * 为 Docker API 没有的文件操作（mkdir / mv / rm）补上 exec 调用。
+ * 辅助容器把配置的宿主机目录挂载到 {@code /host}，所以这里只做两件事：
+ * 把界面上的相对路径转成 {@code /host/...}、复用 {@link ContainerService} 的容器文件能力。
  * <p>
  * 界面上看到的路径始终是相对于挂载目录的，不会出现宿主机绝对路径，
  * 因此也不存在从文件管理里跳到目录外的可能。
@@ -31,41 +29,12 @@ public class HostFileService {
     @Resource
     private ContainerService containerService;
 
-    public List<ContainerFileVo> list(Host host, String path) {
-        HostAgentService.AgentContext context = hostAgentService.requireRunning(host);
-        String rel = HostRootPolicy.normalizeRelativePath(path);
-        List<ContainerFileVo> files = containerService.listFiles(host, context.containerId(),
-                HostRootPolicy.toAgentPath(rel));
-        for (ContainerFileVo file : files) {
-            file.setPath(HostRootPolicy.fromAgentPath(file.getPath()));
-        }
-        return files;
-    }
-
-    public String preview(Host host, String path) {
-        HostAgentService.AgentContext context = hostAgentService.requireRunning(host);
-        String rel = HostRootPolicy.normalizeRelativePath(path);
-        if (rel.isEmpty()) {
-            throw new BusinessException("请选择文件");
-        }
-        return containerService.previewFile(host, context.containerId(), HostRootPolicy.toAgentPath(rel));
-    }
-
-    public void download(Host host, String path, OutputStream out) {
-        HostAgentService.AgentContext context = hostAgentService.requireRunning(host);
-        String rel = HostRootPolicy.normalizeRelativePath(path);
-        if (rel.isEmpty()) {
-            throw new BusinessException("请选择文件");
-        }
-        containerService.downloadFile(host, context.containerId(), HostRootPolicy.toAgentPath(rel), out);
-    }
-
+    /**
+     * 下载挂载目录本身或其中的子目录，空路径表示挂载目录。
+     */
     public void downloadDirectory(Host host, String path, OutputStream out) {
         HostAgentService.AgentContext context = hostAgentService.requireRunning(host);
         String rel = HostRootPolicy.normalizeRelativePath(path);
-        if (rel.isEmpty()) {
-            throw new BusinessException("请选择目录");
-        }
         containerService.downloadDirectory(host, context.containerId(), HostRootPolicy.toAgentPath(rel), out);
     }
 
@@ -119,90 +88,13 @@ public class HostFileService {
         }
     }
 
+    /**
+     * 上传文件到挂载目录下的 dir，文件名只允许单层名称。
+     */
     public void upload(Host host, String dir, String filename, byte[] content) {
         String safeName = HostRootPolicy.normalizeName(filename);
         String rel = HostRootPolicy.joinRelative(dir, safeName);
         write(host, rel, content);
-    }
-
-    public void mkdir(Host host, String path) {
-        String rel = HostRootPolicy.normalizeRelativePath(path);
-        if (rel.isEmpty()) {
-            throw new BusinessException("目录名不能为空");
-        }
-        HostAgentService.AgentContext context = hostAgentService.requireRunning(host);
-        containerService.execOrThrow(host, context.containerId(),
-                List.of("mkdir", "-p", HostRootPolicy.toAgentPath(rel)));
-    }
-
-    public void rename(Host host, String path, String newPath) {
-        String from = HostRootPolicy.normalizeRelativePath(path);
-        String to = HostRootPolicy.normalizeRelativePath(newPath);
-        if (from.isEmpty() || to.isEmpty()) {
-            throw new BusinessException("不能重命名挂载目录本身");
-        }
-        if (from.equals(to)) {
-            throw new BusinessException("新名称与原名称相同");
-        }
-
-        HostAgentService.AgentContext context = hostAgentService.requireRunning(host);
-        String fromAgent = HostRootPolicy.toAgentPath(from);
-        String toAgent = HostRootPolicy.toAgentPath(to);
-
-        ContainerService.CommandResult exists = containerService.exec(host, context.containerId(),
-                testCmd("-e", toAgent));
-        if (exists.exitCode() == 0) {
-            throw new BusinessException("目标已存在：" + to);
-        }
-        containerService.execOrThrow(host, context.containerId(), List.of("mv", fromAgent, toAgent));
-    }
-
-    public void delete(Host host, String path) {
-        String rel = HostRootPolicy.normalizeRelativePath(path);
-        if (rel.isEmpty()) {
-            throw new BusinessException("不能删除挂载目录本身");
-        }
-
-        HostAgentService.AgentContext context = hostAgentService.requireRunning(host);
-        String target = HostRootPolicy.toAgentPath(rel);
-
-        // 符号链接只删链接本身，不跟进去
-        ContainerService.CommandResult link = containerService.exec(host, context.containerId(),
-                testCmd("-L", target));
-        if (link.exitCode() == 0) {
-            containerService.execOrThrow(host, context.containerId(), List.of("rm", "-f", target));
-            return;
-        }
-
-        ContainerService.CommandResult dir = containerService.exec(host, context.containerId(),
-                testCmd("-d", target));
-        if (dir.exitCode() == 0) {
-            assertNotMountPoint(host, context.containerId(), target);
-        }
-        containerService.execOrThrow(host, context.containerId(), List.of("rm", "-rf", target));
-    }
-
-    /**
-     * 目录是独立挂载点时拒绝删除：rm -rf 会先清空挂载点里的内容，再在卸载点报 EBUSY。
-     */
-    private void assertNotMountPoint(Host host, String containerId, String path) {
-        ContainerService.CommandResult self = containerService.exec(host, containerId,
-                statCmd("%d", path));
-        if (self.exitCode() != 0) {
-            return;
-        }
-        int idx = path.lastIndexOf('/');
-        String parent = idx <= 0 ? "/" : path.substring(0, idx);
-        ContainerService.CommandResult parentResult = containerService.exec(host, containerId,
-                statCmd("%d", parent));
-        if (parentResult.exitCode() != 0) {
-            return;
-        }
-        String selfDevice = self.stdout().trim();
-        String parentDevice = parentResult.stdout().trim();
-        if (!selfDevice.isEmpty() && !parentDevice.isEmpty() && !selfDevice.equals(parentDevice)) {
-            throw new BusinessException("该目录是一个独立挂载点，不能通过文件管理删除，请到宿主机处理");
-        }
     }
 
     /**

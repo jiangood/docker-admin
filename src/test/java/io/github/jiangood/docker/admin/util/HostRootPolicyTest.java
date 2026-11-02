@@ -79,8 +79,6 @@ class HostRootPolicyTest {
     void agentPathMapping() {
         assertEquals("/host", HostRootPolicy.toAgentPath(""));
         assertEquals("/host/a/b", HostRootPolicy.toAgentPath("a/b"));
-        assertEquals("", HostRootPolicy.fromAgentPath("/host"));
-        assertEquals("a/b", HostRootPolicy.fromAgentPath("/host/a/b"));
     }
 
     @Test

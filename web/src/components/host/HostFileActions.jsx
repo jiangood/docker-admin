@@ -6,8 +6,9 @@ import {HttpClient} from '@jiangood/open-admin'
 /**
  * 文件上传 / 下载按钮，放在 Agent 状态条右上角。
  * <p>
- * 页面不再展示文件树：上传写入辅助容器当前挂载的目录，下载把该目录打成 tar；
- * 查看、编辑、删除、重命名、新建目录等操作统一走终端，避免平台侧维护一整套文件管理 UI。
+ * 页面不再展示文件树：接口里的 path 相对于辅助容器当前挂载的目录，
+ * 空字符串表示挂载目录本身，所以上传写入挂载目录、下载把整个挂载目录打成 tar；
+ * 查看、编辑、删除、重命名、新建目录等操作统一走终端。
  */
 export default class extends React.Component {
 
@@ -17,7 +18,7 @@ export default class extends React.Component {
 
     uploadingCount = 0
 
-    /** 当前挂载目录，与状态条、终端保持一致。 */
+    /** 当前挂载目录的宿主机绝对路径，只用于展示与下载文件名。 */
     root = () => {
         const {status} = this.props
         const root = (status && (status.mountedRoot || status.desiredRoot)) || '/home'
@@ -35,7 +36,8 @@ export default class extends React.Component {
             form.append('file', file)
             this.uploadingCount += 1
             this.setState({uploading: true})
-            HttpClient.post('admin/host/file/upload', form, {hostId, path}, {toastError: false})
+            // path 为空表示挂载目录本身
+            HttpClient.post('admin/host/file/upload', form, {hostId, path: ''}, {toastError: false})
                 .then(() => message.success(`${file.name} 已上传到 ${path}`))
                 .catch(e => message.error(e.message || `${file.name} 上传失败`))
                 .finally(() => {
@@ -52,7 +54,7 @@ export default class extends React.Component {
         const hide = message.loading(`正在打包 ${path}…`, 0)
         HttpClient.download({
             url: 'admin/host/file/downloadDir',
-            params: {hostId, path},
+            params: {hostId, path: ''},
             fileName: `${name}.tar`,
         }).catch(e => message.error(e.message || '下载失败'))
             .finally(() => hide())

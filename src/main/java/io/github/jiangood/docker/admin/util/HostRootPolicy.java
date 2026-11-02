@@ -208,34 +208,12 @@ public final class HostRootPolicy {
         return parent.isEmpty() ? child : parent + "/" + child;
     }
 
-    public static String parentRelative(String path) {
-        String rel = normalizeRelativePath(path);
-        int idx = rel.lastIndexOf('/');
-        return idx < 0 ? "" : rel.substring(0, idx);
-    }
-
     /**
      * 相对路径 -> 辅助容器内路径（{@code /host/...}）。
      */
     public static String toAgentPath(String relativePath) {
         String rel = normalizeRelativePath(relativePath);
         return rel.isEmpty() ? AGENT_MOUNT : AGENT_MOUNT + "/" + rel;
-    }
-
-    /**
-     * 辅助容器内路径 -> 界面相对路径。
-     */
-    public static String fromAgentPath(String agentPath) {
-        if (agentPath == null) {
-            return "";
-        }
-        if (agentPath.equals(AGENT_MOUNT) || agentPath.equals(AGENT_MOUNT + "/")) {
-            return "";
-        }
-        if (agentPath.startsWith(AGENT_MOUNT + "/")) {
-            return agentPath.substring(AGENT_MOUNT.length() + 1);
-        }
-        return agentPath;
     }
 
     private static void assertNoControlChars(String value) {
