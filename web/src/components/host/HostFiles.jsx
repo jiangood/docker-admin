@@ -3,7 +3,6 @@ import {
     Alert,
     Button,
     Empty,
-    Input,
     Modal,
     Popconfirm,
     Space,
@@ -19,7 +18,6 @@ import {
     EditOutlined,
     EyeOutlined,
     FileOutlined,
-    FolderOpenOutlined,
     FolderOutlined,
     ReloadOutlined,
     UploadOutlined
@@ -53,7 +51,7 @@ function updateTree(nodes, key, children) {
  * <p>
  * 重命名、下载、新建目录等操作交给左侧命令行（agent 内置 docker / compose 和 BusyBox），
  * 文件树保持简单。目录按需加载；根目录是辅助容器当前挂载的宿主机目录，
- * 需要看别的目录时点「切换目录」，后台会用新目录重建容器。
+ * 需要看别的目录时用右上角的「切换目录」（会重建容器，文件与终端一起切换）。
  */
 export default class extends React.Component {
 
@@ -69,9 +67,6 @@ export default class extends React.Component {
         uploading: false,
         preview: CLOSED_PREVIEW,
         edit: CLOSED_EDIT,
-        rootOpen: false,
-        rootInput: '',
-        rootSubmitting: false,
     }
 
     editContent = ''
@@ -181,42 +176,6 @@ export default class extends React.Component {
         preview: CLOSED_PREVIEW,
         edit: CLOSED_EDIT,
     }))
-
-    // ---------------------------------------------------------------- 切换目录
-
-    openRootModal = () => this.setState({rootOpen: true, rootInput: this.state.root || '/home'})
-
-    closeRootModal = () => this.setState({rootOpen: false})
-
-    /**
-     * 切换挂载目录：宿主机目录在部署时不再指定，这里按需换一个。
-     * 辅助容器只能挂一个目录，所以后台会用新目录重建容器，终端会断开重连。
-     */
-    switchRoot = () => {
-        const {hostId} = this.props
-        const value = (this.state.rootInput || '').trim()
-        if (!value.startsWith('/')) {
-            message.warning('请填写以 / 开头的 Linux 绝对路径')
-            return
-        }
-        this.setState({rootSubmitting: true})
-        HttpClient.post('admin/host/agent/root', null, {id: hostId, root: value}, {toastError: false})
-            .then(rs => {
-                message.success((rs && rs.message) || '目录已切换')
-                this.setState({rootOpen: false})
-                if (this.props.onAgentReload) {
-                    this.props.onAgentReload()
-                }
-            })
-            .catch(e => {
-                message.error(e.message || '切换目录失败')
-                // 重建失败时旧容器可能已经删掉，刷新状态让按钮回到「部署」
-                if (this.props.onAgentReload) {
-                    this.props.onAgentReload()
-                }
-            })
-            .finally(() => this.setState({rootSubmitting: false}))
-    }
 
     fullPath = path => {
         const root = (this.state.root || '/home').replace(/\/+$/, '')
@@ -377,11 +336,10 @@ export default class extends React.Component {
     render() {
         const {
             root, deployed, treeData, treeKey, expandedKeys, selectedKeys,
-            selected, uploading, preview, edit, rootOpen, rootInput, rootSubmitting
+            selected, uploading, preview, edit
         } = this.state
         const token = getToken()
         const height = this.props.height || 640
-        const canSwitchRoot = PermUtils.hasPermission('host:save')
 
         if (!PermUtils.hasPermission('host:file')) {
             return <Alert type='warning' showIcon title='缺少 host:file 权限，无法管理主机文件'/>
@@ -398,12 +356,6 @@ export default class extends React.Component {
         const canEdit = !!selected && selected.type === 'file' && isEditable(selected)
         const canDelete = !!selected && selected.key !== ROOT_KEY
         const uploadTarget = this.uploadTarget()
-
-        const switchButton = canSwitchRoot
-            ? <Button size='small' icon={<FolderOpenOutlined/>} onClick={this.openRootModal}>切换目录</Button>
-            : <Tooltip title='需要 host:save 权限才能切换目录'>
-                <span><Button size='small' icon={<FolderOpenOutlined/>} disabled>切换目录</Button></span>
-            </Tooltip>
 
         return <div style={{height, display: 'flex', flexDirection: 'column'}}>
             <div className='mb-2'
@@ -434,7 +386,6 @@ export default class extends React.Component {
                                 onConfirm={() => this.remove(selected)}>
                         <Button size='small' danger icon={<DeleteOutlined/>} disabled={!canDelete}>删除</Button>
                     </Popconfirm>
-                    {switchButton}
                     <Button size='small' icon={<ReloadOutlined/>} onClick={this.refresh}>刷新</Button>
                 </Space>
             </div>
@@ -492,29 +443,6 @@ export default class extends React.Component {
                                       this.editContent = v
                                   }}
                                   placeholder={'# 在此编辑文件内容'}/>
-            </Modal>
-
-            <Modal open={rootOpen} width={640} destroyOnHidden
-                   title='切换文件目录'
-                   okText='切换并重建'
-                   confirmLoading={rootSubmitting}
-                   onOk={this.switchRoot}
-                   onCancel={this.closeRootModal}>
-                <Typography.Text strong>宿主机目录</Typography.Text>
-                <Input className='mt-1' value={rootInput} placeholder='/home'
-                       onChange={e => this.setState({rootInput: e.target.value})}
-                       onPressEnter={this.switchRoot}/>
-                <Space size={4} wrap className='mt-2'>
-                    {['/home', '/data', '/opt', '/srv', '/var/www'].map(path =>
-                        <Button key={path} size='small'
-                                onClick={() => this.setState({rootInput: path})}>{path}</Button>)}
-                </Space>
-                <div className='mt-3' style={{fontSize: 12, lineHeight: 1.8}}>
-                    <div>只接受 Docker daemon 可见的 Linux 绝对路径；Windows 主机填 Docker Desktop 的
-                        <code> /run/desktop/mnt/host/d/...</code> 或 WSL2 的 <code>/mnt/d/...</code>。
-                    </div>
-                    <div>切换会用新目录重建辅助容器，左侧终端会断开并自动重连；不支持 /、/etc 等系统目录。</div>
-                </div>
             </Modal>
         </div>
     }

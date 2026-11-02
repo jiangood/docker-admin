@@ -18,8 +18,6 @@ export default class extends React.Component {
         status: null,
     }
 
-    alertRef = React.createRef()
-
     canFile = () => PermUtils.hasPermission('host:file')
 
     canCli = () => PermUtils.hasPermission('host:cli')
@@ -28,16 +26,6 @@ export default class extends React.Component {
         this.setState({status})
         if (this.props.onStatus) {
             this.props.onStatus(status)
-        }
-    }
-
-    /**
-     * 文件面板切换目录后会重建容器，这里重新读取一次状态：
-     * 新的挂载目录会传给文件树，新的容器 ID 会让终端自动重连。
-     */
-    reloadAgent = () => {
-        if (this.alertRef.current) {
-            this.alertRef.current.load()
         }
     }
 
@@ -60,19 +48,17 @@ export default class extends React.Component {
                     <HostCli hostId={hostId} status={status} height='100%'/>
                 </div>
                 <div style={{flex: 1, minWidth: 0}}>
-                    <HostFiles hostId={hostId} status={status} height='100%'
-                               onAgentReload={this.reloadAgent}/>
+                    <HostFiles hostId={hostId} status={status} height='100%'/>
                 </div>
             </div>
         } else if (canFile) {
-            body = <HostFiles hostId={hostId} status={status} height={height}
-                              onAgentReload={this.reloadAgent}/>
+            body = <HostFiles hostId={hostId} status={status} height={height}/>
         } else {
             body = <HostCli hostId={hostId} status={status} height={height}/>
         }
 
         return <>
-            <HostAgentAlert ref={this.alertRef} hostId={hostId} onChange={this.onAgentChange}/>
+            <HostAgentAlert hostId={hostId} onChange={this.onAgentChange}/>
             {body}
         </>
     }

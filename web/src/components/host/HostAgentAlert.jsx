@@ -1,12 +1,13 @@
 import React from 'react'
 import {Badge, Button, Input, Modal, Popconfirm, Space, Spin, Tooltip, Typography, message} from 'antd'
-import {CloudServerOutlined, DeleteOutlined, QuestionCircleOutlined} from '@ant-design/icons'
+import {CloudServerOutlined, DeleteOutlined, FolderOpenOutlined, QuestionCircleOutlined} from '@ant-design/icons'
 import {HttpClient, PermUtils} from '@jiangood/open-admin'
 
 /**
- * Agent 容器状态条：右上角只显示当前状态与操作（部署 / 删除）。
+ * Agent 容器状态条：右上角只显示当前状态与操作（部署 / 切换目录 / 删除）。
  * <p>
- * 页面不再堆说明性 Alert，镜像、目录、权限等说明统一收进问号弹窗。
+ * 目录同时影响文件面板和终端，所以切换入口放在这一层，与删除按钮同级；
+ * 镜像、目录、权限等说明统一收进问号弹窗。
  */
 export default class extends React.Component {
 
@@ -16,6 +17,9 @@ export default class extends React.Component {
         error: null,
         deployOpen: false,
         helpOpen: false,
+        rootOpen: false,
+        rootInput: '',
+        rootSubmitting: false,
         tag: 'latest',
         submitting: false,
     }
@@ -92,6 +96,40 @@ export default class extends React.Component {
             })
     }
 
+    openRootModal = () => {
+        const {status} = this.state
+        const root = (status && (status.mountedRoot || status.desiredRoot)) || '/home'
+        this.setState({rootOpen: true, rootInput: root})
+    }
+
+    closeRootModal = () => this.setState({rootOpen: false})
+
+    /**
+     * 切换挂载目录：辅助容器只能挂一个目录，后台会用新目录重建容器，
+     * 文件面板与终端都跟着新目录走，终端会断开并自动重连。
+     */
+    switchRoot = () => {
+        const {hostId} = this.props
+        const value = (this.state.rootInput || '').trim()
+        if (!value.startsWith('/')) {
+            message.warning('请填写以 / 开头的 Linux 绝对路径')
+            return
+        }
+        this.setState({rootSubmitting: true})
+        HttpClient.post('admin/host/agent/root', null, {id: hostId, root: value}, {toastError: false})
+            .then(rs => {
+                message.success((rs && rs.message) || '目录已切换')
+                this.setState({rootOpen: false})
+                this.load()
+            })
+            .catch(e => {
+                message.error(e.message || '切换目录失败')
+                // 重建失败时旧容器可能已经删掉，刷新状态让按钮回到「部署」
+                this.load()
+            })
+            .finally(() => this.setState({rootSubmitting: false}))
+    }
+
     renderSummary() {
         const {status, loading, error} = this.state
         if (error) {
@@ -122,7 +160,7 @@ export default class extends React.Component {
     }
 
     render() {
-        const {status, deployOpen, helpOpen, tag, submitting} = this.state
+        const {status, deployOpen, helpOpen, rootOpen, rootInput, rootSubmitting} = this.state
         const canSave = PermUtils.hasPermission('host:save')
         const deployed = !!(status && status.deployed)
 
@@ -137,10 +175,14 @@ export default class extends React.Component {
                             onClick={() => this.setState({helpOpen: true})}/>
                 </Tooltip>
                 {canSave && (deployed
-                    ? <Popconfirm title='删除辅助容器？宿主机上的文件不会被删除'
-                                  onConfirm={this.remove}>
-                        <Button size='small' danger icon={<DeleteOutlined/>}>删除</Button>
-                    </Popconfirm>
+                    ? <>
+                        <Button size='small' icon={<FolderOpenOutlined/>}
+                                onClick={this.openRootModal}>切换目录</Button>
+                        <Popconfirm title='删除辅助容器？宿主机上的文件不会被删除'
+                                    onConfirm={this.remove}>
+                            <Button size='small' danger icon={<DeleteOutlined/>}>删除</Button>
+                        </Popconfirm>
+                    </>
                     : <Button size='small' type='primary' icon={<CloudServerOutlined/>}
                               onClick={this.openDeploy}>部署辅助容器</Button>)}
                 {!canSave && !deployed &&
@@ -148,6 +190,7 @@ export default class extends React.Component {
             </div>
 
             {this.renderDeployModal()}
+            {this.renderRootModal(rootOpen, rootInput, rootSubmitting)}
             {this.renderHelpModal()}
         </>
     }
@@ -175,8 +218,33 @@ export default class extends React.Component {
                 <div>tag 留空表示 latest；生产建议固定为版本 tag，如 <code>v4.8.40</code>。</div>
             </div>
             <Typography.Text type='secondary' style={{display: 'block', marginTop: 12}}>
-                首次部署默认挂载 /home，之后可在文件面板右上角「切换目录」，切换会重建容器。
+                首次部署默认挂载 /home，之后可在右上角「切换目录」，切换会重建容器。
             </Typography.Text>
+        </Modal>
+    }
+
+    renderRootModal(rootOpen, rootInput, rootSubmitting) {
+        return <Modal open={rootOpen} width={640} destroyOnHidden
+                      title='切换文件目录'
+                      okText='切换并重建'
+                      confirmLoading={rootSubmitting}
+                      onOk={this.switchRoot}
+                      onCancel={this.closeRootModal}>
+            <Typography.Text strong>宿主机目录</Typography.Text>
+            <Input className='mt-1' value={rootInput} placeholder='/home'
+                   onChange={e => this.setState({rootInput: e.target.value})}
+                   onPressEnter={this.switchRoot}/>
+            <Space size={4} wrap className='mt-2'>
+                {['/home', '/data', '/opt', '/srv', '/var/www'].map(path =>
+                    <Button key={path} size='small'
+                            onClick={() => this.setState({rootInput: path})}>{path}</Button>)}
+            </Space>
+            <div className='mt-3' style={{fontSize: 12, lineHeight: 1.8}}>
+                <div>只接受 Docker daemon 可见的 Linux 绝对路径；Windows 主机填 Docker Desktop 的
+                    <code> /run/desktop/mnt/host/d/...</code> 或 WSL2 的 <code>/mnt/d/...</code>。
+                </div>
+                <div>切换会用新目录重建辅助容器，文件面板与终端都会切到新目录，终端断开后自动重连；不支持 /、/etc 等系统目录。</div>
+            </div>
         </Modal>
     }
 
@@ -198,7 +266,7 @@ export default class extends React.Component {
 
                 <Typography.Title level={5}>文件目录</Typography.Title>
                 <ul style={{margin: '0 0 8px 18px', padding: 0}}>
-                    <li>部署时不再指定目录，首次默认 <code>/home</code>；在文件面板点「切换目录」按需切换。</li>
+                    <li>部署时不再指定目录，首次默认 <code>/home</code>；在右上角点「切换目录」按需切换。</li>
                     <li>切换会用新目录重建容器，左侧终端会断开并自动重连。</li>
                     <li>只接受 Docker daemon 可见的 Linux 绝对路径（以 / 开头）：
                         Docker Desktop 一般是 <code>/run/desktop/mnt/host/d/data</code>，
