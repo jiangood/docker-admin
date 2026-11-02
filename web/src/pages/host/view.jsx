@@ -7,6 +7,7 @@ import Chart from "../../components/Chart"
 import ContainerDetail from "../../components/container/ContainerDetail"
 import HostImageExportModal from "../../components/HostImageExportModal"
 import HostImageImportModal from "../../components/HostImageImportModal"
+import HostAgentTab from "../../components/host/HostAgentTab"
 import {
     formatBytes,
     formatClock,
@@ -621,6 +622,11 @@ export default class extends React.Component {
                 </>
             },
             {
+                key: 'agent',
+                label: 'Agent',
+                children: <HostAgentTab hostId={this.state.id}/>
+            },
+            {
                 key: 'stats',
                 label: '实时资源',
                 children: this.renderUsage()
@@ -649,6 +655,8 @@ export default class extends React.Component {
                                   {key: 'header', label: '自定义请求头', children: headerLabel(host)},
                                   {key: 'proxy', label: '连接代理', children: proxyLabel(host), span: 2},
                                   {key: 'endpoint', label: '连接地址', children: endpointOf(host), span: 2},
+                                  {key: 'fileRoot', label: '文件管理目录', children: host?.fileRoot || '/home', span: 2},
+                                  {key: 'agentTag', label: 'Agent 镜像 Tag', children: host?.agentImageTag || 'latest'},
                                   {key: 'version', label: 'Docker 版本', children: info?.dockerVersion || '-'},
                                   {key: 'api', label: 'API 版本', children: info?.apiVersion || '-'},
                                   {key: 'os', label: '操作系统', children: info?.os || '-'},

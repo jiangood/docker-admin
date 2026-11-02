@@ -15,6 +15,7 @@ import io.github.jiangood.docker.admin.dto.ContainerFileVo;
 import io.github.jiangood.docker.admin.dto.ContainerSummaryVo;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
+import io.github.jiangood.openadmin.util.BusinessException;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
@@ -312,7 +313,7 @@ public class ContainerService {
     /** 用容器内的 ls 列目录；容器没有 ls 或执行失败时返回 null，由 archive 兜底。 */
     private List<ContainerFileVo> listFilesByLs(DockerClient client, String containerId, String dir) {
         try {
-            ExecResult result = execCapture(client, containerId, List.of("ls", "-la", "--time-style=long-iso", dir));
+            CommandResult result = execCapture(client, containerId, List.of("ls", "-la", "--time-style=long-iso", dir));
             if (result.exitCode != 0) {
                 // 兼容 busybox 等不支持 --time-style 的环境，退回默认格式
                 result = execCapture(client, containerId, List.of("ls", "-la", dir));
@@ -510,7 +511,7 @@ public class ContainerService {
     /** 用容器内的 head 截断读取；容器没有 head 或执行失败时返回 null，由 archive 兜底。 */
     private String previewByHead(DockerClient client, String containerId, String path) {
         try {
-            ExecResult result = execCapture(client, containerId,
+            CommandResult result = execCapture(client, containerId,
                     List.of("head", "-c", String.valueOf(PREVIEW_MAX_BYTES), path));
             if (result.exitCode == 0) {
                 return result.stdout;
@@ -595,6 +596,44 @@ public class ContainerService {
      * @param content 文件字节内容
      */
     public void writeFile(Host host, String containerId, String path, byte[] content) {
+        writeFile(host, containerId, path, content, false);
+    }
+
+    /**
+     * 写入文件；{@code preserveOwner=true} 时沿用已存在文件的 uid/gid。
+     * <p>
+     * 主机文件管理必须开启：宿主机上的配置文件经常属于 www-data、mysql 等用户，
+     * 以 root 覆盖会把属主改掉。
+     */
+    public void writeFile(Host host, String containerId, String path, byte[] content, boolean preserveOwner) {
+        DockerClient client = dockerClientManager.getClient(host);
+        try {
+            // 已存在的文件沿用原权限；开启 preserveOwner 时连 uid/gid 一起沿用
+            FileAttrs attrs = resolveFileAttrs(client, containerId, normalizePath(path), preserveOwner);
+            writeInternal(client, containerId, path, content, attrs);
+        } finally {
+            IOUtils.closeQuietly(client);
+        }
+    }
+
+    /**
+     * 用调用方解析好的权限/属主写入文件。
+     * <p>
+     * 主机上传新文件时用它继承父目录的属主，避免在用户目录下创建出 root:root 的文件。
+     */
+    public void writeFile(Host host, String containerId, String path, byte[] content,
+                          int mode, long uid, long gid) {
+        DockerClient client = dockerClientManager.getClient(host);
+        try {
+            writeInternal(client, containerId, path, content,
+                    new FileAttrs(mode > 0 ? mode : 0644, uid, gid));
+        } finally {
+            IOUtils.closeQuietly(client);
+        }
+    }
+
+    private void writeInternal(DockerClient client, String containerId, String path,
+                               byte[] content, FileAttrs attrs) {
         String file = normalizePath(path);
         int idx = file.lastIndexOf('/');
         String dir = idx <= 0 ? "/" : file.substring(0, idx);
@@ -603,37 +642,32 @@ public class ContainerService {
             throw new RuntimeException("文件名不能为空");
         }
 
-        DockerClient client = dockerClientManager.getClient(host);
         try {
-            // 已存在的文件沿用原权限，避免把 0600 之类的文件覆盖成 0644
-            int mode = resolveFileMode(client, containerId, file);
-            byte[] tar = buildSingleFileTar(name, content, mode);
+            byte[] tar = buildSingleFileTar(name, content, attrs);
             client.copyArchiveToContainerCmd(containerId)
                     .withTarInputStream(new ByteArrayInputStream(tar))
                     .withRemotePath(dir)
                     .exec();
         } catch (IOException e) {
             throw new RuntimeException("写入文件失败: " + e.getMessage(), e);
-        } finally {
-            IOUtils.closeQuietly(client);
         }
     }
 
-    /** 读取容器内已存在文件的权限位；文件不存在或读取失败时返回默认 0644。 */
-    private int resolveFileMode(DockerClient client, String containerId, String path) {
+    /** 读取容器内已存在文件的权限位与属主；文件不存在或读取失败时返回默认值。 */
+    private FileAttrs resolveFileAttrs(DockerClient client, String containerId, String path, boolean preserveOwner) {
         try (InputStream in = client.copyArchiveFromContainerCmd(containerId, path).exec();
              TarArchiveInputStream tar = new TarArchiveInputStream(in)) {
             TarArchiveEntry entry = tar.getNextEntry();
             if (entry != null && !entry.isDirectory()) {
                 int mode = entry.getMode() & 0777;
-                if (mode > 0) {
-                    return mode;
-                }
+                long uid = preserveOwner ? entry.getLongUserId() : 0L;
+                long gid = preserveOwner ? entry.getLongGroupId() : 0L;
+                return new FileAttrs(mode > 0 ? mode : 0644, uid, gid);
             }
         } catch (Exception e) {
-            log.debug("读取容器 {} 文件 {} 权限失败，使用默认权限: {}", containerId, path, e.getMessage());
+            log.debug("读取容器 {} 文件 {} 属性失败，使用默认值: {}", containerId, path, e.getMessage());
         }
-        return 0644;
+        return new FileAttrs(0644, 0L, 0L);
     }
 
     /** 归一化容器内路径：统一分隔符、去掉重复斜杠与 . / .. 片段，并保证以 / 开头。 */
@@ -655,13 +689,15 @@ public class ContainerService {
     }
 
     /** 把单文件内容打包成 tar，供 archive 接口写入容器。 */
-    private static byte[] buildSingleFileTar(String name, byte[] content, int mode) throws IOException {
+    private static byte[] buildSingleFileTar(String name, byte[] content, FileAttrs attrs) throws IOException {
         ByteArrayOutputStream bos = new ByteArrayOutputStream(4096 + content.length);
         try (TarArchiveOutputStream tar = new TarArchiveOutputStream(bos)) {
             tar.setLongFileMode(TarArchiveOutputStream.LONGFILE_POSIX);
             TarArchiveEntry entry = new TarArchiveEntry(name);
             entry.setSize(content.length);
-            entry.setMode(mode);
+            entry.setMode(attrs.mode());
+            entry.setUserId(attrs.uid());
+            entry.setGroupId(attrs.gid());
             tar.putArchiveEntry(entry);
             tar.write(content);
             tar.closeArchiveEntry();
@@ -669,9 +705,36 @@ public class ContainerService {
         return bos.toByteArray();
     }
 
+    private record FileAttrs(int mode, long uid, long gid) {
+    }
+
     // ------------------------------------------------------------------ 工具
 
-    private ExecResult execCapture(DockerClient client, String containerId, List<String> cmd) {
+    /**
+     * 在容器内执行一条命令并返回退出码/输出；用于 Docker API 没有的文件操作（mkdir / mv / rm 等）。
+     * <p>
+     * 命令以 argv 数组传入，不经过 shell，路径里的空格与特殊字符不会被解释。
+     */
+    public CommandResult exec(Host host, String containerId, List<String> cmd) {
+        DockerClient client = dockerClientManager.getClient(host);
+        try {
+            return execCapture(client, containerId, cmd);
+        } finally {
+            IOUtils.closeQuietly(client);
+        }
+    }
+
+    public void execOrThrow(Host host, String containerId, List<String> cmd) {
+        CommandResult result = exec(host, containerId, cmd);
+        if (result.exitCode() != 0) {
+            String stderr = StrUtil.trimToEmpty(result.stderr());
+            throw new BusinessException(stderr.isBlank()
+                    ? "命令执行失败: " + String.join(" ", cmd)
+                    : stderr);
+        }
+    }
+
+    private CommandResult execCapture(DockerClient client, String containerId, List<String> cmd) {
         ExecCreateCmdResponse exec = client.execCreateCmd(containerId)
                 .withAttachStdout(true)
                 .withAttachStderr(true)
@@ -686,7 +749,8 @@ public class ContainerService {
                     .awaitCompletion();
             InspectExecResponse state = client.inspectExecCmd(exec.getId()).exec();
             int exitCode = state.getExitCodeLong() == null ? 0 : state.getExitCodeLong().intValue();
-            return new ExecResult(exitCode, stdout.toString(StandardCharsets.UTF_8), stderr.toString(StandardCharsets.UTF_8));
+            return new CommandResult(exitCode, stdout.toString(StandardCharsets.UTF_8),
+                    stderr.toString(StandardCharsets.UTF_8));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new RuntimeException("命令执行被中断", e);
@@ -705,7 +769,7 @@ public class ContainerService {
         return n != null && n.startsWith("/") ? n.substring(1) : n;
     }
 
-    private record ExecResult(int exitCode, String stdout, String stderr) {
+    public record CommandResult(int exitCode, String stdout, String stderr) {
     }
 
     /**

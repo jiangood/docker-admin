@@ -78,6 +78,12 @@ public class WebSocketConfig implements WebSocketConfigurer {
     @Resource
     private DeployLogHandshakeInterceptor deployLogHandshakeInterceptor;
 
+    @Resource
+    private HostCliWebSocketHandler hostCliHandler;
+
+    @Resource
+    private HostCliHandshakeInterceptor hostCliHandshakeInterceptor;
+
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
         // 容器实时日志
@@ -90,6 +96,9 @@ public class WebSocketConfig implements WebSocketConfigurer {
         // 容器交互式控制台
         register(registry, containerExecHandler, "/admin/ws/container-exec/{hostId}/{containerId}",
                 containerExecHandshakeInterceptor);
+
+        // 主机 Docker CLI（辅助容器内的交互式 shell）
+        register(registry, hostCliHandler, "/admin/ws/host-cli/{hostId}", hostCliHandshakeInterceptor);
 
         // 镜像同步实时日志
         register(registry, syncLogHandler, "/admin/ws/sync-log/{logId}", syncLogHandshakeInterceptor);

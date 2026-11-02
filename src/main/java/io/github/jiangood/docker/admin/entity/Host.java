@@ -4,6 +4,8 @@ import cn.hutool.core.util.StrUtil;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.github.jiangood.docker.admin.proxy.ProxySettings;
+import io.github.jiangood.docker.admin.util.AgentImageUtils;
+import io.github.jiangood.docker.admin.util.HostRootPolicy;
 import io.github.jiangood.openadmin.util.annotation.Remark;
 import io.github.jiangood.openadmin.framework.data.BaseEntity;
 import jakarta.persistence.Column;
@@ -119,6 +121,28 @@ public class Host extends BaseEntity {
     String headerValue;
 
     /**
+     * 主机文件管理 / 辅助容器挂载的宿主机目录（只允许一个目录）。
+     * <p>
+     * 为空表示使用默认目录 {@code /home}。只接受 Docker daemon 所在文件系统中的
+     * Linux 绝对路径；Windows 主机需要填写 daemon 可见的路径（Docker Desktop 通常是
+     * {@code /run/desktop/mnt/host/d/...}，WSL2 原生 docker 是 {@code /mnt/d/...}）。
+     * <p>
+     * 该值在部署/重建辅助容器时由界面写入，路径安全性由
+     * {@link io.github.jiangood.docker.admin.util.HostRootPolicy} 校验。
+     */
+    @Remark("文件管理目录")
+    String fileRoot;
+
+    /**
+     * 该主机使用的辅助容器镜像 tag。
+     * <p>
+     * 全局设置只保存镜像地址（不含 tag），每台主机部署时单独选择 tag；
+     * 为空表示 {@code latest}。tag 与镜像地址拼成实际镜像，用于判断是否需要重建。
+     */
+    @Remark("Agent 镜像 Tag")
+    String agentImageTag;
+
+    /**
      * 远程 TCP 的连接代理类型：{@code none} / {@code http} / {@code socks5}。
      * <p>
      * 用于平台与目标主机网络不通、但另有一台代理主机两边都能访问的场景；
@@ -189,6 +213,26 @@ public class Host extends BaseEntity {
         return StrUtil.isBlank(dockerHost)
                 || StrUtil.startWithIgnoreCase(dockerHost, "unix:")
                 || StrUtil.startWithIgnoreCase(dockerHost, "npipe:");
+    }
+
+    /**
+     * 文件管理目录的实际值：未配置时回落到默认目录。
+     * <p>
+     * 方法名刻意不用 getXxx，避免被 Spring Data Example 当成一个不存在的实体属性。
+     */
+    @JsonIgnore
+    public String resolveFileRoot() {
+        return StrUtil.blankToDefault(StrUtil.trimToNull(fileRoot), HostRootPolicy.DEFAULT_ROOT);
+    }
+
+    /**
+     * 该主机实际使用的 agent 镜像 tag；未配置时为 latest。
+     * <p>
+     * 方法名刻意不用 getXxx，避免被 Spring Data Example 当成一个不存在的实体属性。
+     */
+    @JsonIgnore
+    public String resolveAgentImageTag() {
+        return StrUtil.blankToDefault(StrUtil.trimToNull(agentImageTag), AgentImageUtils.DEFAULT_TAG);
     }
 
     /**

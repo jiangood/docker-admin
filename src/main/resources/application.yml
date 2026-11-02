@@ -37,6 +37,15 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.H2Dialect
+docker:
+  agent:
+    # 主机详情「文件 / Docker CLI」用的辅助容器镜像地址（不含 tag）
+    # tag 在每台主机的部署弹窗里选择，默认 latest
+    repository: ghcr.io/jiangood/docker-admin-agent
+    # 宿主机 docker.sock 路径；rootless 等非默认路径可在这里改
+    socket-path: /var/run/docker.sock
+    # 辅助容器时区，留空使用镜像默认（通常是 UTC）；镜像带 tzdata 时可填 Asia/Shanghai
+    tz:
 sys:
   title: 容器管理平台
   # 同一账号最大并发会话数。默认 1（单点登录）；2 表示允许两台设备同时在线，第 3 次登录会顶掉最早的会话。

@@ -75,6 +75,19 @@ git tag vx.y.z && git push && git push origin vx.y.z
   页面（`web/src/pages/image-sync/index.jsx`）是 ProTable + 工具栏三个「增加」按钮
   （同步到注册中心 / 同步到主机 / 经执行主机中转），每个按钮打开 `ImageSyncModal` 对应模式，
   提交后弹窗原地切换为实时日志；行内「查看日志」用抽屉回看。
+- **主机文件管理 / Docker CLI：** 主机详情新增一个「Agent」Tab（内部用「文件 / 终端」切换），统一通过 Docker API
+  在该主机上运行辅助容器 `docker-admin-agent`。镜像分两层配置：全局设置只保存镜像地址
+  （`docker.agent.repository`，默认 `ghcr.io/jiangood/docker-admin-agent`，不含 tag），
+  每台主机部署时选择 tag（`Host.agentImageTag`，默认 `latest`），实际镜像 = 地址 + `:` + tag。
+  agent 镜像内置 `docker-cli` 和 `docker compose`，由 `.github/workflows/publish-docker-image.yml`
+  在 `v*` tag 上同时发布到 ghcr 与阿里云（`:latest` + `:vX.Y.Z`），目标主机可预加载后离线使用。
+  容器只挂载一个宿主机目录（`Host.fileRoot`，默认 `/home`）：同一目录既挂到容器内 `/host`
+  供文件管理使用，也挂到原始绝对路径供 CLI 使用，因此 `docker compose` 的相对 bind 路径与宿主机一致；
+  同时挂载 `/var/run/docker.sock`。CLI 是辅助容器内的交互式 shell，权限等同于宿主机 root。
+  目录只接受 Docker daemon 可见的 Linux 绝对路径，禁止 `/`、`/host`、`/tmp` 与系统目录；Windows 主机需填
+  Docker Desktop 的 `/run/desktop/mnt/host/d/...` 或 WSL2 的 `/mnt/d/...`，不支持 Windows 容器主机。
+  辅助容器由 `host:save` 显式部署/删除，文件接口用 `host:file`，CLI WebSocket 用 `host:cli`；
+  容器常驻，删除容器不会删除宿主机文件。重建 `latest` 会先尝试拉取，拉取失败但本地已有镜像时继续使用本地镜像。
 - **主机详情镜像导出：** 镜像 Tab 的「导出」打开弹窗，后台在该主机上执行 `docker save`
   （SSH 主机落到远端 `/tmp/docker-admin-image-tar/{logId}/`，本机 / TCP 主机落到平台 `image-tar/{logId}/`）。
   弹窗展示实时日志、已写入大小与速度（每秒 / 每分钟）、保存路径与下载按钮；SSH 下载经 SFTP 流式转发，不在平台侧重复落盘。

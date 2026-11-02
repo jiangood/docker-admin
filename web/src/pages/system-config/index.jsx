@@ -25,12 +25,14 @@ export default class extends React.Component {
         loading: true,
         saving: false,
         savingEmail: false,
+        savingAgent: false,
         testing: false,
         showProxyHelp: false,
         registries: [],
         hosts: [],
         values: {},
-        email: {}
+        email: {},
+        agent: {}
     }
 
     // 回填走 state + initialValues：Card 的 loading 会把表单卸载重建，
@@ -42,9 +44,10 @@ export default class extends React.Component {
     load = async () => {
         this.setState({loading: true})
         try {
-            const [defaults, email, registries, hosts] = await Promise.all([
+            const [defaults, email, agent, registries, hosts] = await Promise.all([
                 HttpClient.get('admin/system-config/defaults'),
                 HttpClient.get('admin/system-config/email'),
+                HttpClient.get('admin/system-config/agent'),
                 HttpClient.get('admin/registry/options'),
                 HttpClient.get('admin/host/options')
             ])
@@ -53,7 +56,8 @@ export default class extends React.Component {
                 registries: registries.data || [],
                 hosts: hosts.data || [],
                 values: defaults.data || {},
-                email: email.data || {}
+                email: email.data || {},
+                agent: agent.data || {}
             })
         } catch (e) {
             this.setState({loading: false})
@@ -85,6 +89,18 @@ export default class extends React.Component {
         }
     }
 
+    onSaveAgent = async values => {
+        this.setState({savingAgent: true})
+        try {
+            const rs = await HttpClient.post('admin/system-config/agent', values)
+            const data = rs.data || values
+            this.setState({agent: data})
+            this.agentFormRef.current?.setFieldsValue({repository: data.repository})
+        } finally {
+            this.setState({savingAgent: false})
+        }
+    }
+
     onTestEmail = async () => {
         this.setState({testing: true})
         try {
@@ -97,9 +113,10 @@ export default class extends React.Component {
     toggleProxyHelp = () => this.setState(state => ({showProxyHelp: !state.showProxyHelp}))
 
     emailFormRef = React.createRef()
+    agentFormRef = React.createRef()
 
     render() {
-        const {loading, saving, savingEmail, testing, showProxyHelp, registries, hosts, values, email} = this.state
+        const {loading, saving, savingEmail, savingAgent, testing, showProxyHelp, registries, hosts, values, email, agent} = this.state
         return <Page padding>
             <Card title='全局设置' loading={loading} className='page-card mb-4'>
                 <Form initialValues={values} labelCol={{flex: '140px'}} onFinish={this.onFinish}>
@@ -197,6 +214,44 @@ export default class extends React.Component {
                         <span style={{color: 'var(--oa-color-text-secondary, #8c8c8c)'}}>
                             测试邮件发到发件邮箱自己；修改后请先保存
                         </span>
+                    </Space>
+                </Form>
+            </Card>
+
+            <Card title='主机文件 / Docker CLI 辅助容器' loading={loading} className='page-card mt-4'>
+                <Form ref={this.agentFormRef} initialValues={agent} labelCol={{flex: '140px'}}
+                      onFinish={this.onSaveAgent}>
+                    <Alert className='mb-4' type='info' showIcon
+                           title='全局只配置镜像地址；tag 在每台主机的部署弹窗里选择，默认 latest'/>
+                    <Form.Item label='Agent 镜像地址' name='repository'
+                               rules={[{
+                                   validator: (_, value) => {
+                                       const text = (value || '').trim()
+                                       if (!text) {
+                                           return Promise.resolve()
+                                       }
+                                       if (/\s/.test(text) || text.includes('@')) {
+                                           return Promise.reject(new Error('只填写镜像仓库地址，不要带 digest'))
+                                       }
+                                       const lastSlash = text.lastIndexOf('/')
+                                       const lastSegment = lastSlash >= 0 ? text.substring(lastSlash + 1) : text
+                                       if (lastSegment.includes(':')) {
+                                           return Promise.reject(new Error('镜像地址不要带 tag，tag 在主机部署时选择'))
+                                       }
+                                       return Promise.resolve()
+                                   }
+                               }]}
+                               tooltip='例如 ghcr.io/jiangood/docker-admin-agent；国内网络可改为阿里云或私有仓库地址'>
+                        <Input placeholder={agent.defaultRepository || 'ghcr.io/jiangood/docker-admin-agent'}
+                               autoComplete='off' style={{maxWidth: 520}}/>
+                    </Form.Item>
+                    <div style={{fontSize: 12, color: 'var(--oa-color-text-secondary, #8c8c8c)', marginBottom: 16}}>
+                        实际镜像 = 上面的地址 + 主机部署时选择的 tag。留空表示使用 application.yml 的默认地址。
+                        <br/>
+                        目标主机必须能拉取该镜像，或预先 <code>docker load</code>；无外网主机请先预加载。
+                    </div>
+                    <Space>
+                        <Button type='primary' htmlType='submit' loading={savingAgent}>保存</Button>
                     </Space>
                 </Form>
             </Card>

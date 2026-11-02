@@ -7,8 +7,10 @@ import io.github.jiangood.docker.admin.dao.SystemConfigRepository;
 import io.github.jiangood.docker.admin.entity.SystemConfig;
 import io.github.jiangood.docker.admin.mail.EmailSettingsInput;
 import io.github.jiangood.docker.admin.proxy.ProxySettings;
+import io.github.jiangood.docker.admin.util.AgentImageUtils;
 import io.github.jiangood.openadmin.framework.data.BaseService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.Assert;
@@ -25,6 +27,11 @@ public class SystemConfigService extends BaseService<SystemConfig> {
 
     public static final String DEFAULT_REGISTRY_ID = "default.registry.id";
     public static final String DEFAULT_BUILD_HOST_ID = "default.build.host.id";
+
+    /**
+     * 主机辅助容器镜像地址（不含 tag）。tag 在每台主机部署时单独选择。
+     */
+    public static final String AGENT_REPOSITORY = "docker.agent.repository";
 
     /** 全局邮件发送服务（目前为 QQ 邮箱 SMTP） */
     public static final String EMAIL_SMTP_HOST = "email.smtp.host";
@@ -53,6 +60,12 @@ public class SystemConfigService extends BaseService<SystemConfig> {
     private final RegistryRepository registryRepository;
     private final HostRepository hostRepository;
 
+    /**
+     * 全局设置未配置时使用的 agent 镜像地址（yml / 环境变量可覆盖）。
+     */
+    @Value("${docker.agent.repository:ghcr.io/jiangood/docker-admin-agent}")
+    private String defaultAgentRepository;
+
     public String getValue(String key) {
         return repository.findByConfigKey(key).map(SystemConfig::getConfigValue).orElse(null);
     }
@@ -63,6 +76,34 @@ public class SystemConfigService extends BaseService<SystemConfig> {
 
     public String getDefaultBuildHostId() {
         return getValue(DEFAULT_BUILD_HOST_ID);
+    }
+
+    /**
+     * 实际生效的 agent 镜像地址（不含 tag）：数据库值优先，空则用 yml / 环境变量。
+     */
+    public String getAgentRepository() {
+        return StrUtil.blankToDefault(
+                StrUtil.trimToNull(getValue(AGENT_REPOSITORY)),
+                AgentImageUtils.normalizeRepository(defaultAgentRepository));
+    }
+
+    public Map<String, Object> getAgentSettings() {
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("repository", getAgentRepository());
+        values.put("defaultRepository", AgentImageUtils.normalizeRepository(defaultAgentRepository));
+        return values;
+    }
+
+    /**
+     * 保存 agent 镜像地址；空值表示清除数据库配置，回落到 yml / 环境变量的默认地址。
+     */
+    @Transactional
+    public void saveAgentSettings(String repository) {
+        String value = StrUtil.trimToNull(repository);
+        if (value != null) {
+            value = AgentImageUtils.normalizeRepository(value);
+        }
+        saveValue(AGENT_REPOSITORY, value, "主机辅助容器镜像地址（不含 tag）");
     }
 
     public Map<String, String> getDefaults() {
