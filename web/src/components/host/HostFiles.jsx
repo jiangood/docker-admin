@@ -67,6 +67,7 @@ export default class extends React.Component {
         uploading: false,
         preview: CLOSED_PREVIEW,
         edit: CLOSED_EDIT,
+        deleting: false,
     }
 
     editContent = ''
@@ -302,15 +303,16 @@ export default class extends React.Component {
             return
         }
         const {hostId} = this.props
-        HttpClient.post('admin/host/file/delete', null, {hostId, path: node.path})
+        this.setState({deleting: true})
+        return HttpClient.post('admin/host/file/delete', null, {hostId, path: node.path}, {toastError: false})
             .then(rs => {
                 message.success((rs && rs.message) || '删除成功')
                 const parent = parentRelative(node.path)
                 this.setState({selected: null, selectedKeys: [], preview: CLOSED_PREVIEW, edit: CLOSED_EDIT})
                 this.reloadNode(parent || ROOT_KEY, parent)
             })
-            .catch(() => {
-            })
+            .catch(e => message.error(e.message || '删除失败'))
+            .finally(() => this.setState({deleting: false}))
     }
 
     titleRender = node => {
@@ -336,7 +338,7 @@ export default class extends React.Component {
     render() {
         const {
             root, deployed, treeData, treeKey, expandedKeys, selectedKeys,
-            selected, uploading, preview, edit
+            selected, uploading, preview, edit, deleting
         } = this.state
         const token = getToken()
         const height = this.props.height || 640
@@ -383,8 +385,11 @@ export default class extends React.Component {
                         </Tooltip>}
                     <Popconfirm title={`确定删除 ${selected ? this.fullPath(selected.path) : ''}？删除后不可恢复`}
                                 disabled={!canDelete}
+                                okText='删除' cancelText='取消'
+                                okButtonProps={{danger: true, loading: deleting}}
                                 onConfirm={() => this.remove(selected)}>
-                        <Button size='small' danger icon={<DeleteOutlined/>} disabled={!canDelete}>删除</Button>
+                        <Button size='small' danger icon={<DeleteOutlined/>} disabled={!canDelete}
+                                loading={deleting}>删除</Button>
                     </Popconfirm>
                     <Button size='small' icon={<ReloadOutlined/>} onClick={this.refresh}>刷新</Button>
                 </Space>

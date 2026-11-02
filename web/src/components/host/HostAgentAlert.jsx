@@ -20,6 +20,7 @@ export default class extends React.Component {
         rootOpen: false,
         rootInput: '',
         rootSubmitting: false,
+        removing: false,
         tag: 'latest',
         submitting: false,
     }
@@ -85,15 +86,23 @@ export default class extends React.Component {
             .finally(() => this.setState({submitting: false}))
     }
 
+    /**
+     * 删除辅助容器：远程主机上 stop + remove 可能要几秒，
+     * 返回 Promise 让 Popconfirm 的确认按钮同步显示 loading，失败也要有提示。
+     */
     remove = () => {
         const {hostId} = this.props
-        HttpClient.post('admin/host/agent/remove', null, {id: hostId})
+        this.setState({removing: true})
+        return HttpClient.post('admin/host/agent/remove', null, {id: hostId}, {toastError: false})
             .then(() => {
                 message.success('辅助容器已删除')
                 this.load()
             })
-            .catch(() => {
+            .catch(e => {
+                message.error(e.message || '删除辅助容器失败')
+                this.load()
             })
+            .finally(() => this.setState({removing: false}))
     }
 
     openRootModal = () => {
@@ -131,7 +140,13 @@ export default class extends React.Component {
     }
 
     renderSummary() {
-        const {status, loading, error} = this.state
+        const {status, loading, error, removing} = this.state
+        if (removing) {
+            return <Space size={6}>
+                <Spin size='small'/>
+                <Typography.Text type='secondary'>正在删除辅助容器…</Typography.Text>
+            </Space>
+        }
         if (error) {
             return <Typography.Text type='danger'>
                 读取状态失败：{error}　<a onClick={this.load}>重试</a>
@@ -160,7 +175,7 @@ export default class extends React.Component {
     }
 
     render() {
-        const {status, deployOpen, helpOpen, rootOpen, rootInput, rootSubmitting} = this.state
+        const {status, deployOpen, helpOpen, rootOpen, rootInput, rootSubmitting, removing} = this.state
         const canSave = PermUtils.hasPermission('host:save')
         const deployed = !!(status && status.deployed)
 
@@ -172,15 +187,19 @@ export default class extends React.Component {
                 {this.renderSummary()}
                 <Tooltip title='辅助容器说明'>
                     <Button type='text' size='small' shape='circle' icon={<QuestionCircleOutlined/>}
+                            disabled={removing}
                             onClick={() => this.setState({helpOpen: true})}/>
                 </Tooltip>
                 {canSave && (deployed
                     ? <>
                         <Button size='small' icon={<FolderOpenOutlined/>}
+                                disabled={removing}
                                 onClick={this.openRootModal}>切换目录</Button>
                         <Popconfirm title='删除辅助容器？宿主机上的文件不会被删除'
+                                    okText='删除' cancelText='取消'
+                                    okButtonProps={{danger: true, loading: removing}}
                                     onConfirm={this.remove}>
-                            <Button size='small' danger icon={<DeleteOutlined/>}>删除</Button>
+                            <Button size='small' danger loading={removing} icon={<DeleteOutlined/>}>删除</Button>
                         </Popconfirm>
                     </>
                     : <Button size='small' type='primary' icon={<CloudServerOutlined/>}
