@@ -1,16 +1,15 @@
 import React from 'react'
-import {Alert} from 'antd'
+import {Alert, Empty} from 'antd'
 import {PermUtils} from '@jiangood/open-admin'
 import HostAgentAlert from './HostAgentAlert'
-import HostFiles from './HostFiles'
+import HostFileActions from './HostFileActions'
 import HostCli from './HostCli'
 
 /**
- * 主机详情的「Agent」Tab：左侧终端，右侧文件树。
+ * 主机详情的「Agent」Tab：终端占满整个页面，上传 / 下载按钮放在右上角状态条里。
  * <p>
- * 文件树只提供查看、下载、上传、编辑、删除；重命名、新建目录等操作走左侧命令行。
+ * 不再渲染文件树，查看、编辑、删除、重命名、新建目录等操作统一走终端；
  * 顶层只渲染一次 HostAgentAlert，避免重复请求 agent 状态。
- * 只有一个权限时，对应面板占满整行。
  */
 export default class extends React.Component {
 
@@ -41,24 +40,18 @@ export default class extends React.Component {
         }
 
         const height = 680
-        let body
-        if (canFile && canCli) {
-            body = <div style={{display: 'flex', gap: 16, alignItems: 'stretch', height, minHeight: 480}}>
-                <div style={{flex: '0 0 48%', minWidth: 0}}>
-                    <HostCli hostId={hostId} status={status} height='100%'/>
-                </div>
-                <div style={{flex: 1, minWidth: 0}}>
-                    <HostFiles hostId={hostId} status={status} height='100%'/>
-                </div>
+        const fileActions = canFile
+            ? <HostFileActions hostId={hostId} status={status}/>
+            : null
+
+        const body = canCli
+            ? <HostCli hostId={hostId} status={status} height={height}/>
+            : <div style={{height, display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
+                <Empty description='缺少 host:cli 权限，只能使用右上角的上传 / 下载'/>
             </div>
-        } else if (canFile) {
-            body = <HostFiles hostId={hostId} status={status} height={height}/>
-        } else {
-            body = <HostCli hostId={hostId} status={status} height={height}/>
-        }
 
         return <>
-            <HostAgentAlert hostId={hostId} onChange={this.onAgentChange}/>
+            <HostAgentAlert hostId={hostId} onChange={this.onAgentChange} extra={fileActions}/>
             {body}
         </>
     }

@@ -1,10 +1,10 @@
 import React from 'react'
 import {Badge, Button, Input, Modal, Popconfirm, Space, Spin, Tooltip, Typography, message} from 'antd'
-import {CloudServerOutlined, DeleteOutlined, FolderOpenOutlined, QuestionCircleOutlined} from '@ant-design/icons'
+import {CloudServerOutlined, FolderOpenOutlined, QuestionCircleOutlined} from '@ant-design/icons'
 import {HttpClient, PermUtils} from '@jiangood/open-admin'
 
 /**
- * Agent 容器状态条：右上角只显示当前状态与操作（部署 / 切换目录 / 删除）。
+ * Agent 容器状态条：右上角只显示当前状态与操作（部署 / 切换挂载目录 / 删除）。
  * <p>
  * 目录同时影响文件面板和终端，所以切换入口放在这一层，与删除按钮同级；
  * 镜像、目录、权限等说明统一收进问号弹窗。
@@ -132,7 +132,7 @@ export default class extends React.Component {
                 this.load()
             })
             .catch(e => {
-                message.error(e.message || '切换目录失败')
+                message.error(e.message || '切换挂载目录失败')
                 // 重建失败时旧容器可能已经删掉，刷新状态让按钮回到「部署」
                 this.load()
             })
@@ -178,6 +178,7 @@ export default class extends React.Component {
         const {status, deployOpen, helpOpen, rootOpen, rootInput, rootSubmitting, removing} = this.state
         const canSave = PermUtils.hasPermission('host:save')
         const deployed = !!(status && status.deployed)
+        const {extra} = this.props
 
         return <>
             <div style={{
@@ -185,6 +186,7 @@ export default class extends React.Component {
                 gap: 8, flexWrap: 'wrap', marginBottom: 12,
             }}>
                 {this.renderSummary()}
+                {extra}
                 <Tooltip title='辅助容器说明'>
                     <Button type='text' size='small' shape='circle' icon={<QuestionCircleOutlined/>}
                             disabled={removing}
@@ -194,12 +196,12 @@ export default class extends React.Component {
                     ? <>
                         <Button size='small' icon={<FolderOpenOutlined/>}
                                 disabled={removing}
-                                onClick={this.openRootModal}>切换目录</Button>
+                                onClick={this.openRootModal}>切换挂载目录</Button>
                         <Popconfirm title='删除辅助容器？宿主机上的文件不会被删除'
                                     okText='删除' cancelText='取消'
                                     okButtonProps={{danger: true, loading: removing}}
                                     onConfirm={this.remove}>
-                            <Button size='small' danger loading={removing} icon={<DeleteOutlined/>}>删除</Button>
+                            <Button size='small' danger loading={removing}>删除 Agent</Button>
                         </Popconfirm>
                     </>
                     : <Button size='small' type='primary' icon={<CloudServerOutlined/>}
@@ -237,14 +239,14 @@ export default class extends React.Component {
                 <div>tag 留空表示 latest；生产建议固定为版本 tag，如 <code>v4.8.40</code>。</div>
             </div>
             <Typography.Text type='secondary' style={{display: 'block', marginTop: 12}}>
-                首次部署默认挂载 /home，之后可在右上角「切换目录」，切换会重建容器。
+                首次部署默认挂载 /home，之后可在右上角「切换挂载目录」，切换会重建容器。
             </Typography.Text>
         </Modal>
     }
 
     renderRootModal(rootOpen, rootInput, rootSubmitting) {
         return <Modal open={rootOpen} width={640} destroyOnHidden
-                      title='切换文件目录'
+                      title='切换挂载目录'
                       okText='切换并重建'
                       confirmLoading={rootSubmitting}
                       onOk={this.switchRoot}
@@ -262,7 +264,7 @@ export default class extends React.Component {
                 <div>只接受 Docker daemon 可见的 Linux 绝对路径；Windows 主机填 Docker Desktop 的
                     <code> /run/desktop/mnt/host/d/...</code> 或 WSL2 的 <code>/mnt/d/...</code>。
                 </div>
-                <div>切换会用新目录重建辅助容器，文件面板与终端都会切到新目录，终端断开后自动重连；不支持 /、/etc 等系统目录。</div>
+                <div>切换会用新目录重建辅助容器，终端、上传与下载都会切到新目录，终端断开后自动重连；不支持 /、/etc 等系统目录。</div>
             </div>
         </Modal>
     }
@@ -280,13 +282,13 @@ export default class extends React.Component {
                 <Typography.Title level={5}>权限与安全</Typography.Title>
                 <ul style={{margin: '0 0 8px 18px', padding: 0}}>
                     <li>容器挂载 docker.sock 与一个宿主机目录，权限等同于宿主机 root，请只在受信任环境使用。</li>
-                    <li>文件面板直接操作宿主机文件系统，删除不可恢复。</li>
+                    <li>上传会写入当前挂载目录并覆盖同名文件，下载会把该目录打成 tar，请谨慎操作。</li>
                 </ul>
 
                 <Typography.Title level={5}>文件目录</Typography.Title>
                 <ul style={{margin: '0 0 8px 18px', padding: 0}}>
-                    <li>部署时不再指定目录，首次默认 <code>/home</code>；在右上角点「切换目录」按需切换。</li>
-                    <li>切换会用新目录重建容器，左侧终端会断开并自动重连。</li>
+                    <li>部署时不再指定目录，首次默认 <code>/home</code>；在右上角点「切换挂载目录」按需切换。</li>
+                    <li>切换会用新目录重建容器，终端会断开并自动重连。</li>
                     <li>只接受 Docker daemon 可见的 Linux 绝对路径（以 / 开头）：
                         Docker Desktop 一般是 <code>/run/desktop/mnt/host/d/data</code>，
                         WSL2 原生 docker 是 <code>/mnt/d/data</code>；不要填 <code>D:\data</code> 这类 Windows 路径。
@@ -296,7 +298,7 @@ export default class extends React.Component {
 
                 <Typography.Title level={5}>文件操作</Typography.Title>
                 <Typography.Paragraph>
-                    文件树提供查看、下载、上传、编辑、删除；新建目录、重命名、压缩等请用左侧终端。
+                    右上角只保留上传与下载，都作用于当前挂载目录；查看、编辑、删除、重命名、新建目录等请用终端。
                 </Typography.Paragraph>
 
                 <Typography.Title level={5}>镜像</Typography.Title>
