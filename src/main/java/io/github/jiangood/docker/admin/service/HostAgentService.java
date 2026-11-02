@@ -36,7 +36,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>
  * 三种连接方式（本机 / TCP / SSH）统一通过 Docker API 在该主机上运行一个 Linux 辅助容器：
  * <ul>
- *     <li>把配置的宿主机目录挂到容器内 {@code /host}，文件管理只操作这一块；</li>
+ *     <li>把当前选择的宿主机目录挂到容器内 {@code /host}，文件管理只操作这一块；
+ *         目录在「文件」面板按需切换，切换时用新目录重建容器；</li>
  *     <li>同一个目录再挂到它自己的绝对路径，CLI 的工作目录也设在这里，
  *         这样 {@code docker compose} 的相对 bind 路径与宿主机一致；</li>
  *     <li>把宿主机 docker.sock 挂进容器，CLI Tab 里的 {@code docker} 命令直接操作宿主机 daemon。</li>
@@ -110,9 +111,12 @@ public class HostAgentService {
     }
 
     /**
-     * 部署或重建辅助容器。
+     * 部署辅助容器，或按新目录 / 镜像重建。
+     * <p>
+     * 宿主机目录不再在部署时填写：没传目录时沿用主机上保存的目录（首次为默认 {@code /home}），
+     * 之后在「文件」面板里按需切换（切换同样走这里，配置不同会自动重建容器）。
      *
-     * @param requestedRoot 界面上填写的宿主机目录；为空时使用 Host.fileRoot 或默认 /home
+     * @param requestedRoot 要挂载的宿主机目录；为空时使用 Host.fileRoot 或默认 /home
      * @param requestedTag  该主机选择的 agent 镜像 tag；为空时使用 Host.agentImageTag 或 latest
      * @param recreate      为 true 时，即使目录与镜像都没变也删除旧容器重建
      */
@@ -125,11 +129,6 @@ public class HostAgentService {
         String image = AgentImageUtils.resolveImage(systemConfigService.getAgentRepository(), tag);
 
         synchronized (deployLocks.computeIfAbsent(host.getId(), key -> new Object())) {
-            hostService.updateFileRoot(host.getId(), root);
-            hostService.updateAgentImageTag(host.getId(), tag);
-            host.setFileRoot(root);
-            host.setAgentImageTag(tag);
-
             DockerClient client = null;
             try {
                 client = dockerClientManager.getClient(host);
@@ -148,6 +147,7 @@ public class HostAgentService {
                             start(client);
                             waitRunning(client);
                         }
+                        persist(host, root, tag);
                         return status(client, host);
                     }
                 }
@@ -165,6 +165,10 @@ public class HostAgentService {
                 start(client);
                 waitRunning(client);
                 assertMountDirectory(host, client, root);
+
+                // 容器成功起来后才落库：切换目录失败时保留旧目录，
+                // 「重新部署」还能按原目录恢复，不会把主机卡在一个无效目录上
+                persist(host, root, tag);
                 return status(client, host);
             } catch (BusinessException e) {
                 throw e;
@@ -176,6 +180,16 @@ public class HostAgentService {
                 IOUtils.closeQuietly(client);
             }
         }
+    }
+
+    /**
+     * 记录本机使用的目录与镜像 tag。失败时保留旧值，避免部署失败后无法回退。
+     */
+    private void persist(Host host, String root, String tag) {
+        hostService.updateFileRoot(host.getId(), root);
+        hostService.updateAgentImageTag(host.getId(), tag);
+        host.setFileRoot(root);
+        host.setAgentImageTag(tag);
     }
 
     public void remove(Host host) {

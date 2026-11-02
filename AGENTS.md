@@ -81,19 +81,24 @@ git tag vx.y.z && git push && git push origin vx.y.z
   每台主机部署时选择 tag（`Host.agentImageTag`，默认 `latest`），实际镜像 = 地址 + `:` + tag。
   agent 镜像内置 `docker-cli` 和 `docker compose`，由 `.github/workflows/publish-docker-image.yml`
   在 `v*` tag 上同时发布到 ghcr 与阿里云（`:latest` + `:vX.Y.Z`），目标主机可预加载后离线使用。
-  容器只挂载一个宿主机目录（`Host.fileRoot`，默认 `/home`）：同一目录既挂到容器内 `/host`
-  供文件管理使用，也挂到原始绝对路径供 CLI 使用，因此 `docker compose` 的相对 bind 路径与宿主机一致；
-  同时挂载 `/var/run/docker.sock`。CLI 是辅助容器内的交互式 shell，权限等同于宿主机 root。
+  **部署时不再选择宿主机目录**：容器只挂当前选中的目录（`Host.fileRoot`，首次默认 `/home`）与
+  `/var/run/docker.sock`；同一目录既挂到容器内 `/host` 供文件管理，也挂到原始绝对路径供 CLI 使用，
+  因此 `docker compose` 的相对 bind 路径与宿主机一致。目录在「文件」面板右上角「切换目录」按需切换，
+  切换会用新目录**重建容器**（`admin/host/agent/root`，需 `host:save`；左侧终端会断开并自动重连）；
+  目录只在容器成功起来后才落库，失败时保留旧值，方便重新部署恢复。
+  CLI 是辅助容器内的交互式 shell，权限等同于宿主机 root。
   目录只接受 Docker daemon 可见的 Linux 绝对路径，禁止 `/`、`/host`、`/tmp` 与系统目录；Windows 主机需填
   Docker Desktop 的 `/run/desktop/mnt/host/d/...` 或 WSL2 的 `/mnt/d/...`，不支持 Windows 容器主机。
   辅助容器由 `host:save` 显式部署/删除，文件接口用 `host:file`，CLI WebSocket 用 `host:cli`；
   容器常驻，删除容器不会删除宿主机文件。重建 `latest` 会先尝试拉取，拉取失败但本地已有镜像时继续使用本地镜像。
+  Agent 面板顶部只保留一行右上角状态（运行中 / 未部署 + 目录 + 删除或部署），去掉刷新与重建按钮；
+  权限、目录、文件操作等长说明收进问号弹窗（`HostAgentAlert`），页面上不再堆 Alert。
 - **主机详情镜像导出：** 镜像 Tab 的「导出」打开弹窗，后台在该主机上执行 `docker save`
   （SSH 主机落到远端 `/tmp/docker-admin-image-tar/{logId}/`，本机 / TCP 主机落到平台 `image-tar/{logId}/`）。
   弹窗展示实时日志、已写入大小与速度（每秒 / 每分钟）、保存路径与下载按钮；SSH 下载经 SFTP 流式转发，不在平台侧重复落盘。
   任务状态只存内存（`HostImageExportService`），tar 不自动删除，由用户按路径自行清理。
 - **首页资源概览分两条链路：** 静态容量走 `admin/home/hostSummary`（`docker info`，30 秒缓存，首屏用），
-  实时用量走 `admin/home/hostUsage`（首页）与 `admin/host/usage`（主机详情「实时资源」Tab），
+  实时用量走 `admin/home/hostUsage`（首页）与 `admin/host/usage`（主机详情「监控」Tab），
   数据由 Quartz 定时任务「主机用量采集」（`HostUsageCollectJob`，每分钟）写进 `HostUsageService` 的内存缓存。
   **页面只读快照**（`snapshotAll` / `snapshot`），不触发采集；只有 `refresh=true`（用户点「刷新」）才现采一轮，
   所以开多少个标签页、多少人在看都不会增加主机侧负载（首页 30 秒、主机页 30 秒轮询，页面隐藏时暂停）。
@@ -105,7 +110,7 @@ git tag vx.y.z && git push && git push origin vx.y.z
   `io_service_bytes_recursive` 读写之和（无条目按 0 计，与 docker stats 一致）；主机级只汇总运行中容器，是「容器合计」。
   采集失败的主机按 1 → 2 → 5 → 15 分钟阶梯退避（状态在 `HostUsageService`，**不能放任务字段**：Quartz 每次触发都重建实例），成功即复位。
 - **用量历史：** 采集结果同时写 `t_host_usage_sample`（每分钟一行/主机，网络与块 I/O 存**累计计数器**原值），
-  主机详情「实时资源」Tab 顶部按 1h / 6h / 24h / 7d / 30d 展示 CPU/内存与网络/磁盘速率曲线
+  主机详情「监控」Tab 顶部按 1h / 6h / 24h / 7d / 30d 展示 CPU/内存与网络/磁盘速率曲线
   （`admin/host/usageHistory`，Java 侧分桶到 ≤500 点；速率由相邻采样求差，差值为负 = 容器重启 → 曲线断点）。
   采样默认保留 30 天（`HostUsageSampleService` 里的默认值，需要时用 `docker.usage.retain-days` 覆盖，采集任务每小时顺带清理）；
   30 台主机 30 天约 130 万行、200 MB。
@@ -122,12 +127,13 @@ git tag vx.y.z && git push && git push origin vx.y.z
   docker-java 3.7.1 的 Apache 传输层没有代理入口，`ProxyAwareApacheDockerHttpClient` 同步了其
   `ApacheDockerHttpClientImpl` 并改用 `ProxyTunnelSocket` 建连；**升级 docker-java 时需对照上游同步这两个类**。
   只有启用代理的 TCP 主机走它，直连主机仍用官方 `ApacheDockerHttpClient`。
-- **隧道页（http-tunnel）：** 平台不再登记客户端、不再调用管理 API 下发代理，`/tunnel` 只是部署/使用说明页
+- **隧道页（http-tunnel，菜单名「内网穿透」）：** `/tunnel` 是部署/使用说明页
   （`web/src/pages/tunnel/index.jsx`，纯静态，没有后端接口）。http-tunnel 已迭代到 2.x，自带 Web 管理端：
   入口、中继、客户端共用同一个 `ht`，角色由 `ht.toml` 是否含 `[upstream]` 决定；管理页与访客共用
   `listen_port`，只在 `control_host` 上可达（Basic 用户名 `ht`，密码为 `token`）。代理 `[[proxies]]`
-  的增删改都在管理页完成并写回 `ht.toml`。页面保留了单节点 / 两节点配置示例，以及经隧道访问 Docker 时
-  在主机「自定义请求头」填 `X-HTTP-TUNNEL-TOKEN` 的说明。**改这块前先对照项目最新文档**。
+  的增删改都在管理页完成并写回 `ht.toml`。页面保留了单节点 / 两节点配置示例、容器部署时挂载
+  `/var/run/docker.sock` 的写法，以及经隧道访问 Docker 时在主机「自定义请求头」填 `X-HTTP-TUNNEL-TOKEN` 的说明。
+  **改这块前先对照项目最新文档**。
 - **构建上下文：** `Project.context` 相对仓库根目录，留空表示仓库根；填写时不带前导 `/`（后端兼容历史的 `/admin`，保存时归一化）。
   `dockerfile` 同样相对仓库根目录、不带前导 `/`，且必须位于上下文内（如 `context=admin` + `dockerfile=admin/Dockerfile`）。
   前端表格/详情直接原样展示上下文（空即空，不再显示「仓库根目录」），输入框失焦时自动去掉前导 `/`。

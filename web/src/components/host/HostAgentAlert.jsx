@@ -1,13 +1,12 @@
 import React from 'react'
-import {Alert, Button, Input, Modal, Popconfirm, Space, Spin, Typography, message} from 'antd'
-import {CloudServerOutlined, DeleteOutlined, ReloadOutlined} from '@ant-design/icons'
+import {Badge, Button, Input, Modal, Popconfirm, Space, Spin, Tooltip, Typography, message} from 'antd'
+import {CloudServerOutlined, DeleteOutlined, QuestionCircleOutlined} from '@ant-design/icons'
 import {HttpClient, PermUtils} from '@jiangood/open-admin'
 
 /**
- * 主机辅助容器状态与部署入口。
+ * Agent 容器状态条：右上角只显示当前状态与操作（部署 / 删除）。
  * <p>
- * 文件 / Docker CLI 两个 Tab 都依赖这一个容器：挂载一个宿主机目录，并把 docker.sock
- * 挂进容器。容器权限等价于宿主机 root，所以必须由 host:save 显式部署。
+ * 页面不再堆说明性 Alert，镜像、目录、权限等说明统一收进问号弹窗。
  */
 export default class extends React.Component {
 
@@ -15,8 +14,8 @@ export default class extends React.Component {
         status: null,
         loading: true,
         error: null,
-        modalOpen: false,
-        root: '/home',
+        deployOpen: false,
+        helpOpen: false,
         tag: 'latest',
         submitting: false,
     }
@@ -54,37 +53,30 @@ export default class extends React.Component {
 
     openDeploy = () => {
         const {status} = this.state
-        const root = (status && (status.desiredRoot || status.mountedRoot)) || '/home'
         const tag = (status && status.tag) || 'latest'
-        this.setState({modalOpen: true, root, tag})
+        this.setState({deployOpen: true, tag})
     }
 
-    closeDeploy = () => this.setState({modalOpen: false})
+    closeDeploy = () => this.setState({deployOpen: false})
 
     deploy = () => {
         const {hostId} = this.props
-        const {root, tag} = this.state
-        const value = (root || '').trim()
-        if (!value.startsWith('/')) {
-            message.warning('请填写以 / 开头的 Linux 绝对路径')
-            return
-        }
+        const {tag} = this.state
         const tagValue = (tag || '').trim() || 'latest'
         if (!/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/.test(tagValue)) {
             message.warning('镜像 Tag 只允许字母、数字、下划线、点和短横线，例如 latest、v4.8.40')
             return
         }
-        const recreate = !!(this.state.status && this.state.status.deployed)
         this.setState({submitting: true})
-        HttpClient.post('admin/host/agent/deploy', null, {
-            id: hostId, root: value, tag: tagValue, recreate
-        })
+        HttpClient.post('admin/host/agent/deploy', null, {id: hostId, tag: tagValue})
             .then(rs => {
                 message.success((rs && rs.message) || '辅助容器已就绪')
-                this.setState({modalOpen: false})
+                this.setState({deployOpen: false})
                 this.load()
             })
             .catch(() => {
+                // 部署失败时容器可能已经被删掉，重新读一次状态，让按钮回到「部署」
+                this.load()
             })
             .finally(() => this.setState({submitting: false}))
     }
@@ -100,100 +92,80 @@ export default class extends React.Component {
             })
     }
 
-    render() {
-        const {status, loading, error, modalOpen, root, submitting} = this.state
-        const canSave = PermUtils.hasPermission('host:save')
-
-        if (loading && !status) {
-            return <div className='mb-3'><Spin size='small'/></div>
-        }
+    renderSummary() {
+        const {status, loading, error} = this.state
         if (error) {
-            return <Alert className='mb-3' type='error' showIcon title='读取辅助容器状态失败'
-                          description={<Space>
-                              <span>{error}</span>
-                              <Button size='small' onClick={this.load}>重试</Button>
-                          </Space>}/>
+            return <Typography.Text type='danger'>
+                读取状态失败：{error}　<a onClick={this.load}>重试</a>
+            </Typography.Text>
+        }
+        if (loading && !status) {
+            return <Space size={6}>
+                <Spin size='small'/>
+                <Typography.Text type='secondary'>读取辅助容器状态…</Typography.Text>
+            </Space>
         }
         if (status && status.message) {
-            return <Alert className='mb-3' type='error' showIcon title={status.message}
-                          description={<Button size='small' icon={<ReloadOutlined/>}
-                                               onClick={this.load}>刷新</Button>}/>
+            return <Typography.Text type='danger'>{status.message}</Typography.Text>
         }
-
-        const deployed = !!(status && status.deployed)
-        const running = !!(status && status.running)
-        const needsRebuild = !!(status && status.needsRebuild)
-
-        const toolbar = <Space size={8}>
-            <Button size='small' icon={<ReloadOutlined/>} loading={loading} onClick={this.load}>刷新</Button>
-            {canSave &&
-                <Button size='small' onClick={this.openDeploy}>
-                    {deployed ? '重建' : '部署辅助容器'}
-                </Button>}
-            {canSave && deployed &&
-                <Popconfirm title='删除辅助容器？宿主机上的文件不会被删除'
-                            onConfirm={this.remove}>
-                    <Button size='small' danger icon={<DeleteOutlined/>}>删除</Button>
-                </Popconfirm>}
+        if (!status || !status.deployed) {
+            return <Typography.Text type='secondary'>辅助容器未部署</Typography.Text>
+        }
+        return <Space size={8} wrap>
+            <Badge status={status.running ? 'success' : 'default'} text={status.running ? '运行中' : '已停止'}/>
+            <Typography.Text type='secondary'>
+                目录 <Typography.Text code>{status.mountedRoot || '-'}</Typography.Text>
+            </Typography.Text>
+            {status.needsRebuild &&
+                <Typography.Text type='warning'>镜像配置已变更，删除后重新部署</Typography.Text>}
         </Space>
+    }
 
-        if (!deployed) {
-            return <>
-                <Alert className='mb-3' type='warning' showIcon icon={<CloudServerOutlined/>}
-                       title='主机文件 / Docker CLI 需要先部署辅助容器'
-                       description={<div>
-                           <div>辅助容器会挂载一个宿主机目录，并把 docker.sock 挂进容器；
-                               容器内权限等同于宿主机 root，请仅在受信任环境使用。</div>
-                           <Space className='mt-2'>{toolbar}</Space>
-                           {!canSave && <div>
-                               <Typography.Text type='secondary'>需要 host:save 权限才能部署，请联系管理员</Typography.Text>
-                           </div>}
-                       </div>}/>
-                {this.renderDeployModal()}
-            </>
-        }
+    render() {
+        const {status, deployOpen, helpOpen, tag, submitting} = this.state
+        const canSave = PermUtils.hasPermission('host:save')
+        const deployed = !!(status && status.deployed)
 
         return <>
-            <Alert className='mb-3' type={needsRebuild ? 'warning' : 'info'} showIcon
-                   title={`辅助容器${running ? '运行中' : '已停止'}${needsRebuild ? '，目录或镜像配置已变更' : ''}`}
-                   description={<div>
-                       <div>挂载目录：<Typography.Text code>{status.mountedRoot || '-'}</Typography.Text>
-                            {'　'}镜像：<Typography.Text code>{status.image || '-'}</Typography.Text>
-                       </div>
-                       {needsRebuild &&
-                           <div style={{marginTop: 4}}>
-                               当前容器：<Typography.Text code>{status.mountedImage || '-'}</Typography.Text>
-                               ，重建后使用 <Typography.Text code>{status.image || '-'}</Typography.Text>
-                           </div>}
-                       <Space className='mt-2'>{toolbar}</Space>
-                   </div>}/>
+            <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+                gap: 8, flexWrap: 'wrap', marginBottom: 12,
+            }}>
+                {this.renderSummary()}
+                <Tooltip title='辅助容器说明'>
+                    <Button type='text' size='small' shape='circle' icon={<QuestionCircleOutlined/>}
+                            onClick={() => this.setState({helpOpen: true})}/>
+                </Tooltip>
+                {canSave && (deployed
+                    ? <Popconfirm title='删除辅助容器？宿主机上的文件不会被删除'
+                                  onConfirm={this.remove}>
+                        <Button size='small' danger icon={<DeleteOutlined/>}>删除</Button>
+                    </Popconfirm>
+                    : <Button size='small' type='primary' icon={<CloudServerOutlined/>}
+                              onClick={this.openDeploy}>部署辅助容器</Button>)}
+                {!canSave && !deployed &&
+                    <Typography.Text type='secondary'>需要 host:save 权限才能部署</Typography.Text>}
+            </div>
+
             {this.renderDeployModal()}
+            {this.renderHelpModal()}
         </>
     }
 
     renderDeployModal() {
-        const {modalOpen, root, tag, submitting, status} = this.state
-        const rebuilding = !!(status && status.deployed)
+        const {deployOpen, tag, submitting, status} = this.state
         const repository = (status && status.repository) || ''
         const effectiveTag = (tag || '').trim() || 'latest'
         const imagePreview = repository ? `${repository}:${effectiveTag}` : effectiveTag
-        return <Modal title={rebuilding ? '重建辅助容器' : '部署辅助容器'}
-                      open={modalOpen}
-                      width={640}
+        return <Modal title='部署辅助容器'
+                      open={deployOpen}
+                      width={560}
                       confirmLoading={submitting}
-                      okText={rebuilding ? '重建' : '部署'}
+                      okText='部署'
                       onOk={this.deploy}
                       onCancel={this.closeDeploy}
                       destroyOnHidden>
-            <Alert className='mb-3' type='warning' showIcon
-                   title='该容器会挂载宿主机目录并接入宿主机 docker.sock，权限等同于宿主机 root'/>
-
-            <Typography.Text strong>宿主机目录</Typography.Text>
-            <Input className='mt-1' value={root}
-                   placeholder='/home'
-                   onChange={e => this.setState({root: e.target.value})}/>
-
-            <Typography.Text strong style={{display: 'block', marginTop: 16}}>Agent 镜像 Tag</Typography.Text>
+            <Typography.Text strong>Agent 镜像 Tag</Typography.Text>
             <Input className='mt-1' value={tag}
                    placeholder='latest'
                    onChange={e => this.setState({tag: e.target.value})}/>
@@ -202,29 +174,62 @@ export default class extends React.Component {
                 <div>将使用：<code>{imagePreview}</code></div>
                 <div>tag 留空表示 latest；生产建议固定为版本 tag，如 <code>v4.8.40</code>。</div>
             </div>
+            <Typography.Text type='secondary' style={{display: 'block', marginTop: 12}}>
+                首次部署默认挂载 /home，之后可在文件面板右上角「切换目录」，切换会重建容器。
+            </Typography.Text>
+        </Modal>
+    }
 
-            <div className='mt-2' style={{fontSize: 12, lineHeight: 1.8}}>
-                <div>一次只能挂载一个目录，只接受 Docker daemon 可见的 Linux 绝对路径（以 / 开头）：</div>
-                <ul style={{margin: '6px 0 0 18px', padding: 0}}>
-                    <li>Linux 主机：<code>/home</code>、<code>/data</code>、<code>/opt/xxx</code></li>
-                    <li>Windows + Docker Desktop（Linux 容器）：通常是
-                        <code> /run/desktop/mnt/host/d/data</code>（旧版本可能是 <code>/host_mnt/d/data</code>）
-                    </li>
-                    <li>WSL2 原生安装的 docker：<code>/mnt/d/data</code></li>
-                    <li>Linux 主机挂载了 Windows 共享盘：填 Linux 挂载点，如 <code>/mnt/share</code></li>
+    renderHelpModal() {
+        const {helpOpen, status} = this.state
+        return <Modal title='辅助容器说明' open={helpOpen} width={720} footer={null}
+                      onCancel={() => this.setState({helpOpen: false})} destroyOnHidden>
+            <div style={{lineHeight: 1.9}}>
+                <Typography.Paragraph>
+                    文件与终端依赖在目标主机上运行的辅助容器 <code>docker-admin-agent</code>，
+                    容器内已装 docker / docker compose，并接入宿主机 docker.sock。
+                </Typography.Paragraph>
+
+                <Typography.Title level={5}>权限与安全</Typography.Title>
+                <ul style={{margin: '0 0 8px 18px', padding: 0}}>
+                    <li>容器挂载 docker.sock 与一个宿主机目录，权限等同于宿主机 root，请只在受信任环境使用。</li>
+                    <li>文件面板直接操作宿主机文件系统，删除不可恢复。</li>
                 </ul>
-                <div style={{marginTop: 6}}>
-                    不要填写 <code>D:\data</code>、<code>C:\Users</code> 这类 Windows 路径；
-                    不支持 Windows 容器主机（辅助镜像是 Linux 镜像）。
-                </div>
-                <div style={{marginTop: 6}}>
-                    目录必须是真实存在的目录，不要填文件，也不要用指向 <code>/etc</code> 等系统目录的软链接。
-                    容器内会保持相同的绝对路径，<code>docker compose</code> 的相对路径与宿主机一致。
-                </div>
-                <div style={{marginTop: 6}}>
-                    建议先验证路径可见：
-                    <code>docker run --rm -v &lt;上面的路径&gt;:/check alpine ls -la /check</code>
-                </div>
+
+                <Typography.Title level={5}>文件目录</Typography.Title>
+                <ul style={{margin: '0 0 8px 18px', padding: 0}}>
+                    <li>部署时不再指定目录，首次默认 <code>/home</code>；在文件面板点「切换目录」按需切换。</li>
+                    <li>切换会用新目录重建容器，左侧终端会断开并自动重连。</li>
+                    <li>只接受 Docker daemon 可见的 Linux 绝对路径（以 / 开头）：
+                        Docker Desktop 一般是 <code>/run/desktop/mnt/host/d/data</code>，
+                        WSL2 原生 docker 是 <code>/mnt/d/data</code>；不要填 <code>D:\data</code> 这类 Windows 路径。
+                    </li>
+                    <li>不允许挂载 <code>/</code>、<code>/etc</code> 等系统目录，也不支持 Windows 容器主机。</li>
+                </ul>
+
+                <Typography.Title level={5}>文件操作</Typography.Title>
+                <Typography.Paragraph>
+                    文件树提供查看、下载、上传、编辑、删除；新建目录、重命名、压缩等请用左侧终端。
+                </Typography.Paragraph>
+
+                <Typography.Title level={5}>镜像</Typography.Title>
+                <Typography.Paragraph>
+                    镜像地址在「设置 - 全局设置」维护（不含 tag），每台主机部署时选择 tag，默认 latest；
+                    删除容器后重新部署即可更换 tag。
+                </Typography.Paragraph>
+
+                {status && status.deployed && <>
+                    <Typography.Title level={5}>当前状态</Typography.Title>
+                    <ul style={{margin: '0 0 0 18px', padding: 0}}>
+                        <li>镜像：<code>{status.image || '-'}</code>
+                            {status.mountedImage && status.mountedImage !== status.image &&
+                                <>（实际：<code>{status.mountedImage}</code>）</>}
+                        </li>
+                        <li>挂载目录：<code>{status.mountedRoot || '-'}</code></li>
+                        <li>docker.sock：<code>{status.socketPath || '-'}</code></li>
+                        <li>容器 ID：<code>{status.containerId ? status.containerId.slice(0, 12) : '-'}</code></li>
+                    </ul>
+                </>}
             </div>
         </Modal>
     }

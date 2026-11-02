@@ -7,9 +7,8 @@ const {Title, Paragraph, Text, Link} = Typography;
 /**
  * 隧道说明页。
  *
- * 平台不再登记客户端，也不再通过管理 API 下发代理规则：
- * http-tunnel 已经迭代到 2.x，自带 Web 管理端，代理（[[proxies]]）直接在客户端管理，
- * 这里只保留入口菜单和一份部署 / 使用说明，避免平台侧的版本兼容负担。
+ * http-tunnel 自带 Web 管理端，代理（[[proxies]]）直接在节点上管理，
+ * 这里只保留入口菜单和一份部署 / 使用说明。
  */
 const Code = ({children}) => (
     <pre style={{
@@ -30,8 +29,8 @@ export default class extends React.Component {
             <Card className='page-card'>
                 <Alert type='info' showIcon className='mb-3'
                        title='隧道由 http-tunnel 自行管理'
-                       description={'平台不再登记客户端、不再调用管理 API 下发代理规则。'
-                           + '请部署最新版 http-tunnel（ht），使用它自带的 Web 管理端维护 [[proxies]]；本页只说明部署与使用方式。'}/>
+                       description={'部署 http-tunnel（ht）后，用它自带的 Web 管理端维护代理（[[proxies]]）；'
+                           + '本页只说明部署与使用方式。'}/>
 
                 <Typography>
                     <Title level={4}>1. 部署 ht</Title>
@@ -133,7 +132,7 @@ token = "与服务端 token 相同"`}</Code>
                             </li>
                             <li>
                                 <b>访问远端 Docker：</b><Text code>local_addr</Text> 填
-                                <Text code>unix:///var/run/docker.sock</Text>（ht 以容器运行时需挂载该 socket），
+                                <Text code>unix:///var/run/docker.sock</Text>（ht 以容器运行时的挂载方式见下一节），
                                 并给这条代理配置 <Text code>auth_header</Text>。然后在平台「主机管理 → 连接方式 TCP →
                                 自定义请求头」填名称 <Text code>X-HTTP-TUNNEL-TOKEN</Text>、值填密钥。
                             </li>
@@ -147,7 +146,52 @@ token = "与服务端 token 相同"`}</Code>
 
                     <Divider/>
 
-                    <Title level={4}>6. 常见问题</Title>
+                    <Title level={4}>6. 容器部署时挂载 docker.sock</Title>
+                    <Paragraph>
+                        用隧道把宿主机的 Docker API 暴露给平台时，<Text code>local_addr</Text> 走 Unix Socket，
+                        所以 ht 容器必须用 bind mount 把宿主机的 socket 挂进容器，
+                        并让容器内路径与 <Text code>local_addr</Text> 完全一致：
+                    </Paragraph>
+                    <Code>{`docker run -d --name ht --restart unless-stopped \\
+  --stop-timeout 40 \\
+  -p 7777:7777 \\
+  -v /opt/ht:/app \\
+  -v /var/run/docker.sock:/var/run/docker.sock \\
+  ghcr.io/jiangood/ht:latest`}</Code>
+                    <Paragraph>
+                        对应的代理规则（<Text code>auth_header</Text> 只填密钥本身，不写头名）：
+                    </Paragraph>
+                    <Code>{`[[proxies]]
+name = "docker"
+domain = "docker.example.com"
+local_addr = "unix:///var/run/docker.sock"
+auth_header = "把 openssl rand -hex 16 的输出填在这里"`}</Code>
+                    <Paragraph>
+                        compose 里同样写一行 <Text code>/var/run/docker.sock:/var/run/docker.sock</Text>；
+                        客户端节点（内网那台）也要挂，因为请求是由它去连本机的 socket。
+                        宿主机不必开启 2375，也不会多出任何监听端口。
+                    </Paragraph>
+                    <Paragraph>
+                        路径按宿主机实际情况改：Linux、Docker Desktop（WSL2 后端）都是
+                        <Text code>/var/run/docker.sock</Text>；rootless docker 是
+                        <Text code>$XDG_RUNTIME_DIR/docker.sock</Text>；Windows 原生 <Text code>ht.exe</Text>
+                        不支持 Unix Socket（填 <Text code>unix://</Text> 会返回 <Text code>502</Text>），
+                        要挂 socket 就让 ht 跑在 Linux 容器里。
+                    </Paragraph>
+                    <Paragraph type='warning'>
+                        <Text code>/var/run/docker.sock</Text> 等价于宿主机 root，挂进容器的同时也把它交给了隧道。
+                        公网入口必须加 TLS，并给这条规则配 <Text code>auth_header</Text>；
+                        socket 不要通过 <Text code>2375</Text> 或明文隧道暴露到公网。
+                    </Paragraph>
+                    <Paragraph type='secondary'>
+                        挂载后用同一个网络里的容器验证：
+                        <Text code>{'curl -H "Host: docker.example.com" -H "X-HTTP-TUNNEL-TOKEN: <密钥>" http://127.0.0.1:7777/version'}</Text>，
+                        返回 <Text code>ApiVersion</Text> 即说明 Docker API 已经穿过隧道。
+                    </Paragraph>
+
+                    <Divider/>
+
+                    <Title level={4}>7. 常见问题</Title>
                     <Paragraph>
                         <ul style={{margin: '8px 0', paddingLeft: 20}}>
                             <li><Text code>404 No tunnel for this host</Text>：节点未连接，或域名不在任何
@@ -155,7 +199,9 @@ token = "与服务端 token 相同"`}</Code>
                             <li><Text code>401</Text>：配置了 <Text code>auth_header</Text> 但访客缺少或带错
                                 <Text code>X-HTTP-TUNNEL-TOKEN</Text>；多跳时也检查两端的 Token 是否一致。</li>
                             <li><Text code>502</Text>：隧道已匹配，但背后的本地服务连不上，检查
-                                <Text code>local_addr</Text> 是否从 ht 所在环境可达。</li>
+                                <Text code>local_addr</Text> 是否从 ht 所在环境可达；填
+                                <Text code>unix:///...</Text> 时确认 socket 真的挂进了容器
+                                （镜像是 <Text code>scratch</Text>，没有 shell 可进容器排查，直接看错误页的 <Text code>cause</Text>）。</li>
                             <li><Text code>control_host</Text> 不能与任何 <Text code>[[proxies]].domain</Text>
                                 相同，也不能是泛域名。</li>
                             <li><Text code>listen_port = 0</Text> 只允许在有 <Text code>[upstream]</Text> 时使用，

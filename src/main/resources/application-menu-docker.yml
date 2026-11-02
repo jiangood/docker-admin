@@ -121,7 +121,7 @@ menus:
       - {name: 下载, code: image-download:download}
   tunnel:
     pid: tool
-    name: 隧道管理
+    name: 内网穿透
     path: /tunnel
     icon: ApiOutlined
     perms:

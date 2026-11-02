@@ -62,15 +62,11 @@ export default class extends React.Component {
 
         if (!deployed) {
             return <div style={{height, display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
-                <Empty description='辅助容器未部署，请先在上方部署'/>
+                <Empty description='辅助容器未部署，请先在右上角部署'/>
             </div>
         }
 
         return <div style={{height, display: 'flex', flexDirection: 'column'}}>
-            <Alert className='mb-2' type='warning' showIcon
-                   title='该终端权限等同于宿主机 root'
-                   description={`容器内可直接执行 docker / docker compose 命令操作宿主机 daemon；宿主机目录 ${root || '-'} 在容器内保持相同路径。`}/>
-
             <Space className='mb-2'>
                 <Button size='small' icon={<ReloadOutlined/>} onClick={this.reconnect}>重新连接</Button>
                 <Typography.Text type='secondary'>

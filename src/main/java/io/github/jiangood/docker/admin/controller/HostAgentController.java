@@ -3,6 +3,7 @@ package io.github.jiangood.docker.admin.controller;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.service.HostAgentService;
 import io.github.jiangood.docker.admin.service.HostService;
+import io.github.jiangood.docker.admin.util.HostRootPolicy;
 import io.github.jiangood.openadmin.framework.log.Log;
 import io.github.jiangood.openadmin.framework.perm.HasPermission;
 import io.github.jiangood.openadmin.util.dto.AjaxResult;
@@ -40,6 +41,21 @@ public class HostAgentController {
         Host host = requireHost(id);
         return AjaxResult.ok().msg("辅助容器已就绪")
                 .data(hostAgentService.deploy(host, root, tag, recreate != null && recreate));
+    }
+
+    /**
+     * 文件面板的「切换目录」：用新目录重建辅助容器，容器成功起来后才保存目录。
+     * 属于基础设施变更（会重启容器、断开 CLI），因此同样要求 {@code host:save}。
+     */
+    @Log("主机-切换文件目录")
+    @HasPermission("host:save")
+    @PostMapping("root")
+    public AjaxResult switchRoot(String id, String root) {
+        Host host = requireHost(id);
+        Assert.hasText(root, "请填写宿主机目录");
+        String normalized = HostRootPolicy.normalizeRoot(root);
+        return AjaxResult.ok().msg("文件目录已切换到 " + normalized)
+                .data(hostAgentService.deploy(host, normalized, null, false));
     }
 
     @Log("主机-删除辅助容器")

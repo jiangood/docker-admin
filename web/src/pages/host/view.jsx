@@ -139,14 +139,14 @@ const TREND_IO_DEFS = [
 ]
 
 /**
- * 主机详情：主机信息 + 垂直 Tab「容器 / 实时资源 / 镜像」，点击容器弹窗展示通用容器组件。
+ * 主机详情：主机信息 + 垂直 Tab「监控 / 容器 / 镜像 / Agent」，点击容器弹窗展示通用容器组件。
  */
 export default class extends React.Component {
 
     importModalRef = React.createRef()
     exportModalRef = React.createRef()
 
-    /** 「实时资源」Tab 的轮询定时器：只在 Tab 激活且开启自动刷新时存在 */
+    /** 「监控」Tab 的轮询定时器：只在 Tab 激活且开启自动刷新时存在 */
     usageTimer = null
 
     state = {
@@ -179,7 +179,7 @@ export default class extends React.Component {
         seriesError: null,
 
         detail: {open: false, containerId: null, name: ''},
-        activeTab: 'containers',
+        activeTab: 'stats',
     }
 
     componentDidMount() {
@@ -214,6 +214,15 @@ export default class extends React.Component {
         HttpClient.get('admin/host/get', {id}, {toastError: false})
             .then(rs => this.setState({host: rs.data, hostLoading: false}))
             .catch(() => this.setState({hostLoading: false}))
+    }
+
+    /** Agent 当前挂载的目录就是文件管理目录，切换后同步到详情，避免显示成旧值 */
+    syncAgentStatus = status => {
+        const root = status && status.mountedRoot
+        if (!root || !this.state.host || this.state.host.fileRoot === root) {
+            return
+        }
+        this.setState(state => ({host: {...state.host, fileRoot: root}}))
     }
 
     loadInfo = id => {
@@ -259,7 +268,7 @@ export default class extends React.Component {
     }
 
     /**
-     * 读取历史曲线：与实时用量分开，只在「实时资源」Tab 激活或切换时间范围时请求，不参与轮询。
+     * 读取历史曲线：与实时用量分开，只在「监控」Tab 激活或切换时间范围时请求，不参与轮询。
      */
     loadSeries = (id = this.state.id, range = this.state.usageRange) => {
         if (!id) {
@@ -331,7 +340,7 @@ export default class extends React.Component {
     }
 
     /**
-     * 「实时资源」Tab：历史曲线在上，docker stats 版式（主机汇总 + 逐容器明细）在下。
+     * 「监控」Tab：历史曲线在上，docker stats 版式（主机汇总 + 逐容器明细）在下。
      */
     renderUsage() {
         return <>
@@ -601,6 +610,11 @@ export default class extends React.Component {
 
         const items = [
             {
+                key: 'stats',
+                label: '监控',
+                children: this.renderUsage()
+            },
+            {
                 key: 'containers',
                 label: `容器 (${containers.length})`,
                 children: <Table rowKey='id' size='small' loading={containersLoading}
@@ -610,7 +624,6 @@ export default class extends React.Component {
                                  onRow={record => ({onDoubleClick: () => this.openContainer(record)})}/>
             },
             {
-                // 容器与镜像紧挨着：这两个是日常来回切的主对象，实时资源排在它们后面
                 key: 'images',
                 label: `镜像 (${images.length})`,
                 children: <>
@@ -624,12 +637,7 @@ export default class extends React.Component {
             {
                 key: 'agent',
                 label: 'Agent',
-                children: <HostAgentTab hostId={this.state.id}/>
-            },
-            {
-                key: 'stats',
-                label: '实时资源',
-                children: this.renderUsage()
+                children: <HostAgentTab hostId={this.state.id} onStatus={this.syncAgentStatus}/>
             },
         ]
 
