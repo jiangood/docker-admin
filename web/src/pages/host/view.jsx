@@ -1,4 +1,4 @@
-import {Alert, Button, Card, Col, Descriptions, Empty, Input, Modal, Popconfirm, Progress, Result, Row, Segmented, Select, Space, Spin, Statistic, Switch, Table, Tabs, Tag, Tooltip, Typography} from 'antd'
+import {Alert, Button, Card, Col, Descriptions, Empty, Input, Modal, Popconfirm, Progress, Result, Row, Segmented, Space, Spin, Statistic, Table, Tabs, Tag, Tooltip, Typography} from 'antd'
 import React from 'react'
 import dayjs from 'dayjs'
 import {DeleteOutlined, ExportOutlined, ImportOutlined, ReloadOutlined} from '@ant-design/icons'
@@ -75,15 +75,8 @@ const USAGE_RANGES = [
     {label: '30 天', value: '30d'},
 ]
 
-/** 分桶粒度文案：告诉用户「曲线上的一个点代表多久」。 */
-function bucketLabel(millis) {
-    const minutes = Math.max(1, Math.round((Number(millis) || 0) / 60000))
-    if (minutes < 60) {
-        return `${minutes} 分钟`
-    }
-    const hours = Math.round(minutes / 60)
-    return hours < 48 ? `${hours} 小时` : `${Math.round(hours / 24)} 天`
-}
+/** 实时用量的轮询间隔：只是「多久看到新数字」，不会增加主机负载（读的是后端快照）。 */
+const USAGE_POLL_INTERVAL = 30 * 1000
 
 /**
  * 曲线配置：时间轴 + 折线，值格式化交给调用方（百分比 / 字节速率）。
@@ -146,7 +139,7 @@ export default class extends React.Component {
     importModalRef = React.createRef()
     exportModalRef = React.createRef()
 
-    /** 「监控」Tab 的轮询定时器：只在 Tab 激活且开启自动刷新时存在 */
+    /** 「监控」Tab 的轮询定时器：只在 Tab 激活时存在，页面隐藏时暂停请求 */
     usageTimer = null
 
     state = {
@@ -169,8 +162,6 @@ export default class extends React.Component {
         usageLoading: false,
         usageError: null,
         usageUpdatedAt: null,
-        usageAuto: true,
-        usageInterval: 30,
 
         // 历史曲线：只含主机级数字，切换范围时才请求
         usageRange: '24h',
@@ -193,12 +184,12 @@ export default class extends React.Component {
         this.loadInfo(id)
         this.loadContainers(id)
         this.loadImages(id)
+        // 默认就停在「监控」Tab，直接拉一次快照与曲线并开始轮询
+        this.syncUsageTimer(id)
     }
 
     componentDidUpdate(prevProps, prevState) {
-        if (prevState.activeTab !== this.state.activeTab
-            || prevState.usageAuto !== this.state.usageAuto
-            || prevState.usageInterval !== this.state.usageInterval) {
+        if (prevState.activeTab !== this.state.activeTab) {
             this.syncUsageTimer()
         }
         if (prevState.usageRange !== this.state.usageRange) {
@@ -288,26 +279,23 @@ export default class extends React.Component {
         }
     }
 
-    /** 切 Tab、改刷新开关或间隔时重建定时器；首次进入该 Tab 立即读一次快照与曲线 */
-    syncUsageTimer = () => {
+    /** 切 Tab 时重建定时器；首次进入该 Tab 立即读一次快照与曲线 */
+    syncUsageTimer = (id = this.state.id) => {
         this.clearUsageTimer()
-        if (this.state.activeTab !== 'stats' || !this.state.id) {
+        if (this.state.activeTab !== 'stats' || !id) {
             return
         }
         if (!this.state.usage) {
-            this.loadUsage(this.state.id, false)
+            this.loadUsage(id, false)
         }
         if (!this.state.series) {
-            this.loadSeries(this.state.id, this.state.usageRange)
-        }
-        if (!this.state.usageAuto) {
-            return
+            this.loadSeries(id, this.state.usageRange)
         }
         this.usageTimer = setInterval(() => {
             if (!document.hidden) {
-                this.loadUsage(this.state.id, false)
+                this.loadUsage(id, false)
             }
-        }, Math.max(10, this.state.usageInterval) * 1000)
+        }, USAGE_POLL_INTERVAL)
     }
 
     /**
@@ -359,17 +347,18 @@ export default class extends React.Component {
         const timePattern = usageRange === '7d' || usageRange === '30d' ? 'MM-DD HH:mm' : 'HH:mm'
 
         const extra = <Space size={8}>
+            {seriesLoading && points.length > 0 && <Spin size='small'/>}
             <Segmented size='small' value={usageRange} options={USAGE_RANGES}
                        onChange={v => this.setState({usageRange: v})}/>
-            {seriesLoading && <Spin size='small'/>}
         </Space>
 
         let body
-        if (seriesError) {
+        if (seriesLoading && points.length === 0) {
+            body = <div className='text-center' style={{padding: '80px 0'}}><Spin/></div>
+        } else if (seriesError) {
             body = <Alert type='warning' showIcon message='历史数据读取失败' description={seriesError}/>
         } else if (points.length === 0) {
-            body = <Empty image={Empty.PRESENTED_IMAGE_SIMPLE}
-                          description={seriesLoading ? '加载中…' : '暂无历史数据（后台每分钟采集一次，稍后即可看到）'}/>
+            body = <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description='暂无历史数据'/>
         } else {
             body = <>
                 <Chart height={220} option={buildTrendOption({
@@ -384,52 +373,23 @@ export default class extends React.Component {
         }
 
         return <Card size='small' className='mb-4' title='资源趋势' extra={extra}>
-            {series && series.sampleCount > 0 && <Typography.Text type='secondary' style={{fontSize: 12}}>
-                每个点约 {bucketLabel(series.bucketMillis)}，共 {series.sampleCount} 条采样
-            </Typography.Text>}
             {body}
         </Card>
     }
 
     /**
-     * 实时用量面板：docker stats 版式（主机汇总 + 逐容器 CPU / 内存 / 网络 / 块 I/O / PID）。
+     * 实时用量：概览卡片（主机汇总）+ 容器用量表格卡片，数据来自后端每分钟的采集快照。
      */
     renderLiveUsage() {
-        const {usage, usageLoading, usageError, usageAuto, usageInterval, usageUpdatedAt} = this.state
+        const {usage, usageLoading, usageError, usageUpdatedAt} = this.state
 
-        const toolbar = <div className='mb-3'
-                             style={{display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap'}}>
-            <Space size={4}>
-                <Typography.Text type='secondary'>自动刷新</Typography.Text>
-                <Switch size='small' checked={usageAuto} onChange={v => this.setState({usageAuto: v})}/>
-            </Space>
-            <Select size='small' style={{width: 96}} value={usageInterval}
-                    onChange={v => this.setState({usageInterval: v})}
-                    options={[{value: 10, label: '10 秒'}, {value: 30, label: '30 秒'}, {value: 60, label: '60 秒'}]}/>
-            <Button size='small' icon={<ReloadOutlined/>} loading={usageLoading}
-                    onClick={() => this.loadUsage(this.state.id, true)}>刷新</Button>
+        const extra = <Space size={8}>
             {usageUpdatedAt && <Typography.Text type='secondary' style={{fontSize: 12}}>
                 采集于 {formatClock(usageUpdatedAt)}
-                {usage && usage.durationMillis != null ? `，耗时 ${usage.durationMillis} ms` : ''}
             </Typography.Text>}
-        </div>
-
-        if (usageError) {
-            return <>
-                {toolbar}
-                <Result status='warning' title='实时用量采集失败' subTitle={usageError} style={{padding: 0}}/>
-            </>
-        }
-        if (!usage) {
-            return <>{toolbar}<Empty description='等待后台采集（每分钟一次），也可以点「刷新」立即采集'/></>
-        }
-        if (!usage.reachable) {
-            return <>
-                {toolbar}
-                <Result status='warning' title='无法采集实时用量'
-                        subTitle={usage.error || '主机可能已离线'} style={{padding: 0}}/>
-            </>
-        }
+            <Button size='small' icon={<ReloadOutlined/>} loading={usageLoading}
+                    onClick={() => this.loadUsage(this.state.id, true)}>刷新</Button>
+        </Space>
 
         const usageColumns = [
             {
@@ -467,11 +427,21 @@ export default class extends React.Component {
             {title: 'PID', dataIndex: 'pids', width: 80, render: v => v ?? '-'},
         ]
 
-        return <>
-            {toolbar}
+        const reachable = usage && !usageError && usage.reachable
 
-            <Row gutter={[16, 8]} className='mb-3'>
-                <Col span={6}>
+        let summary
+        if (usageLoading && !usage) {
+            summary = <div className='text-center' style={{padding: '48px 0'}}><Spin/></div>
+        } else if (usageError) {
+            summary = <Alert type='warning' showIcon message='实时用量采集失败' description={usageError}/>
+        } else if (!usage) {
+            summary = <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description='暂无数据'/>
+        } else if (!usage.reachable) {
+            summary = <Alert type='warning' showIcon message='无法采集实时用量'
+                             description={usage.error || '主机可能已离线'}/>
+        } else {
+            summary = <Row gutter={[16, 8]}>
+                <Col span={8}>
                     <Statistic title='CPU 使用率'
                                value={usage.cpuPercent == null ? '-' : toNumber(usage.cpuPercent).toFixed(1)}
                                suffix={usage.cpuPercent == null ? null : '%'}/>
@@ -485,7 +455,7 @@ export default class extends React.Component {
                         {usage.cpus ? ` / 主机 ${toNumber(usage.cpus)} 核` : ''}
                     </Typography.Text>
                 </Col>
-                <Col span={6}>
+                <Col span={8}>
                     <Statistic title='容器内存合计' value={formatBytes(usage.memUsed)}
                                suffix={usage.memoryTotal ? `/ ${formatBytes(usage.memoryTotal)}` : null}/>
                     <Progress percent={usage.memPercent == null ? 0 : usage.memPercent} showInfo={false}
@@ -495,23 +465,28 @@ export default class extends React.Component {
                         占主机 {formatPercent(usage.memPercent)}
                     </Typography.Text>
                 </Col>
-                <Col span={6}>
+                <Col span={8}>
                     <Statistic title='运行容器'
                                value={usage.containersRunning == null
                                    ? (usage.containers || []).length
                                    : usage.containersRunning}/>
                 </Col>
-                <Col span={6}>
-                    <Statistic title='采集耗时' value={usage.durationMillis ?? '-'} suffix='ms'/>
-                </Col>
             </Row>
+        }
 
-            <Table rowKey='id' size='small' dataSource={usage.containers || []}
-                   columns={usageColumns}
-                   scroll={{x: 'max-content'}}
-                   pagination={{pageSize: 20, showSizeChanger: true}}
-                   locale={{emptyText: <Empty description='主机上没有运行中的容器'/>}}
-                   onRow={record => ({onDoubleClick: () => this.openContainer(record)})}/>
+        return <>
+            <Card size='small' className='mb-4' title='实时用量' extra={extra}>
+                {summary}
+            </Card>
+
+            {reachable && <Card size='small' title='容器用量'>
+                <Table rowKey='id' size='small' dataSource={usage.containers || []}
+                       columns={usageColumns}
+                       scroll={{x: 'max-content'}}
+                       pagination={{pageSize: 20, showSizeChanger: true}}
+                       locale={{emptyText: <Empty description='暂无运行中的容器'/>}}
+                       onRow={record => ({onDoubleClick: () => this.openContainer(record)})}/>
+            </Card>}
         </>
     }
 
@@ -641,6 +616,35 @@ export default class extends React.Component {
             },
         ]
 
+        // 主机信息 / 运行环境分成两块、各按 3 列排：原来 16 项排 2 列要 10 行，
+        // 现在 6~7 行就够。代理与自定义请求头只对远程 TCP 有意义，其他连接方式不占行。
+        const isTcp = (host && host.connectionType) === 'tcp'
+        const hostItems = [
+            {key: 'name', label: '名称', children: host?.name || '-'},
+            {key: 'ip', label: 'IP 地址', children: host?.ip || '-'},
+            {key: 'conn', label: '连接方式', children: connectionLabel(host)},
+            {key: 'endpoint', label: '连接地址', children: endpointOf(host), span: 2},
+            {key: 'agentTag', label: 'Agent 镜像 Tag', children: host?.agentImageTag || 'latest'},
+            ...(isTcp ? [
+                {key: 'proxy', label: '连接代理', children: proxyLabel(host), span: 2},
+                {key: 'header', label: '自定义请求头', children: headerLabel(host)},
+            ] : []),
+            {key: 'fileRoot', label: '文件管理目录', children: host?.fileRoot || '/home', span: 3},
+        ]
+        const runtimeItems = [
+            {key: 'os', label: '操作系统', children: info?.os || '-'},
+            {key: 'arch', label: '架构', children: info?.arch || '-'},
+            {key: 'cpu', label: 'CPU', children: info?.cpus || '-'},
+            {key: 'version', label: 'Docker 版本', children: info?.dockerVersion || '-'},
+            {key: 'api', label: 'API 版本', children: info?.apiVersion || '-'},
+            {key: 'mem', label: '内存', children: info?.memory ? formatBytes(info.memory) : '-'},
+            {
+                key: 'containers', label: '容器数',
+                children: info ? `${info.containersRunning || 0} 运行 / ${info.containersTotal || 0} 总计` : '-'
+            },
+            {key: 'images', label: '镜像数', children: info ? info.images : '-'},
+        ]
+
         return <Page padding>
             <Card className='mb-4' title={host ? host.name : '主机'}
                   extra={canImage
@@ -655,28 +659,12 @@ export default class extends React.Component {
                       : null}>
                 {infoError && <Result status='warning' title='无法连接主机' subTitle={infoError}
                                      className='mb-3' style={{padding: 0}}/>}
-                <Descriptions size='small' column={2}
-                              items={[
-                                  {key: 'name', label: '名称', children: host?.name || '-'},
-                                  {key: 'ip', label: 'IP地址', children: host?.ip || '-'},
-                                  {key: 'conn', label: '连接方式', children: connectionLabel(host)},
-                                  {key: 'header', label: '自定义请求头', children: headerLabel(host)},
-                                  {key: 'proxy', label: '连接代理', children: proxyLabel(host), span: 2},
-                                  {key: 'endpoint', label: '连接地址', children: endpointOf(host), span: 2},
-                                  {key: 'fileRoot', label: '文件管理目录', children: host?.fileRoot || '/home', span: 2},
-                                  {key: 'agentTag', label: 'Agent 镜像 Tag', children: host?.agentImageTag || 'latest'},
-                                  {key: 'version', label: 'Docker 版本', children: info?.dockerVersion || '-'},
-                                  {key: 'api', label: 'API 版本', children: info?.apiVersion || '-'},
-                                  {key: 'os', label: '操作系统', children: info?.os || '-'},
-                                  {key: 'arch', label: '架构', children: info?.arch || '-'},
-                                  {
-                                      key: 'containers', label: '容器数',
-                                      children: info ? `${info.containersRunning || 0} 运行 / ${info.containersTotal || 0} 总计` : '-'
-                                  },
-                                  {key: 'images', label: '镜像数', children: info ? info.images : '-'},
-                                  {key: 'mem', label: '内存', children: info?.memory ? formatBytes(info.memory) : '-'},
-                                  {key: 'cpu', label: 'CPU', children: info?.cpus || '-'},
-                              ]}/>
+                <Descriptions size='small' column={3} title='主机信息'
+                              items={hostItems}
+                              styles={{content: {overflowWrap: 'anywhere'}}}/>
+                <Descriptions size='small' column={3} title='运行环境' className='mt-4'
+                              items={runtimeItems}
+                              styles={{content: {overflowWrap: 'anywhere'}}}/>
             </Card>
 
             <Card>
