@@ -669,7 +669,7 @@ export default class extends React.Component {
               title: '应用', dataIndex: 'name',
               render: (name, row) => (
                 <LinkButton
-                  onClick={() => PageUtils.open('/app/view?id=' + row.id, '应用-' + name)}>{name}</LinkButton>
+                  onClick={() => PageUtils.open('/app/view?id=' + row.id)}>{name}</LinkButton>
               )
             },
             {title: '主机', dataIndex: ['host', 'name']},

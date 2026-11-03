@@ -57,6 +57,8 @@ public class DataSyncJob extends BaseJob {
 
 进度只保存在内存（`JobProgressRegistry`），重启后丢失；执行结果仍由 `sys_job_log` 落库。
 
+> cron 使用 Quartz 格式，共 6 或 7 段：**秒 分 时 日 月 周 [年]**，第一位是秒。例如 `0 */5 * * * ?` 表示每 5 分钟，`*/5 * * * * ?` 表示每 5 秒。
+
 | 端点 | HTTP | 权限 | 说明 |
 |------|------|------|------|
 | `admin/job/progress` | GET | `job:read` | 全部任务运行进度快照，按开始时间倒序 |
@@ -64,15 +66,15 @@ public class DataSyncJob extends BaseJob {
 
 快照字段：`jobId` / `jobName` / `logId` / `state`(`RUNNING`/`SUCCESS`/`FAILED`) / `stateLabel` / `stateColor` / `percent` / `current` / `total` / `message` / `beginTime` / `updateTime` / `endTime` / `runTime` / `result`。
 
-### 日志聚合
+### 执行记录方式
 
-`SysJob.logAggregation`（新建/编辑任务时选择，字典 `jobLogAggregation`）控制执行记录与日志文件粒度：
+`SysJob.logAggregation`（前端字段名「执行记录方式」，新建/编辑任务时选择，字典 `jobLogAggregation`）控制执行记录与日志文件粒度：
 
 | 取值 | 执行记录 | 日志文件 |
 |---|---|---|
-| `PER_RUN` 每次执行（默认） | 每次一行 | 每次一个文件 |
-| `HOURLY` 按小时 | 每任务每小时一行 | 每任务每小时一个文件 |
-| `DAILY` 按天 | 每任务每天一行 | 每任务每天一个文件 |
+| `PER_RUN` 每次一份记录（默认） | 每次一行 | 每次一个文件 |
+| `HOURLY` 每小时一份记录 | 每任务每小时一行 | 每任务每小时一个文件 |
+| `DAILY` 每天一份记录 | 每任务每天一行 | 每任务每天一个文件 |
 
 聚合记录的 `SysJobLog` 额外字段：`logBucket`（聚合桶）、`executeCount`（执行次数）、`failCount`（失败次数）、`totalRunTime`（累计耗时）/`totalRunTimeLabel`；`jobRunTime`/`result` 为最近一次，`success` 表示周期内是否全部成功。执行记录与日志文件按 `sys.job-log-retain-days`（默认 30 天）自动清理。
 
@@ -107,6 +109,76 @@ public class OrderLogPermissionProvider implements LogKeyPermissionProvider {
 
 日志如果属于业务数据、需要行级/数据权限校验，不要复用上面的通用接口（它只能校验权限码）：由业务模块自己提供读取接口，并让 `LogViewer` 通过 `url` 指向它，返回同样的 `{content, nextOffset, eof}` 即可复用增量跟随。
 
+### 参数设置
+
+运行时可改的全局参数。元数据由业务模块/框架实现 `ConfigProvider` 声明，`sys_config` 只保存被覆盖的值（见 [config.md](config.md)）。
+
+| 端点 | HTTP | 权限 | 说明 |
+|------|------|------|------|
+| `admin/sys-config/items` | GET | `sys-config:read` | 分组 + 元数据 + 当前生效值 |
+| `admin/sys-config/update` | POST | `sys-config:update` | 只提交改动项：`{values:[{key,value}]}` |
+| `admin/sys-config/reset` | POST | `sys-config:update` | `{keys:[...]}`；`keys` 为空表示全部恢复默认 |
+| `admin/sys-config/value` | GET | `sys-config:read` | 单键读取，查询参数 `key` |
+
+`items` 返回 `{groups:[{code,label,description,items:[...]}]}`，配置项字段：
+
+| 字段 | 说明 |
+|------|------|
+| `key` / `label` / `hint` | 配置键、显示名、说明 |
+| `type` | `bool` / `int` / `float` / `string` / `text` / `time` / `list` / `select` / `proxy` |
+| `defaultValue` | 生效默认值（`application.yml` 或代码声明）；敏感项为 `null` |
+| `value` | 当前生效值；敏感项为 `null` |
+| `overridden` | 是否被数据库覆盖 |
+| `source` | `db`（数据库覆盖）/ `env`（application.yml）/ `code`（代码默认） |
+| `secret` / `hasValue` | 是否敏感项、敏感项是否已设置 |
+| `min` / `max` / `options` / `required` | 输入约束 |
+
+> `update` 请求体可能包含敏感值，控制器未使用 `@Log`；操作日志由框架只记录变更的 key。
+
+### 邮件
+
+邮件配置统一走上面的参数设置接口，不提供单独的设置读写接口。
+
+| 端点 | HTTP | 权限 | 说明 |
+|------|------|------|------|
+| `admin/mail/test` | POST | `sys-config:update` | 发送测试邮件到发件邮箱自己；失败返回具体原因 |
+
+### 在线用户
+
+系统管理 →「在线用户」页面：一个登录会话一行，展示账号、姓名、机构、IP、登录时间与最后活跃时间，支持把指定会话强制下线。
+
+| 端点 | HTTP | 权限 | 说明 |
+|------|------|------|------|
+| `admin/sys-online-user/page` | GET | `sys-online:read` | 分页查询，查询参数 `keyword`（账号/姓名/IP/机构模糊匹配）、`page`、`size` |
+| `admin/sys-online-user/kick` | POST | `sys-online:kick` | 请求体 `{id}`；`id` 为列表返回的随机标识，非 sessionId |
+
+字段：`id` / `username`（账号）/ `name`（姓名）/ `unitId` / `unitName` / `orgId` / `orgName` / `ip` / `userAgent` / `loginTime` / `lastActiveTime` / `current`（是否当前请求所在会话）。真实 `sessionId` 不会下发给前端。
+
+说明：
+
+- 在线记录与 `HttpSession` 一样保存在内存，**仅单实例部署准确**，应用重启后清空；多实例部署需要 Spring Session 等共享会话方案（见 [config.md](config.md)）。
+- `lastActiveTime` 由 Spring Security `SessionRegistry` 的 `lastRequest` 实时计算，无需业务上报。
+- 强制下线调用 `SessionInformation.expireNow()`，对方下一次请求会收到 401，并复用并发登录提示（见下文「框架内置事件」）。
+- 不允许强制下线当前登录会话；会话被踢后记录立即从列表移除，对方会话在下一次请求时失效。
+- 并发登录被顶下线的旧会话、以及空闲超时的会话，会在下次查询列表时自动清理，不会长期残留。
+
+### 个人中心
+
+个人中心「登录设备」只查询当前登录账号自己的会话，普通用户无需 `sys-online:*` 权限。
+
+| 端点 | HTTP | 权限 | 说明 |
+|------|------|------|------|
+| `admin/user-center/sessions` | GET | 登录即可 | 当前账号的活动会话列表，按登录时间倒序 |
+| `admin/user-center/sessions/kick` | POST | 登录即可 | 请求体 `{id}`；下线自己的其他设备，不能下线当前会话 |
+
+字段：`id`（随机标识，非 sessionId）/ `ip` / `userAgent` / `loginTime` / `lastActiveTime` / `current`。
+
+说明：
+
+- 是否会出现多处登录取决于 `sys.maximum-sessions`：默认 `1` 会在新登录时踢掉旧会话；调大后多个会话并存，个人中心在会话数大于 1 时显示提示。
+- 服务端会校验会话归属，只能下线自己的会话，也允许用户自助下线自己的其他设备。
+- 在线记录保存在内存，**仅单实例部署准确**（同「在线用户」）。
+
 ### 代码生成
 
 系统管理 →「代码生成」页面：动态扫描已注册实体（继承 `BaseEntity` 且标注 `@Entity`），按选中实体生成常见 CRUD 代码并写入项目源码目录（先预览确认，再在预览抽屉里勾选要写入的文件）。
@@ -140,10 +212,10 @@ public class OrderLogPermissionProvider implements LogKeyPermissionProvider {
 
 | 组件 | 用途 |
 |------|------|
-| `Page` | 页面容器（标题/描述/右侧操作区），`padding`/`debug`/`title`/`description`/`actions`（推荐传 `PermAction[]`，兼容带 `perm` 属性的节点）；`backgroundGray` 已废弃（页面底色默认跟随布局底色，该参数不再产生差异） |
+| `Page` | 页面容器（右侧操作区），`padding`/`debug`/`actions`（推荐传 `PermAction[]`，兼容带 `perm` 属性的节点）；页面标题由 `pageMeta.title` / 菜单提供，`Page` 不再提供 `title`/`description` 属性；`backgroundGray` 已废弃（页面底色默认跟随布局底色，该参数不再产生差异） |
 | `PageLoading` | 页面加载中提示（`message` 单条 / `messages` 多阶段） |
 | `ProTable` | 数据表格，分页/筛选/工具栏/树形模式，详见[下方](#protable) |
-| `LinkButton` | 链接跳转按钮（`path` + `label`，通过 `PageUtils.open` 打开页面） |
+| `LinkButton` | 链接跳转按钮（`path` + `label`，通过 `PageUtils.open` 打开页面；`label` 已弃用，目标页请使用 `pageMeta.title`） |
 | `Link` | hash 路由跳转链接（`to`） |
 | `NamedIcon` | 通过名称渲染 Ant Design 图标（按需加载，`name`） |
 | `PermActions` | 权限操作区：数据驱动 `actions`（支持 `perm` 过滤、`more` 下拉、`size`）或按子元素 `perm` 属性过滤（不推荐） |
@@ -157,10 +229,48 @@ public class OrderLogPermissionProvider implements LogKeyPermissionProvider {
 | `View*` | 展示组件，见[展示组件](#展示组件) |
 | `DownloadModal` | 下载弹框，通过 ref 调用 `download()` 方法，支持进度追踪/取消/重试 |
 | `LogViewer` | 文件日志查看器，按字节偏移增量读取；`logKey` + `running` 时自动轮询新内容、任务结束自动补拉最后一段；`url` 可指向业务模块自建接口 |
+| `CronEditor` | cron 表达式输入框 + 常用表达式助手（按间隔/按时间点/自定义），值为 Quartz 格式「秒 分 时 日 月 周 [年]」 |
 
 #### PageFrame
 
 多 Tab 布局的内核：根据当前 hash 匹配路由渲染页面组件。页面通过 `onShow()` 生命周期响应激活（详见[页面生命周期](#页面生命周期)），整个 `PageFrame` 由 `ErrorBoundary` 包裹，页面渲染异常不会影响整体布局。
+
+#### 页面元信息 pageMeta
+
+页面文件可选导出 `pageMeta`，由 vite 插件在扫描路由时读取并写入路由表：
+
+```jsx
+// web/src/pages/system/role/role-perm.jsx
+export const pageMeta = {
+    title: '角色权限设置', // 页面标题；未设置时回退到后端菜单名
+    requiresAuth: true,   // 是否需要登录，默认 true
+    layout: 'admin',      // 'admin'（后台菜单布局）| 'blank'（仅页面内容）
+};
+```
+
+TS 页面可 `import type {PageMeta} from '@jiangood/open-admin'` 并标注 `pageMeta` 类型。
+
+不写时按目录约定推断：
+
+| 页面位置 | `requiresAuth` | `layout` |
+|---|---|---|
+| `pages/public/**` | `false` | `blank` |
+| `pages/standalone/**` | `true` | `blank` |
+| 其他 `pages/**` | `true` | `admin` |
+
+`/login`（`pages/login.jsx`，登录页）默认按 `requiresAuth: false` + `layout: 'blank'` 处理，业务项目覆盖登录页时无需重复声明。`requiresAuth: false` 与 `layout: 'admin'` 是非法组合，会自动修正为 `blank` 并输出 `console.warn`。路由表条目为 `{path, component, meta}`，`matchRoute(pathname)` 的返回值包含 `meta`。
+
+页面标题优先级（同时用于页签和浏览器标题）：
+
+```
+pageMeta.title
+  > 后端菜单名
+  > 未命名
+```
+
+URL 中的 `_label` 已弃用且**不再生效**，检测到时只在控制台提示一次；旧 URL 会按菜单名 / `pageMeta.title` 正常显示。
+
+页面标题为静态元信息，不支持运行时动态回填。浏览器标题统一格式为 `系统标题 | 页面标题`（页面无标题时仅显示系统标题）。
 
 #### FormModal
 
@@ -373,8 +483,8 @@ class ReportPage extends React.Component {
 | `FieldDate` / `FieldDateRange` | 日期/日期范围（`type`：如 `YYYY-MM-DD`、`YYYY-MM`、`YYYY-QQ`、`YYYY-MM-DD HH:mm:ss`、`HH:mm:ss`） |
 | `FieldNumberRange` | 数字范围（值形如 `"1/100"`） |
 | `FieldSysOrgTree` / `FieldSysOrgTreeSelect` | 系统组织树 / 树选择（`type`：dept/unit） |
-| `FieldUploadFile` | 通用文件上传（`/admin/sysFile/upload`） |
-| `FieldUploadImage` | 图片上传（裁剪/压缩，`/admin/sysFile/uploadImage`） |
+| `FieldUploadFile` | 通用文件上传（`/admin/sys-file/upload`） |
+| `FieldUploadImage` | 图片上传（裁剪/压缩，`/admin/sys-file/upload-image`） |
 | `FieldEditor` | 富文本编辑器 |
 | `FieldPercent` | 百分比输入（0~100，内部按 0~1 存储） |
 | `FieldTable` / `FieldTableSelect` | 可编辑表格 / 下拉表格选择 |
@@ -385,11 +495,11 @@ class ReportPage extends React.Component {
 
 | 组件 | 用途 |
 |------|------|
-| `FieldUserSelect` | 系统用户下拉（`/admin/sysUser/options`） |
+| `FieldUserSelect` | 系统用户下拉（`/admin/sys-user/options`） |
 | `FieldUserSelectMultiple` | 系统用户多选 |
-| `FieldUserPicker` | 用户选择弹窗（机构树 + 服务端分页多选，`value` 为用户 id 数组，适合同名多、用户量大的场景；默认数据源 `/admin/sysUser/page`、回显 `/admin/sysUser/by-ids`，可用 `requestUrl`/`usersUrl` 覆盖） |
-| `FieldUnitTreeSelect` | 系统单位树选择（`/admin/sysOrg/unit-tree`） |
-| `FieldDeptTreeSelect` | 系统部门树选择（`/admin/sysOrg/dept-tree`） |
+| `FieldUserPicker` | 用户选择弹窗（机构树 + 服务端分页多选，`value` 为用户 id 数组，适合同名多、用户量大的场景；默认数据源 `/admin/sys-user/page`、回显 `/admin/sys-user/by-ids`，可用 `requestUrl`/`usersUrl` 覆盖） |
+| `FieldUnitTreeSelect` | 系统单位树选择（`/admin/sys-org/unit-tree`） |
+| `FieldDeptTreeSelect` | 系统部门树选择（`/admin/sys-org/dept-tree`） |
 | `FieldOrgTreeSelect` | `FieldDeptTreeSelect` 的别名 |
 | `FieldOrgTreeMultipleSelect` | 系统部门树多选 |
 
@@ -401,9 +511,9 @@ class ReportPage extends React.Component {
 - `/file/{*objectName}?thumb=1` 优先返回缩略图（`xxx.thumb.jpg`），缩略图不存在时回退原图
 
 上传/下载接口（需登录）：
-- `POST /admin/sysFile/upload` — 通用文件上传，表单参数 `file`、`isPublic`（`true` 公开免登录 / `false` 私有需登录，默认 `true`）
-- `POST /admin/sysFile/uploadImage` — 图片上传，表单参数 `file`、`thumb`（缩略图）、`isPublic`
-- `GET /admin/sysFile/download/{*objectName}` — 下载
+- `POST /admin/sys-file/upload` — 通用文件上传，表单参数 `file`、`isPublic`（`true` 公开免登录 / `false` 私有需登录，默认 `true`）
+- `POST /admin/sys-file/upload-image` — 图片上传，表单参数 `file`、`thumb`（缩略图）、`isPublic`
+- `GET /admin/sys-file/download/{*objectName}` — 下载
 
 上传文件默认标记为临时，保存业务数据后后端自动确认（详见[临时文件自动清理](config.md#临时文件自动清理)）。
 
@@ -474,10 +584,10 @@ location /file/public/ {
 | `ObjectUtils` | 对象操作（`copyPropertyIfPresent` 等） |
 | `StorageUtils` | `set` / `get` / `remove`（localStorage 封装） |
 | `DeviceUtils` | `isMobileDevice` |
-| `PageUtils` | `open(path, label)` 打开新 Tab / `closeCurrent` / `redirectToLogin` / `currentUrl` / `currentParams` |
+| `PageUtils` | `open(path)` 打开新 Tab / `currentTitle()` 获取当前页面标题 / `closeCurrent` / `redirectToLogin` / `currentUrl` / `currentParams`；常量 `LOGIN_PATH` 为登录页路径（`/login`）。`open` 的 `label` 参数已弃用且不再生效，`currentLabel()` 已弃用 |
 | `EventBus` | `on` / `once` / `emit` / `off` — 跨组件通信，优先使用，替代 `document.dispatchEvent` |
 
-`EventBus.on` / `once` 返回取消订阅函数；`on` 支持传 `ctx`（this）。`PageUtils.open(path, label)` 用于跳转到页面（`label` 会作为 Tab 标题，通过 `currentLabel()` 读取）。
+`EventBus.on` / `once` 返回取消订阅函数；`on` 支持传 `ctx`（this）。`PageUtils.open(path)` 用于跳转到页面，`PageUtils.currentTitle()` 返回当前页面标题（不含系统标题，未设置时返回 `undefined`）；页面标题请由目标页面通过 `pageMeta.title` 提供。`PageUtils.open(path, label)` 的 `label` 参数与 URL 中的 `_label` 已弃用且不再生效，传入时控制台会输出一次弃用提示。登录相关跳转请使用 `LOGIN_PATH`，不要硬编码 `/public/login`。
 
 框架内置事件：登录失效时 `HttpClient` 广播 `loginExpired`（载荷 `{message, reason}`，`reason` 为 `CONCURRENT_LOGIN` 表示同一账号并发登录被顶下线），`Layouts` 已内置监听并弹出提示，业务无需处理；提示文案由 `sys.login-expired-message` / `sys.concurrent-login-message` 配置（见 [config.md](config.md)）。
 
@@ -488,9 +598,9 @@ location /file/public/ {
 | API | 说明 |
 |-----|------|
 | `history` | `push(url)` / `replace(url)` / `listen(fn)`（hash 变更监听，返回取消函数） |
-| `registerRoutes(defs)` | 注册路由表（`{path, component}[]`，`path` 支持 `:param` 动态段） |
-| `matchRoute(pathname)` | 匹配路由，返回 `{component, params}` |
+| `registerRoutes(defs)` | 注册路由表（`{path, component, meta?}[]`，`path` 支持 `:param` 动态段） |
+| `matchRoute(pathname)` | 匹配路由，返回 `{component, params, meta}` |
 | `Link` | `<Link to="/path">` hash 跳转链接 |
 | `PageFrame` | 路由容器，根据 hash 渲染匹配页面，自动调用 `onShow()` |
 
-业务代码中通过 `history.push('/xxx')` 或 `<Link to="/xxx">` 跳转，通过 `PageUtils.open(path, label)` 打开页面（`label` 显示为 Tab 标题）。
+业务代码中通过 `history.push('/xxx')` 或 `<Link to="/xxx">` 跳转，通过 `PageUtils.open(path)` 打开页面；页面标题由目标页面的 `pageMeta.title` 决定。

@@ -40,7 +40,7 @@ export default class extends React.Component {
             dataIndex: 'name',
             render: (name, row) => (
                 <LinkButton
-                    onClick={() => PageUtils.open('/image/view?id=' + row.id, "镜像-" + name)}>
+                    onClick={() => PageUtils.open('/image/view?id=' + row.id)}>
                     {name}
                 </LinkButton>
             ),

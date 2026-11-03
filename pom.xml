@@ -23,7 +23,7 @@
                容易各自漂移，产生类路径混用。
           统一改用属性后，dependabot 的 groups 配置可将同类升级合并为一个 PR。
         -->
-        <open-admin.version>3.1.10</open-admin.version>
+        <open-admin.version>3.1.12</open-admin.version>
 
         <!--
           hutool 各模块必须同版本：hutool-core / hutool-extra / hutool-http
@@ -125,14 +125,6 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-websocket</artifactId>
         </dependency>
-
-        <!-- 邮件通知（SMTP 账号在「全局设置」中配置，运行时动态创建发送器） -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-mail</artifactId>
-        </dependency>
-
-
 
         <dependency>
             <groupId>org.projectlombok</groupId>

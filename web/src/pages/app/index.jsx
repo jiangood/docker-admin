@@ -41,7 +41,7 @@ export default class extends React.Component {
             sorter: true,
             render: (name, row) => {
                 return <LinkButton
-                    onClick={() => PageUtils.open('/app/view?id=' + row.id, '应用-' + name)}>{name}</LinkButton>
+                    onClick={() => PageUtils.open('/app/view?id=' + row.id)}>{name}</LinkButton>
             }
         },
         {

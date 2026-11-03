@@ -61,6 +61,7 @@ web/
 | `OrgTypeProvider` | 自定义机构类型（如新增"门店"类型） | `@Component` |
 | `FileOperator` | 自定义文件存储后端（默认提供 `LOCAL` / `MINIO` 两种实现） | `@Component` |
 | `StartupHook` | 系统启动钩子（JPA 建表前/种子数据前后） | `@Component` |
+| `ConfigProvider` | 声明运行时可改的参数项（自动出现在「参数设置」页） | `@Component` |
 
 实现类被 `@ComponentScan` 自动发现，无需手动注册。
 
@@ -107,10 +108,13 @@ web/
 
 | 功能 | 说明 |
 |------|------|
-| 定时任务 | 基于 Quartz，动态创建/暂停/恢复，继承 `BaseJob` + `@JobDescription`；`BaseJob.progress(...)` 上报运行进度，日志聚合（每次执行/按小时/按天）与保留期清理 |
+| 参数设置 | 运行时可改的全局配置：数据库只存覆盖值，`application.yml` 与代码默认值兜底；业务模块实现 `ConfigProvider` 即可在通用配置页维护自己的参数 |
+| 定时任务 | 基于 Quartz，动态创建/暂停/恢复，继承 `BaseJob` + `@JobDescription`；`BaseJob.progress(...)` 上报运行进度，执行记录方式（每次/每小时/每天各一份记录）与保留期清理 |
 | 文件管理 | `sys.file.store-type` 配置（`LOCAL` / `MINIO`），统一上传下载预览；临时文件自动清理（TTL 可配置） |
 | 操作日志 | `@Log` 注解 + AOP 切面，异步记录（独立线程池 `operationLogExecutor`） |
+| 在线用户 | 一个登录会话一行，展示账号/姓名/机构/IP/登录与最后活跃时间，支持强制下线；会话记录在内存，仅单实例部署准确 |
 | 运行日志查看 | 在线查看日志文件 |
+| 邮件发送 | 内置 QQ/腾讯企业邮/163/126/Outlook/Gmail/阿里企业邮模板；配置在「参数设置 → 邮件发送」，业务注入 `MailService` 即可发送通知邮件，支持 HTML、附件与 HTTP/SOCKS5 代理 |
 
 ## 添加业务模块
 
@@ -127,9 +131,11 @@ web/
 
 | 模块 | 包路径 | 功能 |
 |------|--------|------|
-| system | `modules/system/` | 用户/角色/菜单/组织/字典/文件/日志管理 |
+| system | `modules/system/` | 用户/角色/菜单/组织/字典/文件/日志/在线用户管理 |
+| config | `modules/config/` | 运行时可改的全局参数（KV 覆盖 + 元数据注册 + 通用配置页） |
 | job | `modules/job/` | Quartz 定时任务 |
 | logviewer | `modules/logviewer/` | 运行日志在线查看（写入 `FileLog` + 增量读取接口 + 按 key 前缀鉴权） |
+| mail | `modules/mail/` | 邮件发送（服务商模板 + 参数项 + `MailService` / `MailTemplate`） |
 | codegen | `modules/codegen/` | 实体扫描与 CRUD 代码生成（系统管理 →「代码生成」） |
 
 ## FAQ
@@ -144,3 +150,5 @@ web/
 **前端依赖安装失败？** `npm install --registry=https://registry.npmmirror.com`
 
 **端口被占用？** 后端默认 8080，前端默认 3000，可通过环境变量 `SERVER_PORT` 修改后端端口。
+
+**页签显示「未命名」怎么办？** 菜单页未声明 `pageMeta.title` 时会自动回退到后端菜单名；非菜单的详情页/公共页需要在页面文件导出 `pageMeta.title`。不要再通过 `PageUtils.open(path, label)` 写 `_label` 参数（已弃用且不再生效，首次使用会在控制台提示）。

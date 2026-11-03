@@ -1,6 +1,5 @@
 import React from 'react'
-import {Alert, Button, Empty, Space, Typography} from 'antd'
-import {ReloadOutlined} from '@ant-design/icons'
+import {Alert, Empty, notification, Typography} from 'antd'
 import {PermUtils} from '@jiangood/open-admin'
 import ContainerTerminal from '../container/ContainerTerminal'
 import {wsHostCliUrl} from './utils'
@@ -10,6 +9,7 @@ import {wsHostCliUrl} from './utils'
  * <p>
  * 辅助容器内已配置 DOCKER_HOST 指向宿主机 docker.sock，所以直接敲 docker / docker compose
  * 命令即可；宿主机目录在容器内保持相同绝对路径。需要 host:cli 权限。
+ * 终端占满剩余高度，页面上不再有单独的工具行：重新连接由 HostAgentTab 放进状态条。
  */
 export default class extends React.Component {
 
@@ -51,9 +51,25 @@ export default class extends React.Component {
 
     reconnect = () => this.setState(state => ({key: state.key + 1}))
 
+    /** 进入容器的说明：改为右下角通知，不再写进终端回滚区。 */
+    notifyEnter = () => {
+        const {root} = this.state
+        notification.info({
+            key: 'host-cli-agent',
+            placement: 'bottomRight',
+            duration: 8,
+            message: '已进入主机辅助容器',
+            description: <div style={{fontSize: 12, lineHeight: 1.8}}>
+                <div>目录 <Typography.Text code>{root || '-'}</Typography.Text> 在容器内保持相同路径</div>
+                <div>docker / docker compose 已指向宿主机 daemon</div>
+                <div>终端权限等同于宿主机 root，请谨慎操作</div>
+            </div>,
+        })
+    }
+
     render() {
         const {hostId} = this.props
-        const {deployed, root, key} = this.state
+        const {deployed, key} = this.state
         const height = this.props.height || 520
 
         if (!PermUtils.hasPermission('host:cli')) {
@@ -66,17 +82,9 @@ export default class extends React.Component {
             </div>
         }
 
-        return <div style={{height, display: 'flex', flexDirection: 'column'}}>
-            <Space className='mb-2'>
-                <Button size='small' icon={<ReloadOutlined/>} onClick={this.reconnect}>重新连接</Button>
-                <Typography.Text type='secondary'>
-                    容器：docker-admin-agent，当前目录：{root || '-'}
-                </Typography.Text>
-            </Space>
-
-            <div style={{flex: 1, minHeight: 200}}>
-                <ContainerTerminal key={key} url={wsHostCliUrl(hostId)} height='100%'/>
-            </div>
+        return <div style={{height}}>
+            <ContainerTerminal key={key} url={wsHostCliUrl(hostId)} height='100%'
+                              onOpen={this.notifyEnter}/>
         </div>
     }
 }

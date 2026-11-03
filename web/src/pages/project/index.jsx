@@ -60,7 +60,7 @@ export default class extends React.Component {
             dataIndex: 'name',
             render: (name, row) => {
                 return <LinkButton
-                    onClick={() => PageUtils.open('/project/view?id=' + row.id, "项目-" + name)}>{name}</LinkButton>
+                    onClick={() => PageUtils.open('/project/view?id=' + row.id)}>{name}</LinkButton>
             },
 
         },

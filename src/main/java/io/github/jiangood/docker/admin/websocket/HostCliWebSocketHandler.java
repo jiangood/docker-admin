@@ -57,11 +57,7 @@ public class HostCliWebSocketHandler extends TextWebSocketHandler {
 
         try {
             HostAgentService.AgentContext context = hostAgentService.requireRunning(host);
-            String banner = "已进入主机辅助容器 " + HostAgentService.CONTAINER_NAME + "\r\n"
-                    + "宿主机目录 " + context.root() + " 在容器内保持相同路径（当前工作目录）\r\n"
-                    + "docker / docker compose 命令已指向宿主机 daemon。\r\n"
-                    + "该终端权限等同于宿主机 root，请谨慎操作。\r\n\r\n";
-            sendText(session, banner);
+            // 进入提示改由前端用 antd 通知展示，不再占用终端回滚区。
 
             ContainerService.ExecSession exec = containerService.openExecSession(host, context.containerId(),
                     "/bin/sh",

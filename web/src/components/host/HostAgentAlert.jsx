@@ -166,9 +166,6 @@ export default class extends React.Component {
         }
         return <Space size={8} wrap>
             <Badge status={status.running ? 'success' : 'default'} text={status.running ? '运行中' : '已停止'}/>
-            <Typography.Text type='secondary'>
-                目录 <Typography.Text code>{status.mountedRoot || '-'}</Typography.Text>
-            </Typography.Text>
             {status.needsRebuild &&
                 <Typography.Text type='warning'>镜像配置已变更，删除后重新部署</Typography.Text>}
         </Space>
@@ -187,11 +184,6 @@ export default class extends React.Component {
             }}>
                 {this.renderSummary()}
                 {extra}
-                <Tooltip title='辅助容器说明'>
-                    <Button type='text' size='small' shape='circle' icon={<QuestionCircleOutlined/>}
-                            disabled={removing}
-                            onClick={() => this.setState({helpOpen: true})}/>
-                </Tooltip>
                 {canSave && (deployed
                     ? <>
                         <Button size='small' icon={<FolderOpenOutlined/>}
@@ -208,6 +200,11 @@ export default class extends React.Component {
                               onClick={this.openDeploy}>部署辅助容器</Button>)}
                 {!canSave && !deployed &&
                     <Typography.Text type='secondary'>需要 host:save 权限才能部署</Typography.Text>}
+                <Tooltip title='辅助容器说明'>
+                    <Button type='text' size='small' shape='circle' icon={<QuestionCircleOutlined/>}
+                            disabled={removing}
+                            onClick={() => this.setState({helpOpen: true})}/>
+                </Tooltip>
             </div>
 
             {this.renderDeployModal()}

@@ -1,5 +1,5 @@
 /**
- * 代理地址（一行）的前端校验：主机接入与邮件发送共用。
+ * 代理地址（一行）的前端校验：主机接入用（邮件代理已由框架参数设置页自己校验）。
  *
  * 只挡明显写错的格式，scheme / 端口 / SOCKS5 认证等细节以后端解析为准
  * （后端见 io.github.jiangood.docker.admin.proxy.ProxySettings）。

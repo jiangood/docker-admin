@@ -59,7 +59,7 @@ export default class extends React.Component {
                 title: '复制完成',
                 content: '是否打开新的应用？',
                 onOk() {
-                    PageUtils.open('/app/view?id=' + newAppId, '应用-' + rs.data.name)
+                    PageUtils.open('/app/view?id=' + newAppId)
                 }
             })
         }).finally(hide)

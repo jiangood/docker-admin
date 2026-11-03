@@ -146,7 +146,7 @@ export default class extends React.Component {
                 <PermActions size='small' actions={[
                     {
                         label: '查看', perm: 'host:list',
-                        onClick: () => PageUtils.open('/host/view?id=' + record.id, '主机-' + record.name)
+                        onClick: () => PageUtils.open('/host/view?id=' + record.id)
                     },
                     {
                         label: this.state.testingId === record.id ? '测试中…' : '测试连接',

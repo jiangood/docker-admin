@@ -136,7 +136,7 @@ function HostResourceBoard() {
         {
             title: '主机', dataIndex: 'name',
             render: (name, record) => <LinkButton
-                onClick={() => PageUtils.open('/host/view?id=' + record.id, '主机-' + name)}>{name}</LinkButton>
+                onClick={() => PageUtils.open('/host/view?id=' + record.id)}>{name}</LinkButton>
         },
         {
             title: '状态', dataIndex: 'reachable', width: 100,

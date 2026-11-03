@@ -1,7 +1,5 @@
 package io.github.jiangood.docker.admin.controller;
 
-import io.github.jiangood.docker.admin.mail.EmailSettingsInput;
-import io.github.jiangood.docker.admin.service.MailService;
 import io.github.jiangood.docker.admin.service.SystemConfigService;
 import io.github.jiangood.openadmin.framework.log.Log;
 import io.github.jiangood.openadmin.framework.perm.HasPermission;
@@ -10,6 +8,11 @@ import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
+/**
+ * 全局设置接口：默认资源与主机辅助容器镜像。
+ * <p>
+ * 邮件发件账号已改为框架「参数设置 - 邮件发送」维护（{@code admin/sys-config} + {@code admin/mail/test}）。
+ */
 @RestController
 @Slf4j
 @RequestMapping("admin/system-config")
@@ -17,9 +20,6 @@ public class SystemConfigController {
 
     @Resource
     private SystemConfigService service;
-
-    @Resource
-    private MailService mailService;
 
     @HasPermission("system-config:view")
     @GetMapping("defaults")
@@ -33,28 +33,6 @@ public class SystemConfigController {
     public AjaxResult saveDefaults(@RequestBody DefaultsRequest request) {
         return AjaxResult.ok().data(service.saveDefaults(request.defaultRegistryId(), request.defaultBuildHostId()))
                 .msg("保存成功");
-    }
-
-    @HasPermission("system-config:view")
-    @GetMapping("email")
-    public AjaxResult email() {
-        return AjaxResult.ok().data(service.getEmailSettings());
-    }
-
-    @Log("全局设置-保存邮件发送服务")
-    @HasPermission("system-config:save")
-    @PostMapping("email")
-    public AjaxResult saveEmail(@RequestBody EmailSettingsInput request) {
-        service.saveEmailSettings(request);
-        return AjaxResult.ok().data(service.getEmailSettings()).msg("保存成功");
-    }
-
-    @Log("全局设置-发送测试邮件")
-    @HasPermission("system-config:save")
-    @PostMapping("email/test")
-    public AjaxResult testEmail() {
-        mailService.sendTest();
-        return AjaxResult.ok().msg("测试邮件已发送到发件邮箱，请查收");
     }
 
     @HasPermission("system-config:view")

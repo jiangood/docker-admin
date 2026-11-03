@@ -73,6 +73,7 @@ export default class extends React.Component {
             })
             this.sendResize()
             term.focus()
+            this.props.onOpen && this.props.onOpen()
         }
 
         ws.onmessage = ev => {

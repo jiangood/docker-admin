@@ -78,7 +78,7 @@ public record ProxySettings(Type type, String host, Integer port, String usernam
      * </ul>
      * 留空表示不使用代理；不写 scheme 时按 http 处理；端口必须显式给出。
      * <p>
-     * 这里不限制 SOCKS5 的账号密码，因为主机侧自己实现 RFC 1929；邮件侧在保存时另行校验。
+     * 这里不限制 SOCKS5 的账号密码，因为主机侧自己实现 RFC 1929。
      */
     public static ProxySettings parse(String url) {
         String raw = StrUtil.trimToEmpty(url);

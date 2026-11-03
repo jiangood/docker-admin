@@ -6,7 +6,7 @@ Multi-host container management platform with CI/CD. UI is Chinese.
 
 - **Backend:** Spring Boot 4.1.0 + Java 21, Maven → `target/app.jar`（`<finalName>app</finalName>`）
 - **Frontend:** Vite 8 + React 19 + Ant Design 6 + TypeScript 7
-- **Base framework:** `io.github.jiangood:open-admin` 3.1.8（后端 Maven）/ `@jiangood/open-admin` 3.1.8（前端 npm），提供 CRUD、鉴权、菜单
+- **Base framework:** `io.github.jiangood:open-admin` 3.1.12（后端 Maven）/ `@jiangood/open-admin` 3.1.12（前端 npm），提供 CRUD、鉴权、菜单
 - **Docker SDK:** docker-java 3.7.1（TCP 传输 httpclient5）
 - **SSH 远程 docker:** `com.github.mwiede.dockerjava:docker-java-transport-jsch` 1.4
 - **数据库:** 默认内置 H2（文件模式，持久化到 `./data`），也支持外部 MySQL
@@ -93,9 +93,13 @@ git tag vx.y.z && git push && git push origin vx.y.z
   辅助容器由 `host:save` 显式部署/删除，文件接口用 `host:file`（`admin/host/file` 只保留 `upload` 与 `downloadDir`，
   路径相对于当前挂载目录，空串表示挂载目录本身），CLI WebSocket 用 `host:cli`；
   容器常驻，删除容器不会删除宿主机文件。重建 `latest` 会先尝试拉取，拉取失败但本地已有镜像时继续使用本地镜像。
-  Agent 面板顶部只保留一行右上角状态（运行中 / 未部署 + 目录），同级放上传、下载、切换挂载目录、部署/删除按钮，
-  去掉刷新与重建；上传写入当前挂载目录，下载把该目录打成 tar，其余文件操作（查看 / 编辑 / 删除 / 重命名 / 新建目录）走终端；
-  权限、目录、文件操作等长说明收进问号弹窗（`HostAgentAlert`），页面上不再堆 Alert。
+  Agent 面板顶部只保留一行右上角状态（运行中 / 未部署），同级放重新连接（图标）、上传、下载、
+  切换挂载目录、部署/删除按钮，去掉刷新与重建；当前目录不在状态条重复展示（终端进入通知与「切换挂载目录」弹窗里有），
+  终端区不再有第二行工具条（`HostCli` 只渲染 xterm，
+  重新连接由 `HostAgentTab` 通过 ref 调 `HostCli.reconnect`）；
+  上传写入当前挂载目录，下载把该目录打成 tar，其余文件操作（查看 / 编辑 / 删除 / 重命名 / 新建目录）走终端；
+  权限、目录、文件操作等长说明收进问号弹窗（`HostAgentAlert`），页面上不再堆 Alert；
+  终端连接成功后用 antd 通知（`HostCli.notifyEnter`）提示目录与 root 权限，不再往终端回滚区写多行 banner。
 - **主机详情镜像导出：** 镜像 Tab 的「导出」打开弹窗，后台在该主机上执行 `docker save`
   （SSH 主机落到远端 `/tmp/docker-admin-image-tar/{logId}/`，本机 / TCP 主机落到平台 `image-tar/{logId}/`）。
   弹窗展示实时日志、已写入大小与速度（每秒 / 每分钟）、保存路径与下载按钮；SSH 下载经 SFTP 流式转发，不在平台侧重复落盘。
@@ -160,20 +164,23 @@ git tag vx.y.z && git push && git push origin vx.y.z
   等旧构建退出代码目录后再开始，触发接口立即返回。取消靠 `cancelledBuilds` 标记 + 检查点
   （克隆后、docker build 后、推送后），克隆阶段无法中断，只能等克隆结束后放弃。
   超时上限见 `BUILD_SLOT_WAIT_MILLIS`；等待是进程内的，多实例部署下不跨实例生效。
-- **邮件通知：** 发件账号（QQ 邮箱 SMTP，默认 `smtp.qq.com:465`）在「设置 - 全局设置」配置，
-  键为 `t_system_config` 的 `email.*`，授权码不回显、留空表示不修改。
-  **邮件代理**同样在全局设置里配置，界面只填一行地址（`http://192.168.1.10:8080`、
-  `http://user:pass@192.168.1.10:8080`、`socks5://192.168.1.10:1080`，不写 scheme 按 http，
-  端口必填，留空即不使用代理；密码回显为 `***`、保存时保持原样表示沿用已存密码，清空地址则把
-  `email.proxy.*` 全部清掉）。落库仍是 `email.proxy.type/host/port/username/password` 五个键，
-  由 `ProxySettings.parse` / `displayUrl` 双向转换（与主机代理共用），旧数据无需迁移。
-  发送时直接复用 Angus Mail 原生的 `mail.smtp.proxy.*`（HTTP CONNECT，可带 Basic 认证）与
-  `mail.smtp.socks.*`（SOCKS5 无认证），隧道在 TLS 之前建立，465/587 都适用；
-  平台跑在容器里时**不能填 127.0.0.1**，要填宿主机网桥网关（如 `172.17.0.1`）或局域网 IP。
+- **邮件通知：** 发件账号由**框架**「系统管理 - 参数设置 - 邮件发送」维护（`sys_config` 的
+  `email.provider/username/password/from.name/proxy`，由框架 `MailConfigProvider` 声明），
+  本项目的「设置 - 全局设置」只保留默认资源与 agent 镜像；旧版 `t_system_config` 里的 `email.*`
+  由 `LegacyEmailConfigMigrator` 在启动时一次性搬到 `sys_config`（按旧 SMTP 主机反推邮箱服务商，
+  成功后删掉旧行；新配置已填发件邮箱时不动）。
+  SMTP 服务器/端口/加密方式由框架的 `MailProvider` 模板决定（QQ、腾讯企业邮、163/126、Outlook/M365、
+  Gmail、阿里企业邮），界面只选服务商 + 填发件邮箱与授权码；**代理**同样只填一行地址
+  （`http://192.168.1.10:8080`、`http://user:pass@192.168.1.10:8080`、`socks5://192.168.1.10:1080`，
+  不写 scheme 按 http，端口必填，留空即不使用；密码回显 `***`）。平台跑在容器里时**不能填 127.0.0.1**，
+  要填宿主机网桥网关（如 `172.17.0.1`）或局域网 IP。
   是否发送在**项目详情页**的「邮件通知」开关控制（`Project.notifyEmail`），收件人为项目创建人的
   `sys_user.email`；创建人未配置邮箱时开关不可开启（后端也会校验），并提示到用户管理补充。
-  `ProjectService` 在构建成功与失败时都发布 `BuildResultEvent`，`MailService` 异步发送，
-  正文为构建摘要并附带日志文件 `${logging.file.path}/{logId}.log`；邮件失败不影响构建结果。
+  `ProjectService` 在构建成功与失败时都发布 `BuildResultEvent`，`admin/mail/BuildMailNotifier` 组装
+  `MailMessage`（正文为构建摘要，附件为日志文件 `${logging.file.path}/{logId}.log`）后交给框架
+  `MailService.sendAsync`；未配置发件账号时只跳过并记日志，邮件失败不影响构建结果。
+  **不要再自己建 `MailService`**：框架的 `modules/mail/service/MailService` 是 `@Service`，
+  同名 Bean 会与业务侧冲突。
 - **前端**是 `@jiangood/open-admin` 之上的薄层，页面在 `web/src/pages/`，构建配置 `web/vite.config.js`。
 - **JSON 里的包装类型 `Long` 是字符串**（open-admin 的 `@JacksonComponent LongToStringSerializer`，
   防 JS 丢精度；`long` / `Integer` / `Double` 仍是数字）。前端做加减乘除前必须 `Number()`

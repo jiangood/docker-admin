@@ -31,6 +31,20 @@
 - 使用 Java 21 Record / Pattern Matching / Switch 表达式 / Text Block
 - 方法参数校验用 `@Valid` / `@Validated`
 
+## 参数设置
+
+运行时可改的参数优先实现 `ConfigProvider`，不要为每个参数单独写 Controller 和页面：
+
+- key 以模块前缀开头，全小写、点分隔，段落内可用连字符（如 `cvs.capture.interval`），全局唯一
+- 默认值写在代码里（`.defaultValue(...)`）；需要部署期覆盖时，在 `application.yml` 中使用同名 key，优先级低于数据库覆盖值
+- 敏感值加 `.asSecret()`；配置修改接口不要直接挂 `@Log`，操作日志由框架只记录变更的 key
+- 需要随 `/admin/public/site-info` 下发给未登录页面的展示类参数加 `.asPublic()`，值会放在 `siteInfo.config` 中
+- 代理地址用 `Configs.proxyUrl(...)`（`proxy` 类型）：一个字段包含类型、主机、端口与凭据，接口回显自动把密码替换成 `***`
+- 业务代码通过 `SysConfigService` 的 `getBool/getInt/getString/getList` 读取，不要直接查 `SysConfigRepository`
+- 只把「运行期读取、改了立即生效」的参数放进来；启动期装配的配置仍留在 `application.yml`
+
+完整声明方式见 [config.md](config.md) 的「参数设置（运行时可改）」。
+
 ## 定时任务（Quartz）
 
 任务类继承 `BaseJob` 并加 `@JobDescription`，注册菜单后由 Quartz 调度（新增示例见 `modules/job/` 下的框架任务）。
@@ -60,15 +74,15 @@ return "同步完成 " + rows.size() + " 条";
 - 进度按 `SysJob.id` 记录，同一任务受 `@DisallowConcurrentExecution` 保护不会并发覆盖
 - 建议按批次/每秒最多一次上报，避免无谓开销；任务结束后状态保留 30 分钟自动清理
 
-### 日志聚合
+### 执行记录方式
 
-高频任务（如每 5 秒执行）会在 `sys_job_log` 和日志目录产生海量记录。任务定义上的「日志聚合」属性（`SysJob.logAggregation`，前端新建/编辑时可选）控制执行记录与日志文件的粒度：
+高频任务（如每 5 秒执行）会在 `sys_job_log` 和日志目录产生海量记录。任务定义上的「执行记录方式」属性（`SysJob.logAggregation`，前端新建/编辑时可选）控制执行记录与日志文件的粒度：
 
 | 取值 | 执行记录 | 日志文件 |
 |---|---|---|
-| `PER_RUN` 每次执行（默认） | 每次一行 | 每次一个文件 |
-| `HOURLY` 按小时 | 每任务每小时一行 | 每任务每小时一个文件 |
-| `DAILY` 按天 | 每任务每天一行 | 每任务每天一个文件 |
+| `PER_RUN` 每次一份记录（默认） | 每次一行 | 每次一个文件 |
+| `HOURLY` 每小时一份记录 | 每任务每小时一行 | 每任务每小时一个文件 |
+| `DAILY` 每天一份记录 | 每任务每天一行 | 每任务每天一个文件 |
 
 - 聚合模式下复用同一条 `SysJobLog`（id 不变），日志按 `job/{logId}` 追加到同一文件；「执行情况 → 日志」按钮打开的就是该周期的完整文件日志。
 - 聚合记录字段：`beginTime` 为周期内第一次执行时间，`jobRunTime` 为最近一次耗时，`totalRunTime` 为累计耗时，`executeCount`/`failCount` 为执行/失败次数，`success` 表示周期内是否全部成功，`result` 为最近一次返回值。
@@ -154,18 +168,19 @@ public void deleteById(String id) {
 ## 前端要点
 
 - **UI 定位**：面向正常业务人员的**桌面端**后台，**不要求无障碍（a11y）与移动端适配**（不强制 tablist/键盘导航、触摸目标、移动布局等）；样式优先使用 `--oa-*` CSS 变量 / antd token，**禁止硬编码颜色**（须同时兼容明暗主题）
-- 组件大驼峰，页面文件小写开头（约定式路由：小写开头才注册为页面）
+- 页面文件用 kebab-case（小写开头，如 `force-update-pwd.jsx`，会自动注册为路由），组件文件用 PascalCase（大驼峰，不会被注册为页面）
 - 使用 ES6+，强制 `const`/`let`，解构赋值
 - 优先使用框架组件：`ProTable`、`Page`、`FieldDictSelect` 等
 - 权限控制：`<PermActions actions={[{label, perm, onClick}]} />`（数据驱动，推荐）、`<Perm code="...">`；旧式 `<Button perm="...">` 已不推荐
 - **列表页工具栏**：操作按钮（新增/导出/清理/刷新）统一放右侧 `toolBarRightRender`，左槽 `toolBarRender` 只放状态/说明类内容（如「已选 N 项」）；与筛选卡的「查询/重置」、分页器同处右侧，避免同一屏出现两个方向的按钮列
 - 跨组件通信使用 `EventBus`（`emit` / `on` / `once` / `off`），不要使用 `document.dispatchEvent`
 - 表单弹框优先用 `FormModal`（ref 调用 `open(values)`），避免静态 `Modal.confirm()` 表单场景；对话框用 `<Modal open={...}>` 控制，避免 `Modal.info()` / `Modal.confirm()` 等静态方法
+- **Modal 内表单回填**：受控 `<Modal open={...}>` 首次打开时内容可能尚未挂载，在打开回调里用 `setFieldsValue` 会因 `ref.current` 为空而静默失败（表现为必填项为空、编辑不生效）。应给 `Modal` 加 `destroyOnHidden`，并用 `Form` 的 `initialValues` 传入当前数据，每次打开重建表单即可正确回填；不要用 `forceRender` 提前挂载来绕开
 - 页面生命周期：页面组件实现 `onShow()` 方法，在首次加载或 Tab 切换激活时自动调用，详见[页面生命周期](api.md#页面生命周期)
 
 ### 页面目录约定
 
-页面文件放在 `web/src/pages/` 下（小写开头自动注册路由），按目录自动识别页面类型，无需额外配置：
+页面文件放在 `web/src/pages/` 下（小写开头的 kebab-case 文件名自动注册路由），按目录自动识别页面类型，无需额外配置：
 
 | 目录 | 路由前缀 | 是否需要登录 | 是否需要 AdminLayout |
 |------|---------|-------------|---------------------|
@@ -173,4 +188,17 @@ public void deleteById(String id) {
 | `pages/public/` | `/public/` | ❌ 否 | ❌ 否 |
 | `pages/standalone/` | `/standalone/` | ✅ 是 | ❌ 否 |
 
-`public` 页免登录、无后台布局（如登录页）；`standalone` 页需登录但无后台布局（如强制改密页）。
+`public` 页免登录、无后台布局（如公开文章页）；`standalone` 页需登录但无后台布局（如强制改密页）。目录只提供默认值，页面可通过 `pageMeta` 显式覆盖：
+
+```jsx
+// 页面文件（可选导出）
+export const pageMeta = {
+    title: '角色权限设置', // 页面标题
+    requiresAuth: true,   // 是否需要登录
+    layout: 'admin',      // 'admin' | 'blank'
+};
+```
+
+非菜单的详情页、公共页推荐声明 `pageMeta.title`；页面标题为静态元信息，不支持运行时动态回填。`PageUtils.open(path, label)` 的 `label` 参数与 URL 中的 `_label` 已弃用且不再生效，传入时控制台会提示。
+
+框架内置登录页为 `/login`（页面文件 `pages/login.jsx`），通过 `pageMeta` 声明为公开页；业务项目覆盖 `pages/login.jsx` 时即使不写 `pageMeta`，插件也会按 `/login` 默认公开页处理。`/public/login` 仅保留为旧地址兼容跳转，新代码请直接使用 `/login`。
