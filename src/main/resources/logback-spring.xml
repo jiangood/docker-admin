@@ -22,6 +22,11 @@
 
 
 
+    <!-- JSch 是 docker-java 的 SSH 传输层（docker-java-transport-jsch）的底层库，
+         INFO 级别下会为每次连接/握手/SFTP 通道打印大量协议细节，SSH 主机多的时候控制台会被刷屏。
+         只保留 WARN 及以上（连接失败、认证失败、主机密钥问题仍能看到）。 -->
+    <logger name="com.jcraft.jsch" level="WARN"/>
+
     <!-- 文件日志（构建、部署、构建测试、镜像同步/导出）。
          需要在前端日志弹窗里实时查看的日志，都通过固定的 logger 名 "file-log"（见 FileLog.LOGGER_NAME）输出，
          这里按 MDC 中的 logFileId（见 FileLog.MDC_KEY）分流到 ${LOG_PATH}/{logId}.log，
