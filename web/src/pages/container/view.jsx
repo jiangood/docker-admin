@@ -17,10 +17,10 @@ export const pageMeta = {
 const MIN_PANE_HEIGHT = 360
 
 /**
- * 视口里不属于页签内容的固定部分（后台页签条、页面内边距、基本信息卡、页签条）。
+ * 视口里不属于页签内容的固定部分（后台页签条、页面内边距、基本信息卡、页签卡的内边距与页签条）。
  * 只是估算值，宁可略大一点让页面滚动，也不让日志 / 终端被裁掉。
  */
-const VIEWPORT_CHROME = 320
+const VIEWPORT_CHROME = 350
 
 /**
  * 容器详情页（独立页面，替代原来的容器弹窗）。
@@ -219,22 +219,24 @@ export default class extends React.Component {
                 label: '文件',
                 children: <div style={{height: paneHeight, overflow: 'auto'}}>
                     {running
-                        ? <ContainerFiles hostId={hostId} containerId={targetId} mounts={detail.mounts}/>
+                        ? <ContainerFiles hostId={hostId} containerId={targetId}/>
                         : <Alert type='warning' showIcon title='容器未运行，无法浏览文件'/>}
                 </div>
             },
             {
                 key: 'console',
                 label: '终端',
-                children: <ContainerConsole hostId={hostId} containerId={targetId}
-                                            mounts={detail.mounts} running={running} height={paneHeight}/>
+                children: <ContainerConsole hostId={hostId} containerId={targetId} running={running}
+                                            height={paneHeight}/>
             },
         ]
 
         return <Page padding>
             {header}
-            <Tabs destroyOnHidden activeKey={activeKey} items={items}
-                  onChange={key => this.setState({activeKey: key})}/>
+            <Card size='small' styles={{body: {padding: 12}}}>
+                <Tabs destroyOnHidden activeKey={activeKey} items={items}
+                      onChange={key => this.setState({activeKey: key})}/>
+            </Card>
 
             {/* 删除确认：运行中的容器必须显式勾选「强制删除」，否则 Docker 会拒绝普通删除 */}
             <Modal title='删除容器'
