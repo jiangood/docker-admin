@@ -90,6 +90,23 @@ public class ContainerExecWebSocketHandler extends TextWebSocketHandler {
     }
 
     @Override
+    protected void handleBinaryMessage(WebSocketSession session, BinaryMessage message) {
+        ContainerService.ExecSession exec = execSessions.get(session.getId());
+        if (exec == null) {
+            return;
+        }
+        try {
+            byte[] data = new byte[message.getPayload().remaining()];
+            message.getPayload().get(data);
+            if (data.length > 0) {
+                exec.write(data);
+            }
+        } catch (Exception e) {
+            log.debug("处理控制台二进制消息失败: {}", e.getMessage());
+        }
+    }
+
+    @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
         ContainerService.ExecSession exec = execSessions.remove(session.getId());
         if (exec != null) {
