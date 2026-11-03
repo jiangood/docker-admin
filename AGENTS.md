@@ -84,7 +84,11 @@ git tag vx.y.z && git push && git push origin vx.y.z
   以及主机详情「Agent」Tab 里的链接（详情页不再内嵌终端，只保留一个打开页面的链接）。镜像分两层配置：全局设置只保存镜像地址
   （`docker.agent.repository`，默认 `ghcr.io/jiangood/docker-admin-agent`，不含 tag），
   每台主机部署时选择 tag（`Host.agentImageTag`，默认 `latest`），实际镜像 = 地址 + `:` + tag。
-  agent 镜像内置 `docker-cli` 和 `docker compose`，由 `.github/workflows/publish-docker-image.yml`
+  agent 镜像内置 `docker-cli` 和 `docker compose`，另装了一批常用运维工具
+  （bash / curl / wget / ping / nc / ss / netstat / dig / ssh / git / rsync / jq / yq /
+  vim / less / htop / ps / top / free / lsof / tree / file / zip / unzip 等，见 `agent/Dockerfile`），
+  便于直接在终端里排查；代价是镜像约 260 MB，目标主机首次部署要拉一次。由
+  `.github/workflows/publish-docker-image.yml`
   在 `v*` tag 上同时发布到 ghcr 与阿里云（`:latest` + `:vX.Y.Z`），目标主机可预加载后离线使用。
   **部署时不再选择宿主机目录**：容器只挂当前选中的目录（`Host.fileRoot`，首次默认 `/home`）与
   `/var/run/docker.sock`；同一目录既挂到容器内 `/host` 供文件管理，也挂到原始绝对路径供 CLI 使用，

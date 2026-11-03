@@ -274,6 +274,11 @@ export default class extends React.Component {
                 <Typography.Paragraph>
                     文件与终端依赖在目标主机上运行的辅助容器 <code>docker-admin-agent</code>，
                     容器内已装 docker / docker compose，并接入宿主机 docker.sock。
+                    终端里可直接用常见运维工具：<code>curl</code> / <code>wget</code> / <code>ping</code> /
+                    <code>ss</code> / <code>netstat</code> / <code>dig</code> / <code>ssh</code> /
+                    <code>git</code> / <code>jq</code> / <code>yq</code> / <code>rsync</code> /
+                    <code>vim</code> / <code>htop</code> / <code>ps</code> / <code>lsof</code> /
+                    <code>tree</code> 等（bash 需手动执行 <code>bash</code> 切换）。
                 </Typography.Paragraph>
 
                 <Typography.Title level={5}>权限与安全</Typography.Title>
