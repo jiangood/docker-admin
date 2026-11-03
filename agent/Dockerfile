@@ -39,6 +39,7 @@ RUN apk add --no-cache \
         tree \
         file \
         lsof \
+        lrzsz \
         # JSON / YAML
         jq \
         yq \
