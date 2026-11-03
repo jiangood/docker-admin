@@ -27,7 +27,7 @@ import java.util.function.Function;
 /**
  * 主机用量采样：写入、清理与历史曲线查询。
  * <p>
- * 写入只在采集任务里进行（每分钟一批），读取只在主机详情的历史曲线里进行，
+ * 写入只在采集任务里进行（每 10 分钟一批），读取只在主机详情的历史曲线里进行，
  * 与实时链路的 {@link HostUsageService}（内存快照）互不影响。
  */
 @Slf4j
@@ -45,7 +45,7 @@ public class HostUsageSampleService {
     private static final int TARGET_BUCKETS = 300;
 
     /**
-     * 清理频率：每分钟的采集任务里顺带跑，一小时检查一次足够。
+     * 清理频率：跟着采集任务顺带跑，一小时检查一次足够。
      */
     private static final long PRUNE_INTERVAL_MILLIS = Duration.ofHours(1).toMillis();
 
@@ -54,7 +54,7 @@ public class HostUsageSampleService {
 
     /**
      * 采样保留天数：默认 30 天（改这里即可，也可以在配置里用 {@code docker.usage.retain-days} 覆盖）。
-     * {@code <=0} 表示不清理——不建议，一分钟一行会把内置 H2 顶满。
+     * {@code <=0} 表示不清理——不建议，10 分钟一行也会一年攒出 5 万多行/主机，最终把内置 H2 顶满。
      */
     @Value("${docker.usage.retain-days:30}")
     private int retainDays;
@@ -214,7 +214,8 @@ public class HostUsageSampleService {
     }
 
     /**
-     * 分桶粒度：最短 1 分钟（采集间隔），最长按「区间 / 目标点数」摊开。
+     * 分桶粒度：最短 1 分钟（兼容升级前 1 分钟一条的老采样，也让近几小时的细粒度数据不被过度合并），
+     * 最长按「区间 / 目标点数」摊开。
      */
     private static long bucketMillis(Range range) {
         return Math.max(Duration.ofMinutes(1).toMillis(), range.duration.toMillis() / TARGET_BUCKETS);

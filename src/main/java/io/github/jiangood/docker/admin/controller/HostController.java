@@ -205,7 +205,7 @@ public class HostController  {
      * <p>
      * 权限与容器列表一致（{@code host:list} 或 {@code app:view}），因为明细里就是容器名与用量。
      * <p>
-     * 默认返回定时任务（每分钟一次）写下的内存快照，<b>不触发采集</b>；{@code refresh=true}
+     * 默认返回定时任务（每 10 分钟一次）写下的内存快照，<b>不触发采集</b>；{@code refresh=true}
      * （用户点刷新）才现采一轮。
      *
      * @param refresh 为 true 时忽略缓存立即采集

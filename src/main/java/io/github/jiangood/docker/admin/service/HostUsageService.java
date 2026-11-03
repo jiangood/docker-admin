@@ -55,8 +55,9 @@ import java.util.stream.Collectors;
  * <p>
  * 数据来源两条链路：
  * <ul>
- *   <li><b>定时任务</b>（{@code HostUsageCollectJob}，每分钟）调 {@link #collectAll()} 采一轮、
- *       写缓存，并交回结果由 {@code HostUsageSampleService} 落库，供主机详情的历史曲线使用；</li>
+ *   <li><b>定时任务</b>（{@code HostUsageCollectJob}，每 {@link #COLLECT_INTERVAL} 一轮）调
+ *       {@link #collectAll()} 采一轮、写缓存，并交回结果由 {@code HostUsageSampleService} 落库，
+ *       供主机详情的历史曲线使用；</li>
  *   <li><b>页面请求</b>只读快照（{@link #snapshotAll()} / {@link #snapshot(String)}），不触发采集，
  *       所以开多少个标签页都不会增加主机侧负载；只有用户点「刷新」才走 {@link #usageAll(boolean)} 现采。</li>
  * </ul>
@@ -64,6 +65,12 @@ import java.util.stream.Collectors;
 @Slf4j
 @Service
 public class HostUsageService {
+
+    /**
+     * 采集间隔：与 {@code HostUsageJobInitializer} 里定时任务的 cron 保持一致。
+     * 采样落库、退避阶梯都以「一轮」为单位，改这里时记得同步 cron。
+     */
+    public static final Duration COLLECT_INTERVAL = Duration.ofMinutes(10);
 
     /** 单台主机一轮采集的总预算（含建立连接、info、容器列表与全部 stats）。 */
     private static final Duration PER_HOST_TIMEOUT = Duration.ofSeconds(8);
@@ -74,7 +81,7 @@ public class HostUsageService {
     /** 单容器采集超时：dockerd 的两次采样本身约 1 秒，留足余量。 */
     private static final long PER_CONTAINER_TIMEOUT_MILLIS = 4_000;
 
-    /** 结果缓存时长：比前端 5 秒轮询稍短，保证每轮都能拿到新数据，又能合并同时到达的请求。 */
+    /** 结果缓存时长：只用来合并同一瞬间到达的请求（页面轮询读的是快照，不经过这里）。 */
     private static final Duration CACHE_TTL = Duration.ofSeconds(3);
 
     @Resource
@@ -108,7 +115,7 @@ public class HostUsageService {
     /**
      * 连续采集失败的主机退避表：只在定时任务里生效。
      * <p>
-     * 一台宕机的 SSH 主机每轮采集都要握手、等超时（最长 8 秒），不退避就是每分钟踢一次铁板；
+     * 一台宕机的 SSH 主机每轮采集都要握手、等超时（最长 8 秒），不退避就是每 10 分钟踢一次铁板；
      * 而「刷新」按钮仍然直接采集，不受这里的限制。
      * <p>
      * 状态不能放在 Quartz 任务里：任务每次触发都会新建实例（见 open-admin 的 BaseJob 说明）。
@@ -289,14 +296,16 @@ public class HostUsageService {
     }
 
     /**
-     * 退避阶梯：第一次失败下一轮（1 分钟）照常重试，之后 2 / 5 / 15 分钟。
+     * 退避阶梯：按「轮」算，一轮 = {@link #COLLECT_INTERVAL}（10 分钟）。
+     * 第一次失败下一轮照常重试，之后跳过 2 / 5 / 15 轮（约 20 / 50 / 150 分钟）。
      */
     private static long backoffDelay(int failures) {
+        long interval = COLLECT_INTERVAL.toMillis();
         return switch (failures) {
             case 0, 1 -> 0L;
-            case 2 -> Duration.ofMinutes(2).toMillis();
-            case 3 -> Duration.ofMinutes(5).toMillis();
-            default -> Duration.ofMinutes(15).toMillis();
+            case 2 -> 2 * interval;
+            case 3 -> 5 * interval;
+            default -> 15 * interval;
         };
     }
 

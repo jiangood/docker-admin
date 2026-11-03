@@ -13,14 +13,15 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 
 /**
- * 主机用量采集（每分钟）：等价于 {@code docker stats} 的一轮快照，既是页面的数据源，也是历史曲线的采样点。
+ * 主机用量采集（每 10 分钟）：等价于 {@code docker stats} 的一轮快照，既是页面的数据源，
+ * 也是历史曲线的采样点。
  * <p>
  * 与页面轮询的关系：页面只读 {@link HostUsageService#snapshotAll()} 的快照，不再自己采集，
- * 所以无论开多少个标签页，主机侧都只有这里每分钟一次的开销。
+ * 所以无论开多少个标签页，主机侧都只有这里每 10 分钟一次的开销；用户点「刷新」时可以就地现采一轮。
  * <p>
  * 任务实例由 Quartz 每次触发重建，不能跨轮保存状态；退避计数放在 {@link HostUsageService} 里。
  * {@link BaseJob} 带 {@code @DisallowConcurrentExecution}，一轮最坏十几秒，不会和下一次重叠。
- * 日志聚合建议在任务定义上选「按小时」：一分钟一次 + 每次一条记录会留下海量执行记录。
+ * 日志聚合建议在任务定义上选「按小时」：一天 144 次执行，按次留记录仍然不少。
  */
 @Component
 @JobDescription(label = "主机用量采集")

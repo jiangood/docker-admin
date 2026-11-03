@@ -32,9 +32,10 @@ public class HostUsageJobInitializer implements ApplicationRunner {
     private static final String JOB_NAME = "主机用量采集";
 
     /**
-     * 每分钟一次：与旧的页面 10 秒轮询相比，主机侧开销降到 1/6 左右。
+     * 每 10 分钟一次：dockerd 采一次 stats 要等两次采样（约 1 秒），一分钟一轮对主机
+     * 和内置 H2 都偏重；10 分钟足够看清趋势，页面仍可随时点「刷新」现采。
      */
-    private static final String CRON = "0 */1 * * * ?";
+    private static final String CRON = "0 */10 * * * ?";
 
     private final SysJobService sysJobService;
     private final SysJobRepository sysJobRepository;
@@ -58,7 +59,7 @@ public class HostUsageJobInitializer implements ApplicationRunner {
         job.setCron(CRON);
         job.setEnabled(true);
         job.setJobClass(jobClass);
-        // 一分钟一次的采集按每次执行记录会每天多出 1440 条记录与日志文件，聚合成每小时一条
+        // 每天 144 次执行，按次留记录也会攒出不少日志文件，聚合成每小时一条
         job.setLogAggregation(JobLogAggregation.HOURLY);
 
         try {

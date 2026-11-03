@@ -12,14 +12,14 @@ import {formatBytes, formatClock, formatPercent, toNumber, usageColor} from '../
  * <ul>
  *   <li>静态容量：{@code admin/home/hostSummary}（docker info），快，首屏先出；</li>
  *   <li>实时用量：{@code admin/home/hostUsage}（等价 docker stats），读的是后端定时任务
- *       （每分钟一次）写下的快照，轮询本身不会再压主机；页面隐藏时暂停。</li>
+ *       （每 10 分钟一次）写下的快照，轮询本身不会再压主机；页面隐藏时暂停。</li>
  * </ul>
  * 实时用量采集失败或超时只让对应单元格显示占位，不会阻塞或破坏静态概览。
  */
 
 /**
- * 实时用量轮询间隔。数据源每分钟才更新一次，这里取 30 秒：
- * 采集任务写入后最多半分钟内可见，同时又不会让多标签页各自触发采集（页面只读快照）。
+ * 实时用量轮询间隔。数据源每 10 分钟才更新一次，这里仍按 30 秒读快照：
+ * 只是后端一次内存读，开销可以忽略，手动「刷新」现采后的结果也能尽快反映到界面上。
  */
 const USAGE_INTERVAL_MILLIS = 30_000
 
@@ -202,7 +202,7 @@ function HostResourceBoard() {
     const extra = <Space size={12}>
         {usageError
             ? <Typography.Text type='warning' style={{fontSize: 12}}>实时用量暂不可用</Typography.Text>
-            : usageAt && <Tooltip title='后台每分钟采集一次，页面读的是最近一次快照'>
+            : usageAt && <Tooltip title='后台每 10 分钟采集一次，页面读的是最近一次快照'>
                 <Typography.Text type='secondary' style={{fontSize: 12}}>
                     数据时间 {formatClock(usageAt)}
                 </Typography.Text>
