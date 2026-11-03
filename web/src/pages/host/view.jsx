@@ -181,6 +181,9 @@ export default class extends React.Component {
         removeTarget: null,
         removeForce: false,
         removing: false,
+
+        // 正在停止的容器 id：只让那一行的按钮转圈
+        stoppingId: null,
     }
 
     componentDidMount() {
@@ -319,6 +322,26 @@ export default class extends React.Component {
 
     openContainer = record => {
         this.setState({detail: {open: true, containerId: record.id, name: record.name}})
+    }
+
+    /**
+     * 停止容器（主机维度）：无需二次确认（可随时再启动）。
+     * 停止成功后稍等片刻再刷新，否则可能仍读到「运行中」的旧状态。
+     */
+    stopContainer = record => {
+        const id = this.state.id
+        if (!id || !record) {
+            return
+        }
+        this.setState({stoppingId: record.id})
+        HttpClient.post('admin/container/stop', null, {hostId: id, containerId: record.id})
+            .then(() => {
+                setTimeout(() => {
+                    this.loadContainers(id)
+                    this.loadInfo(id)
+                }, 600)
+            })
+            .finally(() => this.setState({stoppingId: null}))
     }
 
     /**
@@ -541,7 +564,7 @@ export default class extends React.Component {
     render() {
         const {host, hostLoading, info, infoError, containers, containersLoading,
             images, imagesLoading, imageKeyword, detail, activeTab, usageLoading,
-            removeTarget, removeForce, removing} = this.state
+            removeTarget, removeForce, removing, stoppingId} = this.state
 
         if (hostLoading) {
             return <Page padding><Spin/></Page>
@@ -576,12 +599,16 @@ export default class extends React.Component {
             },
             {title: '创建时间', dataIndex: 'created', width: 170, render: v => formatTime(v)},
             {
-                title: '操作', width: 90,
+                title: '操作', width: 120,
                 render: (_, record) => canContainerOperate
-                    ? <span onDoubleClick={e => e.stopPropagation()}>
-                        <Button size='small' type='link' danger icon={<DeleteOutlined/>}
+                    ? <Space size={4}>
+                        <Button size='small'
+                                disabled={!isRunningState(record.state)}
+                                loading={stoppingId === record.id}
+                                onClick={() => this.stopContainer(record)}>停止</Button>
+                        <Button size='small' danger
                                 onClick={() => this.openRemoveContainer(record)}>删除</Button>
-                      </span>
+                      </Space>
                     : null
             },
         ]
@@ -646,8 +673,7 @@ export default class extends React.Component {
                 children: <Table rowKey='id' size='small' loading={containersLoading}
                                  dataSource={containers} columns={containerColumns}
                                  pagination={{pageSize: 20, showSizeChanger: true}}
-                                 locale={{emptyText: <Empty description='暂无容器'/>}}
-                                 onRow={record => ({onDoubleClick: () => this.openContainer(record)})}/>
+                                 locale={{emptyText: <Empty description='暂无容器'/>}}/>
             },
             {
                 key: 'images',
