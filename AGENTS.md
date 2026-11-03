@@ -117,23 +117,32 @@ git tag vx.y.z && git push && git push origin vx.y.z
   （SSH 主机落到远端 `/tmp/docker-admin-image-tar/{logId}/`，本机 / TCP 主机落到平台 `image-tar/{logId}/`）。
   弹窗展示实时日志、已写入大小与速度（每秒 / 每分钟）、保存路径与下载按钮；SSH 下载经 SFTP 流式转发，不在平台侧重复落盘。
   任务状态只存内存（`HostImageExportService`），tar 不自动删除，由用户按路径自行清理。
+- **容器启停删的兜底超时与超时后回查：** 主机详情 / 应用详情的容器操作都走
+  `DockerClientManager#callWithTimeout`（容器操作 120 秒、应用部署里的停止 60 秒 / 删除 60 秒），
+  不让请求挂满 docker-java 的 1 小时 `responseTimeout`。
+  **stop / remove 超时后会再用 10 秒预算 inspect 回查真实状态**：容器已经停掉 / 删掉就按成功返回
+  （`ContainerService#isStopped` / `#isGone`），否则错误消息里写明「仍然运行 / 仍然存在 / 无法确认」
+  并给出宿主机侧下一步（`docker rm -f <id>`、`docker ps -a`）；删除遇到 404 视为成功（幂等）。
+  前端删除后无论成败都刷新容器列表，容器确实不在了才关弹窗。
+  典型卡死原因：容器内进程卡在不可中断（D）状态（如 bind 挂载的 NFS 失联），SIGKILL 也要等内核返回，
+  此时 stop 与 rm 会一起超时，需在宿主机上看 `ps` 的 D 状态、`dmesg` 的 hung task 与 `mount`。
 - **首页资源概览分两条链路：** 静态容量走 `admin/home/hostSummary`（`docker info`，30 秒缓存，首屏用），
   实时用量走 `admin/home/hostUsage`（首页）与 `admin/host/usage`（主机详情「监控」Tab），
-  数据由 Quartz 定时任务「主机用量采集」（`HostUsageCollectJob`，每分钟）写进 `HostUsageService` 的内存缓存。
+  数据由 Quartz 定时任务「主机用量采集」（`HostUsageCollectJob`，每 10 分钟）写进 `HostUsageService` 的内存缓存。
   **页面只读快照**（`snapshotAll` / `snapshot`），不触发采集；只有 `refresh=true`（用户点「刷新」）才现采一轮，
   所以开多少个标签页、多少人在看都不会增加主机侧负载（首页 30 秒、主机页 30 秒轮询，页面隐藏时暂停）。
   逐运行中容器 `statsCmd(...).withNoStream(true)`——docker-java 只把它映射成 `?stream=0`，dockerd 内部要采两次样本（约 1 秒）
   才有 CPU%，所以容器级并发 12、单机预算 6 秒、整体 8 秒兜底，并合并同一主机的并发采集。
-  每轮采集都新建 DockerClient（`DockerClientManager` 有意不缓存客户端，SSH 主机每轮一次握手），分钟级间隔下这点开销可以接受。
+  每轮采集都新建 DockerClient（`DockerClientManager` 有意不缓存客户端，SSH 主机每轮一次握手），10 分钟间隔下这点开销可以接受。
   口径对齐 docker CLI：CPU% = `(cpuDelta/systemDelta)×onlineCpus×100`，内存扣 `inactive_file`
   （cgroup v1 `total_inactive_file` / v2 `inactive_file`），网络取各接口 rx/tx 求和，块 I/O 取
   `io_service_bytes_recursive` 读写之和（无条目按 0 计，与 docker stats 一致）；主机级只汇总运行中容器，是「容器合计」。
-  采集失败的主机按 1 → 2 → 5 → 15 分钟阶梯退避（状态在 `HostUsageService`，**不能放任务字段**：Quartz 每次触发都重建实例），成功即复位。
-- **用量历史：** 采集结果同时写 `t_host_usage_sample`（每分钟一行/主机，网络与块 I/O 存**累计计数器**原值），
+  采集失败的主机按 1 → 2 → 5 → 15 轮阶梯退避（一轮 10 分钟，状态在 `HostUsageService`，**不能放任务字段**：Quartz 每次触发都重建实例），成功即复位。
+- **用量历史：** 采集结果同时写 `t_host_usage_sample`（每 10 分钟一行/主机，网络与块 I/O 存**累计计数器**原值），
   主机详情「监控」Tab 顶部按 1h / 6h / 24h / 7d / 30d 展示 CPU/内存与网络/磁盘速率曲线
   （`admin/host/usageHistory`，Java 侧分桶到 ≤500 点；速率由相邻采样求差，差值为负 = 容器重启 → 曲线断点）。
   采样默认保留 30 天（`HostUsageSampleService` 里的默认值，需要时用 `docker.usage.retain-days` 覆盖，采集任务每小时顺带清理）；
-  30 台主机 30 天约 130 万行、200 MB。
+  30 台主机 30 天约 13 万行、20 MB。
   定时任务记录由 `HostUsageJobInitializer` 幂等自动创建（`sys.job-enable=false` 时跳过，已存在则不覆盖用户改动），
   日志聚合为按小时。**升级 docker-java 时需要回归这条链路。**
 - **主机接入代理：** 远程 TCP 可选 HTTP / SOCKS5 连接代理，界面与邮件代理一样只填一行地址
