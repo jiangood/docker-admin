@@ -547,10 +547,22 @@ public class AppService extends BaseService<App> {
             list.forEach(c -> {
                 if (c.getState().equals("running")) {
                     log.info("正在停止容器 {}", c);
-                    client.stopContainerCmd(c.getId()).exec();
+                    // 与主机维度的容器操作一致：容器卡在不可中断状态时不能让请求挂满一小时
+                    dockerManager.callWithTimeout(CONTAINER_STOP_TIMEOUT, "停止容器 " + c.getId(), () -> {
+                        client.stopContainerCmd(c.getId()).exec();
+                        return null;
+                    });
                 }
                 log.info("正在删除容器 {}", c);
-                client.removeContainerCmd(c.getId()).exec();
+                try {
+                    dockerManager.callWithTimeout(CONTAINER_REMOVE_TIMEOUT, "删除容器 " + c.getId(), () -> {
+                        client.removeContainerCmd(c.getId()).exec();
+                        return null;
+                    });
+                } catch (NotFoundException e) {
+                    // 已经被删掉了，按成功处理
+                    log.info("容器 {} 已不存在，跳过删除", c.getId());
+                }
             });
         } finally {
             IOUtils.closeQuietly(client);

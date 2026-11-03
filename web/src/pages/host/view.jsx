@@ -162,7 +162,7 @@ export default class extends React.Component {
         imagesLoading: false,
         imageKeyword: '',
 
-        // 实时用量（docker stats）：由后端每分钟的采集任务写入内存快照，页面只读
+        // 实时用量（docker stats）：由后端每 10 分钟的采集任务写入内存快照，页面只读
         usage: null,
         usageLoading: false,
         usageError: null,
@@ -228,9 +228,16 @@ export default class extends React.Component {
 
     loadContainers = id => {
         this.setState({containersLoading: true})
-        HttpClient.get('admin/container/list', {hostId: id, all: true}, {toastError: false})
-            .then(rs => this.setState({containers: rs.data || []}))
-            .catch(() => this.setState({containers: []}))
+        return HttpClient.get('admin/container/list', {hostId: id, all: true}, {toastError: false})
+            .then(rs => {
+                const list = rs.data || []
+                this.setState({containers: list})
+                return list
+            })
+            .catch(() => {
+                this.setState({containers: []})
+                return []
+            })
             .finally(() => this.setState({containersLoading: false}))
     }
 
@@ -243,7 +250,7 @@ export default class extends React.Component {
     }
 
     /**
-     * 读取实时用量：默认读后端每分钟采集好的快照（不触发采集），refresh=true 才让后端现采一轮。
+     * 读取实时用量：默认读后端每 10 分钟采集好的快照（不触发采集），refresh=true 才让后端现采一轮。
      * 因此这里的轮询间隔只影响「多久看到新数字」，不会增加主机侧负载。
      */
     loadUsage = (id = this.state.id, refresh = false) => {
@@ -358,13 +365,22 @@ export default class extends React.Component {
         if (!id || !removeTarget) {
             return
         }
+        const containerId = removeTarget.id
         const force = isRunningState(removeTarget.state) ? removeForce : false
         this.setState({removing: true})
-        HttpClient.post('admin/container/remove', null, {hostId: id, containerId: removeTarget.id, force})
+        HttpClient.post('admin/container/remove', null, {hostId: id, containerId, force})
+            // 失败也继续往下走：超时只说明平台没等到响应，容器可能已经被 dockerd 删掉了，
+            // 必须回查列表才能知道真实状态（否则界面会一直显示已删除的容器）
+            .then(() => true, () => false)
             .then(() => {
-                this.setState({removeTarget: null, removeForce: false})
-                this.loadContainers(id)
                 this.loadInfo(id)
+                return this.loadContainers(id)
+            })
+            .then(list => {
+                // 容器确实不在了才关弹窗；仍在（例如宿主机卡住）就保留弹窗，方便用户重试
+                if (!(list || []).some(c => c.id === containerId)) {
+                    this.setState({removeTarget: null, removeForce: false})
+                }
             })
             .finally(() => this.setState({removing: false}))
     }
@@ -450,7 +466,7 @@ export default class extends React.Component {
     }
 
     /**
-     * 实时用量：概览卡片（主机汇总）+ 容器用量表格卡片，数据来自后端每分钟的采集快照。
+     * 实时用量：概览卡片（主机汇总）+ 容器用量表格卡片，数据来自后端每 10 分钟的采集快照。
      */
     renderLiveUsage() {
         const {usage, usageLoading, usageError, usageUpdatedAt} = this.state

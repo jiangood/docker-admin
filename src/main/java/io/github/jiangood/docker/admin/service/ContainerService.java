@@ -9,6 +9,7 @@ import com.github.dockerjava.api.command.InspectExecResponse;
 import com.github.dockerjava.api.command.InspectContainerResponse.ContainerState;
 import com.github.dockerjava.api.command.InspectContainerResponse.Mount;
 import com.github.dockerjava.api.exception.ConflictException;
+import com.github.dockerjava.api.exception.NotFoundException;
 import com.github.dockerjava.api.model.*;
 import com.github.dockerjava.core.command.ExecStartResultCallback;
 import io.github.jiangood.docker.admin.dto.ContainerDetailVo;
@@ -56,6 +57,15 @@ public class ContainerService {
      * 而这类命令本该秒回，宿主机存储卡住（如 bind 源目录在无响应的 NFS 上）时必须尽快失败。
      */
     private static final Duration CONTAINER_ACTION_TIMEOUT = Duration.ofSeconds(120);
+
+    /**
+     * 删除超时后回查容器是否还在的预算。
+     * <p>
+     * 删除请求超时只代表平台没等到响应，dockerd 往往仍在后台继续删；回查一次能把
+     * 「其实已经删掉」的情况按成功处理（否则用户重试还会收到 404）。
+     * daemon 真卡住时也不能让用户再等两分钟，所以这个预算给得很小。
+     */
+    private static final Duration CONTAINER_VERIFY_TIMEOUT = Duration.ofSeconds(10);
 
     /** 无 ls 时从 archive 接口推断出的修改时间格式，与 {@code ls --time-style=long-iso} 对齐。 */
     private static final DateTimeFormatter MTIME_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
@@ -249,7 +259,25 @@ public class ContainerService {
     }
 
     public void stop(Host host, String containerId) {
-        withClient(host, "停止容器 " + containerId, client -> client.stopContainerCmd(containerId).exec());
+        try {
+            withClient(host, "停止容器 " + containerId, client -> client.stopContainerCmd(containerId).exec());
+        } catch (IllegalStateException e) {
+            // docker stop 是「SIGTERM → 等 10 秒 → SIGKILL」，正常情况下十几秒内必回；
+            // 超时多半是容器里有进程卡在不可中断（D）状态，回查一次确认实际状态再报错
+            Boolean stopped = isStopped(host, containerId);
+            if (Boolean.TRUE.equals(stopped)) {
+                log.warn("停止容器 {} 未在 {} 秒内返回，但回查确认容器已停止", containerId,
+                        CONTAINER_ACTION_TIMEOUT.toSeconds());
+                return;
+            }
+            if (Boolean.FALSE.equals(stopped)) {
+                throw new IllegalStateException(e.getMessage()
+                        + "。回查显示容器仍在运行：容器内可能有进程卡在不可中断（D）状态"
+                        + "（例如挂载的网络存储失联），SIGKILL 也要等内核返回，请登录宿主机用 ps / dmesg / mount 检查", e);
+            }
+            throw new IllegalStateException(e.getMessage()
+                    + "。无法确认容器状态，请登录宿主机执行 docker ps -a 检查", e);
+        }
     }
 
     public void restart(Host host, String containerId) {
@@ -262,9 +290,74 @@ public class ContainerService {
                     .withForce(force)
                     .withRemoveVolumes(false)
                     .exec());
+        } catch (NotFoundException e) {
+            // 容器本来就不存在（并发删除，或上一次超时其实已完成）：删除是幂等的，按成功处理
+            log.info("容器 {} 已不存在，视为删除成功", containerId);
         } catch (ConflictException e) {
             // docker 不允许删除 running / paused 的容器（409），换成用户能直接照做的提示
             throw new BusinessException("容器正在运行，请先停止，或勾选「强制删除」");
+        } catch (IllegalStateException e) {
+            // 超时只说明客户端没等到响应，dockerd 可能还在后台执行：回查一次再决定怎么说
+            Boolean gone = isGone(host, containerId);
+            if (Boolean.TRUE.equals(gone)) {
+                log.warn("删除容器 {} 未在 {} 秒内返回，但回查确认已删除", containerId,
+                        CONTAINER_ACTION_TIMEOUT.toSeconds());
+                return;
+            }
+            if (Boolean.FALSE.equals(gone)) {
+                throw new IllegalStateException(e.getMessage()
+                        + "。回查确认容器仍然存在，可登录宿主机执行 docker rm -f " + containerId + " 处理", e);
+            }
+            throw new IllegalStateException(e.getMessage()
+                    + "。无法确认容器是否已删除，请登录宿主机执行 docker ps -a 检查", e);
+        }
+    }
+
+    /**
+     * 回查容器是否已不存在（删除超时后的判定用）。
+     *
+     * @return {@code true} 确认已不存在；{@code false} 确认仍存在；{@code null} 无法确认（daemon 同样没响应）
+     */
+    private Boolean isGone(Host host, String containerId) {
+        try {
+            inspectForVerify(host, containerId);
+            return false;
+        } catch (NotFoundException e) {
+            return true;
+        } catch (RuntimeException e) {
+            log.debug("回查容器 {} 失败，无法确认删除结果: {}", containerId, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 回查容器是否已停止（停止超时后的判定用）。
+     *
+     * @return {@code true} 已停止或已不存在；{@code false} 仍在运行；{@code null} 无法确认
+     */
+    private Boolean isStopped(Host host, String containerId) {
+        try {
+            InspectContainerResponse r = inspectForVerify(host, containerId);
+            ContainerState state = r.getState();
+            return state == null || !Boolean.TRUE.equals(state.getRunning());
+        } catch (NotFoundException e) {
+            return true;
+        } catch (RuntimeException e) {
+            log.debug("回查容器 {} 失败，无法确认停止结果: {}", containerId, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 用很小的预算回查容器，避免 daemon 卡住时再次让用户干等。
+     */
+    private InspectContainerResponse inspectForVerify(Host host, String containerId) {
+        DockerClient client = dockerClientManager.getClient(host);
+        try {
+            return dockerClientManager.callWithTimeout(CONTAINER_VERIFY_TIMEOUT, "回查容器 " + containerId,
+                    () -> client.inspectContainerCmd(containerId).exec());
+        } finally {
+            IOUtils.closeQuietly(client);
         }
     }
 
