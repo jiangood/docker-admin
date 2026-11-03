@@ -66,6 +66,8 @@ git tag vx.y.z && git push && git push origin vx.y.z
 - **数据库配置**走自定义属性（`db_ip`、`db_port`、`db_database`、`db_username`、`db_password`），
   不是标准 Spring datasource；默认走 H2 无需配置。
 - **菜单配置**在 `src/main/resources/application-menu-docker.yml`，可用 `-override.yml` 覆盖。
+  「容器平台」下依次为 项目 / 应用 / 镜像 / 主机（`/host`），再往下是「设置」（注册中心、代码源、全局设置）
+  与「工具」（镜像同步、构建测试、镜像下载、内网穿透）。**「主机」与「设置」平级**，不再挂在设置下面。
 - **领域模型：** `Project`(项目，构建定义) → `Image`(镜像，`imageUrl` 唯一) → `ImageTag`(镜像标签，`imageUrl`+`tag`)。
   项目与镜像按 `imageUrl` 相等关联；`App` 只存 `imageUrl` + `imageTag`，与项目/镜像均无 id 外键。
   菜单为「项目」(`/project`) 与「镜像」(`/image`)，权限码为 `image:*`，表名为 `t_image`。
@@ -75,9 +77,11 @@ git tag vx.y.z && git push && git push origin vx.y.z
   页面（`web/src/pages/image-sync/index.jsx`）是 ProTable + 工具栏三个「增加」按钮
   （同步到注册中心 / 同步到主机 / 经执行主机中转），每个按钮打开 `ImageSyncModal` 对应模式，
   提交后弹窗原地切换为实时日志；行内「查看日志」用抽屉回看。
-- **主机文件管理 / Docker CLI：** 主机详情有一个「Agent」Tab：终端占满页面，右上角状态条里放
+- **主机文件管理 / Docker CLI：** Agent 是独立页面（`/host/agent-view?id=<主机id>`，页面文件
+  `web/src/pages/host/agent-view.jsx`），终端占满页面，右上角状态条里放
   上传 / 下载、切换挂载目录、部署 / 删除按钮（不再有文件树和左右布局），统一通过 Docker API
-  在该主机上运行辅助容器 `docker-admin-agent`。镜像分两层配置：全局设置只保存镜像地址
+  在该主机上运行辅助容器 `docker-admin-agent`。入口有两处：主机列表「操作」列的「Agent」按钮，
+  以及主机详情「Agent」Tab 里的链接（详情页不再内嵌终端，只保留一个打开页面的链接）。镜像分两层配置：全局设置只保存镜像地址
   （`docker.agent.repository`，默认 `ghcr.io/jiangood/docker-admin-agent`，不含 tag），
   每台主机部署时选择 tag（`Host.agentImageTag`，默认 `latest`），实际镜像 = 地址 + `:` + tag。
   agent 镜像内置 `docker-cli` 和 `docker compose`，由 `.github/workflows/publish-docker-image.yml`

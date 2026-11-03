@@ -45,13 +45,9 @@ menus:
   divider-image:
     pid: biz
     type: divider
-  setting:
-    pid: biz
-    name: 设置
-    icon: SettingOutlined
   host:
-    pid: setting
-    name: 主机管理
+    pid: biz
+    name: 主机
     path: /host
     icon: DesktopOutlined
     perms:
@@ -64,6 +60,10 @@ menus:
       - {name: 镜像操作, code: host:image}
       - {name: 主机文件, code: host:file}
       - {name: 主机命令行, code: host:cli}
+  setting:
+    pid: biz
+    name: 设置
+    icon: SettingOutlined
   setting-registry:
     pid: setting
     name: 注册中心

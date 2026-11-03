@@ -193,7 +193,7 @@ public class BuildTestService {
             Host host = StrUtil.isNotBlank(p.getHostId())
                     ? hostService.findById(p.getHostId()).orElseThrow(() -> new BusinessException("指定的构建主机不存在：" + p.getHostId()))
                     : hostService.getDefaultDockerRunner();
-            Assert.notNull(host, "未配置构建节点（runner），请先在【设置-主机管理】中将某台主机设为构建节点");
+            Assert.notNull(host, "未配置构建节点（runner），请先在【主机】中将某台主机设为构建节点");
 
             String[] target = splitTarget(p.getTargetImage());
             String targetName = target[0];

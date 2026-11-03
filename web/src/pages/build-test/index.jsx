@@ -199,7 +199,7 @@ export default class extends React.Component {
                                   <Tooltip placement='left' title={
                                       <>
                                           <div>以 Git 仓库为构建上下文（可配置子目录），粘贴的 Dockerfile 会覆盖该目录中的同名文件。</div>
-                                          <div className='mt-1'>使用「设置-主机管理」中标记为构建节点的主机进行本地构建，不推送到注册中心。</div>
+                                          <div className='mt-1'>使用「主机」中标记为构建节点的主机进行本地构建，不推送到注册中心。</div>
                                       </>
                                   }>
                                       <QuestionCircleOutlined style={{color: getToken().colorTextSecondary, cursor: 'help'}}/>

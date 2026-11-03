@@ -150,17 +150,18 @@ export default class extends React.Component {
             render: (_, record) => (
                 <PermActions size='small' actions={[
                     {
-                        label: '查看', perm: 'host:list',
-                        onClick: () => PageUtils.open('/host/view?id=' + record.id)
-                    },
-                    {
-                        label: this.state.testingId === record.id ? '测试中…' : '测试连接',
+                        label: this.state.testingId === record.id ? '测试中…' : '测试',
                         perm: 'host:save', onClick: () => this.handleTestRow(record)
                     },
                     {label: '修改', perm: 'host:save', onClick: () => this.handleEdit(record)},
                     {
                         label: '删除', perm: 'host:delete',
                         confirm: '是否确定删除主机', onClick: () => this.handleDelete(record)
+                    },
+                    {
+                        label: 'Agent',
+                        perm: 'host:list',
+                        onClick: () => PageUtils.open('/host/agent-view?id=' + record.id),
                     },
                 ]}/>
             ),
@@ -280,7 +281,7 @@ export default class extends React.Component {
                    width={720}
                    footer={[
                        <Button key='cancel' onClick={() => this.setState({formOpen: false})}>取消</Button>,
-                       <Button key='test' loading={this.state.testing} onClick={this.handleTest}>测试连接</Button>,
+                       <Button key='test' loading={this.state.testing} onClick={this.handleTest}>测试</Button>,
                        <Button key='ok' type='primary' onClick={() => this.formRef.current.submit()}>确定</Button>,
                    ]}
             >

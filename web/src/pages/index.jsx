@@ -266,7 +266,7 @@ function HostResourceBoard() {
                     <Table className='mt-5' rowKey='id' size='small' loading={loading}
                            dataSource={data.hosts} columns={columns} pagination={false}
                            scroll={{x: 'max-content'}}
-                           locale={{emptyText: '尚未添加主机，可在「设置 / 主机管理」中添加'}}/>
+                           locale={{emptyText: '尚未添加主机，可在「主机」中添加'}}/>
                 </>}
     </Card>
 }

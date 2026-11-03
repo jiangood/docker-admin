@@ -7,7 +7,6 @@ import Chart from "../../components/Chart"
 import ContainerDetail from "../../components/container/ContainerDetail"
 import HostImageExportModal from "../../components/HostImageExportModal"
 import HostImageImportModal from "../../components/HostImageImportModal"
-import HostAgentTab from "../../components/host/HostAgentTab"
 import {
     formatBytes,
     formatClock,
@@ -175,8 +174,6 @@ export default class extends React.Component {
 
         detail: {open: false, containerId: null, name: ''},
         activeTab: 'stats',
-        // 「Agent」Tab 的状态与终端在子组件内部，刷新靠换 key 重新挂载
-        agentKey: 0,
     }
 
     componentDidMount() {
@@ -211,15 +208,6 @@ export default class extends React.Component {
         HttpClient.get('admin/host/get', {id}, {toastError: false})
             .then(rs => this.setState({host: rs.data, hostLoading: false}))
             .catch(() => this.setState({hostLoading: false}))
-    }
-
-    /** Agent 当前挂载的目录就是文件管理目录，切换后同步到详情，避免显示成旧值 */
-    syncAgentStatus = status => {
-        const root = status && status.mountedRoot
-        if (!root || !this.state.host || this.state.host.fileRoot === root) {
-            return
-        }
-        this.setState(state => ({host: {...state.host, fileRoot: root}}))
     }
 
     loadInfo = id => {
@@ -334,8 +322,8 @@ export default class extends React.Component {
     }
 
     /**
-     * 刷新当前 Tab：容器 / 镜像 / 监控的数据在父组件 state 里，重取一次即可；
-     * Agent 的状态与终端在子组件内部，换 key 让它卸载后重新挂载。
+     * 刷新当前 Tab：容器 / 镜像 / 监控的数据在父组件 state 里，重取一次即可。
+     * Agent 已经拆成独立页面，这里不再处理。
      */
     refreshTab = () => {
         const {id, activeTab, usageRange} = this.state
@@ -346,9 +334,7 @@ export default class extends React.Component {
             this.loadContainers(id)
         } else if (activeTab === 'images') {
             this.loadImages(id)
-        } else if (activeTab === 'agent') {
-            this.setState(state => ({agentKey: state.agentKey + 1}))
-        } else {
+        } else if (activeTab === 'stats') {
             // 监控：refresh=true 让后端现采一轮，同时重读历史曲线
             this.loadUsage(id, true)
             this.loadSeries(id, usageRange)
@@ -638,8 +624,13 @@ export default class extends React.Component {
             {
                 key: 'agent',
                 label: 'Agent',
-                children: <HostAgentTab key={this.state.agentKey} hostId={this.state.id}
-                                       onStatus={this.syncAgentStatus}/>
+                children: <Space size={4}>
+                    <Typography.Text type='secondary'>Agent 已拆分为独立页面：</Typography.Text>
+                    <Button type='link' style={{padding: 0}}
+                            onClick={() => PageUtils.open('/host/agent-view?id=' + this.state.id)}>
+                        打开 Agent 页面
+                    </Button>
+                </Space>
             },
         ]
 

@@ -133,7 +133,7 @@ token = "与服务端 token 相同"`}</Code>
                             <li>
                                 <b>访问远端 Docker：</b><Text code>local_addr</Text> 填
                                 <Text code>unix:///var/run/docker.sock</Text>（ht 以容器运行时的挂载方式见下一节），
-                                并给这条代理配置 <Text code>auth_header</Text>。然后在平台「主机管理 → 连接方式 TCP →
+                                并给这条代理配置 <Text code>auth_header</Text>。然后在平台「主机 → 连接方式 TCP →
                                 自定义请求头」填名称 <Text code>X-HTTP-TUNNEL-TOKEN</Text>、值填密钥。
                             </li>
                             <li>

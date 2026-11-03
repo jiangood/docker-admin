@@ -50,7 +50,7 @@ export default class extends React.Component {
                           title='缺少 host:file / host:cli 权限，无法使用主机 Agent'/>
         }
 
-        const height = 680
+        const height = this.props.height || 680
         const deployed = !!(status && status.deployed)
         const fileActions = canFile
             ? <HostFileActions hostId={hostId} status={status}/>
