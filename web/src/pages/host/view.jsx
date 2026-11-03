@@ -519,7 +519,7 @@ export default class extends React.Component {
 
     render() {
         const {host, hostLoading, info, infoError, containers, containersLoading,
-            images, imagesLoading, imageKeyword, detail, activeTab} = this.state
+            images, imagesLoading, imageKeyword, detail, activeTab, usageLoading} = this.state
 
         if (hostLoading) {
             return <Page padding><Spin/></Page>
