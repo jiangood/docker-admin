@@ -1,13 +1,14 @@
 import React from 'react'
-import {Alert, Badge, Button, Input, Modal, Popconfirm, Space, Spin, Tooltip, Typography, message} from 'antd'
+import {Alert, Badge, Button, Input, Modal, Space, Spin, Tooltip, Typography, message} from 'antd'
 import {CloudServerOutlined, FolderOpenOutlined, QuestionCircleOutlined} from '@ant-design/icons'
 import {HttpClient, PermUtils} from '@jiangood/open-admin'
 
 /**
- * Agent 容器状态与操作：把「标题（状态）」「提示（异常）」「按钮（部署 / 切换挂载目录 / 删除 / 帮助）」
+ * Agent 容器状态与操作：把「标题（状态）」「提示（异常）」「按钮（部署 / 切换挂载目录 / 帮助）」
  * 通过 render prop 交给外层 Card，自己只负责取状态、弹窗和请求。
  * <p>
- * 目录同时影响文件与终端，所以切换入口也在这一层；镜像、目录、权限等说明统一收进问号弹窗。
+ * 目录决定终端里的挂载基准，所以切换入口也在这一层；镜像、目录、权限等说明统一收进问号弹窗。
+ * 不提供「删除 Agent」入口：辅助容器就是普通容器，需要删除时走主机详情的「容器」Tab。
  * 用法：<HostAgentAlert hostId={id} onChange={fn}>{
  *     ({summary, notice, actions}) => <Card title={summary} extra={actions}>…</Card>
  * }</HostAgentAlert>
@@ -23,7 +24,6 @@ export default class extends React.Component {
         rootOpen: false,
         rootInput: '',
         rootSubmitting: false,
-        removing: false,
         tag: 'latest',
         submitting: false,
     }
@@ -89,25 +89,6 @@ export default class extends React.Component {
             .finally(() => this.setState({submitting: false}))
     }
 
-    /**
-     * 删除辅助容器：远程主机上 stop + remove 可能要几秒，
-     * 返回 Promise 让 Popconfirm 的确认按钮同步显示 loading，失败也要有提示。
-     */
-    remove = () => {
-        const {hostId} = this.props
-        this.setState({removing: true})
-        return HttpClient.post('admin/host/agent/remove', null, {id: hostId}, {toastError: false})
-            .then(() => {
-                message.success('辅助容器已删除')
-                this.load()
-            })
-            .catch(e => {
-                message.error(e.message || '删除辅助容器失败')
-                this.load()
-            })
-            .finally(() => this.setState({removing: false}))
-    }
-
     openRootModal = () => {
         const {status} = this.state
         const root = (status && (status.mountedRoot || status.desiredRoot)) || '/home'
@@ -144,15 +125,9 @@ export default class extends React.Component {
 
     /** 卡片标题里的状态块：加载中 / 运行中 / 已停止 / 未部署。 */
     renderSummary() {
-        const {status, loading, error, removing} = this.state
+        const {status, loading, error} = this.state
         if (error) {
             return <Typography.Text type='danger'>状态读取失败</Typography.Text>
-        }
-        if (removing) {
-            return <Space size={6}>
-                <Spin size='small'/>
-                <Typography.Text type='secondary'>正在删除…</Typography.Text>
-            </Space>
         }
         if (loading && !status) {
             return <Space size={6}>
@@ -169,20 +144,17 @@ export default class extends React.Component {
 
     /** 卡片正文顶部的提示：只有异常 / 需要处理时才出现，正常状态不占空间。 */
     renderNotice() {
-        const {status, error, removing} = this.state
+        const {status, error} = this.state
         if (error) {
             return <Alert className='mb-3' type='error' showIcon title='读取辅助容器状态失败'
                           description={<>{error}　<a onClick={this.load}>重试</a></>}/>
-        }
-        if (removing) {
-            return null
         }
         if (status && status.message) {
             return <Alert className='mb-3' type='error' showIcon title={status.message}/>
         }
         if (status && status.needsRebuild) {
             return <Alert className='mb-3' type='warning' showIcon
-                          title='镜像配置已变更，删除后重新部署即可更换镜像'/>
+                          title='镜像配置已变更，删除 docker-admin-agent 容器后重新部署即可更换镜像'/>
         }
         if (!PermUtils.hasPermission('host:save') && !(status && status.deployed)) {
             return <Alert className='mb-3' type='info' showIcon title='需要 host:save 权限才能部署辅助容器'/>
@@ -191,7 +163,7 @@ export default class extends React.Component {
     }
 
     render() {
-        const {status, deployOpen, helpOpen, rootOpen, rootInput, rootSubmitting, removing} = this.state
+        const {status, deployOpen, helpOpen, rootOpen, rootInput, rootSubmitting} = this.state
         const canSave = PermUtils.hasPermission('host:save')
         const deployed = !!(status && status.deployed)
         const {extra, children} = this.props
@@ -199,22 +171,12 @@ export default class extends React.Component {
         const actions = <>
             {extra}
             {canSave && (deployed
-                ? <>
-                    <Button icon={<FolderOpenOutlined/>}
-                            disabled={removing}
-                            onClick={this.openRootModal}>切换挂载目录</Button>
-                    <Popconfirm title='删除辅助容器？宿主机上的文件不会被删除'
-                                okText='删除' cancelText='取消'
-                                okButtonProps={{danger: true, loading: removing}}
-                                onConfirm={this.remove}>
-                        <Button danger loading={removing}>删除 Agent</Button>
-                    </Popconfirm>
-                </>
+                ? <Button icon={<FolderOpenOutlined/>}
+                          onClick={this.openRootModal}>切换挂载目录</Button>
                 : <Button type='primary' icon={<CloudServerOutlined/>}
                           onClick={this.openDeploy}>部署辅助容器</Button>)}
             <Tooltip title='辅助容器说明'>
                 <Button type='text' shape='circle' icon={<QuestionCircleOutlined/>}
-                        disabled={removing}
                         onClick={() => this.setState({helpOpen: true})}/>
             </Tooltip>
         </>
@@ -280,7 +242,7 @@ export default class extends React.Component {
                 <div>只接受 Docker daemon 可见的 Linux 绝对路径；Windows 主机填 Docker Desktop 的
                     <code> /run/desktop/mnt/host/d/...</code> 或 WSL2 的 <code>/mnt/d/...</code>。
                 </div>
-                <div>切换会用新目录重建辅助容器，终端、上传与下载都会切到新目录，终端断开后自动重连；不支持 /、/etc 等系统目录。</div>
+                <div>切换会用新目录重建辅助容器，终端会切到新目录并断开自动重连；不支持 /、/etc 等系统目录。</div>
             </div>
         </Modal>
     }
@@ -291,7 +253,7 @@ export default class extends React.Component {
                       onCancel={() => this.setState({helpOpen: false})} destroyOnHidden>
             <div style={{lineHeight: 1.9}}>
                 <Typography.Paragraph>
-                    文件与终端依赖在目标主机上运行的辅助容器 <code>docker-admin-agent</code>，
+                    终端依赖在目标主机上运行的辅助容器 <code>docker-admin-agent</code>，
                     容器内已装 docker / docker compose，并接入宿主机 docker.sock。
                     终端里可直接用常见运维工具：<code>curl</code> / <code>wget</code> / <code>ping</code> /
                     <code>ss</code> / <code>netstat</code> / <code>dig</code> / <code>ssh</code> /
@@ -303,10 +265,10 @@ export default class extends React.Component {
                 <Typography.Title level={5}>权限与安全</Typography.Title>
                 <ul style={{margin: '0 0 8px 18px', padding: 0}}>
                     <li>容器挂载 docker.sock 与一个宿主机目录，权限等同于宿主机 root，请只在受信任环境使用。</li>
-                    <li>上传会写入当前挂载目录并覆盖同名文件，下载会把该目录打成 tar，请谨慎操作。</li>
+                    <li>终端里执行命令会直接影响宿主机，删除、覆盖文件等危险操作请谨慎。</li>
                 </ul>
 
-                <Typography.Title level={5}>文件目录</Typography.Title>
+                <Typography.Title level={5}>挂载目录</Typography.Title>
                 <ul style={{margin: '0 0 8px 18px', padding: 0}}>
                     <li>部署时不再指定目录，首次默认 <code>/home</code>；在右上角点「切换挂载目录」按需切换。</li>
                     <li>切换会用新目录重建容器，终端会断开并自动重连。</li>
@@ -319,13 +281,15 @@ export default class extends React.Component {
 
                 <Typography.Title level={5}>文件操作</Typography.Title>
                 <Typography.Paragraph>
-                    右上角只保留上传与下载，都作用于当前挂载目录；查看、编辑、删除、重命名、新建目录等请用终端。
+                    页面不再提供上传 / 下载按钮：该目录同时按原始绝对路径挂进容器，
+                    在终端里用 <code>cp</code> / <code>rsync</code> / <code>scp</code> / <code>curl</code>
+                    等命令上传下载，查看、编辑、删除、重命名、新建目录也都在终端里完成。
                 </Typography.Paragraph>
 
                 <Typography.Title level={5}>镜像</Typography.Title>
                 <Typography.Paragraph>
                     镜像地址在「设置 - 全局设置」维护（不含 tag），每台主机部署时选择 tag，默认 latest；
-                    删除容器后重新部署即可更换 tag。
+                    需要更换 tag 时，在主机详情的「容器」Tab 删除 <code>docker-admin-agent</code> 容器，再回到本页重新部署。
                 </Typography.Paragraph>
 
                 {status && status.deployed && <>

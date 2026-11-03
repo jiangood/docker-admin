@@ -10,8 +10,8 @@ export const pageMeta = {
 /**
  * 主机 Agent 独立页面：通过 ?id=<hostId> 打开，内容就是一块 Agent Card。
  * <p>
- * 入口有两个：主机列表「操作」列的「Agent」按钮，以及主机详情页「Agent」Tab 里的链接。
- * 终端与上传 / 下载都在子组件 {@link HostAgentTab} 里，主机名显示在 Card 标题上，本页只负责取主机 id。
+ * 入口只有主机列表「操作」列的「Agent」按钮（主机详情页不再有 Agent Tab）。
+ * 终端在子组件 {@link HostAgentTab} 里，主机名显示在 Card 标题上，本页只负责取主机 id。
  */
 export default class extends React.Component {
 

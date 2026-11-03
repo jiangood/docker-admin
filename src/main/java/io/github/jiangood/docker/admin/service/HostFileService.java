@@ -30,12 +30,66 @@ public class HostFileService {
     private ContainerService containerService;
 
     /**
-     * 下载挂载目录本身或其中的子目录，空路径表示挂载目录。
+     * 下载前的解析结果：容器、容器内路径、相对挂载目录的路径，以及目标是不是目录。
+     * <p>
+     * 响应头要在写响应体之前设置，而「文件还是目录」必须问过辅助容器才知道，
+     * 所以把这一步单独拆出来，由控制器先 setHeader 再调 {@link #download}。
      */
-    public void downloadDirectory(Host host, String path, OutputStream out) {
+    public record DownloadPlan(String containerId, String containerPath, String relativePath, boolean directory) {
+    }
+
+    /**
+     * 解析下载目标：空路径表示挂载目录本身；符号链接先解析到真实路径，
+     * 指向挂载目录之外的链接直接拒绝。
+     */
+    public DownloadPlan planDownload(Host host, String path) {
         HostAgentService.AgentContext context = hostAgentService.requireRunning(host);
         String rel = HostRootPolicy.normalizeRelativePath(path);
-        containerService.downloadDirectory(host, context.containerId(), HostRootPolicy.toAgentPath(rel), out);
+        String target = HostRootPolicy.toAgentPath(rel);
+        String resolved = resolveLink(host, context.containerId(), target);
+        if (rel.isEmpty()) {
+            return new DownloadPlan(context.containerId(), resolved, rel, true);
+        }
+        String kind = containerService.exec(host, context.containerId(),
+                List.of("sh", "-c", kindCmd(), "sh", resolved)).stdout().trim();
+        if (!"dir".equals(kind) && !"file".equals(kind)) {
+            throw new BusinessException("路径不存在：" + rel);
+        }
+        return new DownloadPlan(context.containerId(), resolved, rel, "dir".equals(kind));
+    }
+
+    /** 一次 exec 判断目标类型：目录 / 其他已存在项 / 不存在，避免多次往返。 */
+    private static String kindCmd() {
+        return "if [ -d \"$1\" ]; then echo dir; elif [ -e \"$1\" ]; then echo file; else echo null; fi";
+    }
+
+    /** 按解析结果下载：目录打包成 tar 流，文件直接透传。 */
+    public void download(Host host, DownloadPlan plan, OutputStream out) {
+        if (plan.directory()) {
+            containerService.downloadDirectory(host, plan.containerId(), plan.containerPath(), out);
+        } else {
+            containerService.downloadFile(host, plan.containerId(), plan.containerPath(), out);
+        }
+    }
+
+    /**
+     * 符号链接解析：Docker archive 接口只会给出链接本身（内容为空），
+     * 所以先用 {@code readlink -f} 找到真实文件；解析结果必须仍在挂载目录内。
+     */
+    private String resolveLink(Host host, String containerId, String target) {
+        if (containerService.exec(host, containerId, testCmd("-L", target)).exitCode() != 0) {
+            return target;
+        }
+        ContainerService.CommandResult result = containerService.exec(host, containerId,
+                List.of("sh", "-c", "readlink -f \"$1\"", "sh", target));
+        String real = result.exitCode() == 0 ? result.stdout().trim() : "";
+        if (real.isEmpty()) {
+            throw new BusinessException("无法解析符号链接的目标，请通过终端下载");
+        }
+        if (!real.equals(HostRootPolicy.AGENT_MOUNT) && !real.startsWith(HostRootPolicy.AGENT_MOUNT + "/")) {
+            throw new BusinessException("符号链接指向挂载目录之外（" + real + "），不允许下载");
+        }
+        return real;
     }
 
     /**

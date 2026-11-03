@@ -78,10 +78,9 @@ git tag vx.y.z && git push && git push origin vx.y.z
   （同步到注册中心 / 同步到主机 / 经执行主机中转），每个按钮打开 `ImageSyncModal` 对应模式，
   提交后弹窗原地切换为实时日志；行内「查看日志」用抽屉回看。
 - **主机文件管理 / Docker CLI：** Agent 是独立页面（`/host/agent-view?id=<主机id>`，页面文件
-  `web/src/pages/host/agent-view.jsx`），终端占满页面，右上角状态条里放
-  上传 / 下载、切换挂载目录、部署 / 删除按钮（不再有文件树和左右布局），统一通过 Docker API
-  在该主机上运行辅助容器 `docker-admin-agent`。入口有两处：主机列表「操作」列的「Agent」按钮，
-  以及主机详情「Agent」Tab 里的链接（详情页不再内嵌终端，只保留一个打开页面的链接）。镜像分两层配置：全局设置只保存镜像地址
+  `web/src/pages/host/agent-view.jsx`），终端占满页面，统一通过 Docker API
+  在该主机上运行辅助容器 `docker-admin-agent`。入口只有主机列表「操作」列的「Agent」按钮
+  （主机详情页已不再有 Agent Tab，也不再内嵌终端）。镜像分两层配置：全局设置只保存镜像地址
   （`docker.agent.repository`，默认 `ghcr.io/jiangood/docker-admin-agent`，不含 tag），
   每台主机部署时选择 tag（`Host.agentImageTag`，默认 `latest`），实际镜像 = 地址 + `:` + tag。
   agent 镜像内置 `docker-cli` 和 `docker compose`，另装了一批常用运维工具
@@ -92,24 +91,26 @@ git tag vx.y.z && git push && git push origin vx.y.z
   在 `v*` tag 上同时发布到 ghcr 与阿里云（`:latest` + `:vX.Y.Z`），目标主机可预加载后离线使用。
   **部署时不再选择宿主机目录**：容器只挂当前选中的目录（`Host.fileRoot`，首次默认 `/home`）与
   `/var/run/docker.sock`；同一目录既挂到容器内 `/host` 供文件管理，也挂到原始绝对路径供 CLI 使用，
-  因此 `docker compose` 的相对 bind 路径与宿主机一致。目录在 Agent 面板右上角「切换挂载目录」按需切换（与删除按钮同级，
-  因为它同时影响终端、上传与下载），切换会用新目录**重建容器**（`admin/host/agent/root`，需 `host:save`；终端会断开并自动重连）；
+  因此 `docker compose` 的相对 bind 路径与宿主机一致。目录在 Agent 面板右上角「切换挂载目录」按需切换，
+  切换会用新目录**重建容器**（`admin/host/agent/root`，需 `host:save`；终端会断开并自动重连）；
   目录只在容器成功起来后才落库，失败时保留旧值，方便重新部署恢复。
   CLI 是辅助容器内的交互式 shell，权限等同于宿主机 root。
   目录只接受 Docker daemon 可见的 Linux 绝对路径，禁止 `/`、`/host`、`/tmp` 与系统目录；Windows 主机需填
   Docker Desktop 的 `/run/desktop/mnt/host/d/...` 或 WSL2 的 `/mnt/d/...`，不支持 Windows 容器主机。
-  辅助容器由 `host:save` 显式部署/删除，文件接口用 `host:file`（`admin/host/file` 只保留 `upload` 与 `downloadDir`，
-  路径相对于当前挂载目录，空串表示挂载目录本身），CLI WebSocket 用 `host:cli`；
+  辅助容器由 `host:save` 显式部署（`admin/host/agent/deploy`；界面不再提供「删除 Agent」按钮，
+  需要删除时走主机详情「容器」Tab，因为辅助容器就是普通容器），CLI WebSocket 用 `host:cli`；
+  **界面不再提供上传 / 下载按钮**：文件操作统一在终端里做（后端 `admin/host/file` 的 `upload` / `download`
+  接口仍保留，权限码 `host:file`，路径相对于当前挂载目录，空串表示挂载目录本身）；
   容器常驻，删除容器不会删除宿主机文件。重建 `latest` 会先尝试拉取，拉取失败但本地已有镜像时继续使用本地镜像。
   Agent 面板用一块 `Card` 承载：标题是「主机名 · Agent + 状态徽标（运行中 / 已停止 / 未部署）」，
-  右上角 `extra` 依次是上传、下载、重新连接（图标）、切换挂载目录、部署 / 删除、帮助（图标），
+  右上角 `extra` 依次是重新连接（图标）、切换挂载目录、部署、帮助（图标），
   正文只有终端（`styles={{body: {padding: 12}}}`）；异常 / 待处理提示（状态读取失败、
   镜像配置已变更、无 `host:save` 权限）以 Alert 形式出现在终端上方，正常状态不占空间；
   容器状态、提示与按钮由 `HostAgentAlert` 通过 render prop 交给 `HostAgentTab` 组装，
   弹窗仍由 `HostAgentAlert` 自己渲染（避免重复请求 agent 状态）。当前目录不在标题重复展示（只在「切换挂载目录」弹窗里），
   终端区没有工具条（`HostCli` 只渲染 xterm，
   重新连接由 `HostAgentTab` 通过 ref 调 `HostCli.reconnect`）；
-  上传写入当前挂载目录，下载把该目录打成 tar，其余文件操作（查看 / 编辑 / 删除 / 重命名 / 新建目录）走终端；
+  文件的上传 / 下载与查看 / 编辑 / 删除 / 重命名 / 新建目录都在终端里完成；
   权限、目录、文件操作等长说明收进问号弹窗（`HostAgentAlert`），页面上不再堆 Alert；
   终端连接成功后不弹通知、也不往终端回滚区写 banner，进入终端即可直接使用。
 - **主机详情镜像导出：** 镜像 Tab 的「导出」打开弹窗，后台在该主机上执行 `docker save`

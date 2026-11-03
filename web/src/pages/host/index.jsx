@@ -150,6 +150,11 @@ export default class extends React.Component {
             render: (_, record) => (
                 <PermActions size='small' actions={[
                     {
+                        label: 'Agent',
+                        perm: 'host:list',
+                        onClick: () => PageUtils.open('/host/agent-view?id=' + record.id),
+                    },
+                    {
                         label: this.state.testingId === record.id ? '测试中…' : '测试',
                         perm: 'host:save', onClick: () => this.handleTestRow(record)
                     },
@@ -157,11 +162,6 @@ export default class extends React.Component {
                     {
                         label: '删除', perm: 'host:delete',
                         confirm: '是否确定删除主机', onClick: () => this.handleDelete(record)
-                    },
-                    {
-                        label: 'Agent',
-                        perm: 'host:list',
-                        onClick: () => PageUtils.open('/host/agent-view?id=' + record.id),
                     },
                 ]}/>
             ),

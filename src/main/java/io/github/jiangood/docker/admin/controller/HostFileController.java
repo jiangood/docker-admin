@@ -35,16 +35,24 @@ public class HostFileController {
     private HostFileService hostFileService;
 
     /**
-     * 下载挂载目录（或其中的子目录），打包成 tar 流。
+     * 下载挂载目录里的文件或目录。
+     * <p>
+     * {@code path} 相对于当前挂载目录，留空表示挂载目录本身；
+     * 文件按原名下载，目录（含留空）打包成 tar。
      */
     @HasPermission("host:file")
-    @RequestMapping("downloadDir")
-    public void downloadDir(String hostId, String path, HttpServletResponse response) throws IOException {
+    @RequestMapping("download")
+    public void download(String hostId, String path, HttpServletResponse response) throws IOException {
         Host host = requireHost(hostId);
-        String name = DownloadTool.fileName(host.resolveFileRoot());
-        DownloadTool.prepareDownload(response, name + ".tar", "application/x-tar");
+        HostFileService.DownloadPlan plan = hostFileService.planDownload(host, path);
+        String name = plan.relativePath().isEmpty()
+                ? DownloadTool.fileName(host.resolveFileRoot())
+                : DownloadTool.fileName(plan.relativePath());
+        DownloadTool.prepareDownload(response,
+                plan.directory() ? name + ".tar" : name,
+                plan.directory() ? "application/x-tar" : "application/octet-stream");
         try (OutputStream out = response.getOutputStream()) {
-            hostFileService.downloadDirectory(host, path, out);
+            hostFileService.download(host, plan, out);
             out.flush();
         }
     }
