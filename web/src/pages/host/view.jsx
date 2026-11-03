@@ -481,7 +481,9 @@ export default class extends React.Component {
                 title: '内存%', dataIndex: 'memPercent', width: 110,
                 render: v => v == null
                     ? '-'
-                    : <Progress percent={Math.min(100, v)} size='small' strokeColor={usageColor(v)}/>
+                    : <Progress percent={Math.min(100, toNumber(v))} size='small'
+                                strokeColor={usageColor(v)}
+                                format={() => formatPercent(v)}/>
             },
             {
                 title: '网络 I/O', width: 190,
@@ -555,8 +557,7 @@ export default class extends React.Component {
                        columns={usageColumns}
                        scroll={{x: 'max-content'}}
                        pagination={{pageSize: 20, showSizeChanger: true}}
-                       locale={{emptyText: <Empty description='暂无运行中的容器'/>}}
-                       onRow={record => ({onDoubleClick: () => this.openContainer(record)})}/>
+                       locale={{emptyText: <Empty description='暂无运行中的容器'/>}}/>
             </Card>}
         </>
     }
@@ -659,11 +660,22 @@ export default class extends React.Component {
             },
         ]
 
-        const imageToolbar = <div className='mb-3' style={{display: 'flex', alignItems: 'center', gap: 8}}>
+        // 镜像操作（导入 / 清理悬空）跟着镜像数据走，按钮放在「镜像」Tab 的工具条里，
+        // 基本信息卡只保留信息，不再混入操作按钮。
+        const imageToolbar = <div className='mb-3'
+                                  style={{display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap'}}>
             <Input allowClear placeholder='搜索仓库 / 标签 / 镜像ID'
                    style={{width: 280}}
                    value={imageKeyword}
                    onChange={e => this.setState({imageKeyword: e.target.value})}/>
+            {canImage && <Space size={8} style={{marginLeft: 'auto'}}>
+                <Button icon={<ImportOutlined/>}
+                        onClick={() => this.importModalRef.current.show()}>导入 tar 镜像</Button>
+                <Popconfirm title='清理悬空（无标签）镜像？正在被使用的镜像不会被清理'
+                            onConfirm={this.pruneImages}>
+                    <Button danger>清理悬空镜像</Button>
+                </Popconfirm>
+            </Space>}
         </div>
 
         const items = [
@@ -700,14 +712,21 @@ export default class extends React.Component {
 
         const removeRunning = !!removeTarget && isRunningState(removeTarget.state)
 
-        // 顶部只留必要信息：名称由 Card title 展示，代理 / 请求头 / Agent 目录只在真正配置后才占行，
-        // 所以两块 Descriptions 都不再带标题（标题只是重复），并按 3 列把长字段单独占满一行。
+        /**
+         * 基本信息卡的所有字段都放进同一张带边框的三列表格：
+         * - 标签列宽度固定、值列等宽，连接信息与引擎信息从此左右对齐，不再是两块各自排版的 Descriptions；
+         * - 连接地址 / 代理 / 请求头 / Agent 目录这类长文本独占一行，避免把某一列撑歪；
+         * - 名称已由 Card title 展示，代理与请求头只在真正配置后才占行。
+         */
         const isTcp = (host && host.connectionType) === 'tcp'
-        const hostItems = [
+        const infoItems = [
             {key: 'conn', label: '连接方式', children: connectionLabel(host)},
             {key: 'ip', label: 'IP 地址', children: host?.ip || '-'},
             {key: 'agentTag', label: 'Agent 镜像 Tag', children: host?.agentImageTag || 'latest'},
-            {key: 'endpoint', label: '连接地址', children: endpointOf(host), span: 3},
+            {
+                key: 'endpoint', label: '连接地址', span: 3,
+                children: <span className='mono'>{endpointOf(host)}</span>
+            },
             ...(isTcp && host?.proxyUrl
                 ? [{key: 'proxy', label: '连接代理', children: proxyLabel(host), span: 3}]
                 : []),
@@ -715,15 +734,14 @@ export default class extends React.Component {
                 ? [{key: 'header', label: '自定义请求头', children: headerLabel(host), span: 3}]
                 : []),
             ...(host?.fileRoot
-                ? [{key: 'fileRoot', label: 'Agent 目录', children: host.fileRoot, span: 3}]
+                ? [{key: 'fileRoot', label: 'Agent 目录', children: <span className='mono'>{host.fileRoot}</span>, span: 3}]
                 : []),
-        ]
-        const runtimeItems = [
             {key: 'os', label: '操作系统', children: info?.os || '-'},
             {key: 'arch', label: '架构', children: info?.arch || '-'},
-            {key: 'cpu', label: 'CPU', children: info?.cpus || '-'},
+            {key: 'cpu', label: 'CPU 核数', children: info?.cpus || '-'},
             {key: 'version', label: 'Docker 版本', children: info?.dockerVersion || '-'},
             {key: 'api', label: 'API 版本', children: info?.apiVersion || '-'},
+            {key: 'kernel', label: '内核版本', children: info?.kernelVersion || '-'},
             {key: 'mem', label: '内存', children: info?.memory ? formatBytes(info.memory) : '-'},
             {
                 key: 'containers', label: '容器数',
@@ -733,25 +751,15 @@ export default class extends React.Component {
         ]
 
         return <Page padding>
-            <Card className='mb-4' title={host ? host.name : '主机'}
-                  extra={canImage
-                      ? <Space size={8}>
-                          <Button icon={<ImportOutlined/>}
-                                  onClick={() => this.importModalRef.current.show()}>导入 tar 镜像</Button>
-                          <Popconfirm title='清理悬空（无标签）镜像？正在被使用的镜像不会被清理'
-                                      onConfirm={this.pruneImages}>
-                              <Button danger>清理悬空镜像</Button>
-                          </Popconfirm>
-                      </Space>
-                      : null}>
-                {infoError && <Result status='warning' title='无法连接主机' subTitle={infoError}
-                                     className='mb-3' style={{padding: 0}}/>}
-                <Descriptions size='small' column={3}
-                              items={hostItems}
-                              styles={{content: {overflowWrap: 'anywhere'}}}/>
-                <Descriptions size='small' column={3} className='mt-4'
-                              items={runtimeItems}
-                              styles={{content: {overflowWrap: 'anywhere'}}}/>
+            <Card className='mb-4' title={host ? host.name : '主机'}>
+                {infoError && <Alert type='warning' showIcon className='mb-4'
+                                     message='无法连接主机' description={infoError}/>}
+                <Descriptions size='small' column={3} bordered
+                              items={infoItems}
+                              styles={{
+                                  label: {width: 132, whiteSpace: 'nowrap'},
+                                  content: {overflowWrap: 'anywhere'},
+                              }}/>
             </Card>
 
             <Card>
