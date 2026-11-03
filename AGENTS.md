@@ -101,13 +101,17 @@ git tag vx.y.z && git push && git push origin vx.y.z
   辅助容器由 `host:save` 显式部署/删除，文件接口用 `host:file`（`admin/host/file` 只保留 `upload` 与 `downloadDir`，
   路径相对于当前挂载目录，空串表示挂载目录本身），CLI WebSocket 用 `host:cli`；
   容器常驻，删除容器不会删除宿主机文件。重建 `latest` 会先尝试拉取，拉取失败但本地已有镜像时继续使用本地镜像。
-  Agent 面板顶部只保留一行右上角状态（运行中 / 未部署），同级放重新连接（图标）、上传、下载、
-  切换挂载目录、部署/删除按钮，去掉刷新与重建；当前目录不在状态条重复展示（终端进入通知与「切换挂载目录」弹窗里有），
-  终端区不再有第二行工具条（`HostCli` 只渲染 xterm，
+  Agent 面板用一块 `Card` 承载：标题是「主机名 · Agent + 状态徽标（运行中 / 已停止 / 未部署）」，
+  右上角 `extra` 依次是上传、下载、重新连接（图标）、切换挂载目录、部署 / 删除、帮助（图标），
+  正文只有终端（`styles={{body: {padding: 12}}}`）；异常 / 待处理提示（状态读取失败、
+  镜像配置已变更、无 `host:save` 权限）以 Alert 形式出现在终端上方，正常状态不占空间；
+  容器状态、提示与按钮由 `HostAgentAlert` 通过 render prop 交给 `HostAgentTab` 组装，
+  弹窗仍由 `HostAgentAlert` 自己渲染（避免重复请求 agent 状态）。当前目录不在标题重复展示（只在「切换挂载目录」弹窗里），
+  终端区没有工具条（`HostCli` 只渲染 xterm，
   重新连接由 `HostAgentTab` 通过 ref 调 `HostCli.reconnect`）；
   上传写入当前挂载目录，下载把该目录打成 tar，其余文件操作（查看 / 编辑 / 删除 / 重命名 / 新建目录）走终端；
   权限、目录、文件操作等长说明收进问号弹窗（`HostAgentAlert`），页面上不再堆 Alert；
-  终端连接成功后用 antd 通知（`HostCli.notifyEnter`）提示目录与 root 权限，不再往终端回滚区写多行 banner。
+  终端连接成功后不弹通知、也不往终端回滚区写 banner，进入终端即可直接使用。
 - **主机详情镜像导出：** 镜像 Tab 的「导出」打开弹窗，后台在该主机上执行 `docker save`
   （SSH 主机落到远端 `/tmp/docker-admin-image-tar/{logId}/`，本机 / TCP 主机落到平台 `image-tar/{logId}/`）。
   弹窗展示实时日志、已写入大小与速度（每秒 / 每分钟）、保存路径与下载按钮；SSH 下载经 SFTP 流式转发，不在平台侧重复落盘。

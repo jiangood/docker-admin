@@ -1,5 +1,5 @@
 import React from 'react'
-import {Alert, Empty, notification, Typography} from 'antd'
+import {Alert, Empty} from 'antd'
 import {PermUtils} from '@jiangood/open-admin'
 import ContainerTerminal from '../container/ContainerTerminal'
 import {wsHostCliUrl} from './utils'
@@ -9,7 +9,7 @@ import {wsHostCliUrl} from './utils'
  * <p>
  * 辅助容器内已配置 DOCKER_HOST 指向宿主机 docker.sock，所以直接敲 docker / docker compose
  * 命令即可；宿主机目录在容器内保持相同绝对路径。需要 host:cli 权限。
- * 终端占满剩余高度，页面上不再有单独的工具行：重新连接由 HostAgentTab 放进状态条。
+ * 终端占满卡片正文，页面上没有单独的工具行：重新连接由 HostAgentTab 放在 Card 右上角。
  */
 export default class extends React.Component {
 
@@ -51,22 +51,6 @@ export default class extends React.Component {
 
     reconnect = () => this.setState(state => ({key: state.key + 1}))
 
-    /** 进入容器的说明：改为右下角通知，不再写进终端回滚区。 */
-    notifyEnter = () => {
-        const {root} = this.state
-        notification.info({
-            key: 'host-cli-agent',
-            placement: 'bottomRight',
-            duration: 8,
-            message: '已进入主机辅助容器',
-            description: <div style={{fontSize: 12, lineHeight: 1.8}}>
-                <div>目录 <Typography.Text code>{root || '-'}</Typography.Text> 在容器内保持相同路径</div>
-                <div>docker / docker compose 已指向宿主机 daemon</div>
-                <div>终端权限等同于宿主机 root，请谨慎操作</div>
-            </div>,
-        })
-    }
-
     render() {
         const {hostId} = this.props
         const {deployed, key} = this.state
@@ -83,8 +67,7 @@ export default class extends React.Component {
         }
 
         return <div style={{height}}>
-            <ContainerTerminal key={key} url={wsHostCliUrl(hostId)} height='100%'
-                              onOpen={this.notifyEnter}/>
+            <ContainerTerminal key={key} url={wsHostCliUrl(hostId)} height='100%'/>
         </div>
     }
 }

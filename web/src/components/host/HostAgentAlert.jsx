@@ -1,13 +1,16 @@
 import React from 'react'
-import {Badge, Button, Input, Modal, Popconfirm, Space, Spin, Tooltip, Typography, message} from 'antd'
+import {Alert, Badge, Button, Input, Modal, Popconfirm, Space, Spin, Tooltip, Typography, message} from 'antd'
 import {CloudServerOutlined, FolderOpenOutlined, QuestionCircleOutlined} from '@ant-design/icons'
 import {HttpClient, PermUtils} from '@jiangood/open-admin'
 
 /**
- * Agent 容器状态条：右上角只显示当前状态与操作（部署 / 切换挂载目录 / 删除）。
+ * Agent 容器状态与操作：把「标题（状态）」「提示（异常）」「按钮（部署 / 切换挂载目录 / 删除 / 帮助）」
+ * 通过 render prop 交给外层 Card，自己只负责取状态、弹窗和请求。
  * <p>
- * 目录同时影响文件面板和终端，所以切换入口放在这一层，与删除按钮同级；
- * 镜像、目录、权限等说明统一收进问号弹窗。
+ * 目录同时影响文件与终端，所以切换入口也在这一层；镜像、目录、权限等说明统一收进问号弹窗。
+ * 用法：<HostAgentAlert hostId={id} onChange={fn}>{
+ *     ({summary, notice, actions}) => <Card title={summary} extra={actions}>…</Card>
+ * }</HostAgentAlert>
  */
 export default class extends React.Component {
 
@@ -139,73 +142,89 @@ export default class extends React.Component {
             .finally(() => this.setState({rootSubmitting: false}))
     }
 
+    /** 卡片标题里的状态块：加载中 / 运行中 / 已停止 / 未部署。 */
     renderSummary() {
         const {status, loading, error, removing} = this.state
+        if (error) {
+            return <Typography.Text type='danger'>状态读取失败</Typography.Text>
+        }
         if (removing) {
             return <Space size={6}>
                 <Spin size='small'/>
-                <Typography.Text type='secondary'>正在删除辅助容器…</Typography.Text>
+                <Typography.Text type='secondary'>正在删除…</Typography.Text>
             </Space>
-        }
-        if (error) {
-            return <Typography.Text type='danger'>
-                读取状态失败：{error}　<a onClick={this.load}>重试</a>
-            </Typography.Text>
         }
         if (loading && !status) {
             return <Space size={6}>
                 <Spin size='small'/>
-                <Typography.Text type='secondary'>读取辅助容器状态…</Typography.Text>
+                <Typography.Text type='secondary'>读取状态…</Typography.Text>
             </Space>
         }
-        if (status && status.message) {
-            return <Typography.Text type='danger'>{status.message}</Typography.Text>
-        }
         if (!status || !status.deployed) {
-            return <Typography.Text type='secondary'>辅助容器未部署</Typography.Text>
+            return <Badge status='default' text='未部署'/>
         }
-        return <Space size={8} wrap>
-            <Badge status={status.running ? 'success' : 'default'} text={status.running ? '运行中' : '已停止'}/>
-            {status.needsRebuild &&
-                <Typography.Text type='warning'>镜像配置已变更，删除后重新部署</Typography.Text>}
-        </Space>
+        return <Badge status={status.running ? 'success' : 'default'}
+                      text={status.running ? '运行中' : '已停止'}/>
+    }
+
+    /** 卡片正文顶部的提示：只有异常 / 需要处理时才出现，正常状态不占空间。 */
+    renderNotice() {
+        const {status, error, removing} = this.state
+        if (error) {
+            return <Alert className='mb-3' type='error' showIcon title='读取辅助容器状态失败'
+                          description={<>{error}　<a onClick={this.load}>重试</a></>}/>
+        }
+        if (removing) {
+            return null
+        }
+        if (status && status.message) {
+            return <Alert className='mb-3' type='error' showIcon title={status.message}/>
+        }
+        if (status && status.needsRebuild) {
+            return <Alert className='mb-3' type='warning' showIcon
+                          title='镜像配置已变更，删除后重新部署即可更换镜像'/>
+        }
+        if (!PermUtils.hasPermission('host:save') && !(status && status.deployed)) {
+            return <Alert className='mb-3' type='info' showIcon title='需要 host:save 权限才能部署辅助容器'/>
+        }
+        return null
     }
 
     render() {
         const {status, deployOpen, helpOpen, rootOpen, rootInput, rootSubmitting, removing} = this.state
         const canSave = PermUtils.hasPermission('host:save')
         const deployed = !!(status && status.deployed)
-        const {extra} = this.props
+        const {extra, children} = this.props
+
+        const actions = <>
+            {extra}
+            {canSave && (deployed
+                ? <>
+                    <Button icon={<FolderOpenOutlined/>}
+                            disabled={removing}
+                            onClick={this.openRootModal}>切换挂载目录</Button>
+                    <Popconfirm title='删除辅助容器？宿主机上的文件不会被删除'
+                                okText='删除' cancelText='取消'
+                                okButtonProps={{danger: true, loading: removing}}
+                                onConfirm={this.remove}>
+                        <Button danger loading={removing}>删除 Agent</Button>
+                    </Popconfirm>
+                </>
+                : <Button type='primary' icon={<CloudServerOutlined/>}
+                          onClick={this.openDeploy}>部署辅助容器</Button>)}
+            <Tooltip title='辅助容器说明'>
+                <Button type='text' shape='circle' icon={<QuestionCircleOutlined/>}
+                        disabled={removing}
+                        onClick={() => this.setState({helpOpen: true})}/>
+            </Tooltip>
+        </>
 
         return <>
-            <div style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
-                gap: 8, flexWrap: 'wrap', marginBottom: 12,
-            }}>
-                {this.renderSummary()}
-                {extra}
-                {canSave && (deployed
-                    ? <>
-                        <Button size='small' icon={<FolderOpenOutlined/>}
-                                disabled={removing}
-                                onClick={this.openRootModal}>切换挂载目录</Button>
-                        <Popconfirm title='删除辅助容器？宿主机上的文件不会被删除'
-                                    okText='删除' cancelText='取消'
-                                    okButtonProps={{danger: true, loading: removing}}
-                                    onConfirm={this.remove}>
-                            <Button size='small' danger loading={removing}>删除 Agent</Button>
-                        </Popconfirm>
-                    </>
-                    : <Button size='small' type='primary' icon={<CloudServerOutlined/>}
-                              onClick={this.openDeploy}>部署辅助容器</Button>)}
-                {!canSave && !deployed &&
-                    <Typography.Text type='secondary'>需要 host:save 权限才能部署</Typography.Text>}
-                <Tooltip title='辅助容器说明'>
-                    <Button type='text' size='small' shape='circle' icon={<QuestionCircleOutlined/>}
-                            disabled={removing}
-                            onClick={() => this.setState({helpOpen: true})}/>
-                </Tooltip>
-            </div>
+            {typeof children === 'function' && children({
+                summary: this.renderSummary(),
+                notice: this.renderNotice(),
+                actions,
+            })}
 
             {this.renderDeployModal()}
             {this.renderRootModal(rootOpen, rootInput, rootSubmitting)}

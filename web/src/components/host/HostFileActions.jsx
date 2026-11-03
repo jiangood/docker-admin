@@ -4,7 +4,7 @@ import {DownloadOutlined, UploadOutlined} from '@ant-design/icons'
 import {HttpClient} from '@jiangood/open-admin'
 
 /**
- * 文件上传 / 下载按钮，放在 Agent 状态条右上角。
+ * 文件上传 / 下载按钮，放在 Agent Card 的右上角。
  * <p>
  * 页面不再展示文件树：接口里的 path 相对于辅助容器当前挂载的目录，
  * 空字符串表示挂载目录本身，所以上传写入挂载目录、下载把整个挂载目录打成 tar；
@@ -71,10 +71,10 @@ export default class extends React.Component {
                         this.uploadFiles([file])
                         return false
                     }}>
-                <Button size='small' icon={<UploadOutlined/>} loading={uploading}
+                <Button icon={<UploadOutlined/>} loading={uploading}
                         disabled={disabled} title={`上传到 ${root}`}>上传</Button>
             </Upload>
-            <Button size='small' icon={<DownloadOutlined/>} disabled={disabled}
+            <Button icon={<DownloadOutlined/>} disabled={disabled}
                     title={`下载 ${root}（tar）`} onClick={this.download}>下载</Button>
         </>
     }
