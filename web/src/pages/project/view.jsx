@@ -17,6 +17,10 @@ import {formatBytes, formatTime} from "../../components/container/utils";
 import {sourceTag} from "../image/index";
 
 
+export const pageMeta = {
+  title: '项目详情',
+};
+
 function getIcon(key, index) {
   const iconDict = {
     PENDING: <ClockCircleOutlined key={index}/>,

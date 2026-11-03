@@ -5,6 +5,7 @@ import React from 'react'
 import {PermActions, FieldBoolean, HttpClient, Page, PageUtils, ProTable} from "@jiangood/open-admin"
 
 import {validateProxyUrl} from '../../utils/proxyUrl'
+import LinkButton from '../../components/LinkButton'
 
 
 const CONNECTION_TYPES = [
@@ -99,6 +100,10 @@ export default class extends React.Component {
         {
             title: '名称',
             dataIndex: 'name',
+            render: (name, record) => (
+                <LinkButton
+                    onClick={() => PageUtils.open('/host/view?id=' + record.id)}>{name}</LinkButton>
+            ),
         },
 
         {

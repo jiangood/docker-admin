@@ -19,6 +19,10 @@ import {
     usageColor
 } from "../../components/container/utils"
 
+export const pageMeta = {
+    title: '主机详情',
+}
+
 const CONNECTION_LABELS = {local: '本机', tcp: '远程 TCP', ssh: 'SSH'}
 
 function connectionLabel(host) {
@@ -171,6 +175,8 @@ export default class extends React.Component {
 
         detail: {open: false, containerId: null, name: ''},
         activeTab: 'stats',
+        // 「Agent」Tab 的状态与终端在子组件内部，刷新靠换 key 重新挂载
+        agentKey: 0,
     }
 
     componentDidMount() {
@@ -328,6 +334,28 @@ export default class extends React.Component {
     }
 
     /**
+     * 刷新当前 Tab：容器 / 镜像 / 监控的数据在父组件 state 里，重取一次即可；
+     * Agent 的状态与终端在子组件内部，换 key 让它卸载后重新挂载。
+     */
+    refreshTab = () => {
+        const {id, activeTab, usageRange} = this.state
+        if (!id) {
+            return
+        }
+        if (activeTab === 'containers') {
+            this.loadContainers(id)
+        } else if (activeTab === 'images') {
+            this.loadImages(id)
+        } else if (activeTab === 'agent') {
+            this.setState(state => ({agentKey: state.agentKey + 1}))
+        } else {
+            // 监控：refresh=true 让后端现采一轮，同时重读历史曲线
+            this.loadUsage(id, true)
+            this.loadSeries(id, usageRange)
+        }
+    }
+
+    /**
      * 「监控」Tab：历史曲线在上，docker stats 版式（主机汇总 + 逐容器明细）在下。
      */
     renderUsage() {
@@ -384,11 +412,10 @@ export default class extends React.Component {
         const {usage, usageLoading, usageError, usageUpdatedAt} = this.state
 
         const extra = <Space size={8}>
+            {usageLoading && <Spin size='small'/>}
             {usageUpdatedAt && <Typography.Text type='secondary' style={{fontSize: 12}}>
                 采集于 {formatClock(usageUpdatedAt)}
             </Typography.Text>}
-            <Button size='small' icon={<ReloadOutlined/>} loading={usageLoading}
-                    onClick={() => this.loadUsage(this.state.id, true)}>刷新</Button>
         </Space>
 
         const usageColumns = [
@@ -580,7 +607,6 @@ export default class extends React.Component {
                    style={{width: 280}}
                    value={imageKeyword}
                    onChange={e => this.setState({imageKeyword: e.target.value})}/>
-            <Button icon={<ReloadOutlined/>} onClick={() => this.loadImages(this.state.id)}>刷新</Button>
         </div>
 
         const items = [
@@ -612,9 +638,15 @@ export default class extends React.Component {
             {
                 key: 'agent',
                 label: 'Agent',
-                children: <HostAgentTab hostId={this.state.id} onStatus={this.syncAgentStatus}/>
+                children: <HostAgentTab key={this.state.agentKey} hostId={this.state.id}
+                                       onStatus={this.syncAgentStatus}/>
             },
         ]
+
+        const tabLoading = activeTab === 'containers' ? containersLoading
+            : activeTab === 'images' ? imagesLoading
+                : activeTab === 'stats' ? usageLoading
+                    : false
 
         // 主机信息 / 运行环境分成两块、各按 3 列排：原来 16 项排 2 列要 10 行，
         // 现在 6~7 行就够。代理与自定义请求头只对远程 TCP 有意义，其他连接方式不占行。
@@ -669,7 +701,10 @@ export default class extends React.Component {
 
             <Card>
                 <Tabs activeKey={activeTab} items={items}
-                      onChange={key => this.setState({activeTab: key})}/>
+                      onChange={key => this.setState({activeTab: key})}
+                      tabBarExtraContent={<Button size='small' icon={<ReloadOutlined/>}
+                                                  loading={tabLoading}
+                                                  onClick={this.refreshTab}>刷新</Button>}/>
             </Card>
 
             <HostImageImportModal ref={this.importModalRef}

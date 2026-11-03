@@ -9,6 +9,10 @@ import {formatBytes, formatTime} from "../../components/container/utils"
 import {sourceTag} from "./index"
 
 
+export const pageMeta = {
+    title: '镜像详情',
+}
+
 /**
  * 导出状态轮询间隔（毫秒）：只在有任务进行中（或刚点了确定）时才轮询。
  */

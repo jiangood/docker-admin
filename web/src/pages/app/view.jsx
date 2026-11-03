@@ -32,6 +32,10 @@ import {stateColor, stateLabel} from "../../components/container/utils";
 
 const Item = Descriptions.Item
 
+export const pageMeta = {
+    title: '应用详情',
+}
+
 /**
  * 等待「部署中」状态出现的最长时间（毫秒）。部署下发是异步的，@Async 任务登记 deploying 有延迟；
  * 触发部署后按 1s 轮询，观察到 deploying 后持续轮询直到它结束，始终没观察到则到此超时收尾。
