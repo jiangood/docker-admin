@@ -505,11 +505,9 @@ export default class extends React.Component {
                 disabled={!PermUtils.hasPermission('project:save')}
                 onChange={this.toggleLatestOnly}
               />
-              <Typography.Text type='secondary'>
-                {project.latestOnly
-                  ? '构建只推送 latest，不保留版本号，无法按版本回滚'
-                  : '版本号 + latest 双标签'}
-              </Typography.Text>
+              {!project.latestOnly && (
+                <Typography.Text type='secondary'>版本号 + latest 双标签</Typography.Text>
+              )}
             </Space>
           </Descriptions.Item>
         </Descriptions>
