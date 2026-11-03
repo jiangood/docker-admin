@@ -25,7 +25,7 @@ import {history} from "@jiangood/open-admin";
 
 import {FieldRemoteSelect, HttpClient, Page, PageUtils} from "@jiangood/open-admin";
 import PublishForm from "./PublishForm";
-import ContainerDetail from "../../components/container/ContainerDetail";
+import ContainerLogs from "../../components/container/ContainerLogs";
 import DeployLogList from "./DeployLogList";
 import LinkButton from "../../components/LinkButton";
 import {stateColor, stateLabel} from "../../components/container/utils";
@@ -80,6 +80,9 @@ export default class extends React.Component {
 
     deployFormRef = React.createRef()
 
+    /** onShow 首次调用与 componentDidMount 重叠，跳过第一次，只在从容器详情页切回来时刷新 */
+    shownOnce = false
+
     componentDidMount() {
         let id = PageUtils.currentParams().id
         this.id = id;
@@ -91,6 +94,15 @@ export default class extends React.Component {
     componentWillUnmount() {
         this._mounted = false;
         clearTimeout(this.pollTimer)
+    }
+
+    /** 从容器详情页切回来时刷新容器状态：停止 / 删除 / 重启都在那边完成 */
+    onShow() {
+        if (!this.shownOnce) {
+            this.shownOnce = true
+            return
+        }
+        this.loadContainer()
     }
 
 
@@ -157,6 +169,24 @@ export default class extends React.Component {
     reload = () => {
         return Promise.all([this.loadApp(), this.loadContainer()])
     };
+
+    /**
+     * 「容器日志」右上角「更多」：打开独立的容器详情页。
+     * 日志继续留在本页签（不跳走也能看），文件 / 终端 / 启停删去容器页处理。
+     */
+    openContainerPage = () => {
+        const {app, container} = this.state
+        if (!container || !container.id) {
+            return
+        }
+        let query = `appId=${encodeURIComponent(app.id)}`
+        if (app.host?.id) {
+            query += `&hostId=${encodeURIComponent(app.host.id)}`
+        }
+        query += `&containerId=${encodeURIComponent(container.id)}&tab=logs`
+        PageUtils.open('/container/view?' + query)
+    }
+
 
     /**
      * 只让指定标签重挂载并重新拉取数据，其余标签保持原样（不再整块骨架屏遮挡）。
@@ -390,11 +420,17 @@ export default class extends React.Component {
             },
             {
                 key: 'container',
-                label: '容器',
+                label: '容器日志',
                 children: container && container.id
-                    ? <ContainerDetail key={'container-' + tabTokens.container}
-                                       hostId={app.host?.id} containerId={container.id} appId={app.id}
-                                       height={520} onClose={this.reload}/>
+                    ? <div key={'container-' + tabTokens.container}>
+                        <div style={{display: 'flex', justifyContent: 'flex-end', marginBottom: 8}}>
+                            <Button size='small' onClick={this.openContainerPage}>更多</Button>
+                        </div>
+                        <ContainerLogs url={`/admin/ws/log/${app.id}`}
+                                       running={container.state === 'running'}
+                                       height={520}
+                                       containerKey={container.id}/>
+                    </div>
                     : <Alert type='info' showIcon title='容器未部署'/>
             },
             {

@@ -28,7 +28,7 @@ function emptyTable(text) {
 
 /**
  * 容器基本信息（来自 docker inspect）。
- * 名称 / 状态 / 操作按钮由外层 ContainerDetail 的固定头部展示，此处不再重复。
+ * 名称 / 状态 / 操作按钮由容器详情页的固定头部展示，此处不再重复。
  */
 export default function ContainerInfo({detail}) {
     if (!detail) {

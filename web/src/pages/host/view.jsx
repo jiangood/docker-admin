@@ -1,18 +1,17 @@
-import {Alert, Button, Card, Checkbox, Col, Descriptions, Empty, Input, Modal, Popconfirm, Progress, Result, Row, Segmented, Space, Spin, Statistic, Table, Tabs, Tag, Tooltip, Typography} from 'antd'
+import {Alert, Button, Card, Col, Descriptions, Empty, Input, Popconfirm, Progress, Result, Row, Segmented, Space, Spin, Statistic, Table, Tabs, Tag, Tooltip, Typography} from 'antd'
 import React from 'react'
 import dayjs from 'dayjs'
 import {DeleteOutlined, ExportOutlined, ImportOutlined, ReloadOutlined} from '@ant-design/icons'
 import {HttpClient, Page, PageUtils, PermUtils} from "@jiangood/open-admin"
 import Chart from "../../components/Chart"
-import ContainerDetail from "../../components/container/ContainerDetail"
 import HostImageExportModal from "../../components/HostImageExportModal"
 import HostImageImportModal from "../../components/HostImageImportModal"
+import LinkButton from "../../components/LinkButton"
 import {
     formatBytes,
     formatClock,
     formatPercent,
     formatTime,
-    isRunningState,
     stateColor,
     stateLabel,
     toNumber,
@@ -174,17 +173,11 @@ export default class extends React.Component {
         seriesLoading: false,
         seriesError: null,
 
-        detail: {open: false, containerId: null, name: ''},
         activeTab: 'containers',
-
-        // 删除容器确认弹窗：force 仅在容器运行中时可选（普通删除会被 Docker 拒绝）
-        removeTarget: null,
-        removeForce: false,
-        removing: false,
-
-        // 正在停止的容器 id：只让那一行的按钮转圈
-        stoppingId: null,
     }
+
+    /** onShow 首次调用与 componentDidMount 重叠，跳过第一次，只在从容器页切回来时刷新 */
+    shownOnce = false
 
     componentDidMount() {
         const id = PageUtils.currentParams().id
@@ -199,6 +192,25 @@ export default class extends React.Component {
         this.loadImages(id)
         // 默认停在「容器」Tab；「监控」在最后，切过去时才拉快照与曲线并开始轮询
         this.syncUsageTimer(id)
+    }
+
+    /**
+     * 从容器详情页切回本页时刷新容器列表与主机信息：
+     * 停止 / 删除 / 重启都已经在容器页里完成，列表不能还是离开时的旧状态。
+     * 监控数据由定时采集任务维护，不在这里重复拉取。
+     */
+    onShow() {
+        if (!this.shownOnce) {
+            this.shownOnce = true
+            return
+        }
+        const id = this.state.id
+        if (!id) {
+            return
+        }
+        this.loadHost(id)
+        this.loadInfo(id)
+        this.loadContainers(id)
     }
 
     componentDidUpdate(prevProps, prevState) {
@@ -327,73 +339,19 @@ export default class extends React.Component {
             })
     }
 
-    openContainer = record => {
-        this.setState({detail: {open: true, containerId: record.id, name: record.name}})
-    }
-
     /**
-     * 停止容器（主机维度）：无需二次确认（可随时再启动）。
-     * 停止成功后稍等片刻再刷新，否则可能仍读到「运行中」的旧状态。
+     * 打开容器详情页（独立页签）。tab 为页面的页签：logs / info / files / console，
+     * 列表里的「概览 / 日志 / 文件 / 终端」按钮据此直达对应页签。
+     * 停止 / 删除等操作也都在容器页里做，列表只负责跳转。
      */
-    stopContainer = record => {
+    openContainer = (record, tab = 'logs') => {
         const id = this.state.id
         if (!id || !record) {
             return
         }
-        this.setState({stoppingId: record.id})
-        HttpClient.post('admin/container/stop', null, {hostId: id, containerId: record.id})
-            .then(() => {
-                setTimeout(() => {
-                    this.loadContainers(id)
-                    this.loadInfo(id)
-                }, 600)
-            })
-            .finally(() => this.setState({stoppingId: null}))
-    }
-
-    /**
-     * 删除容器（主机维度）：先弹窗确认，运行中的容器必须勾选「强制删除」才能提交，
-     * 否则 Docker 会拒绝（不能删除 running / paused / restarting 的容器）。
-     * 成功后刷新容器列表与主机信息里的容器计数。
-     */
-    openRemoveContainer = record => {
-        this.setState({removeTarget: record, removeForce: false, removing: false})
-    }
-
-    confirmRemoveContainer = () => {
-        const {id, removeTarget, removeForce} = this.state
-        if (!id || !removeTarget) {
-            return
-        }
-        const containerId = removeTarget.id
-        const force = isRunningState(removeTarget.state) ? removeForce : false
-        this.setState({removing: true})
-        HttpClient.post('admin/container/remove', null, {hostId: id, containerId, force})
-            // 失败也继续往下走：超时只说明平台没等到响应，容器可能已经被 dockerd 删掉了，
-            // 必须回查列表才能知道真实状态（否则界面会一直显示已删除的容器）
-            .then(() => true, () => false)
-            .then(() => {
-                this.loadInfo(id)
-                return this.loadContainers(id)
-            })
-            .then(list => {
-                // 容器确实不在了才关弹窗；仍在（例如宿主机卡住）就保留弹窗，方便用户重试
-                if (!(list || []).some(c => c.id === containerId)) {
-                    this.setState({removeTarget: null, removeForce: false})
-                }
-            })
-            .finally(() => this.setState({removing: false}))
-    }
-
-    closeRemoveContainer = () => {
-        this.setState({removeTarget: null, removeForce: false, removing: false})
-    }
-
-    closeContainer = () => {
-        this.setState({detail: {open: false, containerId: null, name: ''}})
-        if (this.state.id) {
-            this.loadContainers(this.state.id)
-        }
+        PageUtils.open(`/container/view?hostId=${encodeURIComponent(id)}`
+            + `&containerId=${encodeURIComponent(record.id)}`
+            + `&tab=${encodeURIComponent(tab)}`)
     }
 
     /**
@@ -580,8 +538,7 @@ export default class extends React.Component {
 
     render() {
         const {host, hostLoading, info, infoError, containers, containersLoading,
-            images, imagesLoading, imageKeyword, detail, activeTab, usageLoading,
-            removeTarget, removeForce, removing, stoppingId} = this.state
+            images, imagesLoading, imageKeyword, activeTab, usageLoading} = this.state
 
         if (hostLoading) {
             return <Page padding><Spin/></Page>
@@ -590,7 +547,8 @@ export default class extends React.Component {
             return <Page padding><Result status='warning' title='缺少主机 id'/></Page>
         }
 
-        const canContainerOperate = PermUtils.hasPermission('container:operate')
+        const canContainerFile = PermUtils.hasPermission('container:file')
+        const canContainerExec = PermUtils.hasPermission('container:exec')
 
         const containerColumns = [
             {
@@ -616,17 +574,21 @@ export default class extends React.Component {
             },
             {title: '创建时间', dataIndex: 'created', width: 170, render: v => formatTime(v)},
             {
-                title: '操作', width: 120,
-                render: (_, record) => canContainerOperate
-                    ? <Space size={4}>
-                        <Button size='small'
-                                disabled={!isRunningState(record.state)}
-                                loading={stoppingId === record.id}
-                                onClick={() => this.stopContainer(record)}>停止</Button>
-                        <Button size='small' danger
-                                onClick={() => this.openRemoveContainer(record)}>删除</Button>
-                      </Space>
-                    : null
+                // 四个入口都跳转到容器详情页：概览 / 日志只需查看权限（host:list），
+                // 文件 / 终端分别要求 container:file / container:exec；停止 / 删除在容器页里做
+                title: '操作', width: 170,
+                render: (_, record) => <Space size={4}>
+                    <LinkButton size='small'
+                                onClick={() => this.openContainer(record, 'info')}>概览</LinkButton>
+                    <LinkButton size='small'
+                                onClick={() => this.openContainer(record, 'logs')}>日志</LinkButton>
+                    {canContainerFile &&
+                        <LinkButton size='small'
+                                    onClick={() => this.openContainer(record, 'files')}>文件</LinkButton>}
+                    {canContainerExec &&
+                        <LinkButton size='small'
+                                    onClick={() => this.openContainer(record, 'console')}>终端</LinkButton>}
+                </Space>
             },
         ]
 
@@ -726,8 +688,6 @@ export default class extends React.Component {
                 : activeTab === 'stats' ? usageLoading
                     : false
 
-        const removeRunning = !!removeTarget && isRunningState(removeTarget.state)
-
         /**
          * 基本信息卡的所有字段都放进同一张带边框的三列表格：
          * - 标签列宽度固定、值列等宽，连接信息与引擎信息从此左右对齐，不再是两块各自排版的 Descriptions；
@@ -794,44 +754,6 @@ export default class extends React.Component {
                                   }}/>
 
             <HostImageExportModal ref={this.exportModalRef} hostId={this.state.id}/>
-
-            <Modal title={`容器 - ${detail.name}`}
-                   open={detail.open}
-                   onCancel={this.closeContainer}
-                   footer={null}
-                   width={1100}
-                   destroyOnHidden
-                   styles={{body: {minHeight: 520}}}>
-                {detail.open && detail.containerId &&
-                    <ContainerDetail hostId={this.state.id} containerId={detail.containerId}
-                                     onClose={this.closeContainer}/>}
-            </Modal>
-
-            {/* 删除容器：默认普通删除（force=false），运行中的容器必须显式勾选强制删除 */}
-            <Modal title='删除容器'
-                   open={!!removeTarget}
-                   okText='删除'
-                   cancelText='取消'
-                   okButtonProps={{danger: true, loading: removing, disabled: removeRunning && !removeForce}}
-                   onOk={this.confirmRemoveContainer}
-                   onCancel={this.closeRemoveContainer}
-                   destroyOnHidden
-                   width={520}>
-                {removeTarget && <>
-                    <div>
-                        确定删除容器 <Typography.Text strong>{removeTarget.name}</Typography.Text>？删除后不可恢复。
-                    </div>
-                    {removeRunning && <>
-                        <Alert className='mt-3' type='warning' showIcon
-                               title='容器正在运行，普通删除会被 Docker 拒绝'
-                               description='勾选下方「强制删除」后平台会先停止（kill）容器再删除；也可以先点「停止」，等状态变成已退出后再删除。'/>
-                        <Checkbox className='mt-3' checked={removeForce}
-                                  onChange={e => this.setState({removeForce: e.target.checked})}>
-                            强制删除（停止并删除运行中的容器）
-                        </Checkbox>
-                    </>}
-                </>}
-            </Modal>
         </Page>
     }
 }

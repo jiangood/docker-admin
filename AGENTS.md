@@ -113,6 +113,14 @@ git tag vx.y.z && git push && git push origin vx.y.z
   文件的上传 / 下载与查看 / 编辑 / 删除 / 重命名 / 新建目录都在终端里完成；
   权限、目录、文件操作等长说明收进问号弹窗（`HostAgentAlert`），页面上不再堆 Alert；
   终端连接成功后不弹通知、也不往终端回滚区写 banner，进入终端即可直接使用。
+- **容器详情页：** 容器不再用弹窗 / 内嵌页签展示，统一走独立页面 `/container/view`
+  （`web/src/pages/container/view.jsx`，pageMeta「容器详情」）。参数为 `hostId` + `containerId`（主机维度）
+  或 `appId`（应用维度，走 `admin/app/containerDetail` 与 `/admin/ws/log/{appId}`），
+  `tab=logs|info|files|console` 直达对应页签。页面上方是基本信息与启动 / 停止 / 重启 / 删除，
+  下方是横向页签（日志 / 概览 / 文件 / 终端）；主机详情的容器列表、监控表和应用详情「容器日志」右上角
+  「更多」都跳到这里。删除前需二次确认，运行 / 暂停 / 重启中的容器必须勾选「强制删除」，成功后关闭当前页签。
+  页面页签开启 `destroyOnHidden`，切走即断开日志 / 终端
+  WebSocket；主机 / 应用详情页实现 `onShow()`，从容器页切回时刷新容器状态（首次 onShow 与 mount 重叠，需跳过）。
 - **主机详情镜像导出：** 镜像 Tab 的「导出」打开弹窗，后台在该主机上执行 `docker save`
   （SSH 主机落到远端 `/tmp/docker-admin-image-tar/{logId}/`，本机 / TCP 主机落到平台 `image-tar/{logId}/`）。
   弹窗展示实时日志、已写入大小与速度（每秒 / 每分钟）、保存路径与下载按钮；SSH 下载经 SFTP 流式转发，不在平台侧重复落盘。
