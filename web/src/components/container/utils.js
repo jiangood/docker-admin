@@ -58,6 +58,15 @@ export function stateLabel(state) {
 }
 
 /**
+ * 容器是否处于「运行中」（含已暂停、重启中）：Docker 不允许直接删除这些状态的容器，
+ * 必须带 force 才会先停止再删除。
+ */
+export function isRunningState(state) {
+    const s = (state || '').toLowerCase()
+    return s === 'running' || s === 'paused' || s === 'restarting'
+}
+
+/**
  * 转数字：后端把包装类型 Long 序列化成字符串（避免 JS 丢精度），
  * 直接参与 `+` 会变成字符串拼接，参与计算前必须先转成 number。
  */

@@ -8,6 +8,7 @@ import com.github.dockerjava.api.command.InspectContainerResponse;
 import com.github.dockerjava.api.command.InspectExecResponse;
 import com.github.dockerjava.api.command.InspectContainerResponse.ContainerState;
 import com.github.dockerjava.api.command.InspectContainerResponse.Mount;
+import com.github.dockerjava.api.exception.ConflictException;
 import com.github.dockerjava.api.model.*;
 import com.github.dockerjava.core.command.ExecStartResultCallback;
 import io.github.jiangood.docker.admin.dto.ContainerDetailVo;
@@ -256,10 +257,15 @@ public class ContainerService {
     }
 
     public void remove(Host host, String containerId, boolean force) {
-        withClient(host, "删除容器 " + containerId, client -> client.removeContainerCmd(containerId)
-                .withForce(force)
-                .withRemoveVolumes(false)
-                .exec());
+        try {
+            withClient(host, "删除容器 " + containerId, client -> client.removeContainerCmd(containerId)
+                    .withForce(force)
+                    .withRemoveVolumes(false)
+                    .exec());
+        } catch (ConflictException e) {
+            // docker 不允许删除 running / paused 的容器（409），换成用户能直接照做的提示
+            throw new BusinessException("容器正在运行，请先停止，或勾选「强制删除」");
+        }
     }
 
     private interface ClientAction {

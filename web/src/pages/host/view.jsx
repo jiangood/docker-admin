@@ -1,4 +1,4 @@
-import {Alert, Button, Card, Col, Descriptions, Empty, Input, Modal, Popconfirm, Progress, Result, Row, Segmented, Space, Spin, Statistic, Table, Tabs, Tag, Tooltip, Typography} from 'antd'
+import {Alert, Button, Card, Checkbox, Col, Descriptions, Empty, Input, Modal, Popconfirm, Progress, Result, Row, Segmented, Space, Spin, Statistic, Table, Tabs, Tag, Tooltip, Typography} from 'antd'
 import React from 'react'
 import dayjs from 'dayjs'
 import {DeleteOutlined, ExportOutlined, ImportOutlined, ReloadOutlined} from '@ant-design/icons'
@@ -12,6 +12,7 @@ import {
     formatClock,
     formatPercent,
     formatTime,
+    isRunningState,
     stateColor,
     stateLabel,
     toNumber,
@@ -45,12 +46,12 @@ function headerLabel(host) {
     return `${name} ${host.headerConfigured ? '已配置' : '未配置'}`
 }
 
-/** 连接代理展示：后端回显的是掩码后的一行地址（密码为 ***） */
+/**
+ * 连接代理展示：后端回显的是掩码后的一行地址（密码为 ***）。
+ * 只在真正启用了代理时才展示（调用方用 host.proxyUrl 判断），未使用时这一行不占位置。
+ */
 function proxyLabel(host) {
-    if (!host || host.connectionType !== 'tcp') {
-        return '-'
-    }
-    return host.proxyUrl || '未使用'
+    return (host && host.proxyUrl) || '-'
 }
 
 function endpointOf(host) {
@@ -135,7 +136,8 @@ const TREND_IO_DEFS = [
 ]
 
 /**
- * 主机详情：主机信息 + 垂直 Tab「监控 / 容器 / 镜像 / Agent」，点击容器弹窗展示通用容器组件。
+ * 主机详情：主机信息 + 垂直 Tab「容器 / 镜像 / 监控」，点击容器弹窗展示通用容器组件。
+ * Agent 是独立页面，入口只在主机列表的「Agent」按钮。
  */
 export default class extends React.Component {
 
@@ -173,7 +175,12 @@ export default class extends React.Component {
         seriesError: null,
 
         detail: {open: false, containerId: null, name: ''},
-        activeTab: 'stats',
+        activeTab: 'containers',
+
+        // 删除容器确认弹窗：force 仅在容器运行中时可选（普通删除会被 Docker 拒绝）
+        removeTarget: null,
+        removeForce: false,
+        removing: false,
     }
 
     componentDidMount() {
@@ -187,7 +194,7 @@ export default class extends React.Component {
         this.loadInfo(id)
         this.loadContainers(id)
         this.loadImages(id)
-        // 默认就停在「监控」Tab，直接拉一次快照与曲线并开始轮询
+        // 默认停在「容器」Tab；「监控」在最后，切过去时才拉快照与曲线并开始轮询
         this.syncUsageTimer(id)
     }
 
@@ -314,6 +321,35 @@ export default class extends React.Component {
         this.setState({detail: {open: true, containerId: record.id, name: record.name}})
     }
 
+    /**
+     * 删除容器（主机维度）：先弹窗确认，运行中的容器必须勾选「强制删除」才能提交，
+     * 否则 Docker 会拒绝（不能删除 running / paused / restarting 的容器）。
+     * 成功后刷新容器列表与主机信息里的容器计数。
+     */
+    openRemoveContainer = record => {
+        this.setState({removeTarget: record, removeForce: false, removing: false})
+    }
+
+    confirmRemoveContainer = () => {
+        const {id, removeTarget, removeForce} = this.state
+        if (!id || !removeTarget) {
+            return
+        }
+        const force = isRunningState(removeTarget.state) ? removeForce : false
+        this.setState({removing: true})
+        HttpClient.post('admin/container/remove', null, {hostId: id, containerId: removeTarget.id, force})
+            .then(() => {
+                this.setState({removeTarget: null, removeForce: false})
+                this.loadContainers(id)
+                this.loadInfo(id)
+            })
+            .finally(() => this.setState({removing: false}))
+    }
+
+    closeRemoveContainer = () => {
+        this.setState({removeTarget: null, removeForce: false, removing: false})
+    }
+
     closeContainer = () => {
         this.setState({detail: {open: false, containerId: null, name: ''}})
         if (this.state.id) {
@@ -323,7 +359,6 @@ export default class extends React.Component {
 
     /**
      * 刷新当前 Tab：容器 / 镜像 / 监控的数据在父组件 state 里，重取一次即可。
-     * Agent 已经拆成独立页面，这里不再处理。
      */
     refreshTab = () => {
         const {id, activeTab, usageRange} = this.state
@@ -505,7 +540,8 @@ export default class extends React.Component {
 
     render() {
         const {host, hostLoading, info, infoError, containers, containersLoading,
-            images, imagesLoading, imageKeyword, detail, activeTab, usageLoading} = this.state
+            images, imagesLoading, imageKeyword, detail, activeTab, usageLoading,
+            removeTarget, removeForce, removing} = this.state
 
         if (hostLoading) {
             return <Page padding><Spin/></Page>
@@ -514,11 +550,14 @@ export default class extends React.Component {
             return <Page padding><Result status='warning' title='缺少主机 id'/></Page>
         }
 
+        const canContainerOperate = PermUtils.hasPermission('container:operate')
+
         const containerColumns = [
             {
                 title: '名称', dataIndex: 'name', width: 240,
-                // 不可点击（打开容器走「操作」列或双击行），超长名称换行显示，避免撑破列宽压到镜像列
-                render: name => <span style={{wordBreak: 'break-all', whiteSpace: 'normal'}}>{name}</span>
+                // 点击名称打开容器详情；超长名称换行显示，避免撑破列宽压到镜像列
+                render: (name, record) => <Button type='link' size='small' style={{padding: 0, height: 'auto', whiteSpace: 'normal', textAlign: 'left'}}
+                                                  onClick={() => this.openContainer(record)}>{name}</Button>
             },
             {title: '镜像', dataIndex: 'image', ellipsis: true},
             {
@@ -538,7 +577,12 @@ export default class extends React.Component {
             {title: '创建时间', dataIndex: 'created', width: 170, render: v => formatTime(v)},
             {
                 title: '操作', width: 90,
-                render: (_, record) => <Button size='small' type='link' onClick={() => this.openContainer(record)}>查看</Button>
+                render: (_, record) => canContainerOperate
+                    ? <span onDoubleClick={e => e.stopPropagation()}>
+                        <Button size='small' type='link' danger icon={<DeleteOutlined/>}
+                                onClick={() => this.openRemoveContainer(record)}>删除</Button>
+                      </span>
+                    : null
             },
         ]
 
@@ -597,11 +641,6 @@ export default class extends React.Component {
 
         const items = [
             {
-                key: 'stats',
-                label: '监控',
-                children: this.renderUsage()
-            },
-            {
                 key: 'containers',
                 label: `容器 (${containers.length})`,
                 children: <Table rowKey='id' size='small' loading={containersLoading}
@@ -622,15 +661,9 @@ export default class extends React.Component {
                 </>
             },
             {
-                key: 'agent',
-                label: 'Agent',
-                children: <Space size={4}>
-                    <Typography.Text type='secondary'>Agent 已拆分为独立页面：</Typography.Text>
-                    <Button type='link' style={{padding: 0}}
-                            onClick={() => PageUtils.open('/host/agent-view?id=' + this.state.id)}>
-                        打开 Agent 页面
-                    </Button>
-                </Space>
+                key: 'stats',
+                label: '监控',
+                children: this.renderUsage()
             },
         ]
 
@@ -639,20 +672,25 @@ export default class extends React.Component {
                 : activeTab === 'stats' ? usageLoading
                     : false
 
-        // 主机信息 / 运行环境分成两块、各按 3 列排：原来 16 项排 2 列要 10 行，
-        // 现在 6~7 行就够。代理与自定义请求头只对远程 TCP 有意义，其他连接方式不占行。
+        const removeRunning = !!removeTarget && isRunningState(removeTarget.state)
+
+        // 顶部只留必要信息：名称由 Card title 展示，代理 / 请求头 / Agent 目录只在真正配置后才占行，
+        // 所以两块 Descriptions 都不再带标题（标题只是重复），并按 3 列把长字段单独占满一行。
         const isTcp = (host && host.connectionType) === 'tcp'
         const hostItems = [
-            {key: 'name', label: '名称', children: host?.name || '-'},
-            {key: 'ip', label: 'IP 地址', children: host?.ip || '-'},
             {key: 'conn', label: '连接方式', children: connectionLabel(host)},
-            {key: 'endpoint', label: '连接地址', children: endpointOf(host), span: 2},
+            {key: 'ip', label: 'IP 地址', children: host?.ip || '-'},
             {key: 'agentTag', label: 'Agent 镜像 Tag', children: host?.agentImageTag || 'latest'},
-            ...(isTcp ? [
-                {key: 'proxy', label: '连接代理', children: proxyLabel(host), span: 2},
-                {key: 'header', label: '自定义请求头', children: headerLabel(host)},
-            ] : []),
-            {key: 'fileRoot', label: '文件管理目录', children: host?.fileRoot || '/home', span: 3},
+            {key: 'endpoint', label: '连接地址', children: endpointOf(host), span: 3},
+            ...(isTcp && host?.proxyUrl
+                ? [{key: 'proxy', label: '连接代理', children: proxyLabel(host), span: 3}]
+                : []),
+            ...(isTcp && host?.headerConfigured
+                ? [{key: 'header', label: '自定义请求头', children: headerLabel(host), span: 3}]
+                : []),
+            ...(host?.fileRoot
+                ? [{key: 'fileRoot', label: 'Agent 目录', children: host.fileRoot, span: 3}]
+                : []),
         ]
         const runtimeItems = [
             {key: 'os', label: '操作系统', children: info?.os || '-'},
@@ -682,10 +720,10 @@ export default class extends React.Component {
                       : null}>
                 {infoError && <Result status='warning' title='无法连接主机' subTitle={infoError}
                                      className='mb-3' style={{padding: 0}}/>}
-                <Descriptions size='small' column={3} title='主机信息'
+                <Descriptions size='small' column={3}
                               items={hostItems}
                               styles={{content: {overflowWrap: 'anywhere'}}}/>
-                <Descriptions size='small' column={3} title='运行环境' className='mt-4'
+                <Descriptions size='small' column={3} className='mt-4'
                               items={runtimeItems}
                               styles={{content: {overflowWrap: 'anywhere'}}}/>
             </Card>
@@ -717,6 +755,32 @@ export default class extends React.Component {
                 {detail.open && detail.containerId &&
                     <ContainerDetail hostId={this.state.id} containerId={detail.containerId}
                                      onClose={this.closeContainer}/>}
+            </Modal>
+
+            {/* 删除容器：默认普通删除（force=false），运行中的容器必须显式勾选强制删除 */}
+            <Modal title='删除容器'
+                   open={!!removeTarget}
+                   okText='删除'
+                   cancelText='取消'
+                   okButtonProps={{danger: true, loading: removing, disabled: removeRunning && !removeForce}}
+                   onOk={this.confirmRemoveContainer}
+                   onCancel={this.closeRemoveContainer}
+                   destroyOnHidden
+                   width={520}>
+                {removeTarget && <>
+                    <div>
+                        确定删除容器 <Typography.Text strong>{removeTarget.name}</Typography.Text>？删除后不可恢复。
+                    </div>
+                    {removeRunning && <>
+                        <Alert className='mt-3' type='warning' showIcon
+                               title='容器正在运行，普通删除会被 Docker 拒绝'
+                               description='勾选下方「强制删除」后平台会先停止（kill）容器再删除；也可以先点「停止」，等状态变成已退出后再删除。'/>
+                        <Checkbox className='mt-3' checked={removeForce}
+                                  onChange={e => this.setState({removeForce: e.target.checked})}>
+                            强制删除（停止并删除运行中的容器）
+                        </Checkbox>
+                    </>}
+                </>}
             </Modal>
         </Page>
     }
