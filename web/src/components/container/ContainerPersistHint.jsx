@@ -1,5 +1,5 @@
 import React from "react";
-import {Alert} from "antd";
+import ContainerHint from "./ContainerHint";
 import {isPersistentPath, writableMountDestinations} from "./utils";
 
 /**
@@ -8,33 +8,31 @@ import {isPersistentPath, writableMountDestinations} from "./utils";
  * <p>
  * 传入 path 时按当前浏览目录判断是否落在挂载点内，用于「文件」页签；
  * 不传 path 时给统一提示，用于「终端」页签。
+ * 文案尽量保持单行，且允许关闭（按容器 + 类别记忆，切页签不再重复出现）。
  */
-export default function ContainerPersistHint({mounts, path, className}) {
+export default function ContainerPersistHint({mounts, path, containerKey, className}) {
     const dirs = writableMountDestinations(mounts)
+    // 挂载点可能很多，提示只留一行，超出部分由悬停提示补全
     const list = dirs.join('、')
+    const key = kind => (containerKey ? `persist:${containerKey}:${kind}` : undefined)
 
     if (path) {
         if (dirs.length === 0) {
-            return <Alert type='warning' showIcon className={className}
-                          title='当前容器没有挂载任何可写目录'
-                          description='这里的修改只存在于当前容器，容器重建后会全部丢失。需要长期保留请改为挂载主机目录或数据卷。'/>
+            return <ContainerHint id={key('no-mount')} type='warning' className={className}
+                                  text='容器没有可写挂载目录，这里的修改会在重建后丢失'/>
         }
         if (isPersistentPath(path, mounts)) {
-            return <Alert type='success' showIcon className={className}
-                          title='当前目录已挂载，修改会被保留'
-                          description={`可持久化的目录：${list}；这些目录之外的修改仍会随容器重建丢失。`}/>
+            return <ContainerHint id={key('mounted')} type='success' className={className}
+                                  text='当前目录已挂载，修改会保留'/>
         }
-        return <Alert type='warning' showIcon className={className}
-                      title='当前目录未挂载到主机'
-                      description={`该目录下的修改会随容器重建丢失。可持久化的目录：${list}。`}/>
+        return <ContainerHint id={key('unmounted')} type='warning' className={className}
+                              text={`未挂载，修改会在重建后丢失；可持久化：${list}`}/>
     }
 
     if (dirs.length === 0) {
-        return <Alert type='warning' showIcon className={className}
-                      title='容器内没有可写挂载目录'
-                      description='在终端里写入的文件会随容器重建丢失。需要长期保留请改为挂载主机目录或数据卷。'/>
+        return <ContainerHint id={key('console-no-mount')} type='warning' className={className}
+                              text='容器没有可写挂载目录，终端里的修改会在重建后丢失'/>
     }
-    return <Alert type='warning' showIcon className={className}
-                  title='非挂载目录的修改会在容器重建后丢失'
-                  description={`只有以下目录挂载自主机或数据卷，内容会被保留：${list}；其余位置均为容器内的临时内容。`}/>
+    return <ContainerHint id={key('console')} type='warning' className={className}
+                          text={`只有挂载目录的修改会保留：${list}`}/>
 }

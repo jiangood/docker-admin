@@ -96,6 +96,43 @@
     font-size: var(--font-size-sm);
 }
 
+/*
+ * 容器组件里的轻量提示（ContainerHint）：单行 12px 次要文字，不铺背景、不抢版面，
+ * 右侧有关闭按钮；文案超出宽度用省略号，完整内容走 Tooltip。
+ */
+.container-hint {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    min-height: 20px;
+    font-size: var(--font-size-sm);
+    line-height: 20px;
+}
+
+.container-hint-icon {
+    flex: none;
+    font-size: var(--font-size-sm);
+}
+
+.container-hint-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.container-hint-close {
+    flex: none;
+    padding: 0 2px;
+    font-size: 10px;
+    cursor: pointer;
+    opacity: 0.6;
+}
+
+.container-hint-close:hover {
+    opacity: 1;
+}
+
 /* 容器概览分区标题：统一字号与间距，右侧插槽放数量 / 复制等操作 */
 .container-section-title {
     display: flex;

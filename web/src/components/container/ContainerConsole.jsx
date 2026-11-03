@@ -39,7 +39,7 @@ export default class extends React.Component {
                 <Button size='small' onClick={() => this.setState({key: this.state.key + 1})}>重新连接</Button>
                 <Typography.Text type='secondary'>需要 container:exec 权限</Typography.Text>
             </Space>
-            <ContainerPersistHint mounts={mounts} className='mb-2'/>
+            <ContainerPersistHint mounts={mounts} containerKey={containerId || hostId} className='mb-2'/>
             <div style={{flex: 1, minHeight: 160}}>
                 <ContainerTerminal key={this.state.key}
                                    url={wsContainerExecUrl(hostId, containerId, this.state.shell)}

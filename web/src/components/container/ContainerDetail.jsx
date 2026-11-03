@@ -116,7 +116,8 @@ export default class extends React.Component {
             {
                 key: 'logs',
                 label: '日志',
-                children: <ContainerLogs url={logUrl} running={running} height={tabHeight}/>
+                children: <ContainerLogs url={logUrl} running={running} height={tabHeight}
+                                         containerKey={this.props.containerId || this.props.hostId || this.props.appId}/>
             },
             {
                 key: 'info',

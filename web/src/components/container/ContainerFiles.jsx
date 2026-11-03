@@ -258,7 +258,9 @@ export default class extends React.Component {
         ]
 
         return <>
-            <ContainerPersistHint mounts={this.props.mounts} path={this.state.path} className='mb-3'/>
+            <ContainerPersistHint mounts={this.props.mounts} path={this.state.path}
+                                  containerKey={this.props.containerId || this.props.hostId}
+                                  className='mb-2'/>
             <div className='mb-3'
                  style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                          gap: 'var(--space-4)', flexWrap: 'wrap'}}>
