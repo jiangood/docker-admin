@@ -43,6 +43,26 @@ function imageVersion(row, projectLatestOnly) {
   return latestOnly ? 'latest' : (row.tag || '')
 }
 
+/**
+ * 构建来源类型：refType 缺失的老记录用 branch 是否有值判断。
+ */
+function isBranchBuild(row) {
+  if (!row) return false
+  return row.refType ? row.refType === 'BRANCH' : !!row.branch
+}
+
+/**
+ * 构建来源文案：分支构建为「分支 main」，tag 构建为「tag v1.0.0」。
+ * 老记录没有 refName 时，tag 构建的 tag 即源码 tag。
+ */
+function refLabel(row) {
+  if (!row) return '-'
+  const branchBuild = isBranchBuild(row)
+  const name = row.refName || (branchBuild ? row.branch : row.tag)
+  const label = branchBuild ? '分支' : 'tag'
+  return name ? label + ' ' + name : label
+}
+
 
 /**
  * 提取地址的主机标识（host[:port]，小写），与后端 CodeSourceService.hostKey 保持一致，
@@ -347,65 +367,80 @@ export default class extends React.Component {
 
   columns = [
     {
-      title: '项目',
-      dataIndex: 'projectName',
-    },
-    {
+      // 开始时间与耗时合成一列：第二行展示耗时，节省一列宽度
       title: '开始时间',
       dataIndex: 'createTime',
+      width: 130,
       render(_, row) {
-        return <Tooltip title={row.createTime}> {DateUtils.friendlyTime(row.createTime)}</Tooltip>
+        const spent = DateUtils.friendlyTotalTime(row.timeSpend)
+        return <div>
+          <Tooltip title={row.createTime}>
+            <span>{DateUtils.friendlyTime(row.createTime)}</span>
+          </Tooltip>
+          {spent && (
+            <div>
+              <Typography.Text type='secondary' style={{fontSize: 12}}>耗时 {spent}</Typography.Text>
+            </div>
+          )}
+        </div>
       }
     },
     {
-      title: '来源',
-      dataIndex: 'refName',
-      render: (refName, row) => {
-        // 老记录没有 refType/refName：用 branch 判断类型，tag 构建的 tag 即源码 tag
-        const isBranch = row.refType ? row.refType === 'BRANCH' : !!row.branch
-        const name = refName || (isBranch ? row.branch : row.tag)
-        const label = isBranch ? '分支' : 'tag'
-        return name ? label + ' ' + name : label
+      // 来源（分支 / tag）与实际推送的镜像版本合成一列：tag 构建两者相同，
+      // 分支构建第二行才是生成的版本号，避免「来源」和「镜像版本」各占一列
+      title: '版本',
+      dataIndex: 'tag',
+      render: (tag, row) => {
+        const branchBuild = isBranchBuild(row)
+        const name = row.refName || (branchBuild ? row.branch : row.tag)
+        const version = imageVersion(row, this.state.project?.latestOnly)
+        const latestOnly = row.latestOnly == null ? !!this.state.project?.latestOnly : !!row.latestOnly
+        // tag 构建只有「仅构建 latest」时版本号与来源不同；
+        // 分支构建克隆完成前 tag 还是分支名，此时不重复展示第二行
+        const showVersion = latestOnly || (branchBuild && !!version && version !== name)
+        return <div>
+          <div>{refLabel(row)}</div>
+          {showVersion && (
+            <div>
+              {latestOnly
+                ? <Tooltip title={`本项目仅构建 latest，本次生成的版本号 ${tag} 不会作为镜像标签推送`}>
+                  <Typography.Text type='secondary' style={{fontSize: 12}}>latest</Typography.Text>
+                </Tooltip>
+                : <Typography.Text type='secondary' style={{fontSize: 12}}>{version}</Typography.Text>}
+            </div>
+          )}
+        </div>
       }
     },
     {
+      // 提交短 id 与提交信息合成一列：提交信息单行截断，悬停看全文、点击弹窗看完整内容
       title: '提交',
       dataIndex: 'commitId',
-      width: 110,
       render: (commitId, row) => {
         // 老记录没有 commitId：分支构建的版本号以「-提交短 id」结尾，从里面兜底提取
         const id = commitId || (row.branch ? (row.tag || '').match(/-([0-9a-f]{7,40})$/)?.[1] : null)
-        return id ? <Typography.Text copyable code>{id}</Typography.Text> : '-'
+        return <div>
+          <div>{id ? <Typography.Text copyable code style={{fontSize: 12}}>{id}</Typography.Text> : '-'}</div>
+          {row.codeMessage && (
+            <div>
+              <ViewText value={row.codeMessage} ellipsis maxLength={36}/>
+            </div>
+          )}
+        </div>
       }
     },
     {
-      title: '镜像版本',
-      dataIndex: 'tag',
-      render: (tag, row) => {
-        const latestOnly = row.latestOnly == null ? !!this.state.project?.latestOnly : !!row.latestOnly
-        if (!latestOnly) {
-          return tag
-        }
-        return (
-          <Tooltip title={`本项目仅构建 latest，本次生成的版本号 ${tag} 不会作为镜像标签推送`}>
-            <span>latest</span>
-          </Tooltip>
-        )
-      }
-    },
-    {
-      title: '构建上下文',
+      // 构建上下文与 Dockerfile 合成一列：上下文为空表示仓库根目录，按既有约定原样展示
+      title: '构建配置',
       dataIndex: 'context',
-    },
-    {
-      title: 'Dockerfile',
-      dataIndex: 'dockerfile',
-    },
-    {
-      title: '代码日志',
-      dataIndex: 'codeMessage',
-      width: 200,
-      render: (text) => <ViewText value={text} ellipsis maxLength={50}/>
+      render: (context, row) => <div>
+        <div>上下文 {context || '-'}</div>
+        <div>
+          <Typography.Text type='secondary' style={{fontSize: 12}}>
+            Dockerfile {row.dockerfile || 'Dockerfile'}
+          </Typography.Text>
+        </div>
+      </div>
     },
     {
       title: '构建主机',
@@ -423,13 +458,6 @@ export default class extends React.Component {
           key = "ERROR"
         }
         return getIcon(key, 1);
-      }
-    },
-    {
-      title: '耗时',
-      dataIndex: 'timeSpend',
-      render(t, row) {
-        return DateUtils.friendlyTotalTime(t)
       }
     },
     {
