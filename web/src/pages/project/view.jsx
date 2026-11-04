@@ -496,19 +496,14 @@ export default class extends React.Component {
             </Space>
           </Descriptions.Item>
           <Descriptions.Item label='仅构建 latest'>
-            <Space wrap>
-              <Switch
-                checked={!!project.latestOnly}
-                checkedChildren='开启'
-                unCheckedChildren='关闭'
-                loading={latestOnlyLoading}
-                disabled={!PermUtils.hasPermission('project:save')}
-                onChange={this.toggleLatestOnly}
-              />
-              {!project.latestOnly && (
-                <Typography.Text type='secondary'>版本号 + latest 双标签</Typography.Text>
-              )}
-            </Space>
+            <Switch
+              checked={!!project.latestOnly}
+              checkedChildren='开启'
+              unCheckedChildren='关闭'
+              loading={latestOnlyLoading}
+              disabled={!PermUtils.hasPermission('project:save')}
+              onChange={this.toggleLatestOnly}
+            />
           </Descriptions.Item>
         </Descriptions>
 
