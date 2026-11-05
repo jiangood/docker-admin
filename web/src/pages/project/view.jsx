@@ -11,6 +11,7 @@ import {
   MinusCircleTwoTone
 } from "@ant-design/icons";
 import {DateUtils, getToken, HttpClient, Page, PageUtils, PermUtils, ProTable, UrlUtils, ViewText} from "@jiangood/open-admin";
+import {dockerfileInContext} from "../../buildPath";
 import LogView from "../../components/LogView";
 import LinkButton from "../../components/LinkButton";
 import {formatBytes, formatTime} from "../../components/container/utils";
@@ -430,14 +431,15 @@ export default class extends React.Component {
       }
     },
     {
-      // 构建上下文与 Dockerfile 合成一列：上下文为空表示仓库根目录，按既有约定原样展示
-      title: '构建配置',
+      // 目录与 Dockerfile 合成一列：上下文为空表示仓库根目录，按既有约定原样展示；
+      // Dockerfile 位于上下文内时去掉上下文前缀，避免与上一行重复
+      title: '目录/dockerfile',
       dataIndex: 'context',
       render: (context, row) => <div>
-        <div>上下文 {context || '-'}</div>
+        <div>{context || '-'}</div>
         <div>
           <Typography.Text type='secondary' style={{fontSize: 12}}>
-            Dockerfile {row.dockerfile || 'Dockerfile'}
+            Dockerfile {dockerfileInContext(context, row.dockerfile)}
           </Typography.Text>
         </div>
       </div>

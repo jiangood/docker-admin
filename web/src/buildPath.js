@@ -23,3 +23,15 @@ export function dockerfileForContext(context) {
     const dir = normalizeRelativePath(context)
     return dir ? dir + '/Dockerfile' : 'Dockerfile'
 }
+
+/**
+ * Dockerfile 相对构建上下文的路径：位于上下文内时去掉上下文前缀，展示更紧凑。
+ */
+export function dockerfileInContext(context, dockerfile) {
+    const dir = normalizeRelativePath(context)
+    const path = normalizeRelativePath(dockerfile) || 'Dockerfile'
+    if (!dir || !path.startsWith(dir + '/')) {
+        return path
+    }
+    return path.slice(dir.length + 1)
+}
