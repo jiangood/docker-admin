@@ -239,9 +239,11 @@ export default class extends React.Component {
                             onClick={() => this.setState({rootInput: path})}>{path}</Button>)}
             </Space>
             <div className='mt-3' style={{fontSize: 12, lineHeight: 1.8}}>
-                <div>只接受 Docker daemon 可见的 Linux 绝对路径；Windows 主机填 Docker Desktop 的
-                    <code> /run/desktop/mnt/host/d/...</code> 或 WSL2 的 <code>/mnt/d/...</code>。
+                <div>只接受 Docker daemon 可见的 Linux 绝对路径；Windows 主机：WSL 2 后端填
+                    <code> /run/desktop/mnt/host/d/...</code>，Docker VMM 填 <code>/host_mnt/d/...</code>，
+                    WSL 2 原生 docker 填 <code>/mnt/d/...</code>。
                 </div>
+                <div>Docker VMM 还需先在 Settings → Resources → File sharing 共享该目录（不支持自动共享）。</div>
                 <div>切换会用新目录重建辅助容器，终端会切到新目录并断开自动重连；不支持 /、/etc 等系统目录。</div>
             </div>
         </Modal>
@@ -273,8 +275,10 @@ export default class extends React.Component {
                     <li>部署时不再指定目录，首次默认 <code>/home</code>；在右上角点「切换挂载目录」按需切换。</li>
                     <li>切换会用新目录重建容器，终端会断开并自动重连。</li>
                     <li>只接受 Docker daemon 可见的 Linux 绝对路径（以 / 开头）：
-                        Docker Desktop 一般是 <code>/run/desktop/mnt/host/d/data</code>，
-                        WSL2 原生 docker 是 <code>/mnt/d/data</code>；不要填 <code>D:\data</code> 这类 Windows 路径。
+                        WSL 2 后端是 <code>/run/desktop/mnt/host/d/data</code>，
+                        Docker VMM 是 <code>/host_mnt/d/data</code>，
+                        WSL 2 原生 docker 是 <code>/mnt/d/data</code>；不要填 <code>D:\data</code> 这类 Windows 路径。
+                        Docker VMM 还必须在 Settings → Resources → File sharing 里共享该目录。
                     </li>
                     <li>不允许挂载 <code>/</code>、<code>/etc</code> 等系统目录，也不支持 Windows 容器主机。</li>
                 </ul>

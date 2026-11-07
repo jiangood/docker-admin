@@ -175,7 +175,8 @@ public class HostAgentService {
             } catch (Exception e) {
                 log.warn("部署主机辅助容器失败: host={} root={}", host.getId(), root, e);
                 throw new BusinessException("部署辅助容器失败：" + rootMessage(e)
-                        + "。请确认目录存在、Docker Desktop 已共享该磁盘，且填写的是 daemon 可见的 Linux 路径");
+                        + "。请确认目录存在、Docker Desktop 已共享该磁盘（Docker VMM 需在 Settings > Resources > File sharing 添加目录），"
+                        + "且填写的是 daemon 可见的 Linux 路径");
             } finally {
                 IOUtils.closeQuietly(client);
             }

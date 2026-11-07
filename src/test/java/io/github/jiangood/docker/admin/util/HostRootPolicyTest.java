@@ -58,7 +58,9 @@ class HostRootPolicyTest {
 
         assertThrows(BusinessException.class, () -> HostRootPolicy.assertValidRoot("/run/desktop/mnt/host/d"));
         assertThrows(BusinessException.class, () -> HostRootPolicy.assertValidRoot("/mnt/c"));
+        assertThrows(BusinessException.class, () -> HostRootPolicy.assertValidRoot("/host_mnt/c"));
         assertThrows(BusinessException.class, () -> HostRootPolicy.assertValidRoot("/mnt/c/Windows"));
+        assertThrows(BusinessException.class, () -> HostRootPolicy.assertValidRoot("/host_mnt/c/Windows"));
         assertThrows(BusinessException.class, () -> HostRootPolicy.assertValidRoot("/mnt/c/Program Files"));
         assertThrows(BusinessException.class, () -> HostRootPolicy.assertValidRoot("/run/desktop/mnt/host/c/ProgramData"));
     }

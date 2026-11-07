@@ -16,8 +16,9 @@ import java.util.Locale;
  *     <li>把界面使用的相对路径转换成 {@code /host/...}，并阻止 {@code ..} 越界。</li>
  * </ul>
  * 只接受 Linux 绝对路径。Windows 主机的 C:/D: 盘需要填写 Docker daemon 可见的
- * Linux 路径（Docker Desktop 通常是 {@code /run/desktop/mnt/host/d/...}，
- * WSL2 原生 docker 是 {@code /mnt/d/...}），界面会给出说明。
+ * Linux 路径（Docker Desktop + WSL 2 是 {@code /run/desktop/mnt/host/d/...}，
+ * Docker Desktop + Docker VMM 是 {@code /host_mnt/d/...}，WSL2 原生 docker 是
+ * {@code /mnt/d/...}），界面会给出说明。
  */
 public final class HostRootPolicy {
 

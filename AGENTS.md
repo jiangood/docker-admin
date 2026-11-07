@@ -96,7 +96,9 @@ git tag vx.y.z && git push && git push origin vx.y.z
   目录只在容器成功起来后才落库，失败时保留旧值，方便重新部署恢复。
   CLI 是辅助容器内的交互式 shell，权限等同于宿主机 root。
   目录只接受 Docker daemon 可见的 Linux 绝对路径，禁止 `/`、`/host`、`/tmp` 与系统目录；Windows 主机需填
-  Docker Desktop 的 `/run/desktop/mnt/host/d/...` 或 WSL2 的 `/mnt/d/...`，不支持 Windows 容器主机。
+  Docker Desktop（WSL 2 后端）的 `/run/desktop/mnt/host/d/...`、Docker VMM 后端的 `/host_mnt/d/...`，
+  或 WSL2 原生 docker 的 `/mnt/d/...`；Docker VMM 必须在 Settings → Resources → File sharing 显式共享目录
+  （不支持 bind mount 自动共享），不支持 Windows 容器主机。
   辅助容器由 `host:save` 显式部署（`admin/host/agent/deploy`；界面不再提供「删除 Agent」按钮，
   需要删除时走主机详情「容器」Tab，因为辅助容器就是普通容器），CLI WebSocket 用 `host:cli`；
   **界面不再提供上传 / 下载按钮**：文件操作统一在终端里做（后端 `admin/host/file` 的 `upload` / `download`
