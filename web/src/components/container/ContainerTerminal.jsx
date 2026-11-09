@@ -1,20 +1,24 @@
 import React from "react";
 import {Terminal} from "@xterm/xterm";
 import {FitAddon} from "@xterm/addon-fit";
+import Zmodem from "zmodem.js/src/zmodem_browser";
 import "@xterm/xterm/css/xterm.css";
 
 /**
- * xterm 终端封装：对接容器 exec WebSocket。
- * 发送：{type:'input', data:<base64>} / {type:'resize', cols, rows}
- * 接收：二进制帧直接写入终端。
+ * xterm 终端封装：对接容器 exec / 主机 Agent CLI WebSocket。
+ * 普通输入使用 JSON + Base64；ZMODEM 数据使用原生 WebSocket 二进制帧。
  */
 export default class extends React.Component {
 
     containerRef = React.createRef()
+    fileInputRef = React.createRef()
     term = null
     fitAddon = null
     ws = null
     resizeObserver = null
+    zmodemSentry = null
+    zmodemSession = null
+    pendingUploadSession = null
 
     componentDidMount() {
         this.init()
@@ -31,6 +35,97 @@ export default class extends React.Component {
             binary += String.fromCharCode(b)
         })
         return btoa(binary)
+    }
+
+    handleFilesSelected = async event => {
+        const files = event.target.files
+        const session = this.pendingUploadSession
+        this.pendingUploadSession = null
+        event.target.value = ''
+
+        if (!session) {
+            return
+        }
+        if (!files || files.length === 0) {
+            session.abort()
+            this.zmodemSession = null
+            return
+        }
+
+        try {
+            await Zmodem.Browser.send_files(session, files)
+            await session.close()
+        } catch (e) {
+            console.error('ZMODEM 上传失败', e)
+            try {
+                session.abort()
+            } catch (ignored) {
+                // ignore
+            }
+            this.term && this.term.write('\r\n\x1b[31m[ZMODEM 上传失败]\x1b[0m\r\n')
+            this.zmodemSession = null
+        }
+    }
+
+    handleFilePickerCancel = () => {
+        const session = this.pendingUploadSession
+        this.pendingUploadSession = null
+        if (session) {
+            try {
+                session.abort()
+            } catch (e) {
+                // ignore
+            }
+            this.zmodemSession = null
+        }
+    }
+
+    onZmodemDetected = detection => {
+        const role = detection.get_session_role()
+        const action = role === 'send' ? '上传文件到远程主机' : '从远程主机下载文件'
+        if (!window.confirm(`检测到 ZMODEM 会话，是否确认${action}？\n如果不是你主动发起的文件传输，请选择取消。`)) {
+            detection.deny()
+            return
+        }
+
+        const session = detection.confirm()
+        this.zmodemSession = session
+        session.on('session_end', () => {
+            if (this.zmodemSession === session) {
+                this.zmodemSession = null
+            }
+            this.pendingUploadSession = null
+            this.term && this.term.write('\r\n\x1b[32m[ZMODEM 传输结束]\x1b[0m\r\n')
+        })
+
+        if (session.type === 'send') {
+            // 远端执行 rz：浏览器选择文件并发送给远端。
+            this.pendingUploadSession = session
+            if (this.fileInputRef.current) {
+                this.fileInputRef.current.value = ''
+                this.fileInputRef.current.click()
+            } else {
+                session.abort()
+                this.zmodemSession = null
+            }
+            return
+        }
+
+        // 远端执行 sz：接收远端发来的文件并保存到浏览器下载目录。
+        session.on('offer', offer => {
+            offer.accept().then(() => {
+                const details = offer.get_details()
+                Zmodem.Browser.save_to_disk(offer.get_payloads(), details.name)
+            }).catch(error => {
+                console.error('ZMODEM 下载失败', error)
+                try {
+                    offer.skip()
+                } catch (ignored) {
+                    // ignore
+                }
+            })
+        })
+        session.start()
     }
 
     init() {
@@ -55,6 +150,19 @@ export default class extends React.Component {
         ws.binaryType = 'arraybuffer'
         this.ws = ws
 
+        this.zmodemSentry = new Zmodem.Sentry({
+            to_terminal: octets => term.write(new Uint8Array(octets)),
+            sender: octets => {
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(new Uint8Array(octets))
+                }
+            },
+            on_detect: detection => this.onZmodemDetected(detection),
+            on_retract: () => {
+                term.write('\r\n\x1b[33m[ZMODEM 握手已取消]\x1b[0m\r\n')
+            },
+        })
+
         ws.onopen = () => {
             try {
                 fitAddon.fit()
@@ -62,6 +170,10 @@ export default class extends React.Component {
                 // 容器尺寸尚未就绪时忽略
             }
             term.onData(data => {
+                // ZMODEM 传输期间不把终端按键混入二进制协议流。
+                if (this.zmodemSession) {
+                    return
+                }
                 if (ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({type: 'input', data: this.toBase64(data)}))
                 }
@@ -80,11 +192,25 @@ export default class extends React.Component {
             if (typeof ev.data === 'string') {
                 term.write(ev.data)
             } else {
-                term.write(new Uint8Array(ev.data))
+                try {
+                    this.zmodemSentry.consume(new Uint8Array(ev.data))
+                } catch (e) {
+                    console.error('ZMODEM 数据处理失败', e)
+                    term.write('\r\n\x1b[31m[ZMODEM 协议错误]\x1b[0m\r\n')
+                }
             }
         }
 
         ws.onclose = () => {
+            if (this.zmodemSession) {
+                try {
+                    this.zmodemSession.abort()
+                } catch (e) {
+                    // ignore
+                }
+                this.zmodemSession = null
+                this.pendingUploadSession = null
+            }
             term.write('\r\n\x1b[33m[连接已关闭]\x1b[0m\r\n')
             this.props.onClose && this.props.onClose()
         }
@@ -115,6 +241,16 @@ export default class extends React.Component {
             this.resizeObserver.disconnect()
             this.resizeObserver = null
         }
+        if (this.zmodemSession) {
+            try {
+                this.zmodemSession.abort()
+            } catch (e) {
+                // ignore
+            }
+            this.zmodemSession = null
+        }
+        this.zmodemSentry = null
+        this.pendingUploadSession = null
         try {
             if (this.ws) {
                 this.ws.onclose = null
@@ -136,7 +272,17 @@ export default class extends React.Component {
 
     render() {
         const height = this.props.height || 420
-        return <div ref={this.containerRef}
-                    style={{height, width: '100%', background: '#1e1e1e', padding: 4, boxSizing: 'border-box'}}/>
+        return <>
+            <div ref={this.containerRef}
+                 style={{height, width: '100%', background: '#1e1e1e', padding: 4, boxSizing: 'border-box'}}/>
+            <input
+                ref={this.fileInputRef}
+                type="file"
+                multiple
+                style={{display: 'none'}}
+                onChange={this.handleFilesSelected}
+                onCancel={this.handleFilePickerCancel}
+            />
+        </>
     }
 }
