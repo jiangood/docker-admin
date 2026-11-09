@@ -9,7 +9,7 @@
     </parent>
     <groupId>io.github.jiangood</groupId>
     <artifactId>docker-admin</artifactId>
-    <version>4.8.68</version>
+    <version>4.8.69</version>
     <name>docker-admin</name>
 
     <properties>
