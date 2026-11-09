@@ -38,7 +38,9 @@ export default class extends React.Component {
     }
 
     handleFilesSelected = async event => {
-        const files = event.target.files
+        // 注意：event.target.files 是「活」的 FileList，清空 input.value 后长度会变 0，
+        // 所以必须先快照成数组，再清空输入框，否则上传会被误判为「没有选文件」而直接 abort。
+        const files = Array.from(event.target.files || [])
         const session = this.pendingUploadSession
         this.pendingUploadSession = null
         event.target.value = ''
@@ -46,7 +48,7 @@ export default class extends React.Component {
         if (!session) {
             return
         }
-        if (!files || files.length === 0) {
+        if (files.length === 0) {
             session.abort()
             this.zmodemSession = null
             return
@@ -113,9 +115,11 @@ export default class extends React.Component {
 
         // 远端执行 sz：接收远端发来的文件并保存到浏览器下载目录。
         session.on('offer', offer => {
-            offer.accept().then(() => {
-                const details = offer.get_details()
-                Zmodem.Browser.save_to_disk(offer.get_payloads(), details.name)
+            // zmodem.js 0.1.10 的 Offer 没有 get_payloads()，
+            // accept() 完成时直接把收到的数据块（Uint8Array 数组）作为结果返回。
+            const details = offer.get_details()
+            offer.accept().then(payloads => {
+                Zmodem.Browser.save_to_disk(payloads, details.name)
             }).catch(error => {
                 console.error('ZMODEM 下载失败', error)
                 try {
@@ -195,7 +199,27 @@ export default class extends React.Component {
                 try {
                     this.zmodemSentry.consume(new Uint8Array(ev.data))
                 } catch (e) {
+                    // 会话已经结束时，多出来的字节通常是 shell 提示符之类的普通输出
+                    //（例如 sz 发完 ZFIN 后命令提示符紧跟着到达），直接回显到终端，
+                    // 不要再报协议错误，否则每条命令的提示符都会被吞掉。
+                    if (!this.zmodemSentry.get_confirmed_session()) {
+                        const rest = new Uint8Array(ev.data)
+                        const printable = Array.prototype.every.call(rest,
+                            b => b >= 32 || b === 9 || b === 10 || b === 13 || b === 27)
+                        if (printable) {
+                            term.write(rest)
+                        }
+                        return
+                    }
                     console.error('ZMODEM 数据处理失败', e)
+                    // 协议异常时结束会话，避免 zmodemSession 一直非空把终端输入屏蔽掉。
+                    try {
+                        this.zmodemSession && this.zmodemSession.abort()
+                    } catch (ignored) {
+                        // ignore
+                    }
+                    this.zmodemSession = null
+                    this.pendingUploadSession = null
                     term.write('\r\n\x1b[31m[ZMODEM 协议错误]\x1b[0m\r\n')
                 }
             }
