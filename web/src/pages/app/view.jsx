@@ -192,24 +192,6 @@ export default class extends React.Component {
     };
 
     /**
-     * 「容器日志」右上角「更多」：打开独立的容器详情页。
-     * 日志继续留在本页签（不跳走也能看），文件 / 终端 / 启停删去容器页处理。
-     */
-    openContainerPage = () => {
-        const {app, container} = this.state
-        if (!container || !container.id) {
-            return
-        }
-        let query = `appId=${encodeURIComponent(app.id)}`
-        if (app.host?.id) {
-            query += `&hostId=${encodeURIComponent(app.host.id)}`
-        }
-        query += `&containerId=${encodeURIComponent(container.id)}&tab=logs`
-        PageUtils.open('/container/view?' + query)
-    }
-
-
-    /**
      * 只让指定标签重挂载并重新拉取数据，其余标签保持原样（不再整块骨架屏遮挡）。
      */
     bumpTokens = (keys) => {
@@ -456,15 +438,11 @@ export default class extends React.Component {
                 key: 'container',
                 label: '容器日志',
                 children: container && container.id
-                    ? <div key={'container-' + tabTokens.container}>
-                        <div style={{display: 'flex', justifyContent: 'flex-end', marginBottom: 8}}>
-                            <Button size='small' onClick={this.openContainerPage}>更多</Button>
-                        </div>
-                        <ContainerLogs url={`/admin/ws/log/${app.id}`}
-                                       running={container.state === 'running'}
-                                       height={520}
-                                       containerKey={container.id}/>
-                    </div>
+                    ? <ContainerLogs key={'container-' + tabTokens.container}
+                                     url={`/admin/ws/log/${app.id}`}
+                                     running={container.state === 'running'}
+                                     height={520}
+                                     containerKey={container.id}/>
                     : <Alert type='info' showIcon title='容器未部署'/>
             },
             {
