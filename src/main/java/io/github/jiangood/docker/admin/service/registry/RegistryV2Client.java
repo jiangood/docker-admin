@@ -216,15 +216,16 @@ public class RegistryV2Client {
         JsonNode config = manifest.get("config");
         String configDigest = config == null ? null : text(config, "digest");
         if (StrUtil.isBlank(configDigest)) {
-            return new RemoteImageMeta(null, null, size, null, null);
+            return new RemoteImageMeta(null, null, size, null, null, null);
         }
 
         JsonNode blob = getJson(prefix + "/blobs/" + enc(configDigest), scope, "application/json", "读取镜像配置");
         LocalDateTime created = blob == null ? null : ImageTimeUtils.parse(text(blob, "created"));
-        // 声明的端口与卷也在同一份 image config 里，顺手一起读出来，供详情页展示
+        // 声明的端口、卷与环境变量也在同一份 image config 里，顺手一起读出来，供详情页展示
         JsonNode configNode = blob == null ? null : blob.get("config");
         return new RemoteImageMeta(created, configDigest, size,
-                fieldNames(configNode, "ExposedPorts"), fieldNames(configNode, "Volumes"));
+                fieldNames(configNode, "ExposedPorts"), fieldNames(configNode, "Volumes"),
+                arrayValues(configNode, "Env"));
     }
 
     /**
@@ -417,6 +418,25 @@ public class RegistryV2Client {
         List<String> out = new ArrayList<>();
         obj.fieldNames().forEachRemaining(out::add);
         out.sort(Comparator.naturalOrder());
+        return out;
+    }
+
+    /**
+     * 取 JSON 对象里某个数组字段的全部字符串值（如 image config 的 config.Env 的环境变量），
+     * 保持原顺序（同名变量后声明的覆盖先声明的，排序会改变语义）；节点缺失或不是数组时返回空列表。
+     */
+    private static List<String> arrayValues(JsonNode node, String field) {
+        JsonNode arr = node == null ? null : node.get(field);
+        if (arr == null || !arr.isArray() || arr.isEmpty()) {
+            return List.of();
+        }
+        List<String> out = new ArrayList<>();
+        for (JsonNode n : arr) {
+            String v = n.asText();
+            if (StrUtil.isNotBlank(v)) {
+                out.add(v);
+            }
+        }
         return out;
     }
 

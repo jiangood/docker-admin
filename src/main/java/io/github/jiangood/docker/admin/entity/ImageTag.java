@@ -20,7 +20,7 @@ import java.util.List;
 /**
  * 镜像标签：某个镜像（repository）下的一个 tag。
  * <p>
- * 缓存镜像（Dockerfile）中声明的端口与卷，容器的端口/卷映射只允许根据这里声明的值进行配置。
+ * 缓存镜像（Dockerfile）中声明的端口、卷与环境变量，容器的端口/卷映射只允许根据这里声明的值进行配置。
  */
 @Remark("镜像标签")
 @Entity
@@ -90,6 +90,13 @@ public class ImageTag extends BaseEntity {
     @Lob
     @Convert(converter = StringListConverter.class)
     List<String> volumes = new ArrayList<>();
+
+    /**
+     * 镜像声明的环境变量，形如 KEY=VALUE（Dockerfile 的 ENV），保留声明顺序。
+     */
+    @Lob
+    @Convert(converter = StringListConverter.class)
+    List<String> envs = new ArrayList<>();
 
     @Remark("已读取声明")
     Boolean inspected;

@@ -679,6 +679,10 @@ export default class extends React.Component {
                 title: '声明卷', dataIndex: 'volumes',
                 render: (list) => (list && list.length) ? list.join(', ') : '-'
               },
+              {
+                title: '声明环境变量', dataIndex: 'envs',
+                render: (list) => (list && list.length) ? list.join(', ') : '-'
+              },
             ]}
           />
         </div>

@@ -11,7 +11,8 @@ import java.util.List;
  * @param size         镜像压缩后总大小（各层 + 配置），未知时为空
  * @param exposedPorts 镜像声明的端口（image config 的 config.ExposedPorts），形如 80/tcp，可能为空
  * @param volumes      镜像声明的卷路径（image config 的 config.Volumes），如 /data，可能为空
+ * @param envs         镜像声明的环境变量（image config 的 config.Env），形如 KEY=VALUE，可能为空
  */
 public record RemoteImageMeta(LocalDateTime buildTime, String digest, Long size,
-                              List<String> exposedPorts, List<String> volumes) {
+                              List<String> exposedPorts, List<String> volumes, List<String> envs) {
 }

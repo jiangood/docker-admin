@@ -32,7 +32,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * 镜像标签服务：读取并缓存镜像（Dockerfile）中声明的端口与卷。
+ * 镜像标签服务：读取并缓存镜像（Dockerfile）中声明的端口、卷与环境变量。
  */
 @Service
 @RequiredArgsConstructor
@@ -166,12 +166,15 @@ public class ImageTagService extends BaseService<ImageTag> {
             if (meta.size() != null) {
                 it.setSize(meta.size());
             }
-            // 声明的端口/卷读不到时保持原值，不用空列表冲掉已有数据
+            // 声明的端口/卷/环境变量读不到时保持原值，不用空列表冲掉已有数据
             if (meta.exposedPorts() != null && !meta.exposedPorts().isEmpty()) {
                 it.setExposedPorts(new ArrayList<>(meta.exposedPorts()));
             }
             if (meta.volumes() != null && !meta.volumes().isEmpty()) {
                 it.setVolumes(new ArrayList<>(meta.volumes()));
+            }
+            if (meta.envs() != null && !meta.envs().isEmpty()) {
+                it.setEnvs(new ArrayList<>(meta.envs()));
             }
         }
         return imageTagRepository.save(it);
@@ -200,7 +203,8 @@ public class ImageTagService extends BaseService<ImageTag> {
 
         List<String> ports = parsePorts(response.getConfig());
         List<String> volumes = parseVolumes(response.getConfig());
-        fileLog.info("镜像 {} 声明端口 {}，卷 {}", fullName, ports, volumes);
+        List<String> envs = parseEnvs(response.getConfig());
+        fileLog.info("镜像 {} 声明端口 {}，卷 {}，环境变量 {}", fullName, ports, volumes, envs);
 
         ImageTag it = imageTagRepository.findByImageUrlAndTag(imageUrl, tag).orElseGet(ImageTag::new);
         it.setImageUrl(imageUrl);
@@ -226,6 +230,7 @@ public class ImageTagService extends BaseService<ImageTag> {
         }
         it.setExposedPorts(ports);
         it.setVolumes(volumes);
+        it.setEnvs(envs);
         it.setInspected(true);
         it.setInspectTime(LocalDateTime.now());
         return imageTagRepository.save(it);
@@ -250,6 +255,22 @@ public class ImageTagService extends BaseService<ImageTag> {
         }
         result.addAll(config.getVolumes().keySet());
         result.sort(Comparator.naturalOrder());
+        return result;
+    }
+
+    /**
+     * 环境变量保持声明顺序，不做排序：同名变量在 image config 里后出现的会覆盖先出现的。
+     */
+    private List<String> parseEnvs(ContainerConfig config) {
+        List<String> result = new ArrayList<>();
+        if (config == null || config.getEnv() == null) {
+            return result;
+        }
+        for (String env : config.getEnv()) {
+            if (StrUtil.isNotBlank(env)) {
+                result.add(env);
+            }
+        }
         return result;
     }
 

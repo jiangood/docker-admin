@@ -106,6 +106,7 @@ public class RemoteSyncService {
             vo.setDigest(meta.digest());
             vo.setExposedPorts(meta.exposedPorts());
             vo.setVolumes(meta.volumes());
+            vo.setEnvs(meta.envs());
         } catch (Exception e) {
             log.info("读取镜像 {}:{} 元数据失败：{}", repo, vo.getTag(), e.getMessage());
         }
@@ -123,10 +124,11 @@ public class RemoteSyncService {
         }
         for (RemoteTag vo : tags) {
             RemoteImageMeta meta = new RemoteImageMeta(vo.getBuildTime(), vo.getDigest(), vo.getSize(),
-                    vo.getExposedPorts(), vo.getVolumes());
+                    vo.getExposedPorts(), vo.getVolumes(), vo.getEnvs());
             // 远程没读到任何元数据（如关闭了 withMeta）时，已存在的版本无需重写
             if (vo.isExists() && vo.getBuildTime() == null && vo.getSize() == null
-                    && StrUtil.isBlank(vo.getDigest())) {
+                    && StrUtil.isBlank(vo.getDigest())
+                    && isEmpty(vo.getExposedPorts()) && isEmpty(vo.getVolumes()) && isEmpty(vo.getEnvs())) {
                 result.setTagSkipped(result.getTagSkipped() + 1);
                 continue;
             }
@@ -140,7 +142,8 @@ public class RemoteSyncService {
             }
             boolean metaFilled = saved != null && (saved.getBuildTime() != null || saved.getSize() != null
                     || (saved.getExposedPorts() != null && !saved.getExposedPorts().isEmpty())
-                    || (saved.getVolumes() != null && !saved.getVolumes().isEmpty()));
+                    || (saved.getVolumes() != null && !saved.getVolumes().isEmpty())
+                    || (saved.getEnvs() != null && !saved.getEnvs().isEmpty()));
             if (metaFilled) {
                 result.setMetaFilled(result.getMetaFilled() + 1);
             }
@@ -227,6 +230,10 @@ public class RemoteSyncService {
 
     // ------------------------------------------------------------------ 内部数据结构
 
+    private static boolean isEmpty(List<String> list) {
+        return list == null || list.isEmpty();
+    }
+
     /**
      * 读回来的单个版本，只在服务内部流转。
      */
@@ -245,6 +252,8 @@ public class RemoteSyncService {
         private List<String> exposedPorts;
         /** 镜像声明的卷路径，如 /data。 */
         private List<String> volumes;
+        /** 镜像声明的环境变量，形如 KEY=VALUE。 */
+        private List<String> envs;
     }
 
     /**

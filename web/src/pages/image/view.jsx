@@ -270,10 +270,6 @@ export default class extends React.Component {
                             dataSource={tags}
                             columns={[
                                 {title: 'tag', dataIndex: 'tag'},
-                                {
-                                    title: '完整地址', dataIndex: 'fullUrl',
-                                    render: (v) => <Typography.Text copyable code>{v}</Typography.Text>
-                                },
                                 {title: '来源', dataIndex: 'source', render: (s) => sourceTag(s)},
                                 {
                                     title: '构建时间', dataIndex: 'buildTime', width: 160,
@@ -292,7 +288,11 @@ export default class extends React.Component {
                                     render: (list) => (list && list.length) ? list.join(', ') : '-'
                                 },
                                 {
-                                    title: '操作', width: 180,
+                                    title: '声明环境变量', dataIndex: 'envs',
+                                    render: (list) => (list && list.length) ? list.join(', ') : '-'
+                                },
+                                {
+                                    title: '操作', width: 150,
                                     render: (_, record) => {
                                         const t = this.taskOf(record.imageUrl, record.tag)
                                         const running = !!t && t.status === 'RUNNING'

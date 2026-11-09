@@ -255,7 +255,7 @@ public class ImageSyncService {
             fileLog.info("注册中心同步成功: {}", targetImage);
 
             // 登记镜像与标签。镜像此刻已在同步主机本地（推送注册中心时打过 targetRepo:tag），
-            // 直接 inspect 读取大小与声明的端口/卷，与项目构建的登记方式一致；
+            // 直接 inspect 读取大小与声明的端口/卷/环境变量，与项目构建的登记方式一致；
             // inspect 拿不到（本地查不到等）退回只登记标签，登记失败也不影响已完成的同步。
             try {
                 imageService.upsert(targetRepo, targetName, "SYNC", registry.getId(), null);
