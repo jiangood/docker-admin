@@ -6,11 +6,12 @@ import ContainerHint from "./ContainerHint";
  * 容器日志：复用 LogView，走容器日志 WebSocket。
  * url 由上层根据上下文给出（主机维度通用 WS / 应用维度 app WS）。
  * 容器已停止时只提一句「仅历史日志」，用轻量提示而不是 Alert，不挤占日志区域。
+ * downloadUrl 为对应的日志下载接口（相对路径），传入后日志区显示「停止滚动 / 下载日志」工具条。
  */
-export default function ContainerLogs({url, running, height, containerKey}) {
+export default function ContainerLogs({url, running, height, containerKey, downloadUrl}) {
     return <>
         <ContainerHint type='info' text='容器未运行，仅显示历史日志'
                        id={containerKey ? `logs-stopped:${containerKey}` : undefined} className='mb-2'/>
-        <LogView url={url} websocket height={height || 500}/>
+        <LogView url={url} websocket height={height || 500} toolbar downloadUrl={downloadUrl}/>
     </>
 }

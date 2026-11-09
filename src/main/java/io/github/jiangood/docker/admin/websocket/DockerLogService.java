@@ -13,12 +13,17 @@ import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 
 import java.io.IOException;
+import java.io.OutputStream;
+import java.io.UncheckedIOException;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Service
 public class DockerLogService {
+
+    /** 下载日志时读取的末尾行数，与页面实时日志的初始 tail 保持一致。 */
+    public static final int DOWNLOAD_TAIL_LINES = 2000;
 
     private final Map<String, LogStreamCallback> sessionLogStreams = new ConcurrentHashMap<>();
 
@@ -59,6 +64,37 @@ public class DockerLogService {
         LogStreamCallback callback = sessionLogStreams.remove(sessionId);
         if (callback != null) {
             callback.close();
+        }
+    }
+
+    /**
+     * 把容器最近 {@code tail} 行日志写入输出流（只读历史，不跟随）。
+     * <p>
+     * 用于「下载日志」：读完即返回，调用方负责关闭输出流；DockerClient 在这里关闭，
+     * 与流式日志一致，避免 SSH 会话泄漏。
+     */
+    public void writeContainerLogs(Host host, String containerId, int tail, OutputStream out)
+            throws InterruptedException {
+        DockerClient dockerClient = dockerClientManager.getClient(host);
+        try {
+            dockerClient.logContainerCmd(containerId)
+                    .withStdOut(true)
+                    .withStdErr(true)
+                    .withFollowStream(false)
+                    .withTail(tail)
+                    .exec(new ResultCallback.Adapter<Frame>() {
+                        @Override
+                        public void onNext(Frame frame) {
+                            try {
+                                out.write(frame.getPayload());
+                            } catch (IOException e) {
+                                throw new UncheckedIOException(e);
+                            }
+                        }
+                    })
+                    .awaitCompletion();
+        } finally {
+            IOUtils.closeQuietly(dockerClient);
         }
     }
 

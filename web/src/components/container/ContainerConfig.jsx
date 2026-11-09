@@ -4,7 +4,7 @@ import SectionTitle from "./SectionTitle";
 
 /**
  * 容器配置（只读，来自 docker inspect）。通用容器组件不提供修改容器配置的能力。
- * 环境变量 / 标签统一在「概览」页签展示，此处不再重复。
+ * 环境变量 / 标签统一在「详情」页签展示，此处不再重复。
  */
 export default function ContainerConfig({detail}) {
     if (!detail) {

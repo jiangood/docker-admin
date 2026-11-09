@@ -8,6 +8,7 @@ import io.github.jiangood.docker.admin.dto.ContainerSummaryVo;
 import io.github.jiangood.docker.admin.service.ContainerService;
 import io.github.jiangood.docker.admin.service.HostService;
 import io.github.jiangood.docker.admin.util.ContainerPermTool;
+import io.github.jiangood.docker.admin.websocket.DockerLogService;
 import io.github.jiangood.openadmin.framework.perm.HasPermission;
 import io.github.jiangood.openadmin.util.dto.AjaxResult;
 import jakarta.annotation.Resource;
@@ -35,6 +36,9 @@ public class ContainerController {
     @Resource
     private ContainerService containerService;
 
+    @Resource
+    private DockerLogService dockerLogService;
+
     // ------------------------------------------------------------------ 查看
 
     /** 主机上的容器列表。 */
@@ -53,6 +57,24 @@ public class ContainerController {
         Host host = requireHost(hostId);
         Assert.hasText(containerId, "containerId 不能为空");
         return AjaxResult.ok().data(containerService.inspect(host, containerId));
+    }
+
+    /**
+     * 下载容器最近 {@value DockerLogService#DOWNLOAD_TAIL_LINES} 行日志（只读历史，不跟随实时输出）。
+     */
+    @RequestMapping("logDownload")
+    public void logDownload(String hostId, String containerId, HttpServletResponse response) throws Exception {
+        ContainerPermTool.assertView();
+        Host host = requireHost(hostId);
+        Assert.hasText(containerId, "containerId 不能为空");
+
+        String fileName = "container-" + (containerId.length() > 12 ? containerId.substring(0, 12) : containerId) + ".log";
+        DownloadTool.prepareDownload(response, DownloadTool.safeFileName(fileName), "text/plain;charset=UTF-8");
+        try (OutputStream out = response.getOutputStream()) {
+            dockerLogService.writeContainerLogs(host, containerId,
+                    DockerLogService.DOWNLOAD_TAIL_LINES, out);
+            out.flush();
+        }
     }
 
     // ------------------------------------------------------------------ 文件

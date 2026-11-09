@@ -440,6 +440,7 @@ export default class extends React.Component {
                 children: container && container.id
                     ? <ContainerLogs key={'container-' + tabTokens.container}
                                      url={`/admin/ws/log/${app.id}`}
+                                     downloadUrl={`/admin/app/containerLogDownload?id=${encodeURIComponent(app.id)}`}
                                      running={container.state === 'running'}
                                      height={520}
                                      containerKey={container.id}/>

@@ -35,4 +35,14 @@ public final class DownloadTool {
         String name = idx >= 0 ? p.substring(idx + 1) : p;
         return StrUtil.blankToDefault(name, "download");
     }
+
+    /**
+     * 去掉文件名里的路径分隔符与 Windows 非法字符，避免浏览器保存时出错。
+     */
+    public static String safeFileName(String fileName) {
+        if (StrUtil.isBlank(fileName)) {
+            return "download";
+        }
+        return fileName.replaceAll("[\\\\/:*?\"<>|\\p{Cntrl}]", "_");
+    }
 }

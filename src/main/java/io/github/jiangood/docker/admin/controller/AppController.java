@@ -11,6 +11,7 @@ import io.github.jiangood.docker.admin.entity.DeployLog;
 import io.github.jiangood.docker.admin.entity.DeployTrigger;
 import io.github.jiangood.docker.admin.service.AppService;
 import io.github.jiangood.docker.admin.service.ContainerService;
+import io.github.jiangood.docker.admin.websocket.DockerLogService;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import io.github.jiangood.openadmin.modules.logviewer.service.FileLogService;
 import io.github.jiangood.openadmin.util.dto.AjaxResult;
@@ -19,6 +20,7 @@ import io.github.jiangood.openadmin.framework.data.specification.Spec;
 import io.github.jiangood.openadmin.framework.auth.LoginTool;
 import io.github.jiangood.openadmin.util.BusinessException;
 import jakarta.annotation.Resource;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
@@ -37,6 +39,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.io.IOException;
+import java.io.OutputStream;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -63,6 +66,9 @@ public class AppController {
 
     @Resource
     private ContainerService containerService;
+
+    @Resource
+    private DockerLogService dockerLogService;
 
     @HasPermission("app:view")
     @RequestMapping("list")
@@ -140,6 +146,27 @@ public class AppController {
 
         // 返回 {content, nextOffset, eof}，与框架 LogViewer 的增量读取契约一致
         return AjaxResult.ok().data(fileLogService.readChunk(id, offset, length));
+    }
+
+    /**
+     * 下载应用容器最近 {@value DockerLogService#DOWNLOAD_TAIL_LINES} 行日志。
+     * 只读历史，不跟随实时输出，避免下载请求长期占用连接。
+     */
+    @HasPermission("app:view")
+    @RequestMapping("containerLogDownload")
+    public void containerLogDownload(String id, HttpServletResponse response) throws Exception {
+        App app = assertAppAccess(id);
+        Container container = service.getContainer(app);
+        Assert.notNull(container, "容器未部署");
+
+        String fileName = StrUtil.blankToDefault(app.getName(), "app")
+                + "-" + StrUtil.subPre(container.getId(), 12) + ".log";
+        DownloadTool.prepareDownload(response, DownloadTool.safeFileName(fileName), "text/plain;charset=UTF-8");
+        try (OutputStream out = response.getOutputStream()) {
+            dockerLogService.writeContainerLogs(app.getHost(), container.getId(),
+                    DockerLogService.DOWNLOAD_TAIL_LINES, out);
+            out.flush();
+        }
     }
 
     /**

@@ -25,11 +25,11 @@ const VIEWPORT_CHROME = 350
 /**
  * 容器详情页（独立页面，替代原来的容器弹窗）。
  * <p>
- * 入口：主机详情页的容器列表 / 监控表、应用详情页「容器日志」右上角「更多」。
+ * 入口：主机详情页的容器列表 / 监控表、应用详情页「容器日志」（应用详情页只保留日志，不再提供跳转入口）。
  * 参数：{@code hostId} + {@code containerId}（主机维度），或 {@code appId}（应用维度，额外校验数据权限），
  * {@code tab} 指定首次打开的页签（logs / info / files / console）。
  * <p>
- * 上方是基本信息与操作，下方是横向页签（日志 / 概览 / 文件 / 终端）。
+ * 上方是基本信息与操作，下方是横向页签（日志 / 文件 / 终端 / 详情）。
  * 页签开启 destroyOnHidden：切走即关闭日志 / 终端 WebSocket，回来时重新拉取。
  */
 export default class extends React.Component {
@@ -152,6 +152,10 @@ export default class extends React.Component {
         // 以 inspect 结果为准：应用重新部署后 URL 里的 containerId 可能已经过期
         const targetId = detail.id || containerId
         const logUrl = appId ? `/admin/ws/log/${appId}` : wsContainerLogPath(hostId, targetId)
+        const logDownloadUrl = appId
+            ? `/admin/app/containerLogDownload?id=${encodeURIComponent(appId)}`
+            : `/admin/container/logDownload?hostId=${encodeURIComponent(hostId)}`
+                + `&containerId=${encodeURIComponent(targetId)}`
 
         const header = <Card size='small' className='mb-3' styles={{body: {padding: '12px 16px'}}}>
             <div style={{
@@ -203,16 +207,9 @@ export default class extends React.Component {
             {
                 key: 'logs',
                 label: '日志',
-                children: <ContainerLogs url={logUrl} running={running} height={paneHeight}
+                children: <ContainerLogs url={logUrl} downloadUrl={logDownloadUrl} running={running}
+                                         height={paneHeight}
                                          containerKey={targetId || hostId || appId}/>
-            },
-            {
-                key: 'info',
-                label: '概览',
-                children: <div style={{height: paneHeight, overflow: 'auto'}}>
-                    <ContainerInfo detail={detail}/>
-                    <ContainerConfig detail={detail}/>
-                </div>
             },
             {
                 key: 'files',
@@ -228,6 +225,15 @@ export default class extends React.Component {
                 label: '终端',
                 children: <ContainerConsole hostId={hostId} containerId={targetId} running={running}
                                             height={paneHeight}/>
+            },
+            {
+                key: 'info',
+                label: '详情',
+                // 长路径 / 长 ID 强制换行，避免表格撑宽内容区出现横向滚动条
+                children: <div className='container-detail-pane' style={{height: paneHeight, overflowY: 'auto'}}>
+                    <ContainerInfo detail={detail}/>
+                    <ContainerConfig detail={detail}/>
+                </div>
             },
         ]
 
@@ -254,7 +260,7 @@ export default class extends React.Component {
                 {removeRunning && <>
                     <Alert className='mt-3' type='warning' showIcon
                            title='容器正在运行，普通删除会被 Docker 拒绝'
-                           description='勾选下方「强制删除」后平台会先停止（kill）容器再删除；也可以先在概览页签点「停止」，等状态变成已退出后再删除。'/>
+                           description='勾选下方「强制删除」后平台会先停止（kill）容器再删除；也可以先在「详情」页签点「停止」，等状态变成已退出后再删除。'/>
                     <Checkbox className='mt-3' checked={removeForce}
                               onChange={e => this.setState({removeForce: e.target.checked})}>
                         强制删除（停止并删除运行中的容器）

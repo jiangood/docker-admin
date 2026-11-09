@@ -148,6 +148,13 @@
     font-weight: 600;
 }
 
+/* 容器详情「详情」页签：长路径 / 长 ID 强制换行，避免表格撑宽内容区出现横向滚动条 */
+.container-detail-pane .ant-table-cell,
+.container-detail-pane .ant-descriptions-item-content {
+    word-break: break-all;
+    overflow-wrap: anywhere;
+}
+
 /* 环境变量 / 标签等等宽长文本面板：带边框，内容完整展开不出现滚动条，跟随主题色 */
 .container-code-panel {
     overflow: visible;

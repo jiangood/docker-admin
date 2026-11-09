@@ -341,7 +341,7 @@ export default class extends React.Component {
 
     /**
      * 打开容器详情页（独立页签）。tab 为页面的页签：logs / info / files / console，
-     * 列表里的「概览 / 日志 / 文件 / 终端」按钮据此直达对应页签。
+     * 列表里的「详情 / 日志 / 文件 / 终端」按钮据此直达对应页签。
      * 停止 / 删除等操作也都在容器页里做，列表只负责跳转。
      */
     openContainer = (record, tab = 'logs') => {
@@ -574,12 +574,12 @@ export default class extends React.Component {
             },
             {title: '创建时间', dataIndex: 'created', width: 170, render: v => formatTime(v)},
             {
-                // 四个入口都跳转到容器详情页：概览 / 日志只需查看权限（host:list），
+                // 四个入口都跳转到容器详情页：详情 / 日志只需查看权限（host:list），
                 // 文件 / 终端分别要求 container:file / container:exec；停止 / 删除在容器页里做
                 title: '操作', width: 170,
                 render: (_, record) => <Space size={4}>
                     <LinkButton size='small'
-                                onClick={() => this.openContainer(record, 'info')}>概览</LinkButton>
+                                onClick={() => this.openContainer(record, 'info')}>详情</LinkButton>
                     <LinkButton size='small'
                                 onClick={() => this.openContainer(record, 'logs')}>日志</LinkButton>
                     {canContainerFile &&
