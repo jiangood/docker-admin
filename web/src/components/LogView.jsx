@@ -12,15 +12,17 @@ const TOOLBAR_HEIGHT = 32
  * <p>
  * 传 text 时展示静态日志（按时间段查询结果），不自动滚动；否则按 url 实时 tail。
  * toolbar 打开时显示「停止 / 继续滚动」（仅实时模式）；再传 downloadUrl 时增加「下载日志」。
- * toolbarExtra 用于在工具条左侧放额外控件（如时间范围选择器）。
+ * toolbarExtra 用于在工具条放额外控件（如时间范围选择器），默认靠左；
+ * toolbarExtraAlign='right' 时靠右（与「停止滚动 / 下载日志」同侧），左侧留空。
  */
 export default class extends React.Component {
 
     renderToolbar = ({follow, startFollowing, stopFollowing} = {}) => {
-        const {downloadUrl, onDownload, downloadLoading, toolbarExtra} = this.props
+        const {downloadUrl, onDownload, downloadLoading, toolbarExtra, toolbarExtraAlign} = this.props
         const href = downloadUrl ? UrlUtils.contextPath(downloadUrl) : null
         const showFollow = follow !== undefined
         const showDownload = !!(onDownload || href)
+        const extraRight = toolbarExtraAlign === 'right'
 
         return <div style={{
             display: 'flex',
@@ -31,19 +33,22 @@ export default class extends React.Component {
             marginBottom: 8,
         }}>
             <div style={{minWidth: 0, flex: 1, display: 'flex', alignItems: 'center', gap: 8}}>
-                {toolbarExtra}
+                {extraRight ? null : toolbarExtra}
             </div>
-            <Space size={8}>
-                {showFollow && <Button size='small'
-                                       icon={follow ? <PauseCircleOutlined/> : <PlayCircleOutlined/>}
-                                       onClick={follow ? stopFollowing : startFollowing}>
-                    {follow ? '停止滚动' : '继续滚动'}
-                </Button>}
-                {showDownload && (onDownload
-                    ? <Button size='small' icon={<DownloadOutlined/>} loading={downloadLoading}
-                              onClick={onDownload}>下载日志</Button>
-                    : <Button size='small' icon={<DownloadOutlined/>} href={href}>下载日志</Button>)}
-            </Space>
+            <div style={{display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0}}>
+                {extraRight ? toolbarExtra : null}
+                <Space size={8}>
+                    {showFollow && <Button size='small'
+                                           icon={follow ? <PauseCircleOutlined/> : <PlayCircleOutlined/>}
+                                           onClick={follow ? stopFollowing : startFollowing}>
+                        {follow ? '停止滚动' : '继续滚动'}
+                    </Button>}
+                    {showDownload && (onDownload
+                        ? <Button size='small' icon={<DownloadOutlined/>} loading={downloadLoading}
+                                  onClick={onDownload}>下载日志</Button>
+                        : <Button size='small' icon={<DownloadOutlined/>} href={href}>下载日志</Button>)}
+                </Space>
+            </div>
         </div>
     }
 

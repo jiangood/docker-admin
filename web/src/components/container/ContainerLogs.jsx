@@ -107,7 +107,7 @@ export default class extends React.Component {
         const {range, rangeSince, rangeUntil, rangeLoading, rangeText, rangeError, downloading} = this.state
         const filtered = !!range
 
-        const toolbarExtra = <div style={{display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap'}}>
+        const toolbarExtra = <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
             <RangePicker size='small'
                          showTime
                          format='YYYY-MM-DD HH:mm:ss'
@@ -131,6 +131,7 @@ export default class extends React.Component {
                      loading={rangeLoading}
                      toolbar
                      toolbarExtra={logsUrl ? toolbarExtra : null}
+                     toolbarExtraAlign='right'
                      downloadUrl={downloadUrl}
                      onDownload={downloadUrl ? this.downloadLog : undefined}
                      downloadLoading={downloading}/>
