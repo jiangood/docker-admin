@@ -4,7 +4,7 @@ import ContainerConfigForm from "./ContainerConfigForm";
 import {HttpClient} from "@jiangood/open-admin";
 
 /**
- * 应用详情页「容器配置」标签：复用通用容器配置组件，保存后自动重启。
+ * 应用详情页「参数」标签：复用通用容器配置组件，保存后自动重启。
  * 端口 / 文件映射始终可自由增删改（镜像声明只作默认值）。
  */
 export default class extends React.Component {

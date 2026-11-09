@@ -130,7 +130,7 @@ public class ImageController {
     /**
      * 按镜像地址取镜像，供应用详情「镜像」字段跳转到镜像详情。
      * <p>
-     * 镜像不存在（如历史上被删除）时返回 null，由前端提示，不当作错误。
+     * 镜像列表中没有该地址的记录（外部镜像未收录、历史上被删除）时返回 null，由前端提示，不当作错误。
      */
     @HasPermission("image:view")
     @RequestMapping("getByUrl")

@@ -1,11 +1,10 @@
 import React from "react";
 import {Alert, AutoComplete, Button, Divider, Form, Input, message, Modal, Select, Skeleton, Space, Switch, Tag, Tooltip, Typography} from "antd";
-import {ReloadOutlined} from "@ant-design/icons";
 import {FieldRemoteSelect, HttpClient, PageUtils, Perm, PermUtils} from "@jiangood/open-admin";
 import {DEFAULT_UPDATE_INTERVAL, UPDATE_INTERVAL_OPTIONS} from "./updateSchedule";
 
 /**
- * 发布标签页
+ * 部署标签页
  */
 export default class extends React.Component {
 
@@ -16,9 +15,8 @@ export default class extends React.Component {
         tagOptions: [],
         versionOptions: [],
 
-        // 定时更新设置保存中 / 手动刷新应用信息中
+        // 定时更新设置保存中
         savingScheduledUpdate: false,
-        refreshing: false,
     }
 
     componentDidMount() {
@@ -34,13 +32,10 @@ export default class extends React.Component {
         })
     }
 
-    /** 重新读取应用信息：定时更新是后台任务改的，页面不会自动感知 */
+    /** 重新读取应用信息 */
     reloadApp = () => {
-        this.setState({refreshing: true})
         return HttpClient.get('admin/app/get', {id: this.id}).then(rs => {
             this.setState({app: rs.data})
-        }).finally(() => {
-            this.setState({refreshing: false})
         })
     }
 
@@ -99,7 +94,7 @@ export default class extends React.Component {
     }
 
     renderScheduledStatus = () => {
-        const {app, refreshing} = this.state
+        const {app} = this.state
         if (!app.scheduledUpdate) {
             return <Typography.Text type='secondary'>未启用</Typography.Text>
         }
@@ -110,8 +105,6 @@ export default class extends React.Component {
             {app.scheduledUpdateLastResult && <Tooltip title={app.scheduledUpdateLastResult}>
                 {this.renderScheduledResult(app)}
             </Tooltip>}
-            <Button type='link' size='small' icon={<ReloadOutlined/>} loading={refreshing}
-                    onClick={this.reloadApp}>刷新</Button>
         </Space>
     }
 
@@ -119,7 +112,7 @@ export default class extends React.Component {
     updateVersion = (values) => {
         HttpClient.get("admin/app/updateVersion", {id: this.id, version: values.version}).then(rs => {
             // 版本变化会影响容器配置元数据（镜像声明的端口 / 卷），一并刷新
-            this.props.onChange({redeploy: true, tabs: ['config']})
+            this.props.onChange({redeploy: true, tabs: ['containerConfig']})
         })
     }
     copyApp = (values) => {
@@ -148,7 +141,7 @@ export default class extends React.Component {
             hostId: values.hostId
         }).then(() => {
             // 应用记录仍在，仅主机变化：重新部署后，容器配置（绑定路径）要跟着刷新
-            this.props.onChange({redeploy: true, tabs: ['config']})
+            this.props.onChange({redeploy: true, tabs: ['containerConfig']})
         }).finally(hide)
     }
 
@@ -193,8 +186,6 @@ export default class extends React.Component {
         }
 
         return <>
-
-            <Divider titlePlacement='left' plain>更新策略</Divider>
 
             <div style={rowStyle}>
                 <div style={{flex: '1 1 260px'}}>

@@ -44,8 +44,8 @@ export const pageMeta = {
  */
 const DEPLOY_PROBE_TIMEOUT = 10000
 
-/** 详情页各标签的 key，刷新令牌按此逐项递增 */
-const TAB_KEYS = ['log', 'container', 'config', 'publish']
+/** 详情页各标签的 key；刷新令牌按此逐项递增（「设置」直接读 app 状态，不需要令牌） */
+const TAB_KEYS = ['containerLog', 'containerConfig', 'deploy', 'deployLog']
 
 export default class extends React.Component {
 
@@ -66,7 +66,7 @@ export default class extends React.Component {
         deployVisible: false,
         versionOptions: [],
 
-        activeTab: 'log',
+        activeTab: 'containerLog',
 
         stopping: false,
         starting: false,
@@ -77,7 +77,7 @@ export default class extends React.Component {
         deploySubmitting: false,
 
         // 各标签的刷新令牌：对应值 +1 只让该标签重挂载并重新拉取数据，其他标签不受影响
-        tabTokens: {log: 0, container: 0, config: 0, publish: 0},
+        tabTokens: {containerLog: 0, containerConfig: 0, deploy: 0, deployLog: 0},
     }
 
     deployFormRef = React.createRef()
@@ -123,7 +123,9 @@ export default class extends React.Component {
         HttpClient.get('admin/image/getByUrl', {imageUrl: app.imageUrl}, {toastError: false})
             .then(rs => {
                 if (!rs.data?.id) {
-                    message.warning('镜像不存在或已被删除')
+                    // 应用只存 imageUrl，镜像列表里不一定有对应记录（外部镜像 / 未收录 / 已删除），
+                    // 说“镜像不存在”会让人误以为镜像（镜像仓库或主机上）真的没了
+                    message.warning('平台未收录该镜像')
                     return
                 }
                 PageUtils.open('/image/view?id=' + rs.data.id)
@@ -162,12 +164,12 @@ export default class extends React.Component {
                 } else if (watch.seenDeploying) {
                     // 部署已结束：刷新部署日志与容器标签，展示最终状态
                     this.deployWatch = null
-                    this.bumpTokens(['log', 'container'])
+                    this.bumpTokens(['deployLog', 'containerLog'])
                     keepPolling = false
                 } else if (Date.now() - watch.startedAt > DEPLOY_PROBE_TIMEOUT) {
                     // 兜底：始终没观察到 deploying（部署极快已结束，或已失败），不再空转轮询
                     this.deployWatch = null
-                    this.bumpTokens(['log', 'container'])
+                    this.bumpTokens(['deployLog', 'containerLog'])
                     keepPolling = false
                 } else {
                     // @Async 任务登记 deploying 有延迟，继续探
@@ -270,7 +272,7 @@ export default class extends React.Component {
                 version: values.version,
                 forcePull: values.forcePull
             }).then(() => {
-                this.setState({deployVisible: false, activeTab: 'log'})
+                this.setState({deployVisible: false, activeTab: 'deployLog'})
                 this.handleChanged({redeploy: true})
             }).finally(() => {
                 hide()
@@ -283,7 +285,7 @@ export default class extends React.Component {
         HttpClient.post('admin/app/start/' + this.state.app.id).then(() => {
             this.reload().catch(() => {
             })
-            this.bumpTokens(['container'])
+            this.bumpTokens(['containerLog'])
         }).finally(() => {
             this.setState({starting: false})
         })
@@ -293,7 +295,7 @@ export default class extends React.Component {
         HttpClient.post('admin/app/stop/' + this.state.app.id).then(() => {
             this.reload().catch(() => {
             })
-            this.bumpTokens(['container'])
+            this.bumpTokens(['containerLog'])
         }).finally(() => {
             this.setState({stopping: false})
         })
@@ -429,10 +431,10 @@ export default class extends React.Component {
 
         const items = [
             {
-                key: 'container',
-                label: '容器日志',
+                key: 'containerLog',
+                label: '日志',
                 children: container && container.id
-                    ? <ContainerLogs key={'container-' + tabTokens.container}
+                    ? <ContainerLogs key={'containerLog-' + tabTokens.containerLog}
                                      url={`/admin/ws/log/${app.id}`}
                                      downloadUrl={`/admin/app/containerLogDownload?id=${encodeURIComponent(app.id)}`}
                                      logsUrl={`/admin/app/containerLogs?id=${encodeURIComponent(app.id)}`}
@@ -442,23 +444,24 @@ export default class extends React.Component {
                     : <Alert type='info' showIcon title='容器未部署'/>
             },
             {
-                key: 'log',
-                label: '部署日志',
-                children: <DeployLogList key={'log-' + tabTokens.log} appId={app.id}
-                                         deploying={container?.state === 'deploying'}/>
-            },
-            {
-                key: 'config',
-                label: '容器配置',
-                children: <ConfigForm key={'config-' + tabTokens.config} app={app} onChange={this.handleChanged}/>
+                key: 'containerConfig',
+                label: '参数',
+                children: <ConfigForm key={'containerConfig-' + tabTokens.containerConfig} app={app}
+                                      onChange={this.handleChanged}/>
             },
 
             {
-                key: 'publish',
-                label: '发布',
-                children: <PublishForm key={'publish-' + tabTokens.publish} appId={app.id}
+                key: 'deploy',
+                label: '部署',
+                children: <PublishForm key={'deploy-' + tabTokens.deploy} appId={app.id}
                                        containerState={container?.state}
                                        onChange={this.handleChanged}/>
+            },
+            {
+                key: 'deployLog',
+                label: '部署日志',
+                children: <DeployLogList key={'deployLog-' + tabTokens.deployLog} appId={app.id}
+                                         deploying={container?.state === 'deploying'}/>
             },
             {
                 key: 'setting',
