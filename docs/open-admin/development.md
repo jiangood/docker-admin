@@ -19,15 +19,43 @@
 | 分页查询 | GET | `admin/xxx/page` | `page(Pageable)` |
 | 详情 | GET | `admin/xxx/info/{id}` | `info(@PathVariable id)` |
 | 创建 | POST | `admin/xxx/create` | `create(@RequestBody dto)` |
-| 更新 | POST | `admin/xxx/update` | `update(@RequestBody dto, @RequestHeader("X-Body-Fields") List<String> fields)` |
+| 更新 | POST | `admin/xxx/update` | `update(@RequestBody dto, @RequestHeader(value = "X-Body-Fields", required = false) List<String> fields)` |
 | 删除 | POST | `admin/xxx/delete` | `delete(@Valid @RequestBody IdReq req)` |
 
 > **部分更新语义**：`update` 采用 PATCH 式语义 —— 请求头 `X-Body-Fields` 携带本次 body 的顶层字段名（逗号分隔），后端只更新其中列出的字段，未列出的保持原值；显式传 `null` 的字段会被清空。前端 `HttpClient` 对 POST 的普通对象 body 会自动附加该请求头（值为 `undefined` 的键会被序列化丢弃，故不在其中），业务页面无需手动处理。
 
+### CRUD 辅助（CrudOps）
+
+代码生成器生成的 Controller 默认使用 `io.github.jiangood.openadmin.framework.web.CrudOps`，统一详情、分页、成功响应以及更新/删除校验，避免每个模块重复写同样的判断：
+
+| 方法 | 作用 |
+|------|------|
+| `info(Optional<T>, notFoundMsg)` | 存在返回 `data`，否则返回业务错误 |
+| `page(service, pageable, specCustomizer)` | 构造 Spec 并分页，`customizer` 可为 `null` |
+| `created()` / `created(saved)` / `updated()` / `deleted()` | 标准成功响应文案 |
+| `requireUpdate(id, fields, existingSupplier, notFoundMsg)` | 依次校验 id 非空、确有字段提交、记录存在 |
+| `requireDelete(existing, notFoundMsg)` | 校验记录存在，返回已有记录便于写日志 |
+
+`requireUpdate` 在 id 为空或字段为空时直接抛 `BusinessException`，不会先执行查询；校验失败由全局异常处理器转成 `AjaxResult.err` 业务文案，不会被兜底成「服务器忙」。
+
+```java
+@PostMapping("update")
+public AjaxResult update(@RequestBody Customer input,
+        @RequestHeader(value = "X-Body-Fields", required = false) List<String> updateFields) {
+    CrudOps.requireUpdate(input.getId(), updateFields,
+            () -> service.findById(input.getId()), "记录不存在");
+    service.save(input, updateFields);
+    return CrudOps.updated();
+}
+```
+
+> `X-Body-Fields` 为可选请求头，缺失时由 `CrudOps` 返回「没有提交任何字段」，而不是框架层的 400「缺少请求头」。
+
 ## 后端要点
 
 - 推荐构造器注入（`@RequiredArgsConstructor` + `private final`）；框架基类（如 `BaseService`）允许 `@Autowired` 字段注入；Quartz 任务例外见下方「定时任务（Quartz）」
-- 业务异常抛 `ServiceException`，Controller 不做 try-catch
+- 业务异常抛 `BusinessException`，Controller 不做 try-catch
+- 操作日志用 `@Log("模块-动作")`；需要人话详情时加 `detail = "新增XX「${#input.name}」"`，删除/重置等只有 id 的场景用 `OperationLogContext.setDetail(...)`；详情里不要拼密码、令牌等敏感字段
 - 使用 Java 21 Record / Pattern Matching / Switch 表达式 / Text Block
 - 方法参数校验用 `@Valid` / `@Validated`
 
@@ -40,6 +68,8 @@
 - 敏感值加 `.asSecret()`；配置修改接口不要直接挂 `@Log`，操作日志由框架只记录变更的 key
 - 需要随 `/admin/public/site-info` 下发给未登录页面的展示类参数加 `.asPublic()`，值会放在 `siteInfo.config` 中
 - 代理地址用 `Configs.proxyUrl(...)`（`proxy` 类型）：一个字段包含类型、主机、端口与凭据，接口回显自动把密码替换成 `***`
+- 指纹、初始化标记等内部键加 `.asHidden()`：不出现在配置页，也不能被页面接口修改；业务侧用 `putInternal` / `removeInternal` 读写
+- 已下线的 key 通过 `ConfigProvider.deprecatedKeys()` 声明，启动时自动清理数据库残留行（只记录 key，不记录值）
 - 业务代码通过 `SysConfigService` 的 `getBool/getInt/getString/getList` 读取，不要直接查 `SysConfigRepository`
 - 只把「运行期读取、改了立即生效」的参数放进来；启动期装配的配置仍留在 `application.yml`
 
@@ -48,6 +78,40 @@
 ## 定时任务（Quartz）
 
 任务类继承 `BaseJob` 并加 `@JobDescription`，注册菜单后由 Quartz 调度（新增示例见 `modules/job/` 下的框架任务）。
+
+**自动注册**：启动时会扫描 `BaseJob` 子类以及带 `@JobDescription` 的任务类，把缺失的记录补建到 `sys_job`（默认禁用），不需要再为每个业务任务手写 seed。已有记录不会被覆盖，删除记录后重启会重新补建；不想运行请禁用而不是删除。可通过 `sys.job-auto-register: false` 关闭。注解属性：
+
+| 属性 | 默认值 | 说明 |
+|------|--------|------|
+| `key` | 全限定类名 | 稳定标识；类改名/换包时保持不变即可复用原记录 |
+| `label` | 必填 | 任务名称；重名时自动追加类名 |
+| `defaultCron` | 空 | 自动注册时的默认 cron；为空则只补建不启用调度 |
+| `defaultEnabled` | false | 自动注册时是否启用（需同时配置 `defaultCron`） |
+| `logAggregation` | `PER_RUN` | 执行记录方式 |
+| `autoRegister` | true | 是否参与启动自动注册；依赖库中的任务可设为 false |
+| `params` / `paramsProvider` | 空 | 任务参数定义 |
+
+**稳定 key 与升级**：`sys_job.job_key` 可空且唯一，新记录写入 `key`；旧数据启动时按 `jobClass` 回填。匹配顺序为 `job_key` → `jobClass`，因此类改名/换包后不会重复补建。若 key 已存在但执行类不同，框架只输出 warn，不会覆盖数据库中的执行类；按提示在「系统管理 → 定时任务」里修改即可。key 重复时保留类名排序靠前的一个。
+
+换包且未显式声明 `key` 时，会再做一次保守推断：若数据库中恰好有一条「执行类已不存在、简单类名相同、仍使用默认 key」的记录，则提示「疑似换包」并跳过补建，避免重复；显式改过 key 的记录不参与推断。该逻辑只提示，不自动修改执行类。
+
+**JobRegistrar SPI**：业务可实现 `JobRegistrar` 并注册为 Spring Bean，显式注册任务或覆盖注解默认值（`name` / `cron` / `enabled` / `logAggregation` / `jobData`）。SPI 优先级高于注解，只影响新建记录，不修改已有配置：
+
+```java
+@Bean
+public JobRegistrar reminderJobs() {
+    return () -> List.of(JobDefinition.builder()
+            .key("reminder.send")                    // 可省略，默认全限定类名
+            .jobClass(ReminderJob.class)
+            .name("提醒-发送")
+            .cron("0 0/5 * * * ?")
+            .enabled(true)
+            .logAggregation(JobLogAggregation.DAILY)
+            .build());
+}
+```
+
+**管理页导入**：定时任务页面的「导入任务」会列出代码中存在、数据库未注册的任务，支持单条或全部导入。已存在但执行类不存在的记录仍只提示，不会自动删除。
 
 **实例化与注入**：Quartz 任务由调度器的 JobFactory 在**每次触发时创建新实例**（原型，非 Spring 单例，不走 AOP 代理）。Spring Boot 默认 `SpringBeanJobFactory` 通过 `beanFactory.createBean()` 实例化，因此**构造器注入与字段注入均可使用**。框架自身约定任务用 `@Resource` 字段注入（见 `BaseJob`）。
 
@@ -86,7 +150,7 @@ return "同步完成 " + rows.size() + " 条";
 
 - 聚合模式下复用同一条 `SysJobLog`（id 不变），日志按 `job/{logId}` 追加到同一文件；「执行情况 → 日志」按钮打开的就是该周期的完整文件日志。
 - 聚合记录字段：`beginTime` 为周期内第一次执行时间，`jobRunTime` 为最近一次耗时，`totalRunTime` 为累计耗时，`executeCount`/`failCount` 为执行/失败次数，`success` 表示周期内是否全部成功，`result` 为最近一次返回值。
-- 过期执行记录与日志文件由 `sys.job-log-retain-days`（默认 30 天，`<=0` 不清理）每天 03:00 自动清理；删除任务时也会一并删除其执行记录与日志文件。
+- 过期执行记录与日志文件按 `sys.job-log-retain-days`（默认 30 天，`<=0` 不清理）惰性清理：任意定时任务执行结束后触发一次检查（同一自然日最多清理一次，清理在独立线程异步执行）；没有任务执行就不会触发清理。删除任务时也会一并删除其执行记录与日志文件。
 
 ### 日志写入与在线查看
 

@@ -8,16 +8,21 @@
 |------|------|--------|
 | `sys.title` | 系统标题（必填），可在参数设置页覆盖 | 管理系统 |
 | `sys.short-title` | 系统简称，仅在左侧菜单顶部等空间受限处显示；留空则使用 `sys.title`，可在参数设置页覆盖 | 空 |
-| `sys.file.store-type` | 文件存储 (`LOCAL`/`MINIO`) | LOCAL |
+| `sys.file.store-type` | 文件存储 (`LOCAL`/`S3`) | LOCAL |
 | `sys.file.upload-path` | 本地上传路径 | /home/files |
 | `sys.file.clean-temp-minutes` | 临时文件自动清理时间（分钟） | 120 |
-| `sys.file.minio.*` | MinIO 对象存储配置 | — |
-| `sys.session-idle-time` | Session 超时（分钟） | 180 |
+| `sys.file.s3.*` | S3 对象存储配置 | — |
+| `sys.session-idle-time` | Session 超时（分钟），通过 `server.servlet.session.timeout` 生效 | 180 |
 | `sys.maximum-sessions` | 最大并发会话数（同一账号同时在线数），超出时踢出旧会话 | 1 |
+| `server.servlet.session.persistent` | 优雅停机时把登录会话落盘，重启后恢复（重启免登录） | true |
+| `server.servlet.session.store-dir` | 会话落盘目录，需可写并位于持久卷 | /data/session |
+| `server.servlet.session.timeout` | 会话空闲超时，默认引用 `sys.session-idle-time` | 180m |
 | `sys.concurrent-login-message` | 被并发登录顶下线时的提示文案 | 您的账号已在别处登录，请重新登录 |
 | `sys.login-expired-message` | 会话空闲超时/未登录时的提示文案（经 `/admin/public/site-info` 下发给前端） | 登录已过期，请重新登录 |
 | `sys.job-enable` | 定时任务开关 | true |
-| `sys.job-log-retain-days` | 定时任务执行记录保留天数，`<=0` 表示不清理 | 30 |
+| `sys.job-auto-register` | 启动时扫描 `BaseJob` 子类 / `@JobDescription` 并补建缺失的定时任务记录（只补建，不覆盖已有配置） | true |
+| `sys.job-log-retain-days` | 定时任务执行记录保留天数；任务执行后惰性清理（同一天最多一次，异步执行），`<=0` 表示不清理 | 30 |
+| `sys.job-log-size-warn-mb` | 定时任务日志文件总占用告警阈值（MB），仅用于管理页红色提示，不自动清理；`<=0` 关闭告警 | 1024 |
 | `sys.codegen.backend-dir` | 代码生成后端源码根目录（相对项目根） | src/main/java |
 | `sys.codegen.resource-dir` | 代码生成资源目录（菜单 YAML 输出位置） | src/main/resources |
 | `sys.codegen.frontend-dir` | 代码生成前端页面根目录 | web/src/pages |
@@ -25,7 +30,9 @@
 
 > 框架的 `.opencode/skills/` 与 `docs/open-admin/` 由 `oa-upgrade-docs` skill 从框架 GitHub Release 下载 `framework-files.zip` 同步到业务项目根目录（内容比对，无变更不写入）。无需配置。
 
-> 「在线用户」列表复用同一套会话注册表，记录保存在内存，**仅单实例部署准确**；多实例部署请先引入 Spring Session 等共享会话方案，否则各节点只能看到本节点登录的用户。
+> **会话落盘（重启免登录）**：框架默认开启 `server.servlet.session.persistent`，正常停机时把 `HttpSession` 写入 `server.servlet.session.store-dir`，启动后恢复。仅对**单实例、优雅停机**有效：`kill -9`、JVM 崩溃、断电不会保留会话；多实例请改用 Spring Session 等共享会话方案。首次升级启动时旧的内存会话已丢失，所有用户需重新登录一次，之后正常重启不再需要。session 中的自定义属性必须可序列化；未挂载 `/data` 的项目请覆盖 `store-dir`，或设置 `persistent: false` 关闭。
+
+> 「在线用户」列表复用同一套会话注册表，记录保存在内存，**仅单实例部署准确**；应用重启后会话本身会恢复，在线记录则随用户下一次请求自动补登记（重启后尚未访问的用户不会立即出现在列表里）。多实例部署请先引入 Spring Session 等共享会话方案，否则各节点只能看到本节点登录的用户。
 
 > 本地想验证个人中心「登录设备」的多处登录提示，可用 `local` profile 启动（`-Dspring-boot.run.profiles=local` 或环境变量 `SPRING_PROFILES_ACTIVE=local`），该 profile 将 `sys.maximum-sessions` 设为 `3`。
 
@@ -52,9 +59,10 @@
 | 邮件发送 | `email.username` | STRING | 空 | 发件邮箱 |
 | 邮件发送 | `email.password` | STRING（敏感） | 空 | 授权码/应用专用密码，留空表示不修改 |
 | 邮件发送 | `email.from.name` | STRING | 空 | 发件人显示名，可选 |
+| 邮件发送 | `email.default-to` | LIST | 空 | 默认收件人，多个用逗号分隔；发送时未填收件人则使用 |
 | 邮件发送 | `email.proxy` | PROXY | 空 | 代理 URL，留空表示不使用 |
 
-其余 `sys.*` 仍在 `application.yml` 中维护，**修改后需要重启**；原因是它们属于启动期装配（最大会话数、Quartz 开关、代码生成目录、MinIO 等）或安全结构性配置。
+其余 `sys.*` 仍在 `application.yml` 中维护，**修改后需要重启**；原因是它们属于启动期装配（最大会话数、Quartz 开关、代码生成目录、对象存储等）或安全结构性配置。
 
 ### 邮件发送
 
@@ -76,6 +84,8 @@
 - 代理密码回显为 `***`，保存时保持 `***` 表示沿用已保存的密码；清空字段即不使用代理；
 - SOCKS5 代理不支持账号密码（JavaMail 的限制），需要认证请用 HTTP 代理。
 
+未填写 `email.default-to` 时，`MailMessage` 的 `to` / `cc` / `bcc` 全为空才会报「收件邮箱不能为空」；只填 `cc` 或 `bcc` 时，框架会把发件邮箱放入 `To`，避免部分服务器判定为无收件人而拒收。
+
 业务模块注入 `MailService` 发送：
 
 ```java
@@ -87,6 +97,34 @@ mailService.sendAsync(MailMessage.builder()
                 .paragraph("镜像已推送。")
                 .build())
         .build());
+```
+
+HTML 正文需要内嵌图片时使用 `inline`（CID），客户端直接显示图片，不会变成附件：
+
+```java
+mailService.sendAsync(MailMessage.builder()
+        .to("ops@example.com")
+        .subject("巡检报告")
+        .html("<p>趋势见下图：</p><img src=\"cid:trend\">")
+        .inline(MailInline.of("trend", new File("/data/trend.png")))   // 文件
+        .inline(MailInline.of("logo", logoBytes, "image/png"))         // 字节数组
+        .build());
+```
+
+- `cid` 可以写 `trend`、`cid:trend` 或 `<trend>`，正文统一用 `cid:trend` 引用；框架发送时按 RFC 用尖括号包裹 `Content-ID`；
+- 只填 `bcc` / `cc` 时框架会用发件邮箱补一个 `To`，避免部分服务器把「没有收件人」的邮件拒收；`bcc` 收件人之间互不可见。
+
+需要记录失败、提示用户补配置或自行重试时，使用返回结果的 API：
+
+```java
+MailSendResult result = mailService.trySend(message);
+if (!result.success()) {
+    // result.errorType()：NOT_CONFIGURED / AUTH / PROXY / NETWORK / RECIPIENT_MISSING / INVALID_MESSAGE / UNKNOWN
+    // result.error()：可直接展示的失败原因
+}
+
+// 异步版本，future 完成时得到同样的结果
+mailService.sendAsyncResult(message).thenAccept(r -> { ... });
 ```
 
 ### 业务项目扩展
@@ -128,10 +166,41 @@ List<String> channels = sysConfigService.getList("cvs.capture.channels");
 - `.asPublic()`：随 `/admin/public/site-info` 的 `config` 字段下发给未登录页面
 - `.asSecret()`：接口只返回 `hasValue`，不回显值；不能同时 `.asPublic()`
 - `.asRequired()`：保存时不允许为空
+- `.asHidden()`：内部配置项，业务可正常读写，但不出现在配置页，也不能通过页面接口修改或重置；不能同时 `.asPublic()`
 - 配置文件里用相同 key 写默认值也会生效（优先级低于数据库覆盖值）
-- 配置项声明错误（重复 key、非法 key、敏感项同时公开等）会让应用启动失败，便于尽早发现
+- 配置项声明错误（重复 key、非法 key、敏感项同时公开、隐藏项同时公开等）会让应用启动失败，便于尽早发现
 
-> 修改配置的接口不要直接加 `@Log`：请求体可能包含敏感值。框架通过 `SysConfigOperationLogger` 只记录变更的 key。
+> 修改配置的接口不要直接加 `@Log`：请求体可能包含敏感值。框架通过 `SysConfigOperationLogger` 只记录变更的 key（操作详情里列出 key，不记录值）。
+
+### 内部配置项与废弃键
+
+指纹、初始化标记、内部开关等不需要出现在「参数设置」页的键，用 `.asHidden()` 声明：
+
+```java
+.add(Configs.string("cvs.encode-fp", "编码指纹").asHidden())
+```
+
+- 配置页接口（`items` / `update` / `reset`）不会返回、也不允许修改隐藏项；只包含隐藏项的分组不会显示
+- 业务代码仍可正常读取，写操作使用 `putInternal` / `removeInternal`（仅限隐藏项）：
+
+```java
+sysConfigService.putInternal("cvs.encode-fp", "fp-20261108");
+String fp = sysConfigService.getString("cvs.encode-fp");
+sysConfigService.removeInternal("cvs.encode-fp");   // 恢复默认
+```
+
+- 页面「全部恢复默认」会保留隐藏项的值，避免误删内部状态；需要清理时显式调用 `removeInternal`
+
+已下线的键直接在 `ConfigProvider` 中声明，应用启动时会幂等清理数据库残留行（日志只记录 key，不记录值）：
+
+```java
+@Override
+public List<String> deprecatedKeys() {
+    return List.of("cvs.old-interval", "cvs.old-mode");
+}
+```
+
+从业务自建参数表迁移历史覆盖值时，建议在一次性启动钩子里读取旧表，逐项调用 `update`（可见项）或 `putInternal`（隐藏项）；写入前会按框架声明的类型校验，迁移完成后即可删除旧表与旧页面。
 
 ## 数据库
 
@@ -150,10 +219,40 @@ List<String> channels = sysConfigService.getList("cvs.capture.channels");
 
 ## 文件存储
 
-通过 `sys.file.store-type` 选择后端（`LOCAL` / `MINIO`）：
+通过 `sys.file.store-type` 选择后端（`LOCAL` / `S3`）：
 
 - `LOCAL` — 本地文件系统，保存到 `sys.file.upload-path`，按 `public/`、`private/` 子目录区分可见性
-- `MINIO` — MinIO 对象存储（官方 `io.minio:minio` 客户端），配置 `sys.file.minio.{endpoint,accessKey,secretKey,bucketName}`；`endpoint` 需带协议前缀（如 `http://localhost:9000`），bucket 需提前创建。业务项目需自行添加 `io.minio:minio` 与 `com.squareup.okhttp3:okhttp-jvm` 依赖（minio 9.x 的 Maven 元数据引用的 okhttp 为空壳，实际类在 okhttp-jvm）
+- `S3` — S3 协议对象存储（AWS SDK v2 客户端），可对接 AWS S3、RustFS、阿里云 OSS、腾讯云 COS、Ceph 等。依赖已随框架引入（`software.amazon.awssdk:s3` + `url-connection-client`），业务项目无需额外配置
+
+| 配置 | 说明 | 默认值 |
+|------|------|--------|
+| `sys.file.s3.endpoint` | 服务地址，如 `http://localhost:9000`；对接 AWS S3 时可留空 | 空 |
+| `sys.file.s3.region` | 地域，RustFS 可保持默认；AWS 中国区需改为 `cn-north-1` 等 | us-east-1 |
+| `sys.file.s3.access-key` | Access Key；留空则使用默认凭证链（环境变量 / IAM Role / 实例角色） | 空 |
+| `sys.file.s3.secret-key` | Secret Key | 空 |
+| `sys.file.s3.bucket-name` | 存储桶，需提前创建 | — |
+| `sys.file.s3.path-style-access` | 是否使用 path-style 访问；RustFS 默认 `true`，AWS S3 / 阿里云 OSS 建议 `false`（virtual-hosted） | true |
+
+```yaml
+sys:
+  file:
+    store-type: S3
+    s3:
+      endpoint: http://localhost:9000
+      access-key: your-access-key
+      secret-key: your-secret-key
+      bucket-name: open-admin
+```
+
+本地开发可用 Docker 快速起一个 S3 兼容服务（RustFS，端口 9000 为 S3 API、9001 为控制台）：
+
+```bash
+docker run -d --name rustfs -p 9000:9000 -p 9001:9001 \
+  -e RUSTFS_ACCESS_KEY=openadmin -e RUSTFS_SECRET_KEY=openadmin \
+  -v rustfs-data:/data ghcr.io/rustfs/rustfs:latest
+```
+
+启动后把上面的 `access-key` / `secret-key` 改为 `openadmin` 即可；`bucket-name` 指定的桶需先在控制台创建。
 
 文件 `objectName` 带可见性前缀（如 `public/202607/xxx.jpg` / `private/202607/xxx.pdf`），本地磁盘路径 = `sys.file.upload-path` + `objectName`，与 URL `/file/{objectName}` 完全一致。
 

@@ -15,15 +15,53 @@ Spec<User> spec = Spec.of()
 repository.findAll(spec, pageable);
 ```
 
+### CrudOps CRUD 辅助
+
+`io.github.jiangood.openadmin.framework.web.CrudOps` 收敛 Controller 固定逻辑（代码生成器默认使用）：
+
+| 方法 | 说明 |
+|------|------|
+| `info(Optional<T>, notFoundMsg)` | 存在返回 `data`，否则 `AjaxResult.err(msg)` |
+| `page(service, pageable, specCustomizer)` | 构造 Spec 并分页；`specCustomizer` 可为 `null` |
+| `created()` / `created(saved)` / `updated()` / `deleted()` | 标准成功响应 |
+| `requireUpdate(id, fields, existingSupplier, notFoundMsg)` | 校验 id 非空、确有字段提交、记录存在，返回已有记录 |
+| `requireDelete(existing, notFoundMsg)` | 校验记录存在，返回已有记录（便于写日志详情） |
+
+校验失败抛 `BusinessException`，由全局异常处理器转成 `AjaxResult.err` 业务文案。`requireUpdate` 先校验 id/字段，再按需查询，id 为空时不会执行无效查询。
+
+```java
+@PostMapping("update")
+public AjaxResult update(@RequestBody Customer input,
+        @RequestHeader(value = "X-Body-Fields", required = false) List<String> updateFields) {
+    CrudOps.requireUpdate(input.getId(), updateFields,
+            () -> service.findById(input.getId()), "记录不存在");
+    service.save(input, updateFields);
+    return CrudOps.updated();
+}
+```
+
 ### 注解
 
 | 注解 | 用途 |
 |------|------|
 | `@HasPermission("resource:action")` | 权限控制 |
-| `@Log` | 操作日志 |
+| `@Log("业务-操作")` | 操作日志（可加 `detail` 详情模板） |
 | `@RateLimit(count=10, duration=60)` | IP 限流 |
-| `@JobDescription` | 定时任务定义 |
+| `@JobDescription` | 定时任务定义（`key` / `label` / `defaultCron` / `defaultEnabled` / `logAggregation` / `autoRegister`） |
 | `@ValidateMobile` / `@ValidateIdNum` / ... | 字段格式校验 |
+
+### 操作日志
+
+| 写法 | 用途 |
+|---|---|
+| `@Log("用户-创建")` | 只记录操作名 |
+| `@Log(value = "用户-创建", detail = "新增用户「${#input.name}」")` | 声明式详情；`${}` 内是 SpEL，变量为方法参数（`#参数名`，或 `#p0` / `#a0`） |
+| `OperationLogContext.setDetail("删除用户「" + user.getName() + "」")` | 代码补充详情，适合只有 id、或需要旧值的场景（优先级高于注解模板） |
+
+- 求值失败或结果为 null 时按空串处理，不影响业务方法；详情最长 500 字符
+- 部分更新场景可用 SpEL 的 `?:` 兜底，如 `${#input.name ?: #input.id}`，避免出现空的「」
+- **不要拼接密码、令牌等敏感字段**：`params` 会按字段名自动脱敏，`detail` 不会
+- 日志页的「操作详情」列来自 `detail`，请求参数在行详情抽屉里查看
 
 ### 工具类
 
@@ -31,10 +69,15 @@ repository.findAll(spec, pageable);
 |----|---------|
 | `ExcelTool` | `importExcel` / `exportExcel` |
 | `JdbcRunner` (framework.data) | `findById` / `findAll` / `save` / `deleteById` / `count` |
+| `JdbcValues` | `asLong` / `roundedLong` / `asInt` / `asDouble` / `bool` / `triBool` / `str` / `strTrim` / `strOrNull` / `localDateTime` / `epochSec` / `longOrNull` / `intOrNull` |
+| `FileTool` | `resolveUnder(root, name)` / `existingFile(root, name)` 目录穿越安全解析（`LocalFileOperator` 已复用）；`findByMainName` / `findParentByName` |
+| `ThreadTool` | `execute` / `daemon` / `daemonFixed` / `singleScheduler` / `singleWorker` / `boundedPool` / `close` / `closeNow` / `sleepQuietly` |
 | `LoginTool` | `getUserId` / `getUser` / `getPermissions` / `isAdmin` |
 | `TreeTool` | `buildTree` / `walk` / `treeToList` / `getLeafs` |
 | `BeanTool` / `JsonTool` / `StringTool` | 常用对象/JSON/字符串操作 |
 | `PasswordTool` | 密码加密 |
+
+`JdbcValues` 用于 `JdbcRunner` 返回的 `Map<String, Object>` 取值：`asLong` 截断、`roundedLong` 四舍五入、`triBool` 区分「未知」与 `false`，不要直接强转。`ThreadTool` 的线程工厂一律 daemon；`boundedPool` 队列满时抛 `RejectedExecutionException`；`close` 最多等在途任务 5 秒。取本地文件时优先用 `FileTool.resolveUnder` / `existingFile`，不要自行拼接目录。
 
 ### 定时任务
 
@@ -46,6 +89,8 @@ public class DataSyncJob extends BaseJob {
     public String execute(JobDataMap data, Logger logger) { ... }
 }
 ```
+
+启动时框架会按 `BaseJob` 子类 / `@JobDescription` 自动补建缺失的 `sys_job` 记录（默认禁用，不覆盖已有配置），也支持 `JobRegistrar` SPI 显式注册；`key` / `defaultCron` / `defaultEnabled` / `logAggregation` / `autoRegister` 见 [development.md](development.md) 的「自动注册」。
 
 进度上报（`BaseJob` 受保护方法，供前端「定时任务」页面轮询展示）：
 
@@ -66,6 +111,18 @@ public class DataSyncJob extends BaseJob {
 
 快照字段：`jobId` / `jobName` / `logId` / `state`(`RUNNING`/`SUCCESS`/`FAILED`) / `stateLabel` / `stateColor` / `percent` / `current` / `total` / `message` / `beginTime` / `updateTime` / `endTime` / `runTime` / `result`。
 
+页面顶部统计卡片（运行中 / 今日执行 / 日志占用 / 调度器）：
+
+| 端点 | HTTP | 权限 | 说明 |
+|------|------|------|------|
+| `admin/job/stat` | GET | `job:read` | `jobCount` / `enabledCount` / `runningCount` / `todayExecuteCount` / `todayFailCount` / `scheduler` |
+| `admin/job/log-size` | GET | `job:read` | 全部任务日志占用：`bytes` / `files` / `warnMb` / `warn` |
+| `admin/job/{jobId}/log-size` | GET | `job:read` | 指定任务的日志占用：`bytes` / `files` |
+
+`admin/job/stat` 的 `scheduler` 字段：`version` / `schedulerName` / `instanceId` / `started` / `standby` / `runningSince` / `jobsExecuted` / `threadPoolSize` / `jobStoreClass` / `persistent` / `clustered`，读取失败时带 `error`。
+
+日志占用只读统计 `${logging.file.path}/job/*.log`，不会创建目录；结果在服务端缓存 30 秒，删除任务或执行记录清理后会主动失效。超过 `sys.job-log-size-warn-mb`（默认 1024 MB，`<=0` 关闭）时 `warn` 为 `true`，管理页以红色提示，不自动清理；清理仍由 `sys.job-log-retain-days` 控制（任务执行后惰性触发，见下文）。
+
 ### 执行记录方式
 
 `SysJob.logAggregation`（前端字段名「执行记录方式」，新建/编辑任务时选择，字典 `jobLogAggregation`）控制执行记录与日志文件粒度：
@@ -76,7 +133,7 @@ public class DataSyncJob extends BaseJob {
 | `HOURLY` 每小时一份记录 | 每任务每小时一行 | 每任务每小时一个文件 |
 | `DAILY` 每天一份记录 | 每任务每天一行 | 每任务每天一个文件 |
 
-聚合记录的 `SysJobLog` 额外字段：`logBucket`（聚合桶）、`executeCount`（执行次数）、`failCount`（失败次数）、`totalRunTime`（累计耗时）/`totalRunTimeLabel`；`jobRunTime`/`result` 为最近一次，`success` 表示周期内是否全部成功。执行记录与日志文件按 `sys.job-log-retain-days`（默认 30 天）自动清理。
+聚合记录的 `SysJobLog` 额外字段：`logBucket`（聚合桶）、`executeCount`（执行次数）、`failCount`（失败次数）、`totalRunTime`（累计耗时）/`totalRunTimeLabel`；`jobRunTime`/`result` 为最近一次，`success` 表示周期内是否全部成功。执行记录与日志文件按 `sys.job-log-retain-days`（默认 30 天）惰性清理：任意定时任务执行结束后触发一次检查（同一自然日最多清理一次，清理在独立线程异步执行），没有任务执行就不会触发；删除任务时也会一并删除其执行记录与日志文件。
 
 ### 运行日志
 
@@ -115,9 +172,9 @@ public class OrderLogPermissionProvider implements LogKeyPermissionProvider {
 
 | 端点 | HTTP | 权限 | 说明 |
 |------|------|------|------|
-| `admin/sys-config/items` | GET | `sys-config:read` | 分组 + 元数据 + 当前生效值 |
-| `admin/sys-config/update` | POST | `sys-config:update` | 只提交改动项：`{values:[{key,value}]}` |
-| `admin/sys-config/reset` | POST | `sys-config:update` | `{keys:[...]}`；`keys` 为空表示全部恢复默认 |
+| `admin/sys-config/items` | GET | `sys-config:read` | 分组 + 元数据 + 当前生效值；隐藏项与只含隐藏项的分组不会返回 |
+| `admin/sys-config/update` | POST | `sys-config:update` | 只提交改动项：`{values:[{key,value}]}`；隐藏项会被拒绝 |
+| `admin/sys-config/reset` | POST | `sys-config:update` | `{keys:[...]}`；`keys` 为空表示全部恢复默认（保留隐藏项）；显式传隐藏项会被拒绝 |
 | `admin/sys-config/value` | GET | `sys-config:read` | 单键读取，查询参数 `key` |
 
 `items` 返回 `{groups:[{code,label,description,items:[...]}]}`，配置项字段：
@@ -133,31 +190,48 @@ public class OrderLogPermissionProvider implements LogKeyPermissionProvider {
 | `secret` / `hasValue` | 是否敏感项、敏感项是否已设置 |
 | `min` / `max` / `options` / `required` | 输入约束 |
 
+> 隐藏项（`.asHidden()`）不会出现在 `items` 中，也不能通过 `update` / `reset` 修改；业务侧使用 `SysConfigService.putInternal` / `removeInternal`。`reset` 全部恢复时会保留隐藏项的值。
+
 > `update` 请求体可能包含敏感值，控制器未使用 `@Log`；操作日志由框架只记录变更的 key。
 
 ### 邮件
 
 邮件配置统一走上面的参数设置接口，不提供单独的设置读写接口。
 
-| 端点 | HTTP | 权限 | 说明 |
-|------|------|------|------|
-| `admin/mail/test` | POST | `sys-config:update` | 发送测试邮件到发件邮箱自己；失败返回具体原因 |
+业务侧通过 `MailService` 发送，支持 HTML 正文、附件和内联图片：
+
+```java
+mailService.sendAsync(MailMessage.builder()
+        .to("ops@example.com")
+        .bcc("audit@example.com")                       // 可选
+        .subject("巡检报告")
+        .html("<p>趋势见下图：</p><img src=\"cid:trend\">")
+        .inline(MailInline.of("trend", trendFile))       // 文件
+        .inline(MailInline.of("logo", logoBytes, "image/png"))  // 字节数组
+        .build());
+```
+
+- `MailInline` 的 `cid` 支持 `trend` / `cid:trend` / `<trend>` 三种写法，HTML 统一用 `cid:trend` 引用；发送时 `Content-ID` 会用尖括号包裹；
+- 未填 `to` 时优先使用参数设置里的 `email.default-to`；`to` / `cc` / `bcc` 全为空才报「收件邮箱不能为空」，只有 `cc` / `bcc` 时会用发件邮箱补 `To`；
+- 发送结果统一走 `MailSendResult` / `MailErrorType`，与附件、代理、认证失败的处理一致。
 
 ### 在线用户
 
-系统管理 →「在线用户」页面：一个登录会话一行，展示账号、姓名、机构、IP、登录时间与最后活跃时间，支持把指定会话强制下线。
+系统管理 →「在线用户」页面：一个登录会话一行，展示账号、姓名、机构、IP、登录时间、最后活跃时间与最近操作（取自操作日志，可点击跳转到按该用户 + IP 过滤的操作日志），支持把指定会话强制下线。
 
 | 端点 | HTTP | 权限 | 说明 |
 |------|------|------|------|
 | `admin/sys-online-user/page` | GET | `sys-online:read` | 分页查询，查询参数 `keyword`（账号/姓名/IP/机构模糊匹配）、`page`、`size` |
 | `admin/sys-online-user/kick` | POST | `sys-online:kick` | 请求体 `{id}`；`id` 为列表返回的随机标识，非 sessionId |
 
-字段：`id` / `username`（账号）/ `name`（姓名）/ `unitId` / `unitName` / `orgId` / `orgName` / `ip` / `userAgent` / `loginTime` / `lastActiveTime` / `current`（是否当前请求所在会话）。真实 `sessionId` 不会下发给前端。
+字段：`id` / `username`（账号）/ `name`（姓名）/ `unitId` / `unitName` / `orgId` / `orgName` / `ip` / `userAgent` / `loginTime` / `lastActiveTime` / `lastOperation`（最近操作名称）/ `lastOperationTime`（最近操作时间）/ `lastOperationTimeText`（友好时间，如「5分钟前」）/ `current`（是否当前请求所在会话）。真实 `sessionId` 不会下发给前端。
 
 说明：
 
-- 在线记录与 `HttpSession` 一样保存在内存，**仅单实例部署准确**，应用重启后清空；多实例部署需要 Spring Session 等共享会话方案（见 [config.md](config.md)）。
+- 在线记录保存在内存，**仅单实例部署准确**；应用重启后 `HttpSession` 会从落盘文件恢复，在线记录则在用户下一次请求时自动补登记（重启后尚未访问的用户不会立即出现），多实例部署需要 Spring Session 等共享会话方案（见 [config.md](config.md)）。
 - `lastActiveTime` 由 Spring Security `SessionRegistry` 的 `lastRequest` 实时计算，无需业务上报。
+- `lastOperation` / `lastOperationTime` 按「用户 + IP」从操作日志表 `sys_log` 批量取最新一条；`lastOperationTimeText` 由 `FriendlyTool.getPastTime` 计算。同一账号从不同 IP 登录时，各会话只显示与自己 IP 一致的最近操作。
+- 「最近操作」跳转格式：`/system/log?userId=...&username=...&ip=...`，操作日志页支持 `username`（模糊）、`userId`（精确）、`ip`（精确）筛选。
 - 强制下线调用 `SessionInformation.expireNow()`，对方下一次请求会收到 401，并复用并发登录提示（见下文「框架内置事件」）。
 - 不允许强制下线当前登录会话；会话被踢后记录立即从列表移除，对方会话在下一次请求时失效。
 - 并发登录被顶下线的旧会话、以及空闲超时的会话，会在下次查询列表时自动清理，不会长期残留。
@@ -170,14 +244,21 @@ public class OrderLogPermissionProvider implements LogKeyPermissionProvider {
 |------|------|------|------|
 | `admin/user-center/sessions` | GET | 登录即可 | 当前账号的活动会话列表，按登录时间倒序 |
 | `admin/user-center/sessions/kick` | POST | 登录即可 | 请求体 `{id}`；下线自己的其他设备，不能下线当前会话 |
+| `admin/user-center/shortcuts` | GET | 登录即可 | 当前用户有效快捷菜单，按个人中心配置顺序返回 |
+| `admin/user-center/shortcut-options` | GET | 登录即可 | 快捷菜单配置项：当前用户有权限的页面菜单树，目录节点仅用于分组 |
+| `admin/user-center/shortcuts` | POST | 登录即可 | 请求体 `{menuIds: string[]}`，保存顺序；空数组表示清空，最多 10 个 |
 
 字段：`id`（随机标识，非 sessionId）/ `ip` / `userAgent` / `loginTime` / `lastActiveTime` / `current`。
+
+快捷菜单字段：`id`（菜单 id）/ `name` / `path` / `icon`。服务端只保存菜单 id，读取时按当前角色权限解析；权限被回收或菜单被删除的条目会自动从快捷菜单中消失，保存时也会校验菜单必须属于当前用户可访问的页面菜单。快捷菜单与导航菜单（`admin/menu-info`）都会应用 `MenuCustomizer` 的定制结果（改名、移动、排序、隐藏），见 [guide.md](guide.md)「框架扩展点」。
+
+快捷菜单保存在 `sys_user.shortcut_menus`（TEXT，JSON 数组）。使用 JPA 自动建表时会自动新增；如项目自行管理表结构，需要同步添加该列。
 
 说明：
 
 - 是否会出现多处登录取决于 `sys.maximum-sessions`：默认 `1` 会在新登录时踢掉旧会话；调大后多个会话并存，个人中心在会话数大于 1 时显示提示。
 - 服务端会校验会话归属，只能下线自己的会话，也允许用户自助下线自己的其他设备。
-- 在线记录保存在内存，**仅单实例部署准确**（同「在线用户」）。
+- 在线记录保存在内存，**仅单实例部署准确**（同「在线用户」）；应用重启后随用户请求自动恢复登记。
 
 ### 代码生成
 
@@ -198,7 +279,7 @@ public class OrderLogPermissionProvider implements LogKeyPermissionProvider {
 |------|------|------|
 | Repository | `{实体包去掉 .entity}/repository/{Entity}Repository.java` | 继承 `BaseRepository<Entity, String>` |
 | Service | `{模块包}/service/{Entity}Service.java` | 继承 `BaseService`，含 `@FileField` 时自动生成 confirmTempFiles/discardTempFiles 事务方法 |
-| Controller | `{模块包}/controller/{Entity}Controller.java` | `admin/{module}` 下 `page/info/create/update/delete`，`@HasPermission` + `@Log` |
+| Controller | `{模块包}/controller/{Entity}Controller.java` | `admin/{module}` 下 `page/info/create/update/delete`，`@HasPermission` + `@Log`，默认使用 `CrudOps` 统一响应与校验 |
 | 前端页面 | `web/src/pages/{module}/index.jsx` | `ProTable` + `FormModal`，按字段类型选用 `Field*`/`View*` 组件 |
 | 菜单 | `src/main/resources/application-menu-{module}.yml` | 挂在指定父菜单（默认 `sys`），含读/建/改/删权限 |
 
@@ -230,6 +311,17 @@ public class OrderLogPermissionProvider implements LogKeyPermissionProvider {
 | `DownloadModal` | 下载弹框，通过 ref 调用 `download()` 方法，支持进度追踪/取消/重试 |
 | `LogViewer` | 文件日志查看器，按字节偏移增量读取；`logKey` + `running` 时自动轮询新内容、任务结束自动补拉最后一段；`url` 可指向业务模块自建接口 |
 | `CronEditor` | cron 表达式输入框 + 常用表达式助手（按间隔/按时间点/自定义），值为 Quartz 格式「秒 分 时 日 月 周 [年]」 |
+
+#### Layouts
+
+应用根布局（由 `web/src/main.jsx` 渲染），负责站点信息/登录校验、主题与后台布局（侧栏 + 顶栏 + 页签）。
+
+| 属性 | 类型 | 说明 |
+|---|---|---|
+| `headerExtra` | `(context: HeaderExtraContext) => React.ReactNode` | 顶栏额外内容，默认渲染在 `HeaderRight` 左侧；`context` 含 `activeTopMenu`、`loginInfo` |
+| `headerExtraStretch` | `boolean` | 为 `true` 时 `headerExtra` 紧跟一级菜单并撑满顶栏剩余空间；默认 `false`（保持原位置）。需要常驻条（如预警滚动条）时使用，不要覆盖 `.top-nav` |
+| `showOrgSwitcher` | `(context: HeaderExtraContext) => boolean` | 是否显示组织机构切换器 |
+| `colors` | `Partial<ThemeColors>` | 主题颜色基线，见 [config.md](config.md) |
 
 #### PageFrame
 
@@ -355,6 +447,7 @@ import { PermActions } from '@jiangood/open-admin';
     <Form.Item label="名称" name="name"><Input/></Form.Item>
   )}
   searchInline                           // 搜索表单内联到工具栏左侧（单条件页面），默认 false
+  defaultParams={{status: 'ENABLED'}}    // 初始筛选条件，首次加载即生效并回填表单
   toolBarRightRender={(params, {selectedRowKeys}) => (        // 操作按钮统一放右侧
     <Button type="primary" onClick={this.handleAdd}>新增</Button>
   )}
@@ -379,7 +472,9 @@ import { PermActions } from '@jiangood/open-admin';
 | `searchFormRender` | 搜索表单渲染函数，返回 `Form.Item` 列表 |
 | `searchFormCols` | 搜索栏每行列数，默认 4（`searchInline` 时忽略） |
 | `searchInline` | 搜索表单内联到工具栏左侧，与操作按钮同一行（单条件页面省一行空间）；默认 `false` = 独立筛选卡 |
+| `defaultParams` | 初始筛选条件，首次加载即按此条件查询并回填搜索表单（适合从其他页面带参数跳转） |
 | `defaultPageSize` | 默认每页条数 |
+| `scrollX` | 表格横向宽度：默认 `'max-content'`（按内容撑开，超宽时横向滚动）；传 `true` 让表格自适应容器宽度、单元格内容按列宽换行；传数字为表格最小宽度（容器更宽时铺满，更窄时横向滚动） |
 | `scrollY` | 表格纵向滚动高度 |
 | `bordered` | 是否显示边框 |
 
@@ -514,8 +609,9 @@ class ReportPage extends React.Component {
 - `POST /admin/sys-file/upload` — 通用文件上传，表单参数 `file`、`isPublic`（`true` 公开免登录 / `false` 私有需登录，默认 `true`）
 - `POST /admin/sys-file/upload-image` — 图片上传，表单参数 `file`、`thumb`（缩略图）、`isPublic`
 - `GET /admin/sys-file/download/{*objectName}` — 下载
+- `GET /admin/sys-file/folder-tree` — 文件管理左侧文件夹树，按 objectName 的存储目录聚合，节点为 `key`/`title`/`count`/`children`；`GET /admin/sys-file/page` 可传 `folder`（目录前缀，含子目录）过滤
 
-上传文件默认标记为临时，保存业务数据后后端自动确认（详见[临时文件自动清理](config.md#临时文件自动清理)）。
+上传文件默认标记为临时，保存业务数据后后端自动确认（详见[临时文件自动清理](config.md#临时文件自动清理)）。本地存储会对 `objectName` 做目录穿越校验（绝对路径与 `../` 越界直接拒绝），业务不要把未经校验的外部路径拼到 `sys.file.upload-path` 下。
 
 前端字段直接存储文件 `objectName`（如 `public/202607/xxx.jpg`），`ViewImage` / `ViewFile` / `FieldUploadFile` 自动拼接 `/file/{objectName}` 展示；上传组件通过 `isPublic` prop 指定是否公开，默认 `true`（私有文件显式传 `isPublic={false}`）：
 
@@ -578,7 +674,7 @@ location /file/public/ {
 | `UrlUtils` | `contextPath(path)` 拼接 context-path / `getParams` / `setParam` / `getPathname` |
 | `DictUtils` | `dictList` / `dictLabel` / `dictOptions` / `dictTag` |
 | `TreeUtils` | `walk` / `findByKey` / `flattenTree` / `getKeyList` / `getChildRecursive` |
-| `DateUtils` | `formatDate` / `formatTime` / `formatDateTime` / `formatDateCn` / `friendlyTime` |
+| `DateUtils` | `toDate` / `formatDate` / `formatTime` / `formatDateTime` / `formatDateCn` / `friendlyTime` |
 | `StringUtils` | `ellipsis` / `random` / `contains` / `subBefore` / `subAfter` / `split` / `join` |
 | `ArrayUtils` | 数组操作 |
 | `ObjectUtils` | 对象操作（`copyPropertyIfPresent` 等） |
@@ -586,6 +682,8 @@ location /file/public/ {
 | `DeviceUtils` | `isMobileDevice` |
 | `PageUtils` | `open(path)` 打开新 Tab / `currentTitle()` 获取当前页面标题 / `closeCurrent` / `redirectToLogin` / `currentUrl` / `currentParams`；常量 `LOGIN_PATH` 为登录页路径（`/login`）。`open` 的 `label` 参数已弃用且不再生效，`currentLabel()` 已弃用 |
 | `EventBus` | `on` / `once` / `emit` / `off` — 跨组件通信，优先使用，替代 `document.dispatchEvent` |
+
+`DateUtils.toDate` 统一解析后端时间字段：`Date`、epoch 秒、epoch 毫秒、ISO 串、`YYYY-MM-DD HH:mm:ss`、纯日期（按本地零点），无效或空值返回 `null`；`formatDate*` 同样接受这些入参，解析失败返回空串。后端时间字段可能是 epoch 秒、epoch 毫秒或 ISO 串，业务侧请直接用 `toDate`，不要手写 `v * 1000` 或 `new Date(v)`。`friendlyTime(value, options?)` 的选项：`showSeconds`（默认 `true`，`false` 时不足 1 分钟显示「刚刚」）、`daysOnly`（默认 `false`，`true` 时不换算成「周」）、`future`（默认 `'after'`，`'clamp'` 时未来时间显示「刚刚」）、`empty`（无效值占位，默认 `undefined`）。
 
 `EventBus.on` / `once` 返回取消订阅函数；`on` 支持传 `ctx`（this）。`PageUtils.open(path)` 用于跳转到页面，`PageUtils.currentTitle()` 返回当前页面标题（不含系统标题，未设置时返回 `undefined`）；页面标题请由目标页面通过 `pageMeta.title` 提供。`PageUtils.open(path, label)` 的 `label` 参数与 URL 中的 `_label` 已弃用且不再生效，传入时控制台会输出一次弃用提示。登录相关跳转请使用 `LOGIN_PATH`，不要硬编码 `/public/login`。
 
