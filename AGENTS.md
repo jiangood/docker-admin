@@ -157,11 +157,17 @@ git tag vx.y.z && git push && git push origin vx.y.z
   日志聚合为按小时。**升级 docker-java 时需要回归这条链路。**
 - **应用定时更新：** 应用详情「发布」页的「定时更新」开关（`App.scheduledUpdate`，默认关闭）按
   `scheduledUpdateIntervalMinutes`（默认 1440 分钟）定时检查镜像，适用于不是通过项目构建的外部镜像。
-  任务 `AppScheduledUpdateJob` 每分钟扫描到期应用，只处理**运行中**的容器；pull 后比较运行中容器的
-  `ImageId` 与本地 tag 的 `ImageId`，不同才以 `DeployTrigger.SCHEDULE`（「定时更新」）触发部署，
-  并跳过部署里的二次 pull。检查失败保留旧容器，10 分钟后重试；检查结果快照存在
+  任务 `AppScheduledUpdateJob` 每分钟扫描到期应用，只处理**运行中**的容器；检查由**平台直接访问注册中心**
+  （`RegistryService#v2ClientFor` → `RegistryV2Client#fetchManifestDigest`，只读 manifest，**不下载镜像层**），
+  用注册中心里该 tag 当前的 manifest / index 摘要与本地镜像的 `RepoDigests`、镜像 ID 比较
+  （经典存储的镜像 ID 是 image config 摘要，containerd 存储的镜像 ID 就是 manifest 摘要，两个候选都参与比较），
+  不同才以 `DeployTrigger.SCHEDULE`（「定时更新」）触发部署，部署时强制 pull 拿到新镜像。
+  注册中心地址与凭据按镜像地址解析（`RegistryService#forImageUrl`）；未登记的公共仓库匿名访问
+  （Docker Hub 走 `registry-1.docker.io`，单段名补 `library/`），因此要求**平台能访问该注册中心**。
+  检查失败保留旧容器，10 分钟后重试；检查结果快照存在
   `scheduledUpdateLastCheckTime/LastSuccess/LastResult`，供页面展示。
-  容器 / 本地镜像查询都带 30 秒兜底超时（`SCHEDULED_UPDATE_QUERY_TIMEOUT`），一个失联主机不会拖住整轮。
+  容器查询带 30 秒兜底超时（`SCHEDULED_UPDATE_QUERY_TIMEOUT`），一个失联主机不会拖住整轮；
+  注册中心请求由 `RegistryV2Client` 自带 10 秒连接 / 30 秒读取超时。
   复制应用默认不会继承定时更新开关（间隔偏好保留）。
   **三个内建任务（本任务、主机用量采集、网站可达性检查）统一由 `BuiltinJobRegistrar` 幂等登记**：
   框架 `JobAutoRegistrar` 会先把带 `@JobDescription` 的类补建成「无 cron、默认禁用」的空壳行，

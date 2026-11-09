@@ -7,7 +7,6 @@ import com.github.dockerjava.api.command.CreateContainerCmd;
 import com.github.dockerjava.api.command.CreateContainerResponse;
 import com.github.dockerjava.api.exception.NotFoundException;
 import com.github.dockerjava.api.model.*;
-import com.github.dockerjava.core.command.PullImageResultCallback;
 import io.github.jiangood.docker.admin.BuildSuccessEvent;
 import io.github.jiangood.docker.admin.dao.AppRepository;
 import io.github.jiangood.docker.admin.dao.DeployLogRepository;
@@ -21,6 +20,7 @@ import io.github.jiangood.docker.admin.entity.DeployTrigger;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.entity.ImageTag;
 import io.github.jiangood.docker.admin.entity.Project;
+import io.github.jiangood.docker.admin.service.registry.RegistryV2Client;
 import io.github.jiangood.docker.admin.util.ImageUrlUtils;
 import io.github.jiangood.docker.admin.websocket.TaskLogRegistry;
 import io.github.jiangood.docker.base.FileLog;
@@ -70,22 +70,13 @@ public class AppService extends BaseService<App> {
     private static final Duration BIND_CHECK_TIMEOUT = Duration.ofSeconds(5);
 
     /**
-     * 定时更新检查时拉取镜像的兜底超时。拉大镜像可能很慢，但任务线程不能无限挂住；
-     * 超时后由调用方关闭客户端，中断在途请求。
+     * 定时更新检查的兜底超时。平台只读注册中心的 manifest，通常几秒内返回；
+     * 注册中心不可达时不能把 Quartz 线程一直挂住。
      */
-    private static final Duration SCHEDULED_UPDATE_PULL_TIMEOUT = Duration.ofMinutes(10);
+    private static final Duration SCHEDULED_UPDATE_QUERY_TIMEOUT = Duration.ofSeconds(30);
 
     /** 定时检查失败后的重试间隔：不按完整检查间隔等待，避免一次网络抖动拖一整天 */
     private static final Duration SCHEDULED_UPDATE_RETRY_DELAY = Duration.ofMinutes(10);
-
-    /**
-     * 定时检查里查询容器状态 / 本地镜像的超时。
-     * <p>
-     * 宿主机不可达时 docker-java 的 SSH 传输会无休止重试（见 {@code DockerClientManager#checkSshDocker}），
-     * 而这条链路跑在 Quartz 线程上、一轮要顺序检查多个应用：一个失联主机就能把整轮拖住，
-     * 后面的应用和下一轮触发都得等。宁可按检查失败处理，10 分钟后再试。
-     */
-    private static final Duration SCHEDULED_UPDATE_QUERY_TIMEOUT = Duration.ofSeconds(30);
 
     Set<String> deployingList = ConcurrentHashMap.newKeySet();
 
@@ -153,13 +144,6 @@ public class AppService extends BaseService<App> {
      * @param trigger   本次部署的触发方式，仅用于写部署记录，便于在「部署日志」里区分来源
      */
     private void doDeploy(App app, boolean forcePull, DeployTrigger trigger) {
-        doDeploy(app, forcePull, trigger, false);
-    }
-
-    /**
-     * @param skipPull 定时检查阶段已经拉取过镜像，部署时直接使用本地镜像，避免连续拉取两次
-     */
-    private void doDeploy(App app, boolean forcePull, DeployTrigger trigger, boolean skipPull) {
         Assert.notNull(app, "应用不存在");
         deployingList.add(app.getId());
         DockerClient client = null;
@@ -201,9 +185,7 @@ public class AppService extends BaseService<App> {
             // 构建成功后的自动部署尤其如此，因此无论是否勾选强制拉取都要重新拉取。
             boolean mutableTag = LATEST_TAG.equals(tag);
             boolean localExists = imageExists(client, image);
-            if (skipPull && localExists) {
-                fileLog.info("镜像已在定时检查阶段更新，跳过拉取 {}", image);
-            } else if (!forcePull && !mutableTag && localExists) {
+            if (!forcePull && !mutableTag && localExists) {
                 fileLog.info("本地已存在镜像 {}，跳过拉取（如需更新请勾选强制拉取）", image);
             } else {
                 if (mutableTag && !forcePull) {
@@ -455,7 +437,7 @@ public class AppService extends BaseService<App> {
             if (check.deploy() && !isDeploying(app.getId())) {
                 updated++;
                 // 通过代理调用，保证 @Async 生效
-                SpringUtil.getBean(getClass()).deployScheduledPulled(app.getId());
+                SpringUtil.getBean(getClass()).deployScheduledUpdate(app.getId());
             }
         }
 
@@ -470,8 +452,9 @@ public class AppService extends BaseService<App> {
      * 检查一个应用是否有新镜像。
      * <p>
      * 只处理运行中的容器：停止的应用等下次启动后再说，避免把用户刻意停掉的容器自动拉起。
-     * 判断依据是「运行中容器实际使用的镜像 ID」与「拉取后本地 tag 指向的镜像 ID」是否一致，
-     * 因此上次部署失败、本地 tag 已更新但容器仍是旧镜像时，下一轮还会继续尝试。
+     * 检查由平台直接访问注册中心（读 manifest，不下载镜像层），
+     * 用「注册中心里该 tag 当前的 manifest 摘要」与「本地镜像的 RepoDigests / 镜像 ID」比较，
+     * 因此上次部署失败、本地还是旧镜像时，下一轮还会继续尝试。
      */
     public ScheduledUpdateCheck checkScheduledUpdate(App app) {
         String message;
@@ -485,7 +468,7 @@ public class AppService extends BaseService<App> {
 
             DockerClient client = getClient(app.getHost(), app.getImageUrl());
             try {
-                // 容器查询与本地镜像查询都要兜底超时：后台任务不能被单个失联主机卡住
+                // 容器查询要兜底超时：后台任务不能被单个失联主机卡住
                 Container container = dockerManager.callWithTimeout(SCHEDULED_UPDATE_QUERY_TIMEOUT,
                         "查询容器 " + app.getName(),
                         () -> getContainer(app.getName(), client).stream().findFirst().orElse(null));
@@ -495,13 +478,10 @@ public class AppService extends BaseService<App> {
                 } else if (!"running".equalsIgnoreCase(container.getState())) {
                     message = "容器未运行，跳过";
                 } else {
-                    log.info("应用「{}」定时检查镜像 {}", app.getName(), image);
-                    pullImage(client, repo, tag);
-
-                    String localImageId = dockerManager.callWithTimeout(SCHEDULED_UPDATE_QUERY_TIMEOUT,
-                            "检查本地镜像 " + image,
-                            () -> client.inspectImageCmd(image).exec().getId());
-                    if (StrUtil.equals(localImageId, container.getImageId())) {
+                    log.info("应用「{}」定时检查注册中心镜像 {}", app.getName(), image);
+                    String remoteDigest = remoteImageDigest(repo, tag);
+                    Set<String> localDigests = localImageDigests(client, container.getImageId());
+                    if (localDigests.contains(remoteDigest)) {
                         message = "已是最新";
                     } else {
                         message = "发现新版本，开始部署";
@@ -523,18 +503,46 @@ public class AppService extends BaseService<App> {
     }
 
     /**
-     * 静默拉取镜像：定时检查只关心成功/失败，不把逐层进度写进部署日志文件。
-     * 检查阶段还没有部署记录，也就没有 logId 可绑定。
+     * 查询注册中心里 tag 当前指向的顶层 manifest 摘要（与 docker pull 记入本地 RepoDigests 的值一致）。
+     * <p>
+     * 只读 manifest，不下载镜像层；地址与凭据按
+     * {@link RegistryService#v2ClientFor(String)} 解析，Docker Hub 等未登记的公共仓库匿名访问。
      */
-    private void pullImage(DockerClient client, String repo, String tag) {
-        dockerManager.callWithTimeout(SCHEDULED_UPDATE_PULL_TIMEOUT, "拉取镜像 " + repo + ":" + tag, () -> {
-            // PullImageResultCallback 会在最后一个响应里检查 errorDetail；
-            // 用通用 Adapter 会把错误响应当普通事件吞掉，失败被误判成成功。
-            client.pullImageCmd(repo).withTag(tag)
-                    .exec(new PullImageResultCallback())
-                    .awaitSuccess();
-            return null;
-        });
+    private String remoteImageDigest(String repo, String tag) {
+        RegistryV2Client v2 = registryService.v2ClientFor(repo);
+        String digest = v2.fetchManifestDigest(ImageUrlUtils.repoNameOf(repo), tag);
+        if (StrUtil.isBlank(digest)) {
+            throw new IllegalStateException("注册中心未返回镜像摘要：" + repo + ":" + tag);
+        }
+        return digest.toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * 本地镜像可用于比较的摘要集合。
+     * <p>
+     * 经典镜像存储的镜像 ID 是 image config 摘要，与仓库的 manifest 摘要不同，
+     * 必须读 {@code RepoDigests}；containerd 镜像存储的镜像 ID 本身就是 manifest 摘要。
+     * 两种都收进集合，避免依赖宿主机用的是哪种存储。
+     */
+    private Set<String> localImageDigests(DockerClient client, String imageId) {
+        var local = dockerManager.callWithTimeout(SCHEDULED_UPDATE_QUERY_TIMEOUT,
+                "检查本地镜像 " + imageId,
+                () -> client.inspectImageCmd(imageId).exec());
+
+        Set<String> digests = new HashSet<>();
+        if (StrUtil.isNotBlank(local.getId())) {
+            digests.add(local.getId().toLowerCase(Locale.ROOT));
+        }
+        if (local.getRepoDigests() != null) {
+            for (String repoDigest : local.getRepoDigests()) {
+                String value = StrUtil.nullToEmpty(repoDigest);
+                int at = value.lastIndexOf('@');
+                if (at >= 0 && at < value.length() - 1) {
+                    digests.add(value.substring(at + 1).toLowerCase(Locale.ROOT));
+                }
+            }
+        }
+        return digests;
     }
 
     /**
@@ -574,10 +582,13 @@ public class AppService extends BaseService<App> {
     }
 
     /**
-     * 定时检查发现新镜像后异步部署。镜像已在检查阶段拉取过，部署里不再重复拉取。
+     * 定时检查发现新镜像后异步部署。
+     * <p>
+     * 检查阶段只读了注册中心，本地 tag 很可能仍指向旧镜像，因此这里强制拉取，
+     * 确保部署用的是刚检测到的新镜像。
      */
     @Async
-    public void deployScheduledPulled(String appId) {
+    public void deployScheduledUpdate(String appId) {
         if (isDeploying(appId)) {
             log.info("应用 {} 已在部署中，跳过本次定时更新部署", appId);
             return;
@@ -586,7 +597,7 @@ public class AppService extends BaseService<App> {
         if (app == null) {
             return;
         }
-        doDeploy(app, false, DeployTrigger.SCHEDULE, true);
+        doDeploy(app, true, DeployTrigger.SCHEDULE);
     }
 
     /**

@@ -16,12 +16,15 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -175,27 +178,40 @@ public class RegistryV2Client {
      * 因此可能是 3 次。单版本失败返回 null，不影响其余版本。
      */
     public RemoteImageMeta fetchMeta(String repo, String tag) {
+        return fetchMeta(repo, tag, "amd64", "linux");
+    }
+
+    /**
+     * 只读 manifest，返回 tag 当前指向的顶层摘要（多架构为 manifest list / OCI index 的摘要）。
+     * <p>
+     * 这个值与 {@code docker pull} 记录到本地镜像 {@code RepoDigests} 里的摘要一致，
+     * 因此可以直接和本地镜像的 RepoDigests / 镜像 ID 比较，判断仓库里是否有新版本。
+     * 只发一次 GET，不下载镜像层。
+     */
+    public String fetchManifestDigest(String repo, String tag) {
         Assert.hasText(repo, "仓库名不能为空");
         Assert.hasText(tag, "版本不能为空");
         String scope = "repository:" + repo + ":pull";
-        String prefix = "/v2/" + encPath(repo);
+        HttpResponse<String> r = getResponse("/v2/" + encPath(repo) + "/manifests/" + enc(tag),
+                scope, ACCEPT_MANIFEST, "读取镜像清单");
+        String digest = r.headers().firstValue("Docker-Content-Digest").orElse(null);
+        return StrUtil.isNotBlank(digest) ? digest.trim() : sha256Digest(r.body());
+    }
 
-        JsonNode manifest = getJson(prefix + "/manifests/" + enc(tag), scope, ACCEPT_MANIFEST, "读取镜像清单");
+    /**
+     * 读取镜像元数据，多架构清单按指定平台选子清单（用于和运行中容器的镜像 ID 对齐）。
+     *
+     * @param architecture 目标架构（amd64 / arm64 ...），为空时按 amd64
+     * @param os           目标系统（linux / windows），为空时按 linux
+     */
+    public RemoteImageMeta fetchMeta(String repo, String tag, String architecture, String os) {
+        String prefix = "/v2/" + encPath(repo);
+        String scope = "repository:" + repo + ":pull";
+
+        JsonNode manifest = fetchManifest(repo, tag, architecture, os);
         if (manifest == null) {
             return null;
         }
-        JsonNode list = manifest.get("manifests");
-        if (list != null && list.isArray() && !list.isEmpty()) {
-            String digest = pickPlatformDigest(list);
-            if (StrUtil.isBlank(digest)) {
-                return null;
-            }
-            manifest = getJson(prefix + "/manifests/" + enc(digest), scope, ACCEPT_MANIFEST, "读取子镜像清单");
-            if (manifest == null) {
-                return null;
-            }
-        }
-
         Long size = totalSize(manifest);
         JsonNode config = manifest.get("config");
         String configDigest = config == null ? null : text(config, "digest");
@@ -211,6 +227,30 @@ public class RegistryV2Client {
                 fieldNames(configNode, "ExposedPorts"), fieldNames(configNode, "Volumes"));
     }
 
+    /**
+     * 读取 tag 对应的清单；多架构镜像（manifest list / OCI index）再按平台读子清单。
+     */
+    private JsonNode fetchManifest(String repo, String tag, String architecture, String os) {
+        Assert.hasText(repo, "仓库名不能为空");
+        Assert.hasText(tag, "版本不能为空");
+        String scope = "repository:" + repo + ":pull";
+        String prefix = "/v2/" + encPath(repo);
+
+        JsonNode manifest = getJson(prefix + "/manifests/" + enc(tag), scope, ACCEPT_MANIFEST, "读取镜像清单");
+        if (manifest == null) {
+            return null;
+        }
+        JsonNode list = manifest.get("manifests");
+        if (list != null && list.isArray() && !list.isEmpty()) {
+            String digest = pickPlatformDigest(list, architecture, os);
+            if (StrUtil.isBlank(digest)) {
+                return null;
+            }
+            manifest = getJson(prefix + "/manifests/" + enc(digest), scope, ACCEPT_MANIFEST, "读取子镜像清单");
+        }
+        return manifest;
+    }
+
     // ------------------------------------------------------------------ 内部
 
     /**
@@ -219,6 +259,21 @@ public class RegistryV2Client {
      * @param failHint 失败时给用户看的中文提示前缀
      */
     private JsonNode getJson(String path, String scope, String accept, String failHint) {
+        HttpResponse<String> r = getResponse(path, scope, accept, failHint);
+        if (StrUtil.isBlank(r.body())) {
+            return null;
+        }
+        try {
+            return objectMapper.readTree(r.body());
+        } catch (Exception e) {
+            throw new BusinessException(failHint + "失败：解析返回内容出错，" + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 发起一次带鉴权的 GET，401 时清掉令牌缓存重试一次，并把非 2xx 响应转成用户可读的错误。
+     */
+    private HttpResponse<String> getResponse(String path, String scope, String accept, String failHint) {
         HttpResponse<String> r = send(base + path, tokenOf(scope), accept);
         if (r.statusCode() == 401) {
             // 令牌过期或 scope 变化，清缓存后重试一次
@@ -236,13 +291,20 @@ public class RegistryV2Client {
         if (code < 200 || code >= 300) {
             throw new BusinessException(failHint + "失败：注册中心返回 " + code + "，" + errorText(r.body()));
         }
-        if (StrUtil.isBlank(r.body())) {
-            return null;
-        }
+        return r;
+    }
+
+    /**
+     * 个别 registry 不在响应头里返回 {@code Docker-Content-Digest} 时，按响应体自己算。
+     * manifest 的摘要就是其 JSON 字节的 sha256。
+     */
+    private static String sha256Digest(String body) {
         try {
-            return objectMapper.readTree(r.body());
-        } catch (Exception e) {
-            throw new BusinessException(failHint + "失败：解析返回内容出错，" + e.getMessage(), e);
+            byte[] hash = MessageDigest.getInstance("SHA-256")
+                    .digest(StrUtil.nullToEmpty(body).getBytes(StandardCharsets.UTF_8));
+            return "sha256:" + HexFormat.of().formatHex(hash);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("计算镜像清单摘要失败", e);
         }
     }
 
@@ -359,12 +421,14 @@ public class RegistryV2Client {
     }
 
     /**
-     * 多架构清单里挑 amd64/linux 的子清单摘要，挑不到就用第一个。
+     * 多架构清单里挑指定平台的子清单摘要，挑不到就用第一个。
      */
-    private static String pickPlatformDigest(JsonNode manifests) {
+    private static String pickPlatformDigest(JsonNode manifests, String architecture, String os) {
+        String arch = StrUtil.blankToDefault(architecture, "amd64");
+        String targetOs = StrUtil.blankToDefault(os, "linux");
         for (JsonNode m : manifests) {
             JsonNode p = m.get("platform");
-            if (p != null && "amd64".equals(text(p, "architecture")) && "linux".equals(text(p, "os"))) {
+            if (p != null && arch.equalsIgnoreCase(text(p, "architecture")) && targetOs.equalsIgnoreCase(text(p, "os"))) {
                 return text(m, "digest");
             }
         }

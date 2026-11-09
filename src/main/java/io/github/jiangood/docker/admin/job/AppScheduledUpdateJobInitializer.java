@@ -16,7 +16,7 @@ import org.springframework.stereotype.Component;
  *       {@link org.quartz.ObjectAlreadyExistsException}，忽略即可。</li>
  * </ul>
  * <p>
- * 任务每分钟触发一次，但只有开启「定时更新」且到期的应用才会真正拉取镜像；
+ * 任务每分钟触发一次，但只有开启「定时更新」且到期的应用才会真正访问注册中心；
  * 没有应用开启时每轮只是一次配置查询，开销可忽略。
  */
 @Component

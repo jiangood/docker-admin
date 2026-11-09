@@ -74,6 +74,24 @@ public final class ImageUrlUtils {
     }
 
     /**
+     * 镜像地址去掉注册中心 host 后的仓库名，可直接用于 Registry V2 API（{@code /v2/<name>/...}）。
+     * <p>
+     * 没有显式注册中心的地址按 Docker Hub 处理：单段名补 {@code library/}，
+     * 如 {@code nginx} -> {@code library/nginx}，{@code ztcn/nginx} 原样返回。
+     */
+    public static String repoNameOf(String repoUrl) {
+        if (StrUtil.isBlank(repoUrl)) {
+            return repoUrl;
+        }
+        String v = withoutScheme(repoUrl.trim());
+        String host = hostOf(v);
+        if (host == null) {
+            return v.contains("/") ? v : "library/" + v;
+        }
+        return StrUtil.removePrefix(v.substring(host.length()), "/");
+    }
+
+    /**
      * 从完整地址（repo:tag）中取镜像地址（不含 tag）；无 tag 时原样返回。
      */
     public static String repoOf(String fullUrl) {

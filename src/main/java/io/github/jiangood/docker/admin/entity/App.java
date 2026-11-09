@@ -29,8 +29,8 @@ public class App extends BaseEntity {
     /**
      * 定时更新默认检查间隔：每天。
      * <p>
-     * 定时更新本质是 {@code docker pull}，即使镜像没变也会访问一次镜像仓库。
-     * Docker Hub 等公共仓库有拉取频率限制，默认每天更稳妥；私有仓库可在页面上调短。
+     * 定时更新由平台直接读注册中心（只读 manifest，不下载镜像层），
+     * 但 Docker Hub 等公共仓库仍按请求限流，默认每天更稳妥；私有仓库可在页面上调短。
      */
     public static final int DEFAULT_SCHEDULED_UPDATE_INTERVAL_MINUTES = 1440;
 

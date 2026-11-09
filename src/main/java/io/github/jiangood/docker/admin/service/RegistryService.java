@@ -7,6 +7,7 @@ import io.github.jiangood.docker.admin.dao.RegistryRepository;
 import io.github.jiangood.docker.admin.entity.Image;
 import io.github.jiangood.docker.admin.entity.Project;
 import io.github.jiangood.docker.admin.entity.Registry;
+import io.github.jiangood.docker.admin.service.registry.RegistryV2Client;
 import io.github.jiangood.docker.admin.util.ImageUrlUtils;
 import io.github.jiangood.openadmin.framework.data.BaseService;
 import io.github.jiangood.openadmin.framework.data.specification.Spec;
@@ -105,6 +106,25 @@ public class RegistryService extends BaseService<Registry> {
     private static boolean sameHostOrUnset(Registry registry, String host) {
         String registryHost = ImageUrlUtils.hostOf(registry.getUrl());
         return registryHost == null || registryHost.equalsIgnoreCase(host);
+    }
+
+    /**
+     * 按镜像地址创建可访问其注册中心 V2 API 的客户端，用于在平台侧查询镜像摘要（不经过目标主机拉取）。
+     * <p>
+     * 优先使用镜像归属注册中心的地址与凭据；没有匹配的注册中心时按镜像地址匿名访问：
+     * Docker Hub 走 {@code registry-1.docker.io}，其余地址按 {@code https://<host>}。
+     */
+    public RegistryV2Client v2ClientFor(String imageUrl) {
+        Registry registry = forImageUrl(imageUrl);
+        if (registry != null && StrUtil.isNotBlank(registry.getUrl())) {
+            return new RegistryV2Client(registry.getUrl(), registry.getUsername(), registry.getPassword());
+        }
+
+        String host = ImageUrlUtils.hostOf(imageUrl);
+        if (host == null || "docker.io".equalsIgnoreCase(host) || "index.docker.io".equalsIgnoreCase(host)) {
+            return new RegistryV2Client("https://registry-1.docker.io", null, null);
+        }
+        return new RegistryV2Client("https://" + host, null, null);
     }
 
     /** base 是 repoUrl 的仓库前缀（按 "/" 边界比较）。 */

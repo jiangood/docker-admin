@@ -218,7 +218,7 @@ export default class extends React.Component {
                 <div style={{flex: '1 1 260px'}}>
                     <div>定时更新</div>
                     <Typography.Text type='secondary'>
-                        定时检查镜像仓库，镜像有变化时才重新部署（适用于外部镜像）
+                        由平台定时查询注册中心（只读清单，不下载镜像），镜像有变化时才重新部署（适用于外部镜像）
                     </Typography.Text>
                     <div style={{marginTop: 4}}>
                         {this.renderScheduledStatus()}
