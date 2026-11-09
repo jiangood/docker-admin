@@ -131,6 +131,9 @@ git tag vx.y.z && git push && git push origin vx.y.z
   下方是横向页签（日志 / 文件 / 终端 / 详情）；主机详情的容器列表、监控表跳到这里（应用详情「容器日志」只保留日志，不再提供跳转入口）。
   容器日志页签上方的「停止 / 继续滚动」控制是否跟随新日志，「下载日志」按末尾 2000 行下载为 .log 文件
   （应用维度走 `admin/app/containerLogDownload`，主机维度走 `admin/container/logDownload`）。
+  时间范围选择器按 `since`/`until`（秒级时间戳）查询历史日志，走 `admin/app/containerLogs` /
+  `admin/container/logs`，返回末尾最多 5000 行并带 Docker 时间戳（前端转本地时区展示）；
+  筛选后切为静态展示、不再自动滚动，下载按钮也带上同一时间段；「返回实时日志」恢复 WebSocket tail。
   删除前需二次确认，运行 / 暂停 / 重启中的容器必须勾选「强制删除」，成功后关闭当前页签。
   页面页签开启 `destroyOnHidden`，切走即断开日志 / 终端
   WebSocket；主机 / 应用详情页实现 `onShow()`，从容器页切回时刷新容器状态（首次 onShow 与 mount 重叠，需跳过）。

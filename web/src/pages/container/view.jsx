@@ -156,6 +156,10 @@ export default class extends React.Component {
             ? `/admin/app/containerLogDownload?id=${encodeURIComponent(appId)}`
             : `/admin/container/logDownload?hostId=${encodeURIComponent(hostId)}`
                 + `&containerId=${encodeURIComponent(targetId)}`
+        const logsUrl = appId
+            ? `/admin/app/containerLogs?id=${encodeURIComponent(appId)}`
+            : `/admin/container/logs?hostId=${encodeURIComponent(hostId)}`
+                + `&containerId=${encodeURIComponent(targetId)}`
 
         const header = <Card size='small' className='mb-3' styles={{body: {padding: '12px 16px'}}}>
             <div style={{
@@ -207,7 +211,8 @@ export default class extends React.Component {
             {
                 key: 'logs',
                 label: '日志',
-                children: <ContainerLogs url={logUrl} downloadUrl={logDownloadUrl} running={running}
+                children: <ContainerLogs url={logUrl} downloadUrl={logDownloadUrl} logsUrl={logsUrl}
+                                         running={running}
                                          height={paneHeight}
                                          containerKey={targetId || hostId || appId}/>
             },

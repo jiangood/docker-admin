@@ -149,23 +149,48 @@ public class AppController {
     }
 
     /**
-     * 下载应用容器最近 {@value DockerLogService#DOWNLOAD_TAIL_LINES} 行日志。
+     * 按时间段查询应用容器日志（末尾最多 {@value DockerLogService#RANGE_TAIL_LINES} 行）。
+     * {@code since}/{@code until} 为秒级时间戳，返回带 Docker 时间戳前缀的文本。
+     */
+    @HasPermission("app:view")
+    @RequestMapping("containerLogs")
+    public AjaxResult containerLogs(String id, Integer since, Integer until) throws InterruptedException {
+        App app = assertAppAccess(id);
+        Container container = service.getContainer(app);
+        Assert.notNull(container, "容器未部署");
+        assertTimeRange(since, until);
+        return AjaxResult.ok().data(
+                dockerLogService.readContainerLogs(app.getHost(), container.getId(), since, until));
+    }
+
+    /**
+     * 下载应用容器日志。不传时间范围时取最近 {@value DockerLogService#DOWNLOAD_TAIL_LINES} 行；
+     * 传入 {@code since}/{@code until} 时下载该时间段（末尾最多 {@value DockerLogService#RANGE_TAIL_LINES} 行）。
      * 只读历史，不跟随实时输出，避免下载请求长期占用连接。
      */
     @HasPermission("app:view")
     @RequestMapping("containerLogDownload")
-    public void containerLogDownload(String id, HttpServletResponse response) throws Exception {
+    public void containerLogDownload(String id, Integer since, Integer until,
+                                     HttpServletResponse response) throws Exception {
         App app = assertAppAccess(id);
         Container container = service.getContainer(app);
         Assert.notNull(container, "容器未部署");
+        assertTimeRange(since, until);
 
+        int tail = since == null && until == null
+                ? DockerLogService.DOWNLOAD_TAIL_LINES : DockerLogService.RANGE_TAIL_LINES;
         String fileName = StrUtil.blankToDefault(app.getName(), "app")
                 + "-" + StrUtil.subPre(container.getId(), 12) + ".log";
         DownloadTool.prepareDownload(response, DownloadTool.safeFileName(fileName), "text/plain;charset=UTF-8");
         try (OutputStream out = response.getOutputStream()) {
-            dockerLogService.writeContainerLogs(app.getHost(), container.getId(),
-                    DockerLogService.DOWNLOAD_TAIL_LINES, out);
+            dockerLogService.writeContainerLogs(app.getHost(), container.getId(), since, until, tail, out);
             out.flush();
+        }
+    }
+
+    private static void assertTimeRange(Integer since, Integer until) {
+        if (since != null && until != null && since > until) {
+            throw new BusinessException("开始时间不能晚于结束时间");
         }
     }
 

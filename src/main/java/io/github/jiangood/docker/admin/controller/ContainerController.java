@@ -10,6 +10,7 @@ import io.github.jiangood.docker.admin.service.HostService;
 import io.github.jiangood.docker.admin.util.ContainerPermTool;
 import io.github.jiangood.docker.admin.websocket.DockerLogService;
 import io.github.jiangood.openadmin.framework.perm.HasPermission;
+import io.github.jiangood.openadmin.util.BusinessException;
 import io.github.jiangood.openadmin.util.dto.AjaxResult;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletResponse;
@@ -60,20 +61,42 @@ public class ContainerController {
     }
 
     /**
-     * 下载容器最近 {@value DockerLogService#DOWNLOAD_TAIL_LINES} 行日志（只读历史，不跟随实时输出）。
+     * 按时间段查询容器日志（末尾最多 {@value DockerLogService#RANGE_TAIL_LINES} 行，带 Docker 时间戳前缀）。
      */
-    @RequestMapping("logDownload")
-    public void logDownload(String hostId, String containerId, HttpServletResponse response) throws Exception {
+    @RequestMapping("logs")
+    public AjaxResult logs(String hostId, String containerId, Integer since, Integer until) throws InterruptedException {
         ContainerPermTool.assertView();
         Host host = requireHost(hostId);
         Assert.hasText(containerId, "containerId 不能为空");
+        assertTimeRange(since, until);
+        return AjaxResult.ok().data(dockerLogService.readContainerLogs(host, containerId, since, until));
+    }
 
+    /**
+     * 下载容器日志。不传时间范围时取最近 {@value DockerLogService#DOWNLOAD_TAIL_LINES} 行；
+     * 传入 {@code since}/{@code until} 时下载该时间段（末尾最多 {@value DockerLogService#RANGE_TAIL_LINES} 行）。
+     */
+    @RequestMapping("logDownload")
+    public void logDownload(String hostId, String containerId, Integer since, Integer until,
+                            HttpServletResponse response) throws Exception {
+        ContainerPermTool.assertView();
+        Host host = requireHost(hostId);
+        Assert.hasText(containerId, "containerId 不能为空");
+        assertTimeRange(since, until);
+
+        int tail = since == null && until == null
+                ? DockerLogService.DOWNLOAD_TAIL_LINES : DockerLogService.RANGE_TAIL_LINES;
         String fileName = "container-" + (containerId.length() > 12 ? containerId.substring(0, 12) : containerId) + ".log";
         DownloadTool.prepareDownload(response, DownloadTool.safeFileName(fileName), "text/plain;charset=UTF-8");
         try (OutputStream out = response.getOutputStream()) {
-            dockerLogService.writeContainerLogs(host, containerId,
-                    DockerLogService.DOWNLOAD_TAIL_LINES, out);
+            dockerLogService.writeContainerLogs(host, containerId, since, until, tail, out);
             out.flush();
+        }
+    }
+
+    private static void assertTimeRange(Integer since, Integer until) {
+        if (since != null && until != null && since > until) {
+            throw new BusinessException("开始时间不能晚于结束时间");
         }
     }
 
