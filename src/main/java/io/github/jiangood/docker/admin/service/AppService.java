@@ -78,6 +78,15 @@ public class AppService extends BaseService<App> {
     /** 定时检查失败后的重试间隔：不按完整检查间隔等待，避免一次网络抖动拖一整天 */
     private static final Duration SCHEDULED_UPDATE_RETRY_DELAY = Duration.ofMinutes(10);
 
+    /**
+     * 定时检查里查询容器状态 / 本地镜像的超时。
+     * <p>
+     * 宿主机不可达时 docker-java 的 SSH 传输会无休止重试（见 {@code DockerClientManager#checkSshDocker}），
+     * 而这条链路跑在 Quartz 线程上、一轮要顺序检查多个应用：一个失联主机就能把整轮拖住，
+     * 后面的应用和下一轮触发都得等。宁可按检查失败处理，10 分钟后再试。
+     */
+    private static final Duration SCHEDULED_UPDATE_QUERY_TIMEOUT = Duration.ofSeconds(30);
+
     Set<String> deployingList = ConcurrentHashMap.newKeySet();
 
     private final AppRepository appRepository;
@@ -470,31 +479,37 @@ public class AppService extends BaseService<App> {
         boolean deploy = false;
 
         try {
-            Container container = getContainer(app);
-            if (container == null) {
-                message = "容器未部署，跳过";
-            } else if (!"running".equalsIgnoreCase(container.getState())) {
-                message = "容器未运行，跳过";
-            } else {
-                String tag = StrUtil.blankToDefault(app.getImageTag(), LATEST_TAG);
-                String repo = StrUtil.blankToDefault(ImageUrlUtils.repoOf(app.getImageUrl()), app.getImageUrl());
-                String image = ImageUrlUtils.full(repo, tag);
+            String tag = StrUtil.blankToDefault(app.getImageTag(), LATEST_TAG);
+            String repo = StrUtil.blankToDefault(ImageUrlUtils.repoOf(app.getImageUrl()), app.getImageUrl());
+            String image = ImageUrlUtils.full(repo, tag);
 
-                DockerClient client = getClient(app.getHost(), app.getImageUrl());
-                try {
+            DockerClient client = getClient(app.getHost(), app.getImageUrl());
+            try {
+                // 容器查询与本地镜像查询都要兜底超时：后台任务不能被单个失联主机卡住
+                Container container = dockerManager.callWithTimeout(SCHEDULED_UPDATE_QUERY_TIMEOUT,
+                        "查询容器 " + app.getName(),
+                        () -> getContainer(app.getName(), client).stream().findFirst().orElse(null));
+
+                if (container == null) {
+                    message = "容器未部署，跳过";
+                } else if (!"running".equalsIgnoreCase(container.getState())) {
+                    message = "容器未运行，跳过";
+                } else {
                     log.info("应用「{}」定时检查镜像 {}", app.getName(), image);
                     pullImage(client, repo, tag);
 
-                    String localImageId = client.inspectImageCmd(image).exec().getId();
+                    String localImageId = dockerManager.callWithTimeout(SCHEDULED_UPDATE_QUERY_TIMEOUT,
+                            "检查本地镜像 " + image,
+                            () -> client.inspectImageCmd(image).exec().getId());
                     if (StrUtil.equals(localImageId, container.getImageId())) {
                         message = "已是最新";
                     } else {
                         message = "发现新版本，开始部署";
                         deploy = true;
                     }
-                } finally {
-                    IOUtils.closeQuietly(client);
                 }
+            } finally {
+                IOUtils.closeQuietly(client);
             }
         } catch (Exception e) {
             success = false;

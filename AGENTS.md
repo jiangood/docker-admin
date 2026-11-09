@@ -161,7 +161,12 @@ git tag vx.y.z && git push && git push origin vx.y.z
   `ImageId` 与本地 tag 的 `ImageId`，不同才以 `DeployTrigger.SCHEDULE`（「定时更新」）触发部署，
   并跳过部署里的二次 pull。检查失败保留旧容器，10 分钟后重试；检查结果快照存在
   `scheduledUpdateLastCheckTime/LastSuccess/LastResult`，供页面展示。
+  容器 / 本地镜像查询都带 30 秒兜底超时（`SCHEDULED_UPDATE_QUERY_TIMEOUT`），一个失联主机不会拖住整轮。
   复制应用默认不会继承定时更新开关（间隔偏好保留）。
+  **三个内建任务（本任务、主机用量采集、网站可达性检查）统一由 `BuiltinJobRegistrar` 幂等登记**：
+  框架 `JobAutoRegistrar` 会先把带 `@JobDescription` 的类补建成「无 cron、默认禁用」的空壳行，
+  且顺序早于 `ApplicationRunner`，所以只判断「jobClass 是否存在」会让任务永远不触发；
+  有 cron 的行（用户配置过）一律不碰，没有 cron 的空壳行补上默认 cron 并启用。
 - **主机接入代理：** 远程 TCP 可选 HTTP / SOCKS5 连接代理，界面与邮件代理一样只填一行地址
   （`http://192.168.1.10:8080`、`http://user:pass@192.168.1.10:8080`、`socks5://user:pass@192.168.1.10:1080`，
   不写 scheme 按 http，端口必填，留空表示不使用；密码回显为 `***`，保存时保持 `***` 或省略密码表示沿用已存密码）。
