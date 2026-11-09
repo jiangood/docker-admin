@@ -33,18 +33,20 @@ export default class extends React.Component {
     }
 
     componentDidUpdate(prevProps) {
-        if (prevProps.hostId !== this.props.hostId) {
+        if (prevProps.hostId !== this.props.hostId
+            || prevProps.defaultTag !== this.props.defaultTag
+            || prevProps.defaultRoot !== this.props.defaultRoot) {
             this.load()
         }
     }
 
     load = () => {
-        const {hostId} = this.props
+        const {hostId, defaultTag, defaultRoot} = this.props
         if (!hostId) {
             return
         }
         this.setState({loading: true, error: null})
-        HttpClient.get('admin/host/agent/status', {id: hostId}, {toastError: false})
+        HttpClient.get('admin/host/agent/status', {id: hostId, tag: defaultTag, root: defaultRoot}, {toastError: false})
             .then(rs => {
                 const status = rs.data || {}
                 this.setState({status, loading: false})
@@ -59,16 +61,23 @@ export default class extends React.Component {
         }
     }
 
+    /** 部署 / 切换目录后配置被后端回写，通知外层重新读取配置，避免期望值停留在旧值 */
+    notifyConfigChange = () => {
+        if (this.props.onConfigChange) {
+            this.props.onConfigChange()
+        }
+    }
+
     openDeploy = () => {
         const {status} = this.state
-        const tag = (status && status.tag) || 'latest'
+        const tag = this.props.defaultTag || (status && status.tag) || 'latest'
         this.setState({deployOpen: true, tag})
     }
 
     closeDeploy = () => this.setState({deployOpen: false})
 
     deploy = () => {
-        const {hostId} = this.props
+        const {hostId, defaultRoot} = this.props
         const {tag} = this.state
         const tagValue = (tag || '').trim() || 'latest'
         if (!/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/.test(tagValue)) {
@@ -76,10 +85,12 @@ export default class extends React.Component {
             return
         }
         this.setState({submitting: true})
-        HttpClient.post('admin/host/agent/deploy', null, {id: hostId, tag: tagValue})
+        HttpClient.post('admin/host/agent/deploy', null,
+            {id: hostId, tag: tagValue, root: defaultRoot})
             .then(rs => {
                 message.success((rs && rs.message) || '辅助容器已就绪')
                 this.setState({deployOpen: false})
+                this.notifyConfigChange()
                 this.load()
             })
             .catch(() => {
@@ -91,7 +102,8 @@ export default class extends React.Component {
 
     openRootModal = () => {
         const {status} = this.state
-        const root = (status && (status.mountedRoot || status.desiredRoot)) || '/home'
+        const root = (status && (status.mountedRoot || status.desiredRoot))
+            || this.props.defaultRoot || '/home'
         this.setState({rootOpen: true, rootInput: root})
     }
 
@@ -113,6 +125,7 @@ export default class extends React.Component {
             .then(rs => {
                 message.success((rs && rs.message) || '目录已切换')
                 this.setState({rootOpen: false})
+                this.notifyConfigChange()
                 this.load()
             })
             .catch(e => {
@@ -154,7 +167,7 @@ export default class extends React.Component {
         }
         if (status && status.needsRebuild) {
             return <Alert className='mb-3' type='warning' showIcon
-                          title='镜像配置已变更，删除 docker-admin-agent 容器后重新部署即可更换镜像'/>
+                          title='配置与容器实际参数不一致（镜像 tag 或挂载目录已变更），点「重新部署」即可应用'/>
         }
         if (!PermUtils.hasPermission('host:save') && !(status && status.deployed)) {
             return <Alert className='mb-3' type='info' showIcon title='需要 host:save 权限才能部署辅助容器'/>
@@ -171,8 +184,13 @@ export default class extends React.Component {
         const actions = <>
             {extra}
             {canSave && (deployed
-                ? <Button icon={<FolderOpenOutlined/>}
-                          onClick={this.openRootModal}>切换挂载目录</Button>
+                ? <>
+                    {status && status.needsRebuild &&
+                        <Button type='primary' icon={<CloudServerOutlined/>}
+                                onClick={this.openDeploy}>重新部署</Button>}
+                    <Button icon={<FolderOpenOutlined/>}
+                            onClick={this.openRootModal}>切换挂载目录</Button>
+                </>
                 : <Button type='primary' icon={<CloudServerOutlined/>}
                           onClick={this.openDeploy}>部署辅助容器</Button>)}
             <Tooltip title='辅助容器说明'>
@@ -217,7 +235,8 @@ export default class extends React.Component {
                 <div>tag 留空表示 latest；生产建议固定为版本 tag，如 <code>v4.8.40</code>。</div>
             </div>
             <Typography.Text type='secondary' style={{display: 'block', marginTop: 12}}>
-                首次部署默认挂载 /home，之后可在右上角「切换挂载目录」，切换会重建容器。
+                挂载目录来自 Agent 配置（当前 <code>{this.props.defaultRoot || (status && status.desiredRoot) || '/home'}</code>），
+                部署后可在右上角「切换挂载目录」调整，切换会重建容器。
             </Typography.Text>
         </Modal>
     }
@@ -272,8 +291,8 @@ export default class extends React.Component {
 
                 <Typography.Title level={5}>挂载目录</Typography.Title>
                 <ul style={{margin: '0 0 8px 18px', padding: 0}}>
-                    <li>部署时不再指定目录，首次默认 <code>/home</code>；在右上角点「切换挂载目录」按需切换。</li>
-                    <li>切换会用新目录重建容器，终端会断开并自动重连。</li>
+                    <li>挂载目录来自「工具 - 主机 Agent」的配置，留空时首次默认 <code>/home</code>。</li>
+                    <li>在右上角点「切换挂载目录」按需切换，切换会用新目录重建容器，终端会断开并自动重连。</li>
                     <li>只接受 Docker daemon 可见的 Linux 绝对路径（以 / 开头）：
                         WSL 2 后端是 <code>/run/desktop/mnt/host/d/data</code>，
                         Docker VMM 是 <code>/host_mnt/d/data</code>，
@@ -292,8 +311,9 @@ export default class extends React.Component {
 
                 <Typography.Title level={5}>镜像</Typography.Title>
                 <Typography.Paragraph>
-                    镜像地址在「设置 - 全局设置」维护（不含 tag），每台主机部署时选择 tag，默认 latest；
-                    需要更换 tag 时，在主机详情的「容器」Tab 删除 <code>docker-admin-agent</code> 容器，再回到本页重新部署。
+                    镜像地址在「设置 - 全局设置」维护（不含 tag）；镜像 tag 与挂载目录在
+                    「工具 - 主机 Agent」的配置里维护。配置与容器实际参数不一致时，
+                    面板右上角会出现「重新部署」，点它即可按配置重建容器。
                 </Typography.Paragraph>
 
                 {status && status.deployed && <>

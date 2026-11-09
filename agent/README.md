@@ -2,10 +2,10 @@
 
 本目录只有一份 `Dockerfile`，用来构建 **`docker-admin-agent`** 镜像。
 平台不往目标主机装任何东西，而是在目标主机上跑这台常驻的 Linux 辅助容器，
-主机页的「终端」和文件操作全部发生在它里面。
+「工具 - 主机 Agent」里的终端和文件操作全部发生在它里面。
 
 - 镜像名：`docker-admin-agent`（基础镜像 `alpine:3.21`，约 260 MB）
-- 平台侧入口：主机列表「操作」列的 **Agent** 按钮（`/host/agent-view?id=<主机id>`）
+- 平台侧入口：「工具 - 主机 Agent」（`/host-agent`，行操作「终端」→ `/host-agent/view?id=<配置id>`）
 - 相关代码：
   - `src/main/java/io/github/jiangood/docker/admin/service/HostAgentService.java`（部署 / 状态 / 挂载）
   - `src/main/java/io/github/jiangood/docker/admin/util/HostRootPolicy.java`（挂载目录校验）
@@ -222,7 +222,7 @@ docker run -d --name my-agent \
 ## 挂载目录
 
 首次部署默认 `/home`（`HostRootPolicy.DEFAULT_ROOT`），之后在 Agent 面板右上角
-「切换挂载目录」按需切换。目录保存在 `Host.fileRoot`，并写入容器 label，
+「切换挂载目录」按需切换。目录保存在 Agent 配置（`HostAgentConfig.fileRoot`）里，并写入容器 label，
 **只有容器成功起来且 `/host` 确实是目录时才落库**；失败时保留旧值，方便回退。
 
 目录只接受 **Docker daemon 可见的 Linux 绝对路径**，并且：
@@ -344,14 +344,14 @@ Docker VMM 的已知问题：嵌套 bind mount（一个 bind 里再挂一个 vol
 
 ## 部署 / 切换 / 升级
 
-1. 主机列表 →「操作」→「Agent」；
-2. 未部署时点「部署」，选择 Agent 镜像 tag（留空 = `latest`）；首次默认挂 `/home`；
-3. 「切换挂载目录」会用新目录**重建容器**，终端断开并自动重连；
+1. 「工具 - 主机 Agent」→ 新增配置（选择主机、镜像 tag、挂载目录）；
+2. 行操作「终端」打开 Agent 页；未部署时点「部署」，选择 Agent 镜像 tag（留空 = `latest`）；
+3. 「切换挂载目录」会用新目录**重建容器**，终端断开并自动重连；部署 / 切换成功后配置会自动回写；
 4. 镜像地址在「设置 - 全局设置」维护（`docker.agent.repository`，默认
    `ghcr.io/jiangood/docker-admin-agent`，**只填地址不带 tag**），
-   每台主机的 tag 存在 `Host.agentImageTag`，实际镜像 = 地址 + `:` + tag；
-5. 更换 tag：在主机详情「容器」Tab 删除 `docker-admin-agent`，回到 Agent 页重新部署；
-   或直接对同一主机重新部署并填新 tag。
+   每条配置保存自己的 tag，实际镜像 = 地址 + `:` + tag；
+5. 更换 tag：在「工具 - 主机 Agent」修改配置，回到终端页点「重新部署」；
+   删除配置只删记录，已运行的容器仍在主机详情「容器」Tab 里删除。
 
 镜像拉取策略：`latest` 重建时会先尝试拉取，失败但本地已有则继续用本地镜像；
 固定版本本地存在则不拉取。无外网环境可以先 `docker load` 预加载。

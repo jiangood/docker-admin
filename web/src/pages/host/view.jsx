@@ -136,7 +136,7 @@ const TREND_IO_DEFS = [
 
 /**
  * 主机详情：主机信息 + 垂直 Tab「容器 / 镜像 / 监控」，点击容器弹窗展示通用容器组件。
- * Agent 是独立页面，入口只在主机列表的「Agent」按钮。
+ * Agent 终端是「工具 - 主机 Agent」里的独立页面，入口不在主机详情。
  */
 export default class extends React.Component {
 
@@ -691,14 +691,13 @@ export default class extends React.Component {
         /**
          * 基本信息卡的所有字段都放进同一张带边框的三列表格：
          * - 标签列宽度固定、值列等宽，连接信息与引擎信息从此左右对齐，不再是两块各自排版的 Descriptions；
-         * - 连接地址 / 代理 / 请求头 / Agent 目录这类长文本独占一行，避免把某一列撑歪；
+         * - 连接地址 / 代理 / 请求头这类长文本独占一行，避免把某一列撑歪；
          * - 名称已由 Card title 展示，代理与请求头只在真正配置后才占行。
          */
         const isTcp = (host && host.connectionType) === 'tcp'
         const infoItems = [
             {key: 'conn', label: '连接方式', children: connectionLabel(host)},
             {key: 'ip', label: 'IP 地址', children: host?.ip || '-'},
-            {key: 'agentTag', label: 'Agent 镜像 Tag', children: host?.agentImageTag || 'latest'},
             {
                 key: 'endpoint', label: '连接地址', span: 3,
                 children: <span className='mono'>{endpointOf(host)}</span>
@@ -708,9 +707,6 @@ export default class extends React.Component {
                 : []),
             ...(isTcp && host?.headerConfigured
                 ? [{key: 'header', label: '自定义请求头', children: headerLabel(host), span: 3}]
-                : []),
-            ...(host?.fileRoot
-                ? [{key: 'fileRoot', label: 'Agent 目录', children: <span className='mono'>{host.fileRoot}</span>, span: 3}]
                 : []),
             {key: 'os', label: '操作系统', children: info?.os || '-'},
             {key: 'arch', label: '架构', children: info?.arch || '-'},

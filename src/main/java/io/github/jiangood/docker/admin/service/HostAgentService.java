@@ -32,7 +32,7 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 主机详情页「文件」与「Docker CLI」共用的辅助容器。
+ * 主机 Agent 终端共用的辅助容器。
  * <p>
  * 三种连接方式（本机 / TCP / SSH）统一通过 Docker API 在该主机上运行一个 Linux 辅助容器：
  * <ul>
@@ -64,13 +64,13 @@ public class HostAgentService {
     private DockerClientManager dockerClientManager;
 
     @Resource
-    private HostService hostService;
-
-    @Resource
     private ContainerService containerService;
 
     @Resource
     private SystemConfigService systemConfigService;
+
+    @Resource
+    private HostAgentConfigService hostAgentConfigService;
 
     @Value("${docker.agent.socket-path:/var/run/docker.sock}")
     private String socketPath;
@@ -96,10 +96,20 @@ public class HostAgentService {
     // ------------------------------------------------------------------ 状态 / 部署 / 删除
 
     public HostAgentVo status(Host host) {
+        return status(host, null, null);
+    }
+
+    /**
+     * 按「期望配置」读取状态：tag / root 非空时用它们计算期望镜像与期望目录，
+     * 用于工具菜单里的 Agent 配置（配置里保存的 tag / 目录可能与主机当前值不同）。
+     * <p>
+     * 空值仍沿用主机上保存的配置，与原有主机详情页行为一致。
+     */
+    public HostAgentVo status(Host host, String requestedTag, String requestedRoot) {
         DockerClient client = null;
         try {
             client = dockerClientManager.getClient(host);
-            return status(client, host);
+            return status(client, host, requestedTag, requestedRoot);
         } catch (BusinessException | DockerException e) {
             throw e;
         } catch (Exception e) {
@@ -116,16 +126,18 @@ public class HostAgentService {
      * 宿主机目录不再在部署时填写：没传目录时沿用主机上保存的目录（首次为默认 {@code /home}），
      * 之后在「文件」面板里按需切换（切换同样走这里，配置不同会自动重建容器）。
      *
-     * @param requestedRoot 要挂载的宿主机目录；为空时使用 Host.fileRoot 或默认 /home
-     * @param requestedTag  该主机选择的 agent 镜像 tag；为空时使用 Host.agentImageTag 或 latest
+     * @param requestedRoot 要挂载的宿主机目录；为空时使用 Agent 配置或默认 /home
+     * @param requestedTag  该主机选择的 agent 镜像 tag；为空时使用 Agent 配置或 latest
      * @param recreate      为 true 时，即使目录与镜像都没变也删除旧容器重建
      */
     public HostAgentVo deploy(Host host, String requestedRoot, String requestedTag, boolean recreate) {
         String root = HostRootPolicy.normalizeRoot(
-                StrUtil.blankToDefault(StrUtil.trimToNull(requestedRoot), host.resolveFileRoot()));
+                StrUtil.blankToDefault(StrUtil.trimToNull(requestedRoot),
+                        hostAgentConfigService.resolveFileRoot(host.getId())));
         HostRootPolicy.assertValidRoot(root);
         String tag = AgentImageUtils.normalizeTag(
-                StrUtil.blankToDefault(StrUtil.trimToNull(requestedTag), host.resolveAgentImageTag()));
+                StrUtil.blankToDefault(StrUtil.trimToNull(requestedTag),
+                        hostAgentConfigService.resolveImageTag(host.getId())));
         String image = AgentImageUtils.resolveImage(systemConfigService.getAgentRepository(), tag);
 
         synchronized (deployLocks.computeIfAbsent(host.getId(), key -> new Object())) {
@@ -148,7 +160,7 @@ public class HostAgentService {
                             waitRunning(client);
                         }
                         persist(host, root, tag);
-                        return status(client, host);
+                        return status(client, host, tag, root);
                     }
                 }
 
@@ -169,7 +181,7 @@ public class HostAgentService {
                 // 容器成功起来后才落库：切换目录失败时保留旧目录，
                 // 「重新部署」还能按原目录恢复，不会把主机卡在一个无效目录上
                 persist(host, root, tag);
-                return status(client, host);
+                return status(client, host, tag, root);
             } catch (BusinessException e) {
                 throw e;
             } catch (Exception e) {
@@ -187,10 +199,7 @@ public class HostAgentService {
      * 记录本机使用的目录与镜像 tag。失败时保留旧值，避免部署失败后无法回退。
      */
     private void persist(Host host, String root, String tag) {
-        hostService.updateFileRoot(host.getId(), root);
-        hostService.updateAgentImageTag(host.getId(), tag);
-        host.setFileRoot(root);
-        host.setAgentImageTag(tag);
+        hostAgentConfigService.saveDeployedConfig(host, tag, root);
     }
 
     public void remove(Host host) {
@@ -231,7 +240,8 @@ public class HostAgentService {
                 start(client);
                 waitRunning(client);
             }
-            String root = StrUtil.blankToDefault(labels.get(LABEL_ROOT), host.resolveFileRoot());
+            String root = StrUtil.blankToDefault(labels.get(LABEL_ROOT),
+                    hostAgentConfigService.resolveFileRoot(host.getId()));
             return new AgentContext(response.getId(), root);
         } catch (BusinessException | DockerException e) {
             throw e;
@@ -245,16 +255,21 @@ public class HostAgentService {
 
     // ------------------------------------------------------------------ 容器生命周期
 
-    private HostAgentVo status(DockerClient client, Host host) {
+    private HostAgentVo status(DockerClient client, Host host, String requestedTag, String requestedRoot) {
         String repository = systemConfigService.getAgentRepository();
-        String tag = host.resolveAgentImageTag();
+        String tag = AgentImageUtils.normalizeTag(
+                StrUtil.blankToDefault(StrUtil.trimToNull(requestedTag),
+                        hostAgentConfigService.resolveImageTag(host.getId())));
+        String desiredRoot = HostRootPolicy.normalizeRoot(
+                StrUtil.blankToDefault(StrUtil.trimToNull(requestedRoot),
+                        hostAgentConfigService.resolveFileRoot(host.getId())));
         String image = AgentImageUtils.resolveImage(repository, tag);
 
         HostAgentVo vo = new HostAgentVo();
         vo.setRepository(repository);
         vo.setTag(tag);
         vo.setImage(image);
-        vo.setDesiredRoot(host.resolveFileRoot());
+        vo.setDesiredRoot(desiredRoot);
         vo.setSocketPath(socketPath);
 
         InspectContainerResponse response = inspect(client);

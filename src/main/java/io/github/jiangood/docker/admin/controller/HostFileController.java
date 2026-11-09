@@ -1,6 +1,7 @@
 package io.github.jiangood.docker.admin.controller;
 
 import io.github.jiangood.docker.admin.entity.Host;
+import io.github.jiangood.docker.admin.service.HostAgentConfigService;
 import io.github.jiangood.docker.admin.service.HostFileService;
 import io.github.jiangood.docker.admin.service.HostService;
 import io.github.jiangood.openadmin.framework.perm.HasPermission;
@@ -34,6 +35,9 @@ public class HostFileController {
     @Resource
     private HostFileService hostFileService;
 
+    @Resource
+    private HostAgentConfigService hostAgentConfigService;
+
     /**
      * 下载挂载目录里的文件或目录。
      * <p>
@@ -46,7 +50,7 @@ public class HostFileController {
         Host host = requireHost(hostId);
         HostFileService.DownloadPlan plan = hostFileService.planDownload(host, path);
         String name = plan.relativePath().isEmpty()
-                ? DownloadTool.fileName(host.resolveFileRoot())
+                ? DownloadTool.fileName(hostAgentConfigService.resolveFileRoot(hostId))
                 : DownloadTool.fileName(plan.relativePath());
         DownloadTool.prepareDownload(response,
                 plan.directory() ? name + ".tar" : name,

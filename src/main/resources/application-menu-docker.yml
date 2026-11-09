@@ -102,6 +102,15 @@ menus:
     perms:
       - {name: 查看, code: image-sync:view}
       - {name: 同步, code: image-sync:sync}
+  host-agent:
+    pid: tool
+    name: 主机 Agent
+    path: /host-agent
+    icon: CodeOutlined
+    perms:
+      - {name: 查看, code: host-agent:view}
+      - {name: 保存, code: host-agent:save}
+      - {name: 删除, code: host-agent:delete}
   build-test:
     pid: tool
     name: 构建测试

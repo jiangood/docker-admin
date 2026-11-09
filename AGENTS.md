@@ -67,7 +67,7 @@ git tag vx.y.z && git push && git push origin vx.y.z
   不是标准 Spring datasource；默认走 H2 无需配置。
 - **菜单配置**在 `src/main/resources/application-menu-docker.yml`，可用 `-override.yml` 覆盖。
   「容器平台」下依次为 项目 / 应用 / 镜像 / 主机（`/host`），再往下是「设置」（注册中心、代码源、全局设置）
-  与「工具」（镜像同步、构建测试、镜像下载、内网穿透）。**「主机」与「设置」平级**，不再挂在设置下面。
+  与「工具」（主机 Agent、镜像同步、构建测试、镜像下载、内网穿透、网站监控）。**「主机」与「设置」平级**，不再挂在设置下面。
 - **领域模型：** `Project`(项目，构建定义) → `Image`(镜像，`imageUrl` 唯一) → `ImageTag`(镜像标签，`imageUrl`+`tag`)。
   项目与镜像按 `imageUrl` 相等关联；`App` 只存 `imageUrl` + `imageTag`，与项目/镜像均无 id 外键。
   菜单为「项目」(`/project`) 与「镜像」(`/image`)，权限码为 `image:*`，表名为 `t_image`。
@@ -77,37 +77,46 @@ git tag vx.y.z && git push && git push origin vx.y.z
   页面（`web/src/pages/image-sync/index.jsx`）是 ProTable + 工具栏三个「增加」按钮
   （同步到注册中心 / 同步到主机 / 经执行主机中转），每个按钮打开 `ImageSyncModal` 对应模式，
   提交后弹窗原地切换为实时日志；行内「查看日志」用抽屉回看。
-- **主机文件管理 / Docker CLI：** Agent 是独立页面（`/host/agent-view?id=<主机id>`，页面文件
-  `web/src/pages/host/agent-view.jsx`），终端占满页面，统一通过 Docker API
-  在该主机上运行辅助容器 `docker-admin-agent`。入口只有主机列表「操作」列的「Agent」按钮
-  （主机详情页已不再有 Agent Tab，也不再内嵌终端）。镜像分两层配置：全局设置只保存镜像地址
+- **主机文件管理 / Docker CLI：** Agent 是「工具」菜单下的独立工具（`/host-agent`，
+  ProTable 页面 `web/src/pages/host-agent/index.jsx`），配置存 `t_host_agent_config`
+  （`HostAgentConfig`，表由 `ddl-auto: update` 自动创建）：一条配置绑定一台主机
+  （`hostId` 唯一），保存期望的镜像 tag 与挂载目录，支持新增 / 修改 / 删除；
+  行操作「终端」打开 `/host-agent/view?id=<配置id>`（`web/src/pages/host-agent/view.jsx`），
+  终端占满页面，统一通过 Docker API 在该主机上运行辅助容器 `docker-admin-agent`。
+  主机列表与主机详情都不再有 Agent 入口。部署 / 切换目录成功后会把实际 tag 与目录回写到配置
+  （`HostAgentService` 部署完成后按 hostId 定位配置，必要时自动补一条）；状态接口支持
+  `tag` / `root` 覆写，用于按配置显示「需要重新部署」。删除配置只删记录，不会删除目标主机上的容器。
+  镜像分两层配置：全局设置只保存镜像地址
   （`docker.agent.repository`，默认 `ghcr.io/jiangood/docker-admin-agent`，不含 tag），
-  每台主机部署时选择 tag（`Host.agentImageTag`，默认 `latest`），实际镜像 = 地址 + `:` + tag。
+  每条配置选择 tag（默认 `latest`），实际镜像 = 地址 + `:` + tag。
   agent 镜像内置 `docker-cli` 和 `docker compose`，另装了一批常用运维工具
   （bash / curl / wget / ping / nc / ss / netstat / dig / ssh / git / rsync / jq / yq /
   vim / less / htop / ps / top / free / lsof / tree / file / zip / unzip 等，见 `agent/Dockerfile`），
   便于直接在终端里排查；代价是镜像约 260 MB，目标主机首次部署要拉一次。由
   `.github/workflows/publish-docker-image.yml`
   在 `v*` tag 上同时发布到 ghcr 与阿里云（`:latest` + `:vX.Y.Z`），目标主机可预加载后离线使用。
-  **部署时不再选择宿主机目录**：容器只挂当前选中的目录（`Host.fileRoot`，首次默认 `/home`）与
+  **部署时不再选择宿主机目录**：容器只挂 Agent 配置里的目录（`HostAgentConfig.fileRoot`，首次默认 `/home`）与
   `/var/run/docker.sock`；同一目录既挂到容器内 `/host` 供文件管理，也挂到原始绝对路径供 CLI 使用，
   因此 `docker compose` 的相对 bind 路径与宿主机一致。目录在 Agent 面板右上角「切换挂载目录」按需切换，
   切换会用新目录**重建容器**（`admin/host/agent/root`，需 `host:save`；终端会断开并自动重连）；
   目录只在容器成功起来后才落库，失败时保留旧值，方便重新部署恢复。
+  **`Host` 实体不再有 `fileRoot` / `agentImageTag` 字段**：配置以 Agent 表为准，
+  无配置时按 `/home` + `latest` 兜底；旧库升级时 `HostAgentConfigMigration` 会把
+  `t_host.file_root` / `agent_image_tag` 搬到 `t_host_agent_config` 并清空旧列。
   CLI 是辅助容器内的交互式 shell，权限等同于宿主机 root。
   目录只接受 Docker daemon 可见的 Linux 绝对路径，禁止 `/`、`/host`、`/tmp` 与系统目录；Windows 主机需填
   Docker Desktop（WSL 2 后端）的 `/run/desktop/mnt/host/d/...`、Docker VMM 后端的 `/host_mnt/d/...`，
   或 WSL2 原生 docker 的 `/mnt/d/...`；Docker VMM 必须在 Settings → Resources → File sharing 显式共享目录
   （不支持 bind mount 自动共享），不支持 Windows 容器主机。
-  辅助容器由 `host:save` 显式部署（`admin/host/agent/deploy`；界面不再提供「删除 Agent」按钮，
-  需要删除时走主机详情「容器」Tab，因为辅助容器就是普通容器），CLI WebSocket 用 `host:cli`；
+  辅助容器由 `host:save` 显式部署（`admin/host/agent/deploy`；界面不提供删除容器的按钮：
+  工具页的「删除」只删配置记录，需要删除容器时走主机详情「容器」Tab，因为辅助容器就是普通容器），CLI WebSocket 用 `host:cli`；
   **界面不再提供上传 / 下载按钮**：文件操作统一在终端里做（后端 `admin/host/file` 的 `upload` / `download`
   接口仍保留，权限码 `host:file`，路径相对于当前挂载目录，空串表示挂载目录本身）；
   容器常驻，删除容器不会删除宿主机文件。重建 `latest` 会先尝试拉取，拉取失败但本地已有镜像时继续使用本地镜像。
   Agent 面板用一块 `Card` 承载：标题是「主机名 · Agent + 状态徽标（运行中 / 已停止 / 未部署）」，
-  右上角 `extra` 依次是重新连接（图标）、切换挂载目录、部署、帮助（图标），
+  右上角 `extra` 依次是重新连接（图标）、重新部署（配置与容器不一致时出现）、切换挂载目录、部署、帮助（图标），
   正文只有终端（`styles={{body: {padding: 12}}}`）；异常 / 待处理提示（状态读取失败、
-  镜像配置已变更、无 `host:save` 权限）以 Alert 形式出现在终端上方，正常状态不占空间；
+  配置与容器不一致、无 `host:save` 权限）以 Alert 形式出现在终端上方，正常状态不占空间；
   容器状态、提示与按钮由 `HostAgentAlert` 通过 render prop 交给 `HostAgentTab` 组装，
   弹窗仍由 `HostAgentAlert` 自己渲染（避免重复请求 agent 状态）。当前目录不在标题重复展示（只在「切换挂载目录」弹窗里），
   终端区没有工具条（`HostCli` 只渲染 xterm，

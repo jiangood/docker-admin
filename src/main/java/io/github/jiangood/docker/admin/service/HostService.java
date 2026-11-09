@@ -1,11 +1,10 @@
 package io.github.jiangood.docker.admin.service;
 
 import cn.hutool.core.util.StrUtil;
+import io.github.jiangood.docker.admin.dao.HostAgentConfigRepository;
 import io.github.jiangood.docker.admin.dao.HostRepository;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.proxy.ProxySettings;
-import io.github.jiangood.docker.admin.util.AgentImageUtils;
-import io.github.jiangood.docker.admin.util.HostRootPolicy;
 import io.github.jiangood.openadmin.framework.data.specification.Spec;
 import io.github.jiangood.openadmin.framework.data.BaseService;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +26,7 @@ import java.util.List;
 public class HostService extends BaseService<Host> {
 
     private final HostRepository hostRepository;
+    private final HostAgentConfigRepository hostAgentConfigRepository;
     private final SystemConfigService systemConfigService;
 
     /**
@@ -59,6 +59,8 @@ public class HostService extends BaseService<Host> {
         if (id.equals(systemConfigService.getDefaultBuildHostId())) {
             throw new io.github.jiangood.openadmin.util.BusinessException("该主机是系统默认构建主机，请先在设置-全局设置中更换默认构建主机");
         }
+        // 工具菜单里的 Agent 配置指向这台主机，一并清掉，避免留下点了就报「主机不存在」的孤儿记录
+        hostAgentConfigRepository.deleteByHostId(id);
         deleteById(id);
     }
 
@@ -96,34 +98,6 @@ public class HostService extends BaseService<Host> {
             clearRunnerFlagOfOthers(saved.getId());
         }
         return saved;
-    }
-
-    /**
-     * 保存主机文件管理目录（辅助容器部署/重建时由界面传入）。
-     * <p>
-     * 只改这一列，不触发连接配置归一化与密码回填。
-     */
-    @Transactional
-    public void updateFileRoot(String id, String root) {
-        Assert.hasText(id, "主机 ID 不能为空");
-        Host host = findById(id).orElseThrow(() ->
-                new io.github.jiangood.openadmin.util.BusinessException("主机不存在"));
-        String normalized = HostRootPolicy.normalizeRoot(root);
-        HostRootPolicy.assertValidRoot(normalized);
-        host.setFileRoot(normalized);
-        hostRepository.save(host);
-    }
-
-    /**
-     * 保存该主机选择的 agent 镜像 tag（部署/重建时由界面传入）。
-     */
-    @Transactional
-    public void updateAgentImageTag(String id, String tag) {
-        Assert.hasText(id, "主机 ID 不能为空");
-        Host host = findById(id).orElseThrow(() ->
-                new io.github.jiangood.openadmin.util.BusinessException("主机不存在"));
-        host.setAgentImageTag(AgentImageUtils.normalizeTag(tag));
-        hostRepository.save(host);
     }
 
     /**
@@ -219,20 +193,6 @@ public class HostService extends BaseService<Host> {
         // 自定义请求头：原样保留，空就是空（名称为空则不发送请求头）
         host.setHeaderName(StrUtil.trimToNull(host.getHeaderName()));
         host.setHeaderValue(StrUtil.trimToNull(host.getHeaderValue()));
-        // 文件管理目录：界面只允许一个目录，空表示默认 /home
-        if (StrUtil.isNotBlank(host.getFileRoot())) {
-            String fileRoot = HostRootPolicy.normalizeRoot(host.getFileRoot());
-            HostRootPolicy.assertValidRoot(fileRoot);
-            host.setFileRoot(fileRoot);
-        } else {
-            host.setFileRoot(null);
-        }
-        // 每台主机部署时选择的 agent tag；空表示 latest
-        if (StrUtil.isNotBlank(host.getAgentImageTag())) {
-            host.setAgentImageTag(AgentImageUtils.normalizeTag(host.getAgentImageTag()));
-        } else {
-            host.setAgentImageTag(null);
-        }
         String dockerHost = StrUtil.trim(host.getDockerHost());
         String type = StrUtil.trim(host.getConnectionType());
 

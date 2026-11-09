@@ -28,10 +28,14 @@ public class HostAgentController {
     @Resource
     private HostAgentService hostAgentService;
 
+    /**
+     * 读取辅助容器状态。tag / root 可选：工具菜单里的 Agent 配置用它展示
+     * 「按配置期望的 tag / 目录」计算出的需要重建提示；不传则沿用 Agent 配置里的值。
+     */
     @HasPermission("host:list")
     @RequestMapping("status")
-    public AjaxResult status(String id) {
-        return AjaxResult.ok().data(hostAgentService.status(requireHost(id)));
+    public AjaxResult status(String id, String tag, String root) {
+        return AjaxResult.ok().data(hostAgentService.status(requireHost(id), tag, root));
     }
 
     @Log("主机-部署辅助容器")

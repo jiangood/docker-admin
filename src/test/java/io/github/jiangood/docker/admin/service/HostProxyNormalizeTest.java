@@ -160,7 +160,7 @@ class HostProxyNormalizeTest {
     }
 
     private static HostService service() {
-        return new HostService(null, null);
+        return new HostService(null, null, null);
     }
 
     private static Host tcpHost() {

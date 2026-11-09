@@ -36,7 +36,7 @@ public class HostAgentVo {
     /** 当前配置的 docker socket 宿主机路径。 */
     String socketPath;
 
-    /** 期望挂载的宿主机目录（Host.fileRoot 或默认 /home）。 */
+    /** 期望挂载的宿主机目录（Agent 配置或默认 /home）。 */
     String desiredRoot;
 
     /** 容器实际挂载的宿主机目录（来自容器 label）。 */

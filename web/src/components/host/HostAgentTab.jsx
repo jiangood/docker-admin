@@ -67,6 +67,9 @@ export default class extends React.Component {
         const body = <HostCli ref={this.cli} hostId={hostId} status={status} height={height}/>
 
         return <HostAgentAlert hostId={hostId} onChange={this.onAgentChange}
+                               defaultTag={this.props.defaultTag}
+                               defaultRoot={this.props.defaultRoot}
+                               onConfigChange={this.props.onConfigChange}
                                extra={reconnect}>
             {({summary, notice, actions}) => <Card title={this.renderTitle(summary, host)}
                                                   extra={<Space size={8} wrap>{actions}</Space>}
