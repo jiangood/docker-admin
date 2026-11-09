@@ -145,9 +145,14 @@ public class AppService extends BaseService<App> {
      */
     private void doDeploy(App app, boolean forcePull, DeployTrigger trigger) {
         Assert.notNull(app, "应用不存在");
-        deployingList.add(app.getId());
+        // 用局部变量保存 id：下面重新加载应用时 app 可能为 null，
+        // finally 里再用 app.getId() 会 NPE，导致「部署中」标记永远清不掉
+        String appId = app.getId();
+        deployingList.add(appId);
         DockerClient client = null;
         DeployLog deployLog = null;
+        // saveAndFlush 抛异常时实体的 id 已被 @PrePersist 填好，不能再用 isNew() 判断是否落库
+        boolean logSaved = false;
         boolean success = false;
         try {
             // 每次部署落一条独立记录，并以其 id 作为日志文件名：前端「部署日志」按部署记录
@@ -163,6 +168,7 @@ public class AppService extends BaseService<App> {
             deployLog.setTriggerType(trigger == null ? DeployTrigger.MANUAL : trigger);
             // saveAndFlush：立即拿到底层生成的 id，绑定日志文件时才有值（与 BuildLogService.saveLog 一致）
             deployLog = deployLogRepository.saveAndFlush(deployLog);
+            logSaved = true;
 
             FileLog.bind(deployLog.getId());
             // 登记为运行中的任务：前端「部署日志」用 WebSocket 实时 tail 本文件，
@@ -375,16 +381,24 @@ public class AppService extends BaseService<App> {
         } catch (Exception e) {
             fileLog.error("部署失败", e);
         } finally {
-            if (deployLog != null) {
-                deployLog.setSuccess(success);
-                deployLog.setCompleteTime(LocalDateTime.now());
-                deployLogRepository.save(deployLog);
-                // 标记任务结束：前端 WS 收到后补发剩余内容并断开
-                taskLogRegistry.finish(deployLog.getId());
+            // 先收尾数据库记录，再用内层 try/finally 保证「部署中」标记无论记录成败都会清掉。
+            // 之前记录保存失败会在 finally 里再次抛出，后面的 remove 永远执行不到，
+            // 应用会一直卡在「部署中」，定时更新也从下一轮开始被永久跳过。
+            try {
+                if (logSaved) {
+                    deployLog.setSuccess(success);
+                    deployLog.setCompleteTime(LocalDateTime.now());
+                    deployLogRepository.save(deployLog);
+                    // 标记任务结束：前端 WS 收到后补发剩余内容并断开
+                    taskLogRegistry.finish(deployLog.getId());
+                }
+            } catch (Exception e) {
+                log.error("记录部署结果失败，应用 {} 的这次部署没有写入部署记录", appId, e);
+            } finally {
+                IOUtils.closeQuietly(client);
+                deployingList.remove(appId);
+                FileLog.unbind();
             }
-            IOUtils.closeQuietly(client);
-            deployingList.remove(app.getId());
-            FileLog.unbind();
         }
 
     }
