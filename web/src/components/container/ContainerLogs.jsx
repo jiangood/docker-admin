@@ -1,5 +1,5 @@
 import React from "react";
-import {Alert, Button, DatePicker} from "antd";
+import {Alert, Button, DatePicker, message} from "antd";
 import dayjs from "dayjs";
 import {HttpClient} from "@jiangood/open-admin";
 import LogView from "../LogView";
@@ -23,6 +23,7 @@ export default class extends React.Component {
         rangeLoading: false,
         rangeText: null,
         rangeError: null,
+        downloading: false,
     }
 
     _reqId = 0
@@ -80,16 +81,32 @@ export default class extends React.Component {
         })
     }
 
+    /**
+     * 下载日志：走 HttpClient.download，超出「下载最多天数」时能正常弹出后端错误提示，
+     * 而不是把错误 JSON 当成文件打开。筛选状态下带上同一时间段。
+     */
+    downloadLog = () => {
+        const {downloadUrl} = this.props
+        const {rangeSince, rangeUntil, downloading} = this.state
+        if (!downloadUrl || downloading) {
+            return
+        }
+        const params = rangeSince == null ? undefined : {since: rangeSince, until: rangeUntil}
+        this.setState({downloading: true})
+        const hide = message.loading('日志下载中…', 0)
+        HttpClient.download({url: downloadUrl, params})
+            .catch(() => {
+            })
+            .finally(() => {
+                hide()
+                this.setState({downloading: false})
+            })
+    }
+
     render() {
         const {url, height, containerKey, downloadUrl, logsUrl} = this.props
-        const {range, rangeSince, rangeUntil, rangeLoading, rangeText, rangeError} = this.state
+        const {range, rangeSince, rangeUntil, rangeLoading, rangeText, rangeError, downloading} = this.state
         const filtered = !!range
-
-        // 时间段模式下下载同一段日志，普通模式仍下载最近若干行
-        let effectiveDownloadUrl = downloadUrl
-        if (filtered && downloadUrl) {
-            effectiveDownloadUrl = `${downloadUrl}&since=${rangeSince}&until=${rangeUntil}`
-        }
 
         const toolbarExtra = <div style={{display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap'}}>
             <RangePicker size='small'
@@ -117,7 +134,9 @@ export default class extends React.Component {
                      loading={rangeLoading}
                      toolbar
                      toolbarExtra={logsUrl ? toolbarExtra : null}
-                     downloadUrl={effectiveDownloadUrl}/>
+                     downloadUrl={downloadUrl}
+                     onDownload={downloadUrl ? this.downloadLog : undefined}
+                     downloadLoading={downloading}/>
         </>
     }
 }

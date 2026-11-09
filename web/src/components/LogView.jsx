@@ -17,9 +17,10 @@ const TOOLBAR_HEIGHT = 32
 export default class extends React.Component {
 
     renderToolbar = ({follow, startFollowing, stopFollowing} = {}) => {
-        const {downloadUrl, toolbarExtra} = this.props
+        const {downloadUrl, onDownload, downloadLoading, toolbarExtra} = this.props
         const href = downloadUrl ? UrlUtils.contextPath(downloadUrl) : null
         const showFollow = follow !== undefined
+        const showDownload = !!(onDownload || href)
 
         return <div style={{
             display: 'flex',
@@ -38,13 +39,16 @@ export default class extends React.Component {
                                        onClick={follow ? stopFollowing : startFollowing}>
                     {follow ? '停止滚动' : '继续滚动'}
                 </Button>}
-                {href && <Button size='small' icon={<DownloadOutlined/>} href={href}>下载日志</Button>}
+                {showDownload && (onDownload
+                    ? <Button size='small' icon={<DownloadOutlined/>} loading={downloadLoading}
+                              onClick={onDownload}>下载日志</Button>
+                    : <Button size='small' icon={<DownloadOutlined/>} href={href}>下载日志</Button>)}
             </Space>
         </div>
     }
 
     render() {
-        let {url, websocket, onClose, toolbar, downloadUrl, toolbarExtra, text, loading} = this.props;
+        let {url, websocket, onClose, toolbar, downloadUrl, onDownload, toolbarExtra, text, loading} = this.props;
         const isStatic = text != null
         if (url && !url.startsWith("ws://") && !url.startsWith("wss://") && !url.startsWith("http://") && !url.startsWith("https://")) {
             url = UrlUtils.contextPath(url)
@@ -58,7 +62,7 @@ export default class extends React.Component {
         // 列表 ref 还未就绪、且日志一条未到不会触发重渲染）算出的高度为 0，
         // 界面会是一片空白，直到第一条日志到达才显示出来。
         const height = this.props.height || 500
-        const showToolbar = toolbar || !!downloadUrl || !!toolbarExtra
+        const showToolbar = toolbar || !!downloadUrl || !!onDownload || !!toolbarExtra
         const logHeight = showToolbar ? Math.max(height - TOOLBAR_HEIGHT, 0) : height
 
         if (isStatic) {

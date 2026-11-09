@@ -429,12 +429,6 @@ export default class extends React.Component {
 
         const items = [
             {
-                key: 'log',
-                label: '部署日志',
-                children: <DeployLogList key={'log-' + tabTokens.log} appId={app.id}
-                                         deploying={container?.state === 'deploying'}/>
-            },
-            {
                 key: 'container',
                 label: '容器日志',
                 children: container && container.id
@@ -446,6 +440,12 @@ export default class extends React.Component {
                                      height={520}
                                      containerKey={container.id}/>
                     : <Alert type='info' showIcon title='容器未部署'/>
+            },
+            {
+                key: 'log',
+                label: '部署日志',
+                children: <DeployLogList key={'log-' + tabTokens.log} appId={app.id}
+                                         deploying={container?.state === 'deploying'}/>
             },
             {
                 key: 'config',

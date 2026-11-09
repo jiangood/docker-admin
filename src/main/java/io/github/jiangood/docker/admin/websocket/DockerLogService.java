@@ -25,12 +25,6 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 public class DockerLogService {
 
-    /** 下载日志时读取的末尾行数，与页面实时日志的初始 tail 保持一致。 */
-    public static final int DOWNLOAD_TAIL_LINES = 2000;
-
-    /** 按时间段查询时最多返回的行数，避免长时间范围把整段日志读进内存。 */
-    public static final int RANGE_TAIL_LINES = 5000;
-
     private final Map<String, LogStreamCallback> sessionLogStreams = new ConcurrentHashMap<>();
 
     @Resource
@@ -112,12 +106,12 @@ public class DockerLogService {
     }
 
     /**
-     * 按时间段读取容器日志（末尾最多 {@value #RANGE_TAIL_LINES} 行），返回文本供页面静态展示。
+     * 按时间段读取容器日志（末尾最多 {@code tail} 行），返回文本供页面静态展示。
      */
-    public String readContainerLogs(Host host, String containerId, Integer since, Integer until)
+    public String readContainerLogs(Host host, String containerId, Integer since, Integer until, int tail)
             throws InterruptedException {
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-        writeContainerLogs(host, containerId, since, until, RANGE_TAIL_LINES, buffer);
+        writeContainerLogs(host, containerId, since, until, tail, buffer);
         return buffer.toString(StandardCharsets.UTF_8);
     }
 

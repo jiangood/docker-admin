@@ -35,6 +35,18 @@ public class SystemConfigService extends BaseService<SystemConfig> {
      */
     public static final String AGENT_REPOSITORY = "docker.agent.repository";
 
+    /**
+     * 容器日志：时间段查询 / 下载的最大行数（默认 10000）。
+     */
+    public static final String LOG_RANGE_TAIL = "docker.logs.range-tail";
+
+    /**
+     * 容器日志下载最多回溯的天数（默认 7 天）。
+     */
+    public static final String LOG_DOWNLOAD_DAYS = "docker.logs.download-days";
+    public static final int DEFAULT_LOG_RANGE_TAIL = 10000;
+    public static final int DEFAULT_LOG_DOWNLOAD_DAYS = 7;
+
     private final SystemConfigRepository repository;
     private final RegistryRepository registryRepository;
     private final HostRepository hostRepository;
@@ -90,6 +102,48 @@ public class SystemConfigService extends BaseService<SystemConfig> {
         values.put("defaultRegistryId", getDefaultRegistryId());
         values.put("defaultBuildHostId", getDefaultBuildHostId());
         return values;
+    }
+
+    // ------------------------------------------------------------------ 容器日志
+
+    public int getLogRangeTail() {
+        return readPositiveInt(LOG_RANGE_TAIL, DEFAULT_LOG_RANGE_TAIL);
+    }
+
+    public int getLogDownloadDays() {
+        return readPositiveInt(LOG_DOWNLOAD_DAYS, DEFAULT_LOG_DOWNLOAD_DAYS);
+    }
+
+    public Map<String, Object> getLogSettings() {
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("rangeTail", getLogRangeTail());
+        values.put("downloadDays", getLogDownloadDays());
+        values.put("defaultRangeTail", DEFAULT_LOG_RANGE_TAIL);
+        values.put("defaultDownloadDays", DEFAULT_LOG_DOWNLOAD_DAYS);
+        return values;
+    }
+
+    @Transactional
+    public void saveLogSettings(Integer rangeTail, Integer downloadDays) {
+        int tail = rangeTail == null ? DEFAULT_LOG_RANGE_TAIL : rangeTail;
+        int days = downloadDays == null ? DEFAULT_LOG_DOWNLOAD_DAYS : downloadDays;
+        Assert.isTrue(tail >= 1 && tail <= 1000000, "日志最大行数需在 1 ~ 1000000 之间");
+        Assert.isTrue(days >= 1 && days <= 3650, "日志下载天数需在 1 ~ 3650 之间");
+        saveValue(LOG_RANGE_TAIL, String.valueOf(tail), "容器日志时间段查询 / 下载的最大行数");
+        saveValue(LOG_DOWNLOAD_DAYS, String.valueOf(days), "容器日志下载最多回溯的天数");
+    }
+
+    private int readPositiveInt(String key, int defaultValue) {
+        String value = StrUtil.trimToNull(getValue(key));
+        if (value == null) {
+            return defaultValue;
+        }
+        try {
+            int parsed = Integer.parseInt(value);
+            return parsed > 0 ? parsed : defaultValue;
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
     }
 
     @Transactional

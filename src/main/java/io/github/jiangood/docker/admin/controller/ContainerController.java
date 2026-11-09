@@ -7,6 +7,7 @@ import io.github.jiangood.docker.admin.dto.ContainerFileWriteRequest;
 import io.github.jiangood.docker.admin.dto.ContainerSummaryVo;
 import io.github.jiangood.docker.admin.service.ContainerService;
 import io.github.jiangood.docker.admin.service.HostService;
+import io.github.jiangood.docker.admin.service.SystemConfigService;
 import io.github.jiangood.docker.admin.util.ContainerPermTool;
 import io.github.jiangood.docker.admin.websocket.DockerLogService;
 import io.github.jiangood.openadmin.framework.perm.HasPermission;
@@ -40,6 +41,9 @@ public class ContainerController {
     @Resource
     private DockerLogService dockerLogService;
 
+    @Resource
+    private SystemConfigService systemConfigService;
+
     // ------------------------------------------------------------------ 查看
 
     /** 主机上的容器列表。 */
@@ -61,7 +65,7 @@ public class ContainerController {
     }
 
     /**
-     * 按时间段查询容器日志（末尾最多 {@value DockerLogService#RANGE_TAIL_LINES} 行，带 Docker 时间戳前缀）。
+     * 按时间段查询容器日志（末尾最多为全局设置的行数，默认 10000 行，带 Docker 时间戳前缀）。
      */
     @RequestMapping("logs")
     public AjaxResult logs(String hostId, String containerId, Integer since, Integer until) throws InterruptedException {
@@ -69,12 +73,13 @@ public class ContainerController {
         Host host = requireHost(hostId);
         Assert.hasText(containerId, "containerId 不能为空");
         assertTimeRange(since, until);
-        return AjaxResult.ok().data(dockerLogService.readContainerLogs(host, containerId, since, until));
+        return AjaxResult.ok().data(dockerLogService.readContainerLogs(host, containerId, since, until,
+                systemConfigService.getLogRangeTail()));
     }
 
     /**
-     * 下载容器日志。不传时间范围时取最近 {@value DockerLogService#DOWNLOAD_TAIL_LINES} 行；
-     * 传入 {@code since}/{@code until} 时下载该时间段（末尾最多 {@value DockerLogService#RANGE_TAIL_LINES} 行）。
+     * 下载容器日志。只允许最近 N 天（全局设置，默认 7 天）：未传时间范围时按最近 N 天，
+     * 传入的范围早于该窗口时直接拒绝；末尾最多为全局设置的行数（默认 10000 行）。
      */
     @RequestMapping("logDownload")
     public void logDownload(String hostId, String containerId, Integer since, Integer until,
@@ -84,12 +89,14 @@ public class ContainerController {
         Assert.hasText(containerId, "containerId 不能为空");
         assertTimeRange(since, until);
 
-        int tail = since == null && until == null
-                ? DockerLogService.DOWNLOAD_TAIL_LINES : DockerLogService.RANGE_TAIL_LINES;
+        int days = systemConfigService.getLogDownloadDays();
+        Integer downloadSince = resolveDownloadSince(since, days);
+        assertTimeRange(downloadSince, until);
         String fileName = "container-" + (containerId.length() > 12 ? containerId.substring(0, 12) : containerId) + ".log";
         DownloadTool.prepareDownload(response, DownloadTool.safeFileName(fileName), "text/plain;charset=UTF-8");
         try (OutputStream out = response.getOutputStream()) {
-            dockerLogService.writeContainerLogs(host, containerId, since, until, tail, out);
+            dockerLogService.writeContainerLogs(host, containerId, downloadSince, until,
+                    systemConfigService.getLogRangeTail(), out);
             out.flush();
         }
     }
@@ -98,6 +105,17 @@ public class ContainerController {
         if (since != null && until != null && since > until) {
             throw new BusinessException("开始时间不能晚于结束时间");
         }
+    }
+
+    private static Integer resolveDownloadSince(Integer since, int days) {
+        long earliest = System.currentTimeMillis() / 1000 - days * 86400L;
+        if (since == null) {
+            return (int) earliest;
+        }
+        if (since < earliest) {
+            throw new BusinessException("日志下载最多支持最近 " + days + " 天，请缩小时间范围");
+        }
+        return since;
     }
 
     // ------------------------------------------------------------------ 文件

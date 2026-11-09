@@ -49,8 +49,26 @@ public class SystemConfigController {
         return AjaxResult.ok().data(service.getAgentSettings()).msg("保存成功");
     }
 
+    @HasPermission("system-config:view")
+    @GetMapping("logs")
+    public AjaxResult logs() {
+        return AjaxResult.ok().data(service.getLogSettings());
+    }
+
+    @Log("全局设置-保存容器日志")
+    @HasPermission("system-config:save")
+    @PostMapping("logs")
+    public AjaxResult saveLogs(@RequestBody LogSettingsInput request) {
+        service.saveLogSettings(request == null ? null : request.rangeTail(),
+                request == null ? null : request.downloadDays());
+        return AjaxResult.ok().data(service.getLogSettings()).msg("保存成功");
+    }
+
     public record DefaultsRequest(String defaultRegistryId, String defaultBuildHostId) {}
 
     public record AgentSettingsInput(String repository) {
+    }
+
+    public record LogSettingsInput(Integer rangeTail, Integer downloadDays) {
     }
 }

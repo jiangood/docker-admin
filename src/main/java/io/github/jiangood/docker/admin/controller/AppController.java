@@ -11,6 +11,7 @@ import io.github.jiangood.docker.admin.entity.DeployLog;
 import io.github.jiangood.docker.admin.entity.DeployTrigger;
 import io.github.jiangood.docker.admin.service.AppService;
 import io.github.jiangood.docker.admin.service.ContainerService;
+import io.github.jiangood.docker.admin.service.SystemConfigService;
 import io.github.jiangood.docker.admin.websocket.DockerLogService;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import io.github.jiangood.openadmin.modules.logviewer.service.FileLogService;
@@ -69,6 +70,9 @@ public class AppController {
 
     @Resource
     private DockerLogService dockerLogService;
+
+    @Resource
+    private SystemConfigService systemConfigService;
 
     @HasPermission("app:view")
     @RequestMapping("list")
@@ -149,7 +153,7 @@ public class AppController {
     }
 
     /**
-     * 按时间段查询应用容器日志（末尾最多 {@value DockerLogService#RANGE_TAIL_LINES} 行）。
+     * 按时间段查询应用容器日志（末尾最多为全局设置的行数，默认 10000 行）。
      * {@code since}/{@code until} 为秒级时间戳，返回带 Docker 时间戳前缀的文本。
      */
     @HasPermission("app:view")
@@ -159,13 +163,13 @@ public class AppController {
         Container container = service.getContainer(app);
         Assert.notNull(container, "容器未部署");
         assertTimeRange(since, until);
-        return AjaxResult.ok().data(
-                dockerLogService.readContainerLogs(app.getHost(), container.getId(), since, until));
+        return AjaxResult.ok().data(dockerLogService.readContainerLogs(app.getHost(), container.getId(),
+                since, until, systemConfigService.getLogRangeTail()));
     }
 
     /**
-     * 下载应用容器日志。不传时间范围时取最近 {@value DockerLogService#DOWNLOAD_TAIL_LINES} 行；
-     * 传入 {@code since}/{@code until} 时下载该时间段（末尾最多 {@value DockerLogService#RANGE_TAIL_LINES} 行）。
+     * 下载应用容器日志。只允许最近 N 天（全局设置，默认 7 天）：未传时间范围时按最近 N 天，
+     * 传入的范围早于该窗口时直接拒绝；末尾最多为全局设置的行数（默认 10000 行）。
      * 只读历史，不跟随实时输出，避免下载请求长期占用连接。
      */
     @HasPermission("app:view")
@@ -177,13 +181,15 @@ public class AppController {
         Assert.notNull(container, "容器未部署");
         assertTimeRange(since, until);
 
-        int tail = since == null && until == null
-                ? DockerLogService.DOWNLOAD_TAIL_LINES : DockerLogService.RANGE_TAIL_LINES;
+        int days = systemConfigService.getLogDownloadDays();
+        Integer downloadSince = resolveDownloadSince(since, days);
+        assertTimeRange(downloadSince, until);
         String fileName = StrUtil.blankToDefault(app.getName(), "app")
                 + "-" + StrUtil.subPre(container.getId(), 12) + ".log";
         DownloadTool.prepareDownload(response, DownloadTool.safeFileName(fileName), "text/plain;charset=UTF-8");
         try (OutputStream out = response.getOutputStream()) {
-            dockerLogService.writeContainerLogs(app.getHost(), container.getId(), since, until, tail, out);
+            dockerLogService.writeContainerLogs(app.getHost(), container.getId(), downloadSince, until,
+                    systemConfigService.getLogRangeTail(), out);
             out.flush();
         }
     }
@@ -192,6 +198,20 @@ public class AppController {
         if (since != null && until != null && since > until) {
             throw new BusinessException("开始时间不能晚于结束时间");
         }
+    }
+
+    /**
+     * 下载窗口的起点：未指定时取最近 N 天；早于窗口时拒绝，避免一次下载过多历史日志。
+     */
+    private static Integer resolveDownloadSince(Integer since, int days) {
+        long earliest = System.currentTimeMillis() / 1000 - days * 86400L;
+        if (since == null) {
+            return (int) earliest;
+        }
+        if (since < earliest) {
+            throw new BusinessException("日志下载最多支持最近 " + days + " 天，请缩小时间范围");
+        }
+        return since;
     }
 
     /**
