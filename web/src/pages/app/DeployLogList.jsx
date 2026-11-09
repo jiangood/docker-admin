@@ -42,8 +42,6 @@ export default class extends React.Component {
     state = {
         loading: true,
         logs: [],
-        // 当前展开的部署记录 id；默认最新一条
-        activeKey: null,
         // logId -> 已重连次数，用于给 LogView 换 key 触发重连
         watchAttempts: {},
         // 已放弃实时跟随的 logId（WS 断开且不再重连），其记录不再驱动轮询
@@ -52,7 +50,7 @@ export default class extends React.Component {
 
     componentDidMount() {
         this._mounted = true
-        this.loadLogs(true)
+        this.loadLogs()
     }
 
     componentDidUpdate(prevProps) {
@@ -69,22 +67,15 @@ export default class extends React.Component {
 
     /**
      * 拉取部署记录列表。
-     * @param first 首次加载：显示 loading，并把最新一条设为展开项
+     * 展开状态由 Collapse 自己维护（defaultActiveKey），轮询刷新列表不会覆盖用户的手动收起 / 展开。
      */
-    loadLogs = (first = false) => {
+    loadLogs = () => {
         return HttpClient.get('admin/app/deployLogs', {id: this.props.appId}).then(rs => {
             if (!this._mounted) {
                 return
             }
             const logs = rs.data || []
-            this.setState(s => {
-                const next = {loading: false, logs}
-                if (first || !logs.some(log => String(log.id) === s.activeKey)) {
-                    // 首次进入，或原先展开的记录已不在列表里（如切换应用）：展开最新一条
-                    next.activeKey = logs.length ? String(logs[0].id) : null
-                }
-                return next
-            }, () => this.schedulePoll(logs))
+            this.setState({loading: false, logs}, () => this.schedulePoll(logs))
         }).catch(() => {
             if (this._mounted) {
                 this.setState({loading: false})
@@ -134,7 +125,7 @@ export default class extends React.Component {
     }
 
     render() {
-        const {loading, logs, activeKey} = this.state
+        const {loading, logs} = this.state
         if (loading) {
             return <Spin/>
         }
@@ -151,8 +142,9 @@ export default class extends React.Component {
         return <Collapse
             accordion
             destroyOnHidden
-            activeKey={activeKey}
-            onChange={key => this.setState({activeKey: Array.isArray(key) ? key[0] : key})}
+            // 非受控：只在挂载（首次进入 / 标签重新挂载）时展开最新一条，之后完全由用户控制，
+            // 轮询刷新不会把手动收起的记录重新弹开
+            defaultActiveKey={logs.length ? String(logs[0].id) : undefined}
             items={items}
         />
     }
