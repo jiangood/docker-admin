@@ -28,6 +28,9 @@ public enum DeployTrigger {
     MIGRATE,
 
     @DictItem(label = "构建自动部署")
-    BUILD
+    BUILD,
+
+    @DictItem(label = "定时更新")
+    SCHEDULE
 
 }

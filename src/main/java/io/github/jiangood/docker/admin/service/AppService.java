@@ -7,6 +7,7 @@ import com.github.dockerjava.api.command.CreateContainerCmd;
 import com.github.dockerjava.api.command.CreateContainerResponse;
 import com.github.dockerjava.api.exception.NotFoundException;
 import com.github.dockerjava.api.model.*;
+import com.github.dockerjava.core.command.PullImageResultCallback;
 import io.github.jiangood.docker.admin.BuildSuccessEvent;
 import io.github.jiangood.docker.admin.dao.AppRepository;
 import io.github.jiangood.docker.admin.dao.DeployLogRepository;
@@ -20,6 +21,7 @@ import io.github.jiangood.docker.admin.entity.DeployTrigger;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.entity.ImageTag;
 import io.github.jiangood.docker.admin.entity.Project;
+import io.github.jiangood.docker.admin.util.ImageUrlUtils;
 import io.github.jiangood.docker.admin.websocket.TaskLogRegistry;
 import io.github.jiangood.docker.base.FileLog;
 import io.github.jiangood.docker.sdk.engine.DefaultCallback;
@@ -66,6 +68,15 @@ public class AppService extends BaseService<App> {
 
     /** 部署前探测 bind 源目录的超时（仅本机部署时探测） */
     private static final Duration BIND_CHECK_TIMEOUT = Duration.ofSeconds(5);
+
+    /**
+     * 定时更新检查时拉取镜像的兜底超时。拉大镜像可能很慢，但任务线程不能无限挂住；
+     * 超时后由调用方关闭客户端，中断在途请求。
+     */
+    private static final Duration SCHEDULED_UPDATE_PULL_TIMEOUT = Duration.ofMinutes(10);
+
+    /** 定时检查失败后的重试间隔：不按完整检查间隔等待，避免一次网络抖动拖一整天 */
+    private static final Duration SCHEDULED_UPDATE_RETRY_DELAY = Duration.ofMinutes(10);
 
     Set<String> deployingList = ConcurrentHashMap.newKeySet();
 
@@ -133,6 +144,13 @@ public class AppService extends BaseService<App> {
      * @param trigger   本次部署的触发方式，仅用于写部署记录，便于在「部署日志」里区分来源
      */
     private void doDeploy(App app, boolean forcePull, DeployTrigger trigger) {
+        doDeploy(app, forcePull, trigger, false);
+    }
+
+    /**
+     * @param skipPull 定时检查阶段已经拉取过镜像，部署时直接使用本地镜像，避免连续拉取两次
+     */
+    private void doDeploy(App app, boolean forcePull, DeployTrigger trigger, boolean skipPull) {
         Assert.notNull(app, "应用不存在");
         deployingList.add(app.getId());
         DockerClient client = null;
@@ -160,8 +178,10 @@ public class AppService extends BaseService<App> {
             fileLog.info("部署阶段开始");
             Host host = app.getHost();
 
-            // 镜像
-            String image = app.getImageUrl() + ":" + app.getImageTag();
+            // 镜像：tag 为空时按 latest 处理，与定时更新检查阶段保持一致
+            String tag = StrUtil.blankToDefault(app.getImageTag(), LATEST_TAG);
+            String repo = StrUtil.blankToDefault(ImageUrlUtils.repoOf(app.getImageUrl()), app.getImageUrl());
+            String image = ImageUrlUtils.full(repo, tag);
 
             client = getClient(host, app.getImageUrl());
             // 供 lambda 捕获：client 在 try 里赋值，本身不是 effectively final
@@ -170,8 +190,11 @@ public class AppService extends BaseService<App> {
 
             // latest 是可变标签：同样的 tag 可能已经指向新镜像，跳过拉取会继续用旧内容，
             // 构建成功后的自动部署尤其如此，因此无论是否勾选强制拉取都要重新拉取。
-            boolean mutableTag = LATEST_TAG.equals(app.getImageTag());
-            if (!forcePull && !mutableTag && imageExists(client, image)) {
+            boolean mutableTag = LATEST_TAG.equals(tag);
+            boolean localExists = imageExists(client, image);
+            if (skipPull && localExists) {
+                fileLog.info("镜像已在定时检查阶段更新，跳过拉取 {}", image);
+            } else if (!forcePull && !mutableTag && localExists) {
                 fileLog.info("本地已存在镜像 {}，跳过拉取（如需更新请勾选强制拉取）", image);
             } else {
                 if (mutableTag && !forcePull) {
@@ -390,6 +413,197 @@ public class AppService extends BaseService<App> {
             }
         }
         return list;
+    }
+
+    // ---------------- 定时更新 ----------------
+
+    /**
+     * 定时更新一轮：只检查开启且到期的应用。
+     * <p>
+     * 任务每分钟触发一次，间隔粒度由应用自己配置（与网站监控一致）；
+     * 绝大多数轮次只会读一遍配置，开销可忽略。
+     */
+    public ScheduledUpdateSummary runDueScheduledUpdates() {
+        List<App> apps = appRepository.findAllByScheduledUpdateIsTrue();
+        int checked = 0;
+        int updated = 0;
+        int failed = 0;
+
+        for (App app : apps) {
+            if (!isScheduledUpdateDue(app)) {
+                continue;
+            }
+            if (isDeploying(app.getId())) {
+                log.info("应用「{}」正在部署，跳过本轮定时更新检查", app.getName());
+                continue;
+            }
+
+            checked++;
+            ScheduledUpdateCheck check = checkScheduledUpdate(app);
+            if (!check.success()) {
+                failed++;
+            }
+            if (check.deploy() && !isDeploying(app.getId())) {
+                updated++;
+                // 通过代理调用，保证 @Async 生效
+                SpringUtil.getBean(getClass()).deployScheduledPulled(app.getId());
+            }
+        }
+
+        return new ScheduledUpdateSummary(checked, updated, failed);
+    }
+
+    public boolean isDeploying(String appId) {
+        return appId != null && deployingList.contains(appId);
+    }
+
+    /**
+     * 检查一个应用是否有新镜像。
+     * <p>
+     * 只处理运行中的容器：停止的应用等下次启动后再说，避免把用户刻意停掉的容器自动拉起。
+     * 判断依据是「运行中容器实际使用的镜像 ID」与「拉取后本地 tag 指向的镜像 ID」是否一致，
+     * 因此上次部署失败、本地 tag 已更新但容器仍是旧镜像时，下一轮还会继续尝试。
+     */
+    public ScheduledUpdateCheck checkScheduledUpdate(App app) {
+        String message;
+        boolean success = true;
+        boolean deploy = false;
+
+        try {
+            Container container = getContainer(app);
+            if (container == null) {
+                message = "容器未部署，跳过";
+            } else if (!"running".equalsIgnoreCase(container.getState())) {
+                message = "容器未运行，跳过";
+            } else {
+                String tag = StrUtil.blankToDefault(app.getImageTag(), LATEST_TAG);
+                String repo = StrUtil.blankToDefault(ImageUrlUtils.repoOf(app.getImageUrl()), app.getImageUrl());
+                String image = ImageUrlUtils.full(repo, tag);
+
+                DockerClient client = getClient(app.getHost(), app.getImageUrl());
+                try {
+                    log.info("应用「{}」定时检查镜像 {}", app.getName(), image);
+                    pullImage(client, repo, tag);
+
+                    String localImageId = client.inspectImageCmd(image).exec().getId();
+                    if (StrUtil.equals(localImageId, container.getImageId())) {
+                        message = "已是最新";
+                    } else {
+                        message = "发现新版本，开始部署";
+                        deploy = true;
+                    }
+                } finally {
+                    IOUtils.closeQuietly(client);
+                }
+            }
+        } catch (Exception e) {
+            success = false;
+            message = "检查失败：" + StrUtil.maxLength(StrUtil.nullToEmpty(e.getMessage()), 800);
+            log.warn("应用「{}」定时更新检查失败：{}", app.getName(), e.toString());
+        }
+
+        applyScheduledUpdateResult(app.getId(), success, message);
+        log.info("应用「{}」定时更新检查：{}", app.getName(), message);
+        return new ScheduledUpdateCheck(message, success, deploy);
+    }
+
+    /**
+     * 静默拉取镜像：定时检查只关心成功/失败，不把逐层进度写进部署日志文件。
+     * 检查阶段还没有部署记录，也就没有 logId 可绑定。
+     */
+    private void pullImage(DockerClient client, String repo, String tag) {
+        dockerManager.callWithTimeout(SCHEDULED_UPDATE_PULL_TIMEOUT, "拉取镜像 " + repo + ":" + tag, () -> {
+            // PullImageResultCallback 会在最后一个响应里检查 errorDetail；
+            // 用通用 Adapter 会把错误响应当普通事件吞掉，失败被误判成成功。
+            client.pullImageCmd(repo).withTag(tag)
+                    .exec(new PullImageResultCallback())
+                    .awaitSuccess();
+            return null;
+        });
+    }
+
+    /**
+     * 检查结束后只回写检查快照，避免把任务线程里加载的旧应用对象整体保存，
+     * 覆盖用户在检查期间做的修改。
+     */
+    private void applyScheduledUpdateResult(String appId, boolean success, String message) {
+        App latest = appRepository.findById(appId).orElse(null);
+        if (latest == null) {
+            return;
+        }
+        latest.setScheduledUpdateLastCheckTime(LocalDateTime.now());
+        latest.setScheduledUpdateLastSuccess(success);
+        latest.setScheduledUpdateLastResult(StrUtil.maxLength(message, 990));
+        appRepository.save(latest);
+    }
+
+    /**
+     * 到期判断：从未检查过，或距上次检查已满配置间隔。
+     * 上次检查失败时最多等 10 分钟就重试，避免一次网络抖动拖过一个完整间隔。
+     */
+    private boolean isScheduledUpdateDue(App app) {
+        LocalDateTime last = app.getScheduledUpdateLastCheckTime();
+        if (last == null) {
+            return true;
+        }
+
+        int minutes = app.getScheduledUpdateIntervalMinutes() == null
+                ? App.DEFAULT_SCHEDULED_UPDATE_INTERVAL_MINUTES
+                : Math.max(1, app.getScheduledUpdateIntervalMinutes());
+        Duration interval = Duration.ofMinutes(minutes);
+        if (Boolean.FALSE.equals(app.getScheduledUpdateLastSuccess())
+                && interval.compareTo(SCHEDULED_UPDATE_RETRY_DELAY) > 0) {
+            interval = SCHEDULED_UPDATE_RETRY_DELAY;
+        }
+        return Duration.between(last, LocalDateTime.now()).compareTo(interval) >= 0;
+    }
+
+    /**
+     * 定时检查发现新镜像后异步部署。镜像已在检查阶段拉取过，部署里不再重复拉取。
+     */
+    @Async
+    public void deployScheduledPulled(String appId) {
+        if (isDeploying(appId)) {
+            log.info("应用 {} 已在部署中，跳过本次定时更新部署", appId);
+            return;
+        }
+        App app = appRepository.findById(appId).orElse(null);
+        if (app == null) {
+            return;
+        }
+        doDeploy(app, false, DeployTrigger.SCHEDULE, true);
+    }
+
+    /**
+     * 保存定时更新设置。开启时重置上次检查时间，下一轮任务会立即检查一次。
+     */
+    @Transactional
+    public App updateScheduledUpdate(String id, boolean enabled, Integer intervalMinutes) {
+        App app = appRepository.findById(id).orElse(null);
+        Assert.notNull(app, "应用不存在");
+
+        int minutes = intervalMinutes == null
+                ? App.DEFAULT_SCHEDULED_UPDATE_INTERVAL_MINUTES
+                : intervalMinutes;
+        Assert.isTrue(minutes >= 1 && minutes <= 60 * 24 * 30, "检查间隔必须在 1 分钟到 30 天之间");
+
+        app.setScheduledUpdate(enabled);
+        app.setScheduledUpdateIntervalMinutes(minutes);
+        if (enabled) {
+            app.setScheduledUpdateLastCheckTime(null);
+            app.setScheduledUpdateLastSuccess(null);
+            app.setScheduledUpdateLastResult(null);
+        }
+        return appRepository.save(app);
+    }
+
+    public record ScheduledUpdateSummary(int checked, int updated, int failed) {
+        public String describe() {
+            return "检查 " + checked + " 个应用，更新 " + updated + " 个，失败 " + failed + " 个";
+        }
+    }
+
+    public record ScheduledUpdateCheck(String message, boolean success, boolean deploy) {
     }
 
     /**
@@ -861,9 +1075,14 @@ public class AppService extends BaseService<App> {
     private App buildCopiedApp(App app, String newName, Host host) {
         App newApp = new App();
         BeanUtils.copyProperties(app, newApp, "id", "name", "host", "createUser", "createTime",
-                "updateUser", "updateTime", "logUrl", "config");
+                "updateUser", "updateTime", "logUrl", "config",
+                // 复制出来的应用默认不开启定时更新，避免多出一份没人预期的自动拉取；间隔偏好保留
+                "scheduledUpdate", "scheduledUpdateLastCheckTime",
+                "scheduledUpdateLastSuccess", "scheduledUpdateLastResult");
         newApp.setName(newName);
         newApp.setHost(host);
+        newApp.setScheduledUpdate(false);
+        newApp.setScheduledUpdateIntervalMinutes(app.getScheduledUpdateIntervalMinutes());
         if (app.getConfig() != null) {
             newApp.setConfig(JsonTool.jsonToBean(JsonTool.toJsonQuietly(app.getConfig()), App.AppConfig.class));
         }

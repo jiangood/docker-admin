@@ -302,6 +302,21 @@ public class AppController {
     }
 
 
+    /**
+     * 保存定时更新设置：开关 + 检查间隔（分钟）。
+     * 与 {@link #autoDeploy} 区分：这里由时间触发，适合不是通过项目构建的外部镜像。
+     */
+    @HasPermission("app:deploy")
+    @RequestMapping("scheduledUpdate")
+    public AjaxResult scheduledUpdate(String id, boolean scheduledUpdate, Integer intervalMinutes) {
+        assertAppAccess(id);
+        App app = service.updateScheduledUpdate(id, scheduledUpdate, intervalMinutes);
+        return AjaxResult.ok()
+                .msg(scheduledUpdate ? "已开启定时更新" : "已关闭定时更新")
+                .data(app);
+    }
+
+
     @HasPermission("app:save")
     @RequestMapping("start/{appId}")
     public AjaxResult start(@PathVariable String appId) {

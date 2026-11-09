@@ -16,7 +16,8 @@ import {
     Spin,
     Tabs,
     Tag,
-    Tooltip
+    Tooltip,
+    Typography
 } from 'antd';
 import React from 'react';
 import {ReloadOutlined} from "@ant-design/icons";
@@ -29,6 +30,7 @@ import ContainerLogs from "../../components/container/ContainerLogs";
 import DeployLogList from "./DeployLogList";
 import LinkButton from "../../components/LinkButton";
 import {stateColor, stateLabel} from "../../components/container/utils";
+import {updateIntervalLabel} from "./updateSchedule";
 
 const Item = Descriptions.Item
 
@@ -204,7 +206,11 @@ export default class extends React.Component {
      * @param redeploy 是否触发了重新部署；true 时进入部署观察，部署结束后再刷新日志与容器标签
      * @param tabs     需要立即重挂载的标签 key；不传则不动任何标签
      */
-    handleChanged = ({redeploy = false, tabs} = {}) => {
+    handleChanged = ({redeploy = false, tabs, refreshApp = false} = {}) => {
+        if (refreshApp) {
+            this.loadApp().catch(() => {
+            })
+        }
         if (redeploy) {
             this.deployWatch = {seenDeploying: false, startedAt: Date.now()}
             this.reload().catch(() => {
@@ -349,6 +355,13 @@ export default class extends React.Component {
 
                 <Descriptions size="small">
                     <Item label='镜像' span={2}>  {app.imageUrl}:{app.imageTag} </Item>
+
+                    <Item label='定时更新'>
+                        {app.scheduledUpdate
+                            ? <Tag color='blue'>{updateIntervalLabel(app.scheduledUpdateIntervalMinutes)}</Tag>
+                            : <Typography.Text type='secondary'>未开启</Typography.Text>}
+                    </Item>
+
                     <Item label='状态'>
                         {containerLoading ? '检测中…' :
                             <Tag color={stateColor(state)}>
@@ -443,6 +456,7 @@ export default class extends React.Component {
                 key: 'publish',
                 label: '发布',
                 children: <PublishForm key={'publish-' + tabTokens.publish} appId={app.id}
+                                       containerState={container?.state}
                                        onChange={this.handleChanged}/>
             },
             {

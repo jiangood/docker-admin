@@ -11,6 +11,8 @@ public interface AppRepository extends BaseRepository<App, String> {
 
     List<App> findAllByHost_Id(String hostId);
 
+    List<App> findAllByScheduledUpdateIsTrue();
+
     boolean existsByName(String name);
 
 }

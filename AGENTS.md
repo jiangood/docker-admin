@@ -155,6 +155,13 @@ git tag vx.y.z && git push && git push origin vx.y.z
   30 台主机 30 天约 13 万行、20 MB。
   定时任务记录由 `HostUsageJobInitializer` 幂等自动创建（`sys.job-enable=false` 时跳过，已存在则不覆盖用户改动），
   日志聚合为按小时。**升级 docker-java 时需要回归这条链路。**
+- **应用定时更新：** 应用详情「发布」页的「定时更新」开关（`App.scheduledUpdate`，默认关闭）按
+  `scheduledUpdateIntervalMinutes`（默认 1440 分钟）定时检查镜像，适用于不是通过项目构建的外部镜像。
+  任务 `AppScheduledUpdateJob` 每分钟扫描到期应用，只处理**运行中**的容器；pull 后比较运行中容器的
+  `ImageId` 与本地 tag 的 `ImageId`，不同才以 `DeployTrigger.SCHEDULE`（「定时更新」）触发部署，
+  并跳过部署里的二次 pull。检查失败保留旧容器，10 分钟后重试；检查结果快照存在
+  `scheduledUpdateLastCheckTime/LastSuccess/LastResult`，供页面展示。
+  复制应用默认不会继承定时更新开关（间隔偏好保留）。
 - **主机接入代理：** 远程 TCP 可选 HTTP / SOCKS5 连接代理，界面与邮件代理一样只填一行地址
   （`http://192.168.1.10:8080`、`http://user:pass@192.168.1.10:8080`、`socks5://user:pass@192.168.1.10:1080`，
   不写 scheme 按 http，端口必填，留空表示不使用；密码回显为 `***`，保存时保持 `***` 或省略密码表示沿用已存密码）。

@@ -1,6 +1,8 @@
 import React from "react";
-import {AutoComplete, Button, Divider, Form, Input, message, Modal, Skeleton, Switch, Typography} from "antd";
-import {FieldRemoteSelect, HttpClient, PageUtils, Perm} from "@jiangood/open-admin";
+import {Alert, AutoComplete, Button, Divider, Form, Input, message, Modal, Select, Skeleton, Space, Switch, Tag, Tooltip, Typography} from "antd";
+import {ReloadOutlined} from "@ant-design/icons";
+import {FieldRemoteSelect, HttpClient, PageUtils, Perm, PermUtils} from "@jiangood/open-admin";
+import {DEFAULT_UPDATE_INTERVAL, UPDATE_INTERVAL_OPTIONS} from "./updateSchedule";
 
 /**
  * 发布标签页
@@ -12,18 +14,18 @@ export default class extends React.Component {
         appLoading: true,
 
         tagOptions: [],
-        versionOptions: []
+        versionOptions: [],
+
+        // 定时更新设置保存中 / 手动刷新应用信息中
+        savingScheduledUpdate: false,
+        refreshing: false,
     }
 
     componentDidMount() {
         this.id = this.props.appId
 
         this.setState({appLoading: true})
-        HttpClient.get('admin/app/get', {id: this.id}).then(rs => {
-            this.setState({app: rs.data})
-
-
-        }).finally(() => {
+        this.reloadApp().finally(() => {
             this.setState({appLoading: false})
         })
 
@@ -32,11 +34,85 @@ export default class extends React.Component {
         })
     }
 
+    /** 重新读取应用信息：定时更新是后台任务改的，页面不会自动感知 */
+    reloadApp = () => {
+        this.setState({refreshing: true})
+        return HttpClient.get('admin/app/get', {id: this.id}).then(rs => {
+            this.setState({app: rs.data})
+        }).finally(() => {
+            this.setState({refreshing: false})
+        })
+    }
+
     setAutoDeploy = (autoDeploy) => {
         // 自动发布开关不影响容器，不通知父级刷新；保持开关自身状态即可
         HttpClient.get("admin/app/autoDeploy", {id: this.id, autoDeploy}).then(() => {
             this.setState(s => ({app: {...s.app, autoDeploy}}))
         })
+    }
+
+    /**
+     * 保存定时更新设置。开关和间隔共用一个接口，后端会返回保存后的应用，
+     * 以避免开关状态与「上次检查」快照不同步。
+     */
+    saveScheduledUpdate = values => {
+        const {app, savingScheduledUpdate} = this.state
+        if (savingScheduledUpdate) {
+            return
+        }
+        const payload = {
+            id: this.id,
+            scheduledUpdate: values.scheduledUpdate !== undefined
+                ? values.scheduledUpdate
+                : !!app.scheduledUpdate,
+            intervalMinutes: values.intervalMinutes !== undefined
+                ? values.intervalMinutes
+                : (Number(app.scheduledUpdateIntervalMinutes) || DEFAULT_UPDATE_INTERVAL),
+        }
+
+        this.setState({savingScheduledUpdate: true})
+        HttpClient.get('admin/app/scheduledUpdate', payload).then(rs => {
+            this.setState({app: rs.data || {}})
+            // 顶部信息卡也展示「定时更新」，同步刷新父级
+            this.props.onChange && this.props.onChange({refreshApp: true})
+        }).finally(() => {
+            this.setState({savingScheduledUpdate: false})
+        })
+    }
+
+    /** 上次检查结果的短标签，完整内容放在 Tooltip 里 */
+    renderScheduledResult = app => {
+        if (app.scheduledUpdateLastSuccess === false) {
+            return <Tag color='red'>检查失败</Tag>
+        }
+        const result = app.scheduledUpdateLastResult || ''
+        if (result.indexOf('发现新版本') >= 0) {
+            return <Tag color='blue'>发现新版本</Tag>
+        }
+        if (result.indexOf('已是最新') >= 0) {
+            return <Tag color='green'>已是最新</Tag>
+        }
+        if (result.indexOf('跳过') >= 0) {
+            return <Tag>跳过</Tag>
+        }
+        return result ? <Tag>{result}</Tag> : null
+    }
+
+    renderScheduledStatus = () => {
+        const {app, refreshing} = this.state
+        if (!app.scheduledUpdate) {
+            return <Typography.Text type='secondary'>未启用</Typography.Text>
+        }
+        return <Space size={6} wrap>
+            <Typography.Text type='secondary'>
+                {app.scheduledUpdateLastCheckTime ? `上次检查：${app.scheduledUpdateLastCheckTime}` : '等待首次检查'}
+            </Typography.Text>
+            {app.scheduledUpdateLastResult && <Tooltip title={app.scheduledUpdateLastResult}>
+                {this.renderScheduledResult(app)}
+            </Tooltip>}
+            <Button type='link' size='small' icon={<ReloadOutlined/>} loading={refreshing}
+                    onClick={this.reloadApp}>刷新</Button>
+        </Space>
     }
 
 
@@ -96,21 +172,34 @@ export default class extends React.Component {
 
 
     render() {
-        const {app, appLoading} = this.state;
+        const {app, appLoading, savingScheduledUpdate} = this.state;
 
         if (appLoading) {
             return <Skeleton active={true}/>
         }
 
-
-        const rowStyle = {display: 'flex', justifyContent: 'space-between', alignItems: 'center'}
+        const canDeploy = PermUtils.hasPermission('app:deploy')
+        const scheduledUpdate = !!app.scheduledUpdate
+        const intervalMinutes = Number(app.scheduledUpdateIntervalMinutes) || DEFAULT_UPDATE_INTERVAL
+        const containerState = this.props.containerState
+        // 容器确实处于停止 / 暂停状态时才提示；部署中（deploying）不提示
+        const containerStopped = ['exited', 'created', 'paused', 'dead'].includes(containerState)
+        const rowStyle = {
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: 16,
+            flexWrap: 'wrap',
+        }
 
         return <>
 
+            <Divider titlePlacement='left' plain>更新策略</Divider>
+
             <div style={rowStyle}>
-                <div>
-                    <div>自动发布</div>
-                    <Typography.Text type='secondary'>镜像构建成功后，自动更新</Typography.Text>
+                <div style={{flex: '1 1 260px'}}>
+                    <div>构建后自动部署</div>
+                    <Typography.Text type='secondary'>本项目镜像构建成功后，立即更新应用</Typography.Text>
                 </div>
                 <Form onValuesChange={changedValues => this.setAutoDeploy(changedValues.autoDeploy)}>
                     <Form.Item
@@ -118,10 +207,48 @@ export default class extends React.Component {
                         valuePropName="checked"
                         style={{marginBottom: 0}}
                         initialValue={app.autoDeploy}>
-                        <Switch/>
+                        <Switch disabled={!canDeploy}/>
                     </Form.Item>
                 </Form>
             </div>
+
+            <Divider className='mt-3 mb-3'/>
+
+            <div style={rowStyle}>
+                <div style={{flex: '1 1 260px'}}>
+                    <div>定时更新</div>
+                    <Typography.Text type='secondary'>
+                        定时检查镜像仓库，镜像有变化时才重新部署（适用于外部镜像）
+                    </Typography.Text>
+                    <div style={{marginTop: 4}}>
+                        {this.renderScheduledStatus()}
+                    </div>
+                    {!canDeploy && <div>
+                        <Typography.Text type='secondary'>无「应用部署」权限，仅可查看</Typography.Text>
+                    </div>}
+                </div>
+                <Space wrap>
+                    <Select style={{width: 130}}
+                            value={intervalMinutes}
+                            options={UPDATE_INTERVAL_OPTIONS}
+                            disabled={!scheduledUpdate || !canDeploy || savingScheduledUpdate}
+                            onChange={value => this.saveScheduledUpdate({intervalMinutes: value})}/>
+                    <Switch checked={scheduledUpdate}
+                            loading={savingScheduledUpdate}
+                            disabled={!canDeploy}
+                            onChange={checked => this.saveScheduledUpdate({scheduledUpdate: checked})}/>
+                </Space>
+            </div>
+
+            {scheduledUpdate && app.imageTag && app.imageTag !== 'latest' && (
+                <Alert className='mt-3' type='warning' showIcon
+                       title={`当前版本固定为 ${app.imageTag}，只有该标签在仓库中被重新推送时才会触发更新`}/>
+            )}
+
+            {scheduledUpdate && containerStopped && (
+                <Alert className='mt-3' type='info' showIcon
+                       title='容器当前未运行，定时更新不会执行'/>
+            )}
 
             <Divider className='mt-3 mb-3'/>
 
