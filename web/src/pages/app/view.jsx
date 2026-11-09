@@ -438,9 +438,7 @@ export default class extends React.Component {
                                      url={`/admin/ws/log/${app.id}`}
                                      downloadUrl={`/admin/app/containerLogDownload?id=${encodeURIComponent(app.id)}`}
                                      logsUrl={`/admin/app/containerLogs?id=${encodeURIComponent(app.id)}`}
-                                     running={container.state === 'running'}
-                                     height={520}
-                                     containerKey={container.id}/>
+                                     height={520}/>
                     : <Alert type='info' showIcon title='容器未部署'/>
             },
             {

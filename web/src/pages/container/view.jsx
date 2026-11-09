@@ -212,9 +212,7 @@ export default class extends React.Component {
                 key: 'logs',
                 label: '日志',
                 children: <ContainerLogs url={logUrl} downloadUrl={logDownloadUrl} logsUrl={logsUrl}
-                                         running={running}
-                                         height={paneHeight}
-                                         containerKey={targetId || hostId || appId}/>
+                                         height={paneHeight}/>
             },
             {
                 key: 'files',

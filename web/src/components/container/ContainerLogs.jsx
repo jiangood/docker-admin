@@ -3,14 +3,13 @@ import {Alert, Button, DatePicker, message} from "antd";
 import dayjs from "dayjs";
 import {HttpClient} from "@jiangood/open-admin";
 import LogView from "../LogView";
-import ContainerHint from "./ContainerHint";
 
 const {RangePicker} = DatePicker
 
 /**
  * 容器日志：复用 LogView，走容器日志 WebSocket。
  * url 由上层根据上下文给出（主机维度通用 WS / 应用维度 app WS）。
- * 容器已停止时只提一句「仅历史日志」，用轻量提示而不是 Alert，不挤占日志区域。
+ * 运行状态由页面头部展示，这里不再重复提示；容器停止后 WebSocket 只回放历史日志。
  * downloadUrl 为对应的日志下载接口（相对路径），logsUrl 为按时间段查询接口。
  * 选择时间范围后不再实时 tail，改为静态展示该时间段日志（不自动滚动）。
  */
@@ -104,7 +103,7 @@ export default class extends React.Component {
     }
 
     render() {
-        const {url, height, containerKey, downloadUrl, logsUrl} = this.props
+        const {url, height, downloadUrl, logsUrl} = this.props
         const {range, rangeSince, rangeUntil, rangeLoading, rangeText, rangeError, downloading} = this.state
         const filtered = !!range
 
@@ -126,8 +125,6 @@ export default class extends React.Component {
         </div>
 
         return <>
-            <ContainerHint type='info' text='容器未运行，仅显示历史日志'
-                           id={containerKey ? `logs-stopped:${containerKey}` : undefined} className='mb-2'/>
             {rangeError && <Alert type='error' showIcon title={rangeError} className='mb-2'/>}
             <LogView url={url} websocket height={height || 500}
                      text={filtered ? (rangeText || '') : null}
