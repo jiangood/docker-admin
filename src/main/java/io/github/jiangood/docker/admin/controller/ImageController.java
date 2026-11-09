@@ -127,6 +127,23 @@ public class ImageController {
         return AjaxResult.ok().data(assertImageAccess(id));
     }
 
+    /**
+     * 按镜像地址取镜像，供应用详情「镜像」字段跳转到镜像详情。
+     * <p>
+     * 镜像不存在（如历史上被删除）时返回 null，由前端提示，不当作错误。
+     */
+    @HasPermission("image:view")
+    @RequestMapping("getByUrl")
+    public AjaxResult getByUrl(String imageUrl) {
+        Assert.hasText(imageUrl, "镜像地址不能为空");
+        Image image = service.findByImageUrl(imageUrl);
+        if (image == null) {
+            return AjaxResult.ok().data(null);
+        }
+        OrgAccessTool.assertAccess(image.getSysOrg());
+        return AjaxResult.ok().data(image);
+    }
+
     @HasPermission("image:view")
     @RequestMapping("tags")
     public AjaxResult tags(String imageUrl) {

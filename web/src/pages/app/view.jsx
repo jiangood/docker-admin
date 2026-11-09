@@ -114,6 +114,25 @@ export default class extends React.Component {
         })
     }
 
+    /** 跳转镜像详情：应用只存 imageUrl，需先按地址查到镜像 id */
+    openImage = () => {
+        const {app} = this.state
+        if (!app.imageUrl) {
+            return
+        }
+        HttpClient.get('admin/image/getByUrl', {imageUrl: app.imageUrl}, {toastError: false})
+            .then(rs => {
+                if (!rs.data?.id) {
+                    message.warning('镜像不存在或已被删除')
+                    return
+                }
+                PageUtils.open('/image/view?id=' + rs.data.id)
+            })
+            .catch(e => {
+                message.warning(e.message || '无法打开镜像详情，请确认是否有镜像查看权限')
+            })
+    }
+
     /**
      * 拉取容器状态。
      * @param silent 静默轮询：不显示「检测中…」，避免部署轮询期间顶部状态每秒闪烁
@@ -354,7 +373,9 @@ export default class extends React.Component {
 
 
                 <Descriptions size="small">
-                    <Item label='镜像' span={2}>  {app.imageUrl}:{app.imageTag} </Item>
+                    <Item label='镜像' span={2}>
+                        <Typography.Link onClick={this.openImage}>{app.imageUrl}:{app.imageTag}</Typography.Link>
+                    </Item>
 
                     <Item label='定时更新'>
                         {app.scheduledUpdate
