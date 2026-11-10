@@ -71,15 +71,16 @@ export default class extends React.Component {
     token = ''
 
     componentDidMount() {
-        this.applyStatus(this.props.status)
+        this.applyStatus(this.props.status, false)
     }
 
     componentDidUpdate(prevProps) {
-        if (prevProps.hostId !== this.props.hostId) {
+        const hostChanged = prevProps.hostId !== this.props.hostId
+        if (hostChanged) {
             this.token = ''
         }
-        if (prevProps.status !== this.props.status || prevProps.hostId !== this.props.hostId) {
-            this.applyStatus(this.props.status)
+        if (prevProps.status !== this.props.status || hostChanged) {
+            this.applyStatus(this.props.status, hostChanged)
         }
     }
 
@@ -90,15 +91,25 @@ export default class extends React.Component {
         return this.token
     }
 
-    /** 父组件 HostAgentTab 持有 agent 状态，这里只负责根据状态维护终端连接。 */
-    applyStatus = status => {
+    /**
+     * 父组件 HostAgentTab 持有 agent 状态，这里只负责根据状态维护终端连接。
+     * <p>
+     * 注意：只有「已经部署过、且容器真的变了」才换令牌。
+     * 刷新页面时首次拿到状态也会经历 deployed=false → true，此时必须沿用
+     * sessionStorage 里的旧令牌，否则永远接不回原来的 shell。
+     */
+    applyStatus = (status, hostChanged = false) => {
         const root = (status && (status.mountedRoot || status.desiredRoot)) || ''
         const deployed = !!(status && status.deployed)
         const prev = this.state
-        const containerChanged = !!(prev.status && status && prev.status.containerId !== status.containerId)
-        // 首次部署、重建（容器 ID 变化）或目录变化后旧 shell 已经不存在，换一个会话令牌
+        const containerChanged = !hostChanged
+            && !!(prev.status && status && prev.status.containerId !== status.containerId)
+        // 首次部署、重建（容器 ID 变化）或目录变化后需要重新挂载终端
         const needNewKey = deployed && (!prev.deployed || containerChanged || prev.root !== root)
-        if (needNewKey) {
+        // 但只有「之前已经部署过」才说明旧 shell 真的不存在了，刷新后的首次状态不能换令牌
+        const needNewToken = deployed && !hostChanged && prev.deployed
+            && (containerChanged || prev.root !== root)
+        if (needNewToken) {
             this.token = refreshToken(this.props.hostId)
         }
         this.setState({
