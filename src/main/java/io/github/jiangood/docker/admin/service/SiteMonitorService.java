@@ -8,6 +8,7 @@ import io.github.jiangood.docker.admin.entity.SiteMonitorLog;
 import io.github.jiangood.docker.admin.mail.SiteMonitorMailNotifier;
 import io.github.jiangood.openadmin.framework.data.BaseService;
 import io.github.jiangood.openadmin.framework.data.specification.Spec;
+import io.github.jiangood.openadmin.modules.system.repository.SysUserRepository;
 import io.github.jiangood.openadmin.util.BusinessException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,7 +27,10 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 /**
  * 网站监控：监控项的增删改查之外，还承担本轮探测的判定、快照更新、告警与历史清理。
@@ -75,6 +79,7 @@ public class SiteMonitorService extends BaseService<SiteMonitor> {
     private final SiteMonitorRepository siteMonitorRepository;
     private final SiteMonitorLogRepository logRepository;
     private final SiteMonitorMailNotifier mailNotifier;
+    private final SysUserRepository sysUserRepository;
 
     private final AtomicLong lastLogPrune = new AtomicLong();
 
@@ -109,6 +114,28 @@ public class SiteMonitorService extends BaseService<SiteMonitor> {
         Assert.hasText(monitorId, "缺少监控项 id");
         Spec<SiteMonitorLog> q = Spec.<SiteMonitorLog>of().eq(SiteMonitorLog.Fields.monitorId, monitorId);
         return logRepository.findAll(q, pageable);
+    }
+
+    /**
+     * 批量填充告警邮件实际收件人（创建人邮箱，不持久化），供列表展示。
+     * 创建人未配置邮箱时留空，页面据此提示「告警发不出去」。
+     */
+    public void fillNotifyEmailTo(List<SiteMonitor> monitors) {
+        if (monitors == null || monitors.isEmpty()) {
+            return;
+        }
+        Set<String> userIds = monitors.stream()
+                .map(SiteMonitor::getCreateUser)
+                .filter(StrUtil::isNotBlank)
+                .collect(Collectors.toSet());
+        Map<String, String> emails = userIds.isEmpty() ? Map.of()
+                : sysUserRepository.findAllById(userIds).stream()
+                .collect(Collectors.toMap(u -> u.getId(),
+                        u -> StrUtil.trimToEmpty(u.getEmail()),
+                        (a, b) -> a));
+        for (SiteMonitor monitor : monitors) {
+            monitor.setNotifyEmailTo(StrUtil.trimToNull(emails.get(monitor.getCreateUser())));
+        }
     }
 
     /**

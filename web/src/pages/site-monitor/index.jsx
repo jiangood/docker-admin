@@ -1,4 +1,4 @@
-import {HistoryOutlined, PlusOutlined, SearchOutlined} from '@ant-design/icons'
+import {HistoryOutlined, PlusOutlined, SearchOutlined, WarningOutlined} from '@ant-design/icons'
 import {Drawer, Form, Input, InputNumber, Modal, Select, Space, Switch, Tag, Tooltip, Typography, message} from 'antd'
 import React from 'react'
 import {HttpClient, Page, PermActions, ProTable} from '@jiangood/open-admin'
@@ -70,7 +70,13 @@ export default class extends React.Component {
             title: '间隔',
             dataIndex: 'intervalMinutes',
             width: 85,
-            render: (v, record) => `${v || 5} 分钟 / ${record.timeoutSeconds || 10}s`,
+            render: v => `${v || 5} 分钟`,
+        },
+        {
+            title: '超时',
+            dataIndex: 'timeoutSeconds',
+            width: 75,
+            render: v => `${v || 10} 秒`,
         },
         {
             title: '最近状态',
@@ -97,14 +103,30 @@ export default class extends React.Component {
             render: v => v || '-',
         },
         {
-            title: '邮件',
+            title: '邮件告警',
             dataIndex: 'notifyEmail',
-            width: 60,
-            render: (v, record) => v
-                ? <Tooltip title={`告警发送给创建人（连续失败 ${record.failCount || 0} / 3 次）`}>
-                    <Tag color='purple'>开</Tag>
+            width: 220,
+            render: (v, record) => {
+                if (!v) {
+                    return <Typography.Text type='secondary'>-</Typography.Text>
+                }
+                if (record.notifyEmailTo) {
+                    return <Tooltip title={`告警与恢复通知发送至创建人邮箱 ${record.notifyEmailTo}`}>
+                        <Space size={4}>
+                            <Tag color='purple'>开</Tag>
+                            <Typography.Text ellipsis style={{maxWidth: 160}}>{record.notifyEmailTo}</Typography.Text>
+                        </Space>
+                    </Tooltip>
+                }
+                return <Tooltip title='创建人未配置邮箱，告警邮件实际发不出去；请到「系统管理-用户管理」为该用户补充邮箱'>
+                    <Space size={4}>
+                        <Tag color='orange'>开</Tag>
+                        <Typography.Text type='danger' style={{fontSize: 12}}>
+                            <WarningOutlined/> 无收件人
+                        </Typography.Text>
+                    </Space>
                 </Tooltip>
-                : <Typography.Text type='secondary'>-</Typography.Text>,
+            },
         },
         {
             title: '操作',

@@ -70,7 +70,7 @@ git tag vx.y.z && git push && git push origin vx.y.z
 - **菜单配置**在 `src/main/resources/menu-docker.yml`，可用 `menu-override.yml` 覆盖
   （open-admin 3.2.0 起只扫描 `menu.yml` / `menu-*.yml`，旧的 `application-menu*.yml` 不再识别）。
   「容器平台」下依次为 项目 / 应用 / 镜像 / 主机（`/host`），再往下是「设置」（注册中心、代码源）
-  与「工具」（主机 Agent、镜像同步、构建测试、镜像下载、内网穿透、网站监控）。**「主机」与「设置」平级**，不再挂在设置下面。
+  与「工具」（主机 Agent、镜像同步、构建测试、镜像下载、网站监控）。**「主机」与「设置」平级**，不再挂在设置下面。
 - **领域模型：** `Project`(项目，构建定义) → `Image`(镜像，`imageUrl` 唯一) → `ImageTag`(镜像标签，`imageUrl`+`tag`)。
   项目与镜像按 `imageUrl` 相等关联；`App` 只存 `imageUrl` + `imageTag`，与项目/镜像均无 id 外键。
   菜单为「项目」(`/project`) 与「镜像」(`/image`)，权限码为 `image:*`，表名为 `t_image`。
@@ -242,13 +242,9 @@ git tag vx.y.z && git push && git push origin vx.y.z
   docker-java 3.7.1 的 Apache 传输层没有代理入口，`ProxyAwareApacheDockerHttpClient` 同步了其
   `ApacheDockerHttpClientImpl` 并改用 `ProxyTunnelSocket` 建连；**升级 docker-java 时需对照上游同步这两个类**。
   只有启用代理的 TCP 主机走它，直连主机仍用官方 `ApacheDockerHttpClient`。
-- **隧道页（http-tunnel，菜单名「内网穿透」）：** `/tunnel` 是部署/使用说明页
-  （`web/src/pages/tunnel/index.jsx`，纯静态，没有后端接口）。http-tunnel 已迭代到 2.x，自带 Web 管理端：
-  入口、中继、客户端共用同一个 `ht`，角色由 `ht.toml` 是否含 `[upstream]` 决定；管理页与访客共用
-  `listen_port`，只在 `control_host` 上可达（Basic 用户名 `ht`，密码为 `token`）。代理 `[[proxies]]`
-  的增删改都在管理页完成并写回 `ht.toml`。页面保留了单节点 / 两节点配置示例、容器部署时挂载
-  `/var/run/docker.sock` 的写法，以及经隧道访问 Docker 时在主机「自定义请求头」填 `X-HTTP-TUNNEL-TOKEN` 的说明。
-  **改这块前先对照项目最新文档**。
+- **内网穿透说明页已移除：** 原来的 `/tunnel` 页面（`web/src/pages/tunnel/index.jsx`）与菜单项已删除，
+  前端不再有 `tunnel:view` 权限码。http-tunnel 自身的部署与使用以项目文档为准；
+  主机「自定义请求头」里关于 `X-HTTP-TUNNEL-TOKEN` 的提示仍保留。
 - **构建上下文：** `Project.context` 相对仓库根目录，留空表示仓库根；填写时不带前导 `/`（后端兼容历史的 `/admin`，保存时归一化）。
   `dockerfile` 同样相对仓库根目录、不带前导 `/`，且必须位于上下文内（如 `context=admin` + `dockerfile=admin/Dockerfile`）。
   前端表格/详情直接原样展示上下文（空即空，不再显示「仓库根目录」），输入框失焦时自动去掉前导 `/`。

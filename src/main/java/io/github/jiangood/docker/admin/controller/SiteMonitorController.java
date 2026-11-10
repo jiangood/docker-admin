@@ -40,6 +40,7 @@ public class SiteMonitorController {
         Spec<SiteMonitor> q = Spec.of();
         q.orLike(searchText, SiteMonitor.Fields.name, SiteMonitor.Fields.url);
         Page<SiteMonitor> page = service.findAll(q, pageable);
+        service.fillNotifyEmailTo(page.getContent());
         return AjaxResult.ok().data(page);
     }
 

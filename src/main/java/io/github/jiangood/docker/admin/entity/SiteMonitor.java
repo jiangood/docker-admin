@@ -5,6 +5,7 @@ import io.github.jiangood.openadmin.util.annotation.Remark;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.FieldNameConstants;
@@ -90,6 +91,14 @@ public class SiteMonitor extends BaseEntity {
      * 收件人为创建人的邮箱。
      */
     Boolean notifyEmail;
+
+    /**
+     * 告警邮件实际收件人（创建人邮箱），仅用于列表展示与提示，不持久化。
+     * 为空表示创建人未配置邮箱，此时即使开启邮件告警也发不出去。
+     */
+    @Remark("告警收件邮箱")
+    @Transient
+    String notifyEmailTo;
 
     // ---------------- 以下为最近一次检测的快照（非用户配置） ----------------
 
