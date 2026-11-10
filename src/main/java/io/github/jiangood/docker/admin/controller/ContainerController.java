@@ -65,7 +65,7 @@ public class ContainerController {
     }
 
     /**
-     * 按时间段查询容器日志（末尾最多为全局设置的行数，默认 10000 行，带 Docker 时间戳前缀）。
+     * 按时间段查询容器日志（末尾最多为系统参数的行数，默认 10000 行，带 Docker 时间戳前缀）。
      */
     @RequestMapping("logs")
     public AjaxResult logs(String hostId, String containerId, Integer since, Integer until) throws InterruptedException {
@@ -78,8 +78,8 @@ public class ContainerController {
     }
 
     /**
-     * 下载容器日志。只允许最近 N 天（全局设置，默认 7 天）：未传时间范围时按最近 N 天，
-     * 传入的范围早于该窗口时直接拒绝；末尾最多为全局设置的行数（默认 10000 行）。
+     * 下载容器日志。只允许最近 N 天（系统参数，默认 7 天）：未传时间范围时按最近 N 天，
+     * 传入的范围早于该窗口时直接拒绝；末尾最多为系统参数的行数（默认 10000 行）。
      */
     @RequestMapping("logDownload")
     public void logDownload(String hostId, String containerId, Integer since, Integer until,

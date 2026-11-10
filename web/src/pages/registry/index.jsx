@@ -62,7 +62,7 @@ export default class extends React.Component {
                 {canViewPassword && row.passwordMasked &&
                     <Button type='link' onClick={() => this.viewPassword(row)}>查看密码</Button>}
                 <Button type='link' onClick={() => this.edit(row)}>编辑</Button>
-                <Popconfirm title='确定删除该注册中心？' description='默认注册中心需先到设置-全局设置中更换；已被项目使用的注册中心需先解除绑定。'
+                <Popconfirm title='确定删除该注册中心？' description='默认注册中心需先到「系统管理 - 系统参数」中更换；已被项目使用的注册中心需先解除绑定。'
                             onConfirm={() => this.remove(row.id)}>
                     <Button type='link' danger>删除</Button>
                 </Popconfirm>

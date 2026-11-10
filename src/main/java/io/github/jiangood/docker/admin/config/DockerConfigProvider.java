@@ -1,15 +1,22 @@
 package io.github.jiangood.docker.admin.config;
 
+import io.github.jiangood.docker.admin.dao.HostRepository;
+import io.github.jiangood.docker.admin.dao.RegistryRepository;
+import io.github.jiangood.docker.admin.entity.Host;
+import io.github.jiangood.docker.admin.entity.Registry;
 import io.github.jiangood.docker.admin.util.AgentImageUtils;
 import io.github.jiangood.openadmin.framework.config.dynamic.ConfigGroup;
 import io.github.jiangood.openadmin.framework.config.dynamic.Configs;
 import io.github.jiangood.openadmin.framework.spi.ConfigProvider;
+import io.github.jiangood.openadmin.util.dto.Option;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
 
 /**
- * 「系统管理 - 系统参数」里的容器相关分组：容器运行、主机辅助容器、容器日志。
+ * 「系统管理 - 系统参数」里的容器相关分组：默认资源、容器运行、主机辅助容器、容器日志。
  * <p>
  * 框架的 {@code ConfigRegistry} 会注入所有 {@link ConfigProvider} Bean，
  * 所以加 {@code @Component} 就会自动出现在系统参数页，无需前端改动。
@@ -17,15 +24,39 @@ import java.util.List;
  * 注意：这里只做声明，不能注入 {@code SysConfigService}（它会反向依赖 ConfigRegistry，
  * 构成构造器循环依赖）；读取逻辑在 {@link DockerSettings}。
  * <p>
- * 原来放在本项目「设置 - 全局设置」里的 agent 镜像与容器日志限制也在这里，
- * 旧 {@code t_system_config} 里的值由 {@link LegacyDockerConfigMigrator} 一次性搬迁。
+ * 默认注册中心 / 默认构建主机原来是项目自己的「设置 - 全局设置」页面，现在用
+ * {@link Configs#select(String, String, java.util.function.Supplier)} 动态列出业务表里的选项：
+ * 声明阶段不查库，每次打开参数页 / 保存时才求值，所以注入 Repository 是安全的。
+ * 旧 {@code t_system_config} 里的值由 {@link LegacySystemConfigMigrator} 一次性搬迁。
  */
 @Component
+@RequiredArgsConstructor
 public class DockerConfigProvider implements ConfigProvider {
+
+    private final RegistryRepository registryRepository;
+    private final HostRepository hostRepository;
 
     @Override
     public List<ConfigGroup> define() {
         return List.of(
+                Configs.group("docker-defaults", "默认资源", 45)
+                        .description("未显式指定时使用的平台默认注册中心与构建主机")
+                        .add(Configs.select(DockerConfigKeys.DEFAULT_REGISTRY_ID, "默认镜像注册中心",
+                                        () -> registryRepository.findAll(Sort.by(Sort.Direction.ASC, Registry.Fields.url))
+                                                .stream()
+                                                .map(r -> new Option(r.getId(), r.getFullUrl()))
+                                                .toList())
+                                .allowEmpty()
+                                .hint("未指定注册中心的镜像操作使用此默认值。选项来自「设置 - 注册中心」，"
+                                        + "新增后重新进入本页即可看到；留空表示不设置默认注册中心"))
+                        .add(Configs.select(DockerConfigKeys.DEFAULT_BUILD_HOST_ID, "默认构建主机",
+                                        () -> hostRepository.findAll(Sort.by(Sort.Direction.ASC, Host.Fields.name))
+                                                .stream()
+                                                .map(h -> new Option(h.getId(), h.getName()))
+                                                .toList())
+                                .allowEmpty()
+                                .hint("未指定构建主机时使用此主机。选项来自主机列表；"
+                                        + "留空表示不设置默认构建主机")),
                 Configs.group("docker", "容器运行", 50)
                         .description("容器运行与平台交互的全局默认值，对所有主机上的应用容器生效")
                         .add(Configs.integer(DockerConfigKeys.STOP_TIMEOUT_SECONDS, "停止容器宽限期（秒）")

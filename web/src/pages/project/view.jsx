@@ -238,7 +238,7 @@ export default class extends React.Component {
       this.setState({branchOptions: options})
       this.selectDefault('branch', options)
     })
-    // 构建主机列表：所有主机都可选；默认选中全局设置的默认构建主机（未配置则不选，后端回退默认 runner）
+    // 构建主机列表：所有主机都可选；默认选中系统参数里的默认构建主机（未配置则不选，后端回退默认 runner）
     HttpClient.get('admin/host/options').then(rs => {
       this.setState({buildHostOptions: rs.data || []})
     })

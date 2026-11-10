@@ -69,7 +69,7 @@ git tag vx.y.z && git push && git push origin vx.y.z
   或 `application-mysql.yml`）；默认走 H2 无需配置。
 - **菜单配置**在 `src/main/resources/menu-docker.yml`，可用 `menu-override.yml` 覆盖
   （open-admin 3.2.0 起只扫描 `menu.yml` / `menu-*.yml`，旧的 `application-menu*.yml` 不再识别）。
-  「容器平台」下依次为 项目 / 应用 / 镜像 / 主机（`/host`），再往下是「设置」（注册中心、代码源、全局设置）
+  「容器平台」下依次为 项目 / 应用 / 镜像 / 主机（`/host`），再往下是「设置」（注册中心、代码源）
   与「工具」（主机 Agent、镜像同步、构建测试、镜像下载、内网穿透、网站监控）。**「主机」与「设置」平级**，不再挂在设置下面。
 - **领域模型：** `Project`(项目，构建定义) → `Image`(镜像，`imageUrl` 唯一) → `ImageTag`(镜像标签，`imageUrl`+`tag`)。
   项目与镜像按 `imageUrl` 相等关联；`App` 只存 `imageUrl` + `imageTag`，与项目/镜像均无 id 外键。
@@ -163,18 +163,25 @@ git tag vx.y.z && git push && git push origin vx.y.z
   **日志驱动为 `none`**（构建器创建中间容器时固定写 `LogConfig=none`）、
   不带 `app.name` / Agent / `com.docker.compose.project` 标签。
   因此按钮始终带 Popconfirm 二次确认；单个容器删除失败只记日志，不影响整轮清理。
-- **系统参数里的容器分组：** 「系统管理 - 系统参数」新增三组，全部由
+- **系统参数里的容器分组：** 「系统管理 - 系统参数」新增四组，全部由
   `DockerConfigProvider` 用 `Configs.group(...)` 声明（框架 `ConfigRegistry` 自动收集所有
   `ConfigProvider` Bean）：
+  - 「默认资源」`docker.default.registry-id` 与 `docker.default.build-host-id`——动态下拉，
+    选项在每次打开页面 / 保存时由 `Supplier` 查 `t_registry` / `t_host`（`Configs.select(...)`），
+    留空表示不设置；未配置时仍按「唯一注册中心 / 构建节点」旧规则回退；
   - 「容器运行」`docker.container.stop-timeout-seconds`（默认 60，范围 1~600）——停止容器的宽限期，
     决定 SIGTERM 到 SIGKILL 之间的等待时间，等价 compose 的 `stop_grace_period`；
   - 「主机辅助容器」`docker.agent.repository`——只填镜像地址（不含 tag），留空用 yml 默认值；
   - 「容器日志」`docker.logs.range-tail`（默认 10000）与 `docker.logs.download-days`（默认 7）。
   
   读取集中在 `DockerSettings`（宽限期用 `#graceSeconds()`，配置缺失 / 越界回落默认值；
-  平台调用预算用 `#budget()` = 宽限期 + 30 秒）。旧 `t_system_config` 里同名的三个 `docker.*`
-  键由 `LegacyDockerConfigMigrator` 在启动时一次性搬到 `sys_config`（新配置已有值则不覆盖，成功后删旧行）；
-  「设置 - 全局设置」页面现在只剩默认注册中心与默认构建主机。
+  平台调用预算用 `#budget()` = 宽限期 + 30 秒；默认资源用 `#defaultRegistryId()` / `#defaultBuildHostId()`）。
+  旧 `t_system_config` 里的三个同名 `docker.*` 键与 `default.registry.id` / `default.build.host.id`
+  分别由 `LegacyDockerConfigMigrator` / `LegacySystemConfigMigrator` 在启动时一次性搬到 `sys_config`
+  （新配置已有值则不覆盖，成功后删旧行；指向已删除的注册中心 / 主机时跳过并记日志）。
+  **「设置 - 全局设置」页面与 `admin/system-config/*` 接口已删除**，权限码从
+  `system-config:view/save` 换成框架的 `sys-config:read/update`——只授过旧权限码的角色需要补授。
+  `SysConfigService` 有 30 秒覆盖值缓存，改完默认资源后部署 / 构建最多 30 秒才生效。
   **docker-java 的 `stopContainerCmd` 默认写死 `t=10`**（不是不传参），所以部署（`AppService#deploy`）、
   应用停止 / 删除、主机维度的停止与重启都必须显式 `.withTimeout(graceSeconds)`；
   宿主机上手工 `docker stop` 仍按容器自身配置（docker-java 3.7.1 不支持写 `HostConfig.StopTimeout`），
@@ -282,7 +289,8 @@ git tag vx.y.z && git push && git push origin vx.y.z
   超时上限见 `BUILD_SLOT_WAIT_MILLIS`；等待是进程内的，多实例部署下不跨实例生效。
 - **邮件通知：** 发件账号由**框架**「系统管理 - 系统参数 - 邮件发送」维护（`sys_config` 的
   `email.provider/username/password/from.name/proxy`，由框架 `MailConfigProvider` 声明），
-  本项目的「设置 - 全局设置」只保留默认注册中心与默认构建主机；旧版 `t_system_config` 里的 `email.*`
+  本项目「设置」下只剩注册中心与代码源；默认注册中心 / 默认构建主机与 `docker.*` 同在
+  「系统管理 - 系统参数」；旧版 `t_system_config` 里的 `email.*`
   由 `LegacyEmailConfigMigrator` 在启动时一次性搬到 `sys_config`（按旧 SMTP 主机反推邮箱服务商，
   成功后删掉旧行；新配置已填发件邮箱时不动）。
   SMTP 服务器/端口/加密方式由框架的 `MailProvider` 模板决定（QQ、腾讯企业邮、163/126、Outlook/M365、

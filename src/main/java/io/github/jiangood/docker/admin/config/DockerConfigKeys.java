@@ -3,9 +3,9 @@ package io.github.jiangood.docker.admin.config;
 /**
  * 注册到框架「系统管理 - 系统参数」的配置键。
  * <p>
- * 与 {@code SystemConfigService} 里的 {@code t_system_config} 不是一套：
- * 这里的键由 {@link DockerConfigProvider} 声明，值存在框架的 {@code sys_config} 表。
- * 键名沿用旧 {@code t_system_config} 的名字，方便一次性迁移。
+ * 这里的键由 {@link DockerConfigProvider} 声明，值存在框架的 {@code sys_config} 表；
+ * 旧的 {@code t_system_config} 只由一次性迁移器读取，不再有新写入。
+ * 容器相关的键名沿用旧 {@code t_system_config} 的名字，方便一次性迁移。
  */
 public final class DockerConfigKeys {
 
@@ -34,6 +34,12 @@ public final class DockerConfigKeys {
     public static final String LOG_DOWNLOAD_DAYS = "docker.logs.download-days";
     public static final int DEFAULT_LOG_DOWNLOAD_DAYS = 7;
     public static final int MAX_LOG_DOWNLOAD_DAYS = 3650;
+
+    /** 默认镜像注册中心（{@code t_registry.id}），留空表示不设置默认值。 */
+    public static final String DEFAULT_REGISTRY_ID = "docker.default.registry-id";
+
+    /** 默认构建主机（{@code t_host.id}），留空表示不设置默认值。 */
+    public static final String DEFAULT_BUILD_HOST_ID = "docker.default.build-host-id";
 
     private DockerConfigKeys() {
     }

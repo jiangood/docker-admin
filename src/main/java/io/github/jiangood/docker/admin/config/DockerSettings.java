@@ -11,7 +11,11 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 
 /**
- * 读取「系统管理 - 系统参数」里的容器相关配置。
+ * 读取「系统管理 - 系统参数」里的容器相关配置（默认资源 / 容器运行 / 主机辅助容器 / 容器日志）。
+ * <p>
+ * 默认注册中心与默认构建主机存在「默认资源」分组，值分别是 {@code t_registry.id}
+ * 与 {@code t_host.id}；未配置时返回 null，由调用方回退到旧规则
+ * （唯一注册中心 / 构建节点）。
  * <p>
  * 停止容器的宽限期（SIGTERM → SIGKILL 之间的等待）来自「容器运行」分组：
  * docker-java 的 {@code stopContainerCmd} 默认写死 {@code t=10}（不是「不传参数」），
@@ -60,14 +64,18 @@ public class DockerSettings {
      * {@link AgentImageUtils#resolveImage(String, String)} 校验并给出可读错误。
      */
     public String agentRepository() {
-        String configured = null;
-        try {
-            configured = StrUtil.trimToNull(sysConfigService.getString(DockerConfigKeys.AGENT_REPOSITORY));
-        } catch (RuntimeException e) {
-            log.debug("读取 agent 镜像地址失败，按默认地址执行: {}", e.getMessage());
-        }
-        return StrUtil.blankToDefault(configured,
+        return StrUtil.blankToDefault(readString(DockerConfigKeys.AGENT_REPOSITORY),
                 AgentImageUtils.normalizeRepository(defaultAgentRepository));
+    }
+
+    /** 默认镜像注册中心 id；未配置或读取失败时返回 null。 */
+    public String defaultRegistryId() {
+        return readString(DockerConfigKeys.DEFAULT_REGISTRY_ID);
+    }
+
+    /** 默认构建主机 id；未配置或读取失败时返回 null。 */
+    public String defaultBuildHostId() {
+        return readString(DockerConfigKeys.DEFAULT_BUILD_HOST_ID);
     }
 
     /** 容器日志时间段查询 / 下载的最大行数。 */
@@ -80,6 +88,15 @@ public class DockerSettings {
     public int logDownloadDays() {
         return readInt(DockerConfigKeys.LOG_DOWNLOAD_DAYS,
                 DockerConfigKeys.DEFAULT_LOG_DOWNLOAD_DAYS, 1, DockerConfigKeys.MAX_LOG_DOWNLOAD_DAYS);
+    }
+
+    private String readString(String key) {
+        try {
+            return StrUtil.trimToNull(sysConfigService.getString(key));
+        } catch (RuntimeException e) {
+            log.debug("读取参数 {} 失败，按未配置处理: {}", key, e.getMessage());
+            return null;
+        }
     }
 
     private int readInt(String key, int defaultValue, int min, int max) {

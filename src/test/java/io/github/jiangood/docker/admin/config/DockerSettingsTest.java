@@ -1,5 +1,7 @@
 package io.github.jiangood.docker.admin.config;
 
+import io.github.jiangood.docker.admin.dao.HostRepository;
+import io.github.jiangood.docker.admin.dao.RegistryRepository;
 import io.github.jiangood.openadmin.framework.config.dynamic.ConfigSpec;
 import io.github.jiangood.openadmin.framework.config.dynamic.ConfigType;
 import io.github.jiangood.openadmin.modules.config.service.ConfigRegistry;
@@ -9,6 +11,8 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -20,7 +24,8 @@ class DockerSettingsTest {
 
     @Test
     void providerRegistersValidSpecs() {
-        ConfigRegistry registry = new ConfigRegistry(List.of(new DockerConfigProvider()));
+        ConfigRegistry registry = new ConfigRegistry(List.of(new DockerConfigProvider(
+                mock(RegistryRepository.class), mock(HostRepository.class))));
 
         ConfigSpec stop = registry.require(DockerConfigKeys.STOP_TIMEOUT_SECONDS);
         assertEquals(ConfigType.INT, stop.type());
@@ -38,6 +43,16 @@ class DockerSettingsTest {
         assertEquals(DockerConfigKeys.DEFAULT_LOG_DOWNLOAD_DAYS, days.defaultValue());
 
         assertEquals(ConfigType.STRING, registry.require(DockerConfigKeys.AGENT_REPOSITORY).type());
+
+        ConfigSpec defaultRegistry = registry.require(DockerConfigKeys.DEFAULT_REGISTRY_ID);
+        assertEquals(ConfigType.SELECT, defaultRegistry.type());
+        assertTrue(defaultRegistry.allowEmptyValue());
+        assertTrue(defaultRegistry.dynamicOptions());
+
+        ConfigSpec defaultHost = registry.require(DockerConfigKeys.DEFAULT_BUILD_HOST_ID);
+        assertEquals(ConfigType.SELECT, defaultHost.type());
+        assertTrue(defaultHost.allowEmptyValue());
+        assertTrue(defaultHost.dynamicOptions());
     }
 
     @Test
@@ -84,6 +99,18 @@ class DockerSettingsTest {
         // 未注入 @Value 的字段为 null，normalizeRepository 会回落到内置默认地址
         assertEquals("ghcr.io/jiangood/docker-admin-agent",
                 new DockerSettings(configService).agentRepository());
+    }
+
+    @Test
+    void defaultResourcesFallBackToNullWhenMissing() {
+        SysConfigService configService = mock(SysConfigService.class);
+        when(configService.getString(DockerConfigKeys.DEFAULT_REGISTRY_ID)).thenReturn("  ");
+        when(configService.getString(DockerConfigKeys.DEFAULT_BUILD_HOST_ID))
+                .thenThrow(new IllegalStateException("配置项不存在"));
+
+        DockerSettings settings = new DockerSettings(configService);
+        assertNull(settings.defaultRegistryId());
+        assertNull(settings.defaultBuildHostId());
     }
 
     private static DockerSettings settingsReturning(String key, int value) {

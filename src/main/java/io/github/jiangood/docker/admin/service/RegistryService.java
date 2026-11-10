@@ -1,6 +1,7 @@
 package io.github.jiangood.docker.admin.service;
 
 import cn.hutool.core.util.StrUtil;
+import io.github.jiangood.docker.admin.config.DockerSettings;
 import io.github.jiangood.docker.admin.dao.ImageRepository;
 import io.github.jiangood.docker.admin.dao.ProjectRepository;
 import io.github.jiangood.docker.admin.dao.RegistryRepository;
@@ -28,7 +29,7 @@ public class RegistryService extends BaseService<Registry> {
     private final RegistryRepository registryRepository;
     private final ProjectRepository projectRepository;
     private final ImageRepository imageRepository;
-    private final SystemConfigService systemConfigService;
+    private final DockerSettings dockerSettings;
 
     /**
      * 按镜像地址解析它所属的注册中心，用于拉取镜像时附带凭据。
@@ -92,7 +93,7 @@ public class RegistryService extends BaseService<Registry> {
         }
 
         // 3) 镜像命名空间与注册中心配置对不上：默认值优先，其次取最近更新的一个
-        String defaultId = systemConfigService.getDefaultRegistryId();
+        String defaultId = dockerSettings.defaultRegistryId();
         if (StrUtil.isNotBlank(defaultId)) {
             for (Registry candidate : candidates) {
                 if (defaultId.equals(candidate.getId())) {
@@ -134,10 +135,10 @@ public class RegistryService extends BaseService<Registry> {
 
     /** 默认注册中心；兼容旧版单记录数据，多条记录时要求配置默认值。 */
     public Registry getEffective() {
-        String id = systemConfigService.getDefaultRegistryId();
+        String id = dockerSettings.defaultRegistryId();
         if (StrUtil.isNotBlank(id)) {
             return registryRepository.findById(id)
-                    .orElseThrow(() -> new BusinessException("系统默认注册中心不存在，请到设置-全局设置重新选择"));
+                    .orElseThrow(() -> new BusinessException("系统默认注册中心不存在，请到「系统管理 - 系统参数」重新选择"));
         }
         List<Registry> list = registryRepository.findAll(Sort.by(Sort.Direction.DESC, "updateTime"));
         return list.size() == 1 ? list.get(0) : null;
@@ -160,7 +161,7 @@ public class RegistryService extends BaseService<Registry> {
     public Registry requireRegistry(String registryId) {
         if (StrUtil.isBlank(registryId)) {
             Registry effective = getEffective();
-            if (effective == null) throw new BusinessException("未指定注册中心，请到设置-全局设置设置默认注册中心");
+            if (effective == null) throw new BusinessException("未指定注册中心，请到「系统管理 - 系统参数」设置默认注册中心");
             return effective;
         }
         return registryRepository.findById(registryId)
@@ -184,8 +185,8 @@ public class RegistryService extends BaseService<Registry> {
     @Transactional
     public void deleteRegistry(String id) {
         Assert.hasText(id, "注册中心 ID 不能为空");
-        if (id.equals(systemConfigService.getDefaultRegistryId())) {
-            throw new BusinessException("该注册中心是系统默认值，请先在设置-全局设置中更换默认注册中心");
+        if (id.equals(dockerSettings.defaultRegistryId())) {
+            throw new BusinessException("该注册中心是系统默认值，请先在「系统管理 - 系统参数」中更换默认注册中心");
         }
         // 被项目绑定为构建目标的注册中心不允许删除：否则项目镜像地址无法解析，列表与构建都会报错
         List<Project> bound = projectRepository.findAll(Spec.<Project>of().eq(Project.Fields.registryId, id));

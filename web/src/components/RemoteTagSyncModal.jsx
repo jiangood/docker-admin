@@ -69,7 +69,7 @@ export default class RemoteTagSyncModal extends React.Component {
                     <Switch checkedChildren='同时读取镜像元数据' unCheckedChildren='仅同步版本号'/>
                 </Form.Item>
                 <Alert type='info' showIcon
-                       message='从全局设置的注册中心读取该镜像的全部版本，本地已存在的会补全缺失的构建时间、大小等元数据'/>
+                       message='从系统参数中配置的默认注册中心读取该镜像的全部版本，本地已存在的会补全缺失的构建时间、大小等元数据'/>
             </Form>
 
             {result

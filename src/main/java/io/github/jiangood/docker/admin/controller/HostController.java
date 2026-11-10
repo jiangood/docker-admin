@@ -172,7 +172,7 @@ public class HostController  {
     }
 
     /**
-     * 默认构建主机（全局设置）的 id，供「立即构建」弹窗默认选中；未配置时为 null。
+     * 默认构建主机（系统参数）的 id，供「立即构建」弹窗默认选中；未配置时为 null。
      */
     @HasPermission("host:list")
     @RequestMapping("default")

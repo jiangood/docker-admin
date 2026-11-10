@@ -366,7 +366,7 @@ export default class ImageSyncModal extends React.Component {
 
             {isRegistry && (
                 <Form.Item label='目标注册中心' name='targetRegistryId'
-                           tooltip='默认使用全局设置中的注册中心；可在此为本次同步单独指定目标'>
+                           tooltip='默认使用「系统管理 - 系统参数」中的默认注册中心；可在此为本次同步单独指定目标'>
                     <Select allowClear showSearch optionFilterProp='label' options={registryOptions}
                             placeholder='使用系统默认注册中心'/>
                 </Form.Item>
