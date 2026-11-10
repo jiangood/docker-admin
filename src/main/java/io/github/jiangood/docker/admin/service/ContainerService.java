@@ -57,7 +57,7 @@ public class ContainerService {
      * 容器启停删的兜底超时：docker-java 的 responseTimeout 是 1 小时（拉镜像需要），
      * 而这类命令本该秒回，宿主机存储卡住（如 bind 源目录在无响应的 NFS 上）时必须尽快失败。
      * <p>
-     * 停止 / 重启不用这个值：它们要覆盖「参数设置 - 容器运行」里的宽限期，
+     * 停止 / 重启不用这个值：它们要覆盖「系统参数 - 容器运行」里的宽限期，
      * 由 {@link DockerSettings#budget()} 计算（宽限期 + 30 秒响应预算）。
      */
     private static final Duration CONTAINER_ACTION_TIMEOUT = Duration.ofSeconds(120);
@@ -284,7 +284,7 @@ public class ContainerService {
             withClient(host, "停止容器 " + containerId, stopBudget,
                     client -> client.stopContainerCmd(containerId).withTimeout(stopGraceSeconds).exec());
         } catch (IllegalStateException e) {
-            // docker stop 是「SIGTERM → 等宽限期 → SIGKILL」，宽限期在「参数设置 - 容器运行」里配置（默认 60 秒）；
+            // docker stop 是「SIGTERM → 等宽限期 → SIGKILL」，宽限期在「系统参数 - 容器运行」里配置（默认 60 秒）；
             // 超时多半是容器里有进程卡在不可中断（D）状态，回查一次确认实际状态再报错
             Boolean stopped = isStopped(host, containerId);
             if (Boolean.TRUE.equals(stopped)) {

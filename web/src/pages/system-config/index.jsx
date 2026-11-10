@@ -4,7 +4,7 @@ import {HttpClient, Page} from '@jiangood/open-admin'
 
 /**
  * 全局设置只保留平台级默认资源（默认注册中心、默认构建主机）。
- * 邮件、容器运行、主机辅助容器与容器日志限制都在框架「系统管理 - 参数设置」维护。
+ * 邮件、容器运行、主机辅助容器与容器日志限制都在框架「系统管理 - 系统参数」维护。
  */
 export default class extends React.Component {
     state = {
@@ -56,7 +56,7 @@ export default class extends React.Component {
         const {loading, saving, registries, hosts, values} = this.state
         return <Page padding>
             <Alert className='mb-4' type='info' showIcon
-                   title='邮件发送、容器运行、主机辅助容器与容器日志限制已移到「系统管理 - 参数设置」'
+                   title='邮件发送、容器运行、主机辅助容器与容器日志限制已移到「系统管理 - 系统参数」'
                    description='这里只保留平台的默认注册中心与默认构建主机。是否发送构建邮件仍由「项目详情页」的「邮件通知」开关控制，收件人为项目创建人的邮箱。'/>
 
             <Card title='全局设置' loading={loading} className='page-card'>

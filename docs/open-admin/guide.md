@@ -61,7 +61,7 @@ web/
 | `OrgTypeProvider` | 自定义机构类型（如新增"门店"类型） | `@Component` |
 | `FileOperator` | 自定义文件存储后端（默认提供 `LOCAL` / `S3` 两种实现） | `@Component` |
 | `StartupHook` | 系统启动钩子（JPA 建表前/种子数据前后） | `@Component` |
-| `ConfigProvider` | 声明运行时可改的参数项（自动出现在「参数设置」页） | `@Component` |
+| `ConfigProvider` | 声明运行时可改的参数项（自动出现在「系统参数」页） | `@Component` |
 | `MenuCustomizer` | 调整登录用户看到的菜单：改名、移动、排序、隐藏（不支持增删） | `@Component` |
 
 实现类被 `@ComponentScan` 自动发现，无需手动注册。
@@ -95,7 +95,7 @@ public class CvsMenuCustomizer implements MenuCustomizer {
 - **BaseEntity** — 所有实体继承 BaseEntity（UUIDv7 id 由 `@PrePersist` 自动生成，含 createTime/createUser、updateTime/updateUser）
 - **Spec 动态查询** — `Spec<T>` 链式构建 JPA Specification（eq/like/in/between/or 等），通过 `SpecImpl` + `ExpressionTool` 执行
 - **PageExt** — 扩展 PageImpl，支持返回额外数据（如汇总行）
-- **菜单加载** — `classpath*:application-menu*.yml` YAML 定义菜单（Map 格式，key 为菜单 id）；id 必须全局唯一，重复定义启动失败
+- **菜单加载** — `classpath*:menu.yml` + `classpath*:menu-*.yml` YAML 定义菜单（Map 格式，key 为菜单 id）；id 必须全局唯一，重复定义启动失败。旧名 `application-menu*.yml` 已不再识别，需改名为 `menu.yml` / `menu-*.yml`
 - **权限控制** — `@HasPermission` 注解 + AOP 切面，支持 SpEL 表达式
 - **ID 生成** — 默认 UUIDv7（时间排序，MySQL 友好）
 - **文件存储** — 支持 `local` / `s3`（AWS SDK v2，兼容 RustFS / OSS / COS），通过 `FileOperator` 接口抽象
@@ -119,7 +119,7 @@ public class CvsMenuCustomizer implements MenuCustomizer {
 - **角色管理**：列表/创建/编辑/分配权限（菜单 + 按钮）
 - **权限控制**：后端 `@HasPermission("resource:action")` 注解 + AOP 切面，支持 SpEL；前端推荐 `<PermActions actions={[{label, perm, onClick}]} />` 数据驱动模式（旧式 `<Button perm="xxx:yyy" />` 子元素写法已不推荐）和 `<Perm code="xxx">` 组件
 - **权限码格式**：全小写两段式 `{资源}:{操作}`，资源 kebab-case（如 `sys-user:read`、`sys-role:grant-permission`）
-- **YAML 定义**：`application-menu*.yml` 中用 `perms` 对象列表定义
+- **YAML 定义**：`menu*.yml` 中用 `perms` 对象列表定义
 - **菜单分隔线**：左侧菜单支持在 YAML 中配置分隔线（`type: divider`，无需 `name`/`path`，用 `pid` + `seq` 控制位置）对菜单项分组；顶部菜单不支持分隔线
 - **快捷菜单**：用户在个人中心「快捷菜单」Tab 从有权限的页面菜单中勾选（最多 10 个，可拖拽排序），配置结果固定显示在左侧菜单顶部
 
@@ -134,13 +134,13 @@ public class CvsMenuCustomizer implements MenuCustomizer {
 
 | 功能 | 说明 |
 |------|------|
-| 参数设置 | 运行时可改的全局配置：数据库只存覆盖值，`application.yml` 与代码默认值兜底；业务模块实现 `ConfigProvider` 即可在通用配置页维护自己的参数 |
+| 系统参数 | 运行时可改的全局配置：数据库只存覆盖值，`application.yml` 与代码默认值兜底；页面顶部只读展示最大并发会话数、会话超时、文件存储等启动期配置；业务模块实现 `ConfigProvider` 即可在通用配置页维护自己的参数 |
 | 定时任务 | 基于 Quartz，动态创建/暂停/恢复，继承 `BaseJob` + `@JobDescription`；`BaseJob.progress(...)` 上报运行进度，执行记录方式（每次/每小时/每天各一份记录）与保留期清理 |
 | 文件管理 | `sys.file.store-type` 配置（`LOCAL` / `S3`），统一上传下载预览；临时文件自动清理（TTL 可配置） |
-| 操作日志 | `@Log` 注解 + AOP 切面，异步记录（独立线程池 `operationLogExecutor`）；`@Log.detail` 或 `OperationLogContext` 记录人类可读详情，日志页支持详情列与行详情抽屉 |
+| 操作日志 | `@Log` 注解 + AOP 切面，异步记录（独立线程池 `operationLogExecutor`）；`@Log.detail` 或 `OperationLogContext` 记录人类可读详情，日志页支持详情列与行详情抽屉；登录/登出及失败登录由框架自动记录 |
 | 在线用户 | 一个登录会话一行，展示账号/姓名/机构/IP/登录时间、最后活跃与最近操作（取自操作日志，按用户 + IP 匹配，可跳转日志），支持强制下线；在线记录在内存，仅单实例部署准确；登录会话默认落盘，正常重启后免登录，在线记录随用户请求自动恢复 |
 | 运行日志查看 | 在线查看日志文件 |
-| 邮件发送 | 内置 QQ/腾讯企业邮/163/126/Outlook/Gmail/阿里企业邮模板；配置在「参数设置 → 邮件发送」，业务注入 `MailService` 即可发送通知邮件，支持 HTML、附件与 HTTP/SOCKS5 代理 |
+| 邮件发送 | 内置 QQ/腾讯企业邮/163/126/Outlook/Gmail/阿里企业邮模板；配置在「系统参数 → 邮件发送」，业务注入 `MailService` 即可发送通知邮件，支持 HTML、附件与 HTTP/SOCKS5 代理 |
 
 ## 添加业务模块
 
@@ -148,7 +148,7 @@ public class CvsMenuCustomizer implements MenuCustomizer {
 2. **Repository** — 继承 `BaseRepository<T, String>`，通用 CRUD + 动态查询
 3. **Service** — 继承 `BaseService<T>`，通用业务逻辑
 4. **Controller** — RESTful，返回 `AjaxResult`，`@HasPermission` 控制权限；含文件上传字段的实体打 `@FileField` 注解，save 后调用 `sysFileService.confirmTempFiles(entity)` 确认临时文件
-5. **菜单** — `src/main/resources/application-menu*.yml` 定义菜单树
+5. **菜单** — `src/main/resources/menu.yml`（或 `menu-*.yml`）定义菜单树
 6. **前端** — 使用 `ProTable` + `Field*` 组件快速搭建 CRUD 页面
 
 > 在业务项目中创建完整 CRUD 模块可借助 opencode skill `oa-crud`（由 `oa-upgrade-docs` skill 从框架 Release 同步到 `.opencode/skills/`）。也可在「系统管理 → 代码生成」中选中已建好的实体，一键生成 Repository / Service / Controller / 前端页面 / 菜单 代码并写入项目源码目录（先预览确认）。

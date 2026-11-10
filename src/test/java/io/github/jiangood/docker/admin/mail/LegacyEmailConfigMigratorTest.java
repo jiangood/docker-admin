@@ -103,7 +103,7 @@ class LegacyEmailConfigMigratorTest {
         new LegacyEmailConfigMigrator(repository, configService).run(null);
 
         verify(configService, never()).update(anyMap());
-        // 识别不了服务商时保留旧行，用户可在参数设置里手工选
+        // 识别不了服务商时保留旧行，用户可在系统参数里手工选
         verify(repository, never()).deleteAllInBatch(anyList());
     }
 

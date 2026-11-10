@@ -9,10 +9,10 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 
 /**
- * 「系统管理 - 参数设置」里的容器相关分组：容器运行、主机辅助容器、容器日志。
+ * 「系统管理 - 系统参数」里的容器相关分组：容器运行、主机辅助容器、容器日志。
  * <p>
  * 框架的 {@code ConfigRegistry} 会注入所有 {@link ConfigProvider} Bean，
- * 所以加 {@code @Component} 就会自动出现在参数设置页，无需前端改动。
+ * 所以加 {@code @Component} 就会自动出现在系统参数页，无需前端改动。
  * <p>
  * 注意：这里只做声明，不能注入 {@code SysConfigService}（它会反向依赖 ConfigRegistry，
  * 构成构造器循环依赖）；读取逻辑在 {@link DockerSettings}。

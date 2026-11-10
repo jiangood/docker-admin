@@ -1,7 +1,7 @@
 package io.github.jiangood.docker.admin.config;
 
 /**
- * 注册到框架「系统管理 - 参数设置」的配置键。
+ * 注册到框架「系统管理 - 系统参数」的配置键。
  * <p>
  * 与 {@code SystemConfigService} 里的 {@code t_system_config} 不是一套：
  * 这里的键由 {@link DockerConfigProvider} 声明，值存在框架的 {@code sys_config} 表。
@@ -18,7 +18,7 @@ public final class DockerConfigKeys {
     /** 默认 60 秒，与 docker compose 常见的 stop_grace_period 对齐。 */
     public static final int DEFAULT_STOP_TIMEOUT_SECONDS = 60;
 
-    /** 允许配置的范围，参数设置页的输入框也按这个范围校验。 */
+    /** 允许配置的范围，系统参数页的输入框也按这个范围校验。 */
     public static final int MIN_STOP_TIMEOUT_SECONDS = 1;
     public static final int MAX_STOP_TIMEOUT_SECONDS = 600;
 

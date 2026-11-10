@@ -235,7 +235,7 @@ export default class extends React.Component {
                     </Form.Item>
 
                     <Form.Item label='邮件告警' name='notifyEmail' valuePropName='checked'
-                               tooltip='连续失败满 3 次发告警邮件，恢复后发恢复通知；收件人为创建人邮箱，发件账号在「系统管理-参数设置-邮件发送」维护'>
+                               tooltip='连续失败满 3 次发告警邮件，恢复后发恢复通知；收件人为创建人邮箱，发件账号在「系统管理-系统参数-邮件发送」维护'>
                         <Switch/>
                     </Form.Item>
                 </Form>

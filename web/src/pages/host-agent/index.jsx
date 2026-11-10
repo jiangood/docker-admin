@@ -172,7 +172,7 @@ export default class extends React.Component {
                     </Form.Item>
 
                     <Form.Item label='镜像 Tag' name='imageTag'
-                               tooltip='镜像地址在「系统管理 - 参数设置 - 主机辅助容器」维护（不含 tag）；留空表示 latest，生产建议固定版本 tag'>
+                               tooltip='镜像地址在「系统管理 - 系统参数 - 主机辅助容器」维护（不含 tag）；留空表示 latest，生产建议固定版本 tag'>
                         <Input placeholder='latest' maxLength={128}/>
                     </Form.Item>
 

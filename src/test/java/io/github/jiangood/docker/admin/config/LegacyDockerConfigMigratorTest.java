@@ -56,7 +56,7 @@ class LegacyDockerConfigMigratorTest {
         SystemConfigRepository repository = repositoryRows(
                 row(DockerConfigKeys.LOG_RANGE_TAIL, "999999999"));
         SysConfigService configService = mock(SysConfigService.class);
-        // 参数设置页会校验范围，旧库里的越界值按异常处理
+        // 系统参数页会校验范围，旧库里的越界值按异常处理
         when(configService.update(Map.of(DockerConfigKeys.LOG_RANGE_TAIL, "999999999")))
                 .thenThrow(new IllegalArgumentException("超出范围"));
 

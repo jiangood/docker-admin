@@ -7,3 +7,12 @@ services:
       - "/var/run/docker.sock:/var/run/docker.sock"
       - "./data/:/data"
     restart: unless-stopped
+    # 登录空闲超时（分钟）默认取框架的 180；要调整时取消注释即可（环境变量优先级高于配置文件，
+    # 不用改 application.yml）。实测 SYS_SESSION_IDLE_TIME=240 → Tomcat sessionTimeout=240。
+    # environment:
+    #   SYS_SESSION_IDLE_TIME: 480
+    #
+    # 登录会话在停机最后一步才写入 /data/session/SESSIONS.ser，docker 默认只等 10 秒，
+    # 应用优雅停机（graceful + 线程池 awaitTermination）可能超过 10 秒，超时被 SIGKILL 就会丢掉所有会话，
+    # 表现为每次 docker stop / compose up -d 之后所有人都要重新登录。60s 与框架文档保持一致。
+    stop_grace_period: 60s

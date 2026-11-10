@@ -65,7 +65,7 @@ public class AppService extends BaseService<App> {
      * 容器启停删的兜底超时：docker-java 的 responseTimeout 是 1 小时（拉镜像需要），
      * 但这类命令本该秒回，宿主机存储卡死时必须尽快失败，不能让部署线程一直挂着。
      * <p>
-     * 停止的预算不在这里：它必须比「参数设置 - 容器运行」里的宽限期更长，
+     * 停止的预算不在这里：它必须比「系统参数 - 容器运行」里的宽限期更长，
      * 见 {@link DockerSettings#budget()}。
      */
     private static final Duration CONTAINER_START_TIMEOUT = Duration.ofSeconds(120);
@@ -236,7 +236,7 @@ public class AppService extends BaseService<App> {
                 String oldContainerId = container.getId();
                 if (container.getState().equals("running")) {
                     fileLog.info("停止容器{}", container.getNames());
-                    // 宽限期来自「参数设置 - 容器运行」，默认 60 秒（docker-java 不传时写死 10 秒）
+                    // 宽限期来自「系统参数 - 容器运行」，默认 60 秒（docker-java 不传时写死 10 秒）
                     int stopGraceSeconds = dockerSettings.graceSeconds();
                     dockerManager.callWithTimeout(dockerSettings.budget(), "停止容器 " + oldContainerId, () -> {
                         dc.stopContainerCmd(oldContainerId).withTimeout(stopGraceSeconds).exec();

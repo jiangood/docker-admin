@@ -1,7 +1,7 @@
 package io.github.jiangood.docker.sdk.engine;
 
 import com.github.dockerjava.transport.DockerHttpClient;
-import io.github.jiangood.docker.admin.proxy.ProxySettings;
+import io.github.jiangood.openadmin.framework.proxy.ProxySettings;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayOutputStream;

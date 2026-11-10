@@ -1,8 +1,8 @@
 /**
- * 代理地址（一行）的前端校验：主机接入用（邮件代理已由框架参数设置页自己校验）。
+ * 代理地址（一行）的前端校验：主机接入用（邮件代理已由框架系统参数页自己校验）。
  *
  * 只挡明显写错的格式，scheme / 端口 / SOCKS5 认证等细节以后端解析为准
- * （后端见 io.github.jiangood.docker.admin.proxy.ProxySettings）。
+ * （后端见框架 io.github.jiangood.openadmin.framework.proxy.ProxySettings）。
  */
 export function validateProxyUrl(_, value) {
     const v = (value || '').trim()

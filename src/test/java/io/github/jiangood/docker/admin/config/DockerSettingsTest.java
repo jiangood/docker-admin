@@ -13,7 +13,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
- * 「参数设置」里的容器分组必须能通过框架的 Registry 校验，否则参数设置页会打不开；
+ * 「系统参数」里的容器分组必须能通过框架的 Registry 校验，否则系统参数页会打不开；
  * 同时确认读取时的默认值、范围与 agent 镜像地址回落。
  */
 class DockerSettingsTest {

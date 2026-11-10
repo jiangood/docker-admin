@@ -17,7 +17,7 @@ import java.util.Map;
 /**
  * 默认资源（默认注册中心 / 默认构建主机）的读写，存在本项目的 {@code t_system_config}。
  * <p>
- * 其余全局配置都已迁到框架的「系统管理 - 参数设置」：
+ * 其余全局配置都已迁到框架的「系统管理 - 系统参数」：
  * 邮件发件账号（{@code email.*}）、容器运行 / 主机辅助容器 / 容器日志（{@code docker.*}）；
  * 旧 {@code t_system_config} 里的值分别由 {@code LegacyEmailConfigMigrator} 与
  * {@code LegacyDockerConfigMigrator} 一次性搬迁。

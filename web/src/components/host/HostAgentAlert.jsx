@@ -230,7 +230,7 @@ export default class extends React.Component {
                    placeholder='latest'
                    onChange={e => this.setState({tag: e.target.value})}/>
             <div className='mt-2' style={{fontSize: 12, lineHeight: 1.8}}>
-                <div>镜像地址（参数设置）：<code>{repository || '-'}</code></div>
+                <div>镜像地址（系统参数）：<code>{repository || '-'}</code></div>
                 <div>将使用：<code>{imagePreview}</code></div>
                 <div>tag 留空表示 latest；生产建议固定为版本 tag，如 <code>v4.8.40</code>。</div>
             </div>
@@ -311,7 +311,7 @@ export default class extends React.Component {
 
                 <Typography.Title level={5}>镜像</Typography.Title>
                 <Typography.Paragraph>
-                    镜像地址在「系统管理 - 参数设置 - 主机辅助容器」维护（不含 tag）；镜像 tag 与挂载目录在
+                    镜像地址在「系统管理 - 系统参数 - 主机辅助容器」维护（不含 tag）；镜像 tag 与挂载目录在
                     「工具 - 主机 Agent」的配置里维护。配置与容器实际参数不一致时，
                     面板右上角会出现「重新部署」，点它即可按配置重建容器。
                 </Typography.Paragraph>

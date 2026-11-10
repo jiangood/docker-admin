@@ -62,6 +62,7 @@ public AjaxResult update(@RequestBody Customer input,
 - 部分更新场景可用 SpEL 的 `?:` 兜底，如 `${#input.name ?: #input.id}`，避免出现空的「」
 - **不要拼接密码、令牌等敏感字段**：`params` 会按字段名自动脱敏，`detail` 不会
 - 日志页的「操作详情」列来自 `detail`，请求参数在行详情抽屉里查看
+- 登录/登出由框架手动写入（登录时尚未认证、登出时上下文已清空，切面拿不到操作者）：操作名为「认证-登录」「认证-登录失败」「认证-登出」，失败登录会记录原因（如「账号或密码错误」「账户已被锁定」），不记录请求参数，避免密码进入日志
 
 ### 工具类
 
@@ -166,16 +167,19 @@ public class OrderLogPermissionProvider implements LogKeyPermissionProvider {
 
 日志如果属于业务数据、需要行级/数据权限校验，不要复用上面的通用接口（它只能校验权限码）：由业务模块自己提供读取接口，并让 `LogViewer` 通过 `url` 指向它，返回同样的 `{content, nextOffset, eof}` 即可复用增量跟随。
 
-### 参数设置
+### 系统参数
 
-运行时可改的全局参数。元数据由业务模块/框架实现 `ConfigProvider` 声明，`sys_config` 只保存被覆盖的值（见 [config.md](config.md)）。
+运行时可改的全局参数，以及页面顶部只读展示的启动期参数。元数据由业务模块/框架实现 `ConfigProvider` 声明，`sys_config` 只保存被覆盖的值（见 [config.md](config.md)）。
 
 | 端点 | HTTP | 权限 | 说明 |
 |------|------|------|------|
 | `admin/sys-config/items` | GET | `sys-config:read` | 分组 + 元数据 + 当前生效值；隐藏项与只含隐藏项的分组不会返回 |
+| `admin/sys-config/system` | GET | `sys-config:read` | 只读系统参数（来自 `application.yml` / 代码默认值），返回 `{items:[{key,label,value,group}]}`；`group` 为 `runtime`（运行时状态，页面定时刷新）或 `startup`（启动期配置） |
 | `admin/sys-config/update` | POST | `sys-config:update` | 只提交改动项：`{values:[{key,value}]}`；隐藏项会被拒绝 |
 | `admin/sys-config/reset` | POST | `sys-config:update` | `{keys:[...]}`；`keys` 为空表示全部恢复默认（保留隐藏项）；显式传隐藏项会被拒绝 |
 | `admin/sys-config/value` | GET | `sys-config:read` | 单键读取，查询参数 `key` |
+
+> `system` 只返回非敏感的启动期参数，值已按业务含义格式化；修改仍需改 `application.yml` 并重启。
 
 `items` 返回 `{groups:[{code,label,description,items:[...]}]}`，配置项字段：
 
@@ -189,6 +193,9 @@ public class OrderLogPermissionProvider implements LogKeyPermissionProvider {
 | `source` | `db`（数据库覆盖）/ `env`（application.yml）/ `code`（代码默认） |
 | `secret` / `hasValue` | 是否敏感项、敏感项是否已设置 |
 | `min` / `max` / `options` / `required` | 输入约束 |
+| `allowEmpty` | 仅 `select`：是否允许保存空值（表示「不设置」） |
+
+> `select` 的 `value` 与 `options[].value` 统一为字符串。`options` 可以在每次请求时动态求值（`Configs.select(key, label, Supplier)`），新增 / 删除业务表记录后重新进入参数页即可看到，无需重启；求值失败时该项按空选项返回，不影响其他配置项。
 
 > 隐藏项（`.asHidden()`）不会出现在 `items` 中，也不能通过 `update` / `reset` 修改；业务侧使用 `SysConfigService.putInternal` / `removeInternal`。`reset` 全部恢复时会保留隐藏项的值。
 
@@ -196,7 +203,7 @@ public class OrderLogPermissionProvider implements LogKeyPermissionProvider {
 
 ### 邮件
 
-邮件配置统一走上面的参数设置接口，不提供单独的设置读写接口。
+邮件配置统一走上面的系统参数接口，不提供单独的设置读写接口。
 
 业务侧通过 `MailService` 发送，支持 HTML 正文、附件和内联图片：
 
@@ -212,7 +219,7 @@ mailService.sendAsync(MailMessage.builder()
 ```
 
 - `MailInline` 的 `cid` 支持 `trend` / `cid:trend` / `<trend>` 三种写法，HTML 统一用 `cid:trend` 引用；发送时 `Content-ID` 会用尖括号包裹；
-- 未填 `to` 时优先使用参数设置里的 `email.default-to`；`to` / `cc` / `bcc` 全为空才报「收件邮箱不能为空」，只有 `cc` / `bcc` 时会用发件邮箱补 `To`；
+- 未填 `to` 时优先使用系统参数里的 `email.default-to`；`to` / `cc` / `bcc` 全为空才报「收件邮箱不能为空」，只有 `cc` / `bcc` 时会用发件邮箱补 `To`；
 - 发送结果统一走 `MailSendResult` / `MailErrorType`，与附件、代理、认证失败的处理一致。
 
 ### 在线用户
@@ -230,7 +237,7 @@ mailService.sendAsync(MailMessage.builder()
 
 - 在线记录保存在内存，**仅单实例部署准确**；应用重启后 `HttpSession` 会从落盘文件恢复，在线记录则在用户下一次请求时自动补登记（重启后尚未访问的用户不会立即出现），多实例部署需要 Spring Session 等共享会话方案（见 [config.md](config.md)）。
 - `lastActiveTime` 由 Spring Security `SessionRegistry` 的 `lastRequest` 实时计算，无需业务上报。
-- `lastOperation` / `lastOperationTime` 按「用户 + IP」从操作日志表 `sys_log` 批量取最新一条；`lastOperationTimeText` 由 `FriendlyTool.getPastTime` 计算。同一账号从不同 IP 登录时，各会话只显示与自己 IP 一致的最近操作。
+- `lastOperation` / `lastOperationTime` 按「用户 + IP」从操作日志表 `sys_log` 批量取最新一条；`lastOperationTimeText` 由 `FriendlyTool.getPastTime` 计算。同一账号从不同 IP 登录时，各会话只显示与自己 IP 一致的最近操作。登录成功本身也会写入一条「认证-登录」，所以刚登录的会话最近操作通常显示为登录。
 - 「最近操作」跳转格式：`/system/log?userId=...&username=...&ip=...`，操作日志页支持 `username`（模糊）、`userId`（精确）、`ip`（精确）筛选。
 - 强制下线调用 `SessionInformation.expireNow()`，对方下一次请求会收到 401，并复用并发登录提示（见下文「框架内置事件」）。
 - 不允许强制下线当前登录会话；会话被踢后记录立即从列表移除，对方会话在下一次请求时失效。
@@ -256,7 +263,7 @@ mailService.sendAsync(MailMessage.builder()
 
 说明：
 
-- 是否会出现多处登录取决于 `sys.maximum-sessions`：默认 `1` 会在新登录时踢掉旧会话；调大后多个会话并存，个人中心在会话数大于 1 时显示提示。
+- 是否会出现多处登录取决于 `sys.maximum-sessions`：默认 `1`，配合 `sys.max-sessions-prevents-login`（默认 `true`）时新登录会被拒绝、旧会话继续有效；将该开关设为 `false` 则改为踢掉旧会话。调大后多个会话并存，个人中心在会话数大于 1 时显示提示。
 - 服务端会校验会话归属，只能下线自己的会话，也允许用户自助下线自己的其他设备。
 - 在线记录保存在内存，**仅单实例部署准确**（同「在线用户」）；应用重启后随用户请求自动恢复登记。
 
@@ -281,7 +288,7 @@ mailService.sendAsync(MailMessage.builder()
 | Service | `{模块包}/service/{Entity}Service.java` | 继承 `BaseService`，含 `@FileField` 时自动生成 confirmTempFiles/discardTempFiles 事务方法 |
 | Controller | `{模块包}/controller/{Entity}Controller.java` | `admin/{module}` 下 `page/info/create/update/delete`，`@HasPermission` + `@Log`，默认使用 `CrudOps` 统一响应与校验 |
 | 前端页面 | `web/src/pages/{module}/index.jsx` | `ProTable` + `FormModal`，按字段类型选用 `Field*`/`View*` 组件 |
-| 菜单 | `src/main/resources/application-menu-{module}.yml` | 挂在指定父菜单（默认 `sys`），含读/建/改/删权限 |
+| 菜单 | `src/main/resources/menu-{module}.yml` | 挂在指定父菜单（默认 `sys`），含读/建/改/删权限 |
 
 字段映射：String→`Input`、`@Lob`/TEXT→`Input.TextArea`、数字→`InputNumber`、布尔→`FieldBoolean`、日期→`FieldDate`、枚举（`@DictType`）→`FieldDictSelect`、`@FileField(html=true)`→`FieldEditor`、图片类文件→`FieldUploadImage`、其他文件→`FieldUploadFile`；查询条件为可搜索 String 字段的 `searchText` 模糊匹配 + 枚举/布尔等值过滤。
 
@@ -362,7 +369,7 @@ pageMeta.title
 
 URL 中的 `_label` 已弃用且**不再生效**，检测到时只在控制台提示一次；旧 URL 会按菜单名 / `pageMeta.title` 正常显示。
 
-页面标题为静态元信息，不支持运行时动态回填。浏览器标题统一格式为 `系统标题 | 页面标题`（页面无标题时仅显示系统标题）。
+页面标题为静态元信息，不支持运行时动态回填。浏览器标题统一格式为 `系统标题 | 页面标题`（页面无标题时仅显示系统标题）；其中的系统标题优先使用 `sys.short-title`，未配置时回退到 `sys.title`。
 
 #### FormModal
 

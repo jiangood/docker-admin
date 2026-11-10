@@ -59,7 +59,7 @@ public AjaxResult update(@RequestBody Customer input,
 - 使用 Java 21 Record / Pattern Matching / Switch 表达式 / Text Block
 - 方法参数校验用 `@Valid` / `@Validated`
 
-## 参数设置
+## 系统参数
 
 运行时可改的参数优先实现 `ConfigProvider`，不要为每个参数单独写 Controller 和页面：
 
@@ -72,8 +72,9 @@ public AjaxResult update(@RequestBody Customer input,
 - 已下线的 key 通过 `ConfigProvider.deprecatedKeys()` 声明，启动时自动清理数据库残留行（只记录 key，不记录值）
 - 业务代码通过 `SysConfigService` 的 `getBool/getInt/getString/getList` 读取，不要直接查 `SysConfigRepository`
 - 只把「运行期读取、改了立即生效」的参数放进来；启动期装配的配置仍留在 `application.yml`
+- 启动期配置不会出现在可编辑分组中；「系统参数」页面右侧的只读卡片会展示框架内置的关键启动参数，业务模块无需额外实现
 
-完整声明方式见 [config.md](config.md) 的「参数设置（运行时可改）」。
+完整声明方式见 [config.md](config.md) 的「系统参数（运行时可改）」。
 
 ## 定时任务（Quartz）
 

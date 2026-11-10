@@ -63,9 +63,12 @@ git tag vx.y.z && git push && git push origin vx.y.z
     `mvn dependency:tree -Dincludes=cn.hutool` 核对。
   - `docker-java.version` 核心与传输层共用同一属性，保持同版本。
   - lombok **不显式指定版本**，由 `spring-boot-starter-parent` 管理（当前 1.18.46）。
-- **数据库配置**走自定义属性（`db_ip`、`db_port`、`db_database`、`db_username`、`db_password`），
-  不是标准 Spring datasource；默认走 H2 无需配置。
-- **菜单配置**在 `src/main/resources/application-menu-docker.yml`，可用 `-override.yml` 覆盖。
+- **数据库配置**用 `db_path`（H2 文件路径）+ 标准 `spring.datasource.*`，不是框架的 `db_*` 变量
+  （open-admin 3.2.0 起 `db_ip` / `db_port` / `db_database` / `db_username` / `db_password` 已移除，
+  外部 MySQL 改走 `SPRING_DATASOURCE_URL` / `SPRING_DATASOURCE_USERNAME` / `SPRING_DATASOURCE_PASSWORD`
+  或 `application-mysql.yml`）；默认走 H2 无需配置。
+- **菜单配置**在 `src/main/resources/menu-docker.yml`，可用 `menu-override.yml` 覆盖
+  （open-admin 3.2.0 起只扫描 `menu.yml` / `menu-*.yml`，旧的 `application-menu*.yml` 不再识别）。
   「容器平台」下依次为 项目 / 应用 / 镜像 / 主机（`/host`），再往下是「设置」（注册中心、代码源、全局设置）
   与「工具」（主机 Agent、镜像同步、构建测试、镜像下载、内网穿透、网站监控）。**「主机」与「设置」平级**，不再挂在设置下面。
 - **领域模型：** `Project`(项目，构建定义) → `Image`(镜像，`imageUrl` 唯一) → `ImageTag`(镜像标签，`imageUrl`+`tag`)。
@@ -86,7 +89,7 @@ git tag vx.y.z && git push && git push origin vx.y.z
   主机列表与主机详情都不再有 Agent 入口。部署 / 切换目录成功后会把实际 tag 与目录回写到配置
   （`HostAgentService` 部署完成后按 hostId 定位配置，必要时自动补一条）；状态接口支持
   `tag` / `root` 覆写，用于按配置显示「需要重新部署」。删除配置只删记录，不会删除目标主机上的容器。
-  镜像分两层配置：参数设置只保存镜像地址
+  镜像分两层配置：系统参数只保存镜像地址
   （`docker.agent.repository`，默认 `ghcr.io/jiangood/docker-admin-agent`，不含 tag），
   每条配置选择 tag（默认 `latest`），实际镜像 = 地址 + `:` + tag。
   agent 镜像内置 `docker-cli` 和 `docker compose`，另装了一批常用运维工具
@@ -129,13 +132,13 @@ git tag vx.y.z && git push && git push origin vx.y.z
   或 `appId`（应用维度，走 `admin/app/containerDetail` 与 `/admin/ws/log/{appId}`），
   `tab=logs|info|files|console` 直达对应页签。页面上方是基本信息与启动 / 停止 / 重启 / 删除，
   下方是横向页签（日志 / 文件 / 终端 / 详情）；主机详情的容器列表、监控表跳到这里（应用详情「容器日志」只保留日志，不再提供跳转入口）。
-  容器日志页签上方的「停止 / 继续滚动」控制是否跟随新日志，「下载日志」下载最近 N 天（参数设置，默认 7 天）
+  容器日志页签上方的「停止 / 继续滚动」控制是否跟随新日志，「下载日志」下载最近 N 天（系统参数，默认 7 天）
   的 .log 文件（应用维度走 `admin/app/containerLogDownload`，主机维度走 `admin/container/logDownload`）；
   请求范围早于下载窗口会被拒绝，未选时间范围时按最近 N 天。
   时间范围选择器按 `since`/`until`（秒级时间戳）查询历史日志，走 `admin/app/containerLogs` /
   `admin/container/logs`，返回末尾最多「最大行数」（默认 10000 行）并带 Docker 时间戳（前端转本地时区展示）；
   筛选后切为静态展示、不再自动滚动，下载按钮也带上同一时间段；「返回实时日志」恢复 WebSocket tail。
-  最大行数与下载天数在「系统管理 - 参数设置 - 容器日志」维护，对应 `sys_config` 的
+  最大行数与下载天数在「系统管理 - 系统参数 - 容器日志」维护，对应 `sys_config` 的
   `docker.logs.range-tail`（默认 10000）与 `docker.logs.download-days`（默认 7）。
   删除前需二次确认，运行 / 暂停 / 重启中的容器必须勾选「强制删除」，成功后关闭当前页签。
   页面页签开启 `destroyOnHidden`，切走即断开日志 / 终端
@@ -160,7 +163,7 @@ git tag vx.y.z && git push && git push origin vx.y.z
   **日志驱动为 `none`**（构建器创建中间容器时固定写 `LogConfig=none`）、
   不带 `app.name` / Agent / `com.docker.compose.project` 标签。
   因此按钮始终带 Popconfirm 二次确认；单个容器删除失败只记日志，不影响整轮清理。
-- **参数设置里的容器分组：** 「系统管理 - 参数设置」新增三组，全部由
+- **系统参数里的容器分组：** 「系统管理 - 系统参数」新增三组，全部由
   `DockerConfigProvider` 用 `Configs.group(...)` 声明（框架 `ConfigRegistry` 自动收集所有
   `ConfigProvider` Bean）：
   - 「容器运行」`docker.container.stop-timeout-seconds`（默认 60，范围 1~600）——停止容器的宽限期，
@@ -224,7 +227,8 @@ git tag vx.y.z && git push && git push origin vx.y.z
   （`http://192.168.1.10:8080`、`http://user:pass@192.168.1.10:8080`、`socks5://user:pass@192.168.1.10:1080`，
   不写 scheme 按 http，端口必填，留空表示不使用；密码回显为 `***`，保存时保持 `***` 或省略密码表示沿用已存密码）。
   落库仍是 `Host.proxyType/host/port/username/password` 五列，`Host.proxyUrl` 是 `@Transient` 的出入参字段，
-  由 `ProxySettings.parse` / `displayUrl` 双向转换（主机与邮件共用），旧数据无需迁移；界面只提交 `proxyUrl`，
+  由框架的 `io.github.jiangood.openadmin.framework.proxy.ProxySettings` 的 `parse` / `displayUrl` /
+  `resolvePassword` 双向转换（主机与邮件共用，**业务侧不再保留同名副本**），旧数据无需迁移；界面只提交 `proxyUrl`，
   `HostService.saveHost` 会把解析出的五列补进 `X-Body-Fields` 更新列表。
   用于平台与目标 docker 网络不通、但另有一台主机两边都能访问的场景：HTTP 走 CONNECT（支持 Basic 认证），
   SOCKS5 支持用户名密码（RFC 1929），目标主机名交给代理解析，`https://` 的 TLS 仍是平台到目标端到端。
@@ -256,12 +260,27 @@ git tag vx.y.z && git push && git push origin vx.y.z
   `403 Unexpected response code`（会话失效是 401，别混淆）。放行所有来源后，跨站防护由①会话 Cookie 显式
   `SameSite=Lax`（`application.yml` 的 `server.servlet.session.cookie.same-site`，**别改成 none**）与
   ②每个端点的鉴权拦截器（登录+权限+数据权限）承担，所以**新增 WS 端点不要漏掉鉴权拦截器**。
+- **会话（登录态）超时与重启免登录：** 空闲超时由 `sys.session-idle-time`（分钟）决定，框架
+  `application-lib.yml` 里是 `server.servlet.session.timeout: "${sys.session-idle-time:180}m"`，
+  **默认 180 分钟（3 小时），本项目不覆盖**。
+  **不要直接改 `server.servlet.session.timeout`**——`spring.config.import` 引入的框架文件优先级高于业务 yml，
+  同名键会被覆盖；要调只能在 `sys.session-idle-time` 上改，或用环境变量 `SYS_SESSION_IDLE_TIME`
+  （env 优先级高于所有配置文件，无需改 `application.yml`）。
+  实测：设 1 → Tomcat `sessionTimeout=1`，1 分钟后接口返回 401「身份验证失败，请重新登录」。
+  框架默认 `server.servlet.session.persistent: true` + `store-dir: /data/session`，优雅停机时把会话写进
+  `/data/session/SESSIONS.ser`，重启后免登录（实测有效）；`kill -9` / OOM / SIGKILL 不保留。
+  **容器部署必须保留 compose 里的 `stop_grace_period: 60s`**：会话在停机最后一步才落盘，
+  docker 默认只等 10 秒，被 SIGKILL 就一个字节都写不出去，表现为每次部署后都要重新登录
+  （`docker inspect <容器> --format '{{.State.ExitCode}}'`：137 = 被 SIGKILL，143 = 正常退出）。
+  另注意 `sys.maximum-sessions: 2`：3.2.0 起超过上限会**拒绝新登录**（提示
+  `sys.concurrent-login-blocked-message`，旧会话继续有效），与空闲过期的「登录已过期」文案不同，
+  排查掉线先看提示语；要恢复「新登录顶掉最早会话」旧行为需设 `sys.max-sessions-prevents-login: false`。
 - **构建并发（新的覆盖旧的）：** 同一项目用固定代码目录，不能并行构建。新的触发（手动、重试或 Webhook）
   会先取消正在跑的旧构建（`ProjectService.cancelProcessingBuilds` → `stopBuild`），新任务在 `@Async` 线程里
   等旧构建退出代码目录后再开始，触发接口立即返回。取消靠 `cancelledBuilds` 标记 + 检查点
   （克隆后、docker build 后、推送后），克隆阶段无法中断，只能等克隆结束后放弃。
   超时上限见 `BUILD_SLOT_WAIT_MILLIS`；等待是进程内的，多实例部署下不跨实例生效。
-- **邮件通知：** 发件账号由**框架**「系统管理 - 参数设置 - 邮件发送」维护（`sys_config` 的
+- **邮件通知：** 发件账号由**框架**「系统管理 - 系统参数 - 邮件发送」维护（`sys_config` 的
   `email.provider/username/password/from.name/proxy`，由框架 `MailConfigProvider` 声明），
   本项目的「设置 - 全局设置」只保留默认注册中心与默认构建主机；旧版 `t_system_config` 里的 `email.*`
   由 `LegacyEmailConfigMigrator` 在启动时一次性搬到 `sys_config`（按旧 SMTP 主机反推邮箱服务商，

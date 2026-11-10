@@ -15,7 +15,7 @@ import com.jcraft.jsch.Session;
 import com.jcraft.jsch.UserInfo;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.entity.Registry;
-import io.github.jiangood.docker.admin.proxy.ProxySettings;
+import io.github.jiangood.openadmin.framework.proxy.ProxySettings;
 import io.github.jiangood.docker.base.FileLog;
 import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;

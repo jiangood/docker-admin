@@ -19,7 +19,7 @@ import java.util.Set;
 /**
  * 把旧「设置 - 全局设置」里的 {@code docker.agent.repository}、
  * {@code docker.logs.range-tail}、{@code docker.logs.download-days}
- * 搬到框架的「系统管理 - 参数设置」（{@code sys_config}）。
+ * 搬到框架的「系统管理 - 系统参数」（{@code sys_config}）。
  * <p>
  * 两边键名一致，只是换了表；只在「新配置还没有值」时搬迁，成功后删掉旧行。
  * 某个值超出新配置的范围时只跳过该键并记日志，不影响其他键与启动。
@@ -42,7 +42,7 @@ public class LegacyDockerConfigMigrator implements ApplicationRunner {
         try {
             migrate();
         } catch (Exception e) {
-            log.warn("旧容器配置迁移失败，请到「系统管理 - 参数设置」手工确认：{}", e.toString());
+            log.warn("旧容器配置迁移失败，请到「系统管理 - 系统参数」手工确认：{}", e.toString());
         }
     }
 
@@ -70,13 +70,13 @@ public class LegacyDockerConfigMigrator implements ApplicationRunner {
                 sysConfigService.update(Map.of(key, row.getConfigValue()));
                 handled.add(row);
             } catch (RuntimeException e) {
-                log.warn("旧配置 {}={} 无法迁移到参数设置：{}", key, row.getConfigValue(), e.getMessage());
+                log.warn("旧配置 {}={} 无法迁移到系统参数：{}", key, row.getConfigValue(), e.getMessage());
             }
         }
 
         if (!handled.isEmpty()) {
             legacyRepository.deleteAllInBatch(handled);
-            log.info("已将 {} 条旧「全局设置」容器配置迁移到「系统管理 - 参数设置」", handled.size());
+            log.info("已将 {} 条旧「全局设置」容器配置迁移到「系统管理 - 系统参数」", handled.size());
         }
     }
 }

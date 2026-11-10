@@ -3,7 +3,7 @@ package io.github.jiangood.docker.admin.entity;
 import cn.hutool.core.util.StrUtil;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import io.github.jiangood.docker.admin.proxy.ProxySettings;
+import io.github.jiangood.openadmin.framework.proxy.ProxySettings;
 import io.github.jiangood.openadmin.util.annotation.Remark;
 import io.github.jiangood.openadmin.framework.data.BaseEntity;
 import jakarta.persistence.Column;

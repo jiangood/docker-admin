@@ -4,7 +4,7 @@ import com.github.dockerjava.api.exception.ConflictException;
 import com.github.dockerjava.api.exception.NotFoundException;
 import cn.hutool.core.util.StrUtil;
 import io.github.jiangood.docker.admin.dto.HostImageExportTaskView;
-import io.github.jiangood.docker.admin.proxy.ProxySettings;
+import io.github.jiangood.openadmin.framework.proxy.ProxySettings;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.service.HostImageExportService;
 import io.github.jiangood.docker.admin.service.HostService;

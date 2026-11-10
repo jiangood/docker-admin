@@ -4,7 +4,7 @@ import com.github.dockerjava.transport.DockerHttpClient;
 import com.github.dockerjava.transport.NamedPipeSocket;
 import com.github.dockerjava.transport.SSLConfig;
 import com.github.dockerjava.transport.UnixSocket;
-import io.github.jiangood.docker.admin.proxy.ProxySettings;
+import io.github.jiangood.openadmin.framework.proxy.ProxySettings;
 import org.apache.hc.client5.http.DnsResolver;
 import org.apache.hc.client5.http.SystemDefaultDnsResolver;
 import org.apache.hc.client5.http.classic.methods.HttpUriRequestBase;

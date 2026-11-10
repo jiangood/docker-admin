@@ -20,14 +20,14 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * 把旧版「全局设置 - 邮件发送服务」里的 {@code email.*} 配置搬到框架的「参数设置 - 邮件发送」。
+ * 把旧版「全局设置 - 邮件发送服务」里的 {@code email.*} 配置搬到框架的「系统参数 - 邮件发送」。
  * <p>
  * 两边的键名本来就一致（{@code email.provider/username/password/from.name/proxy}），
  * 只是从本项目的 {@code t_system_config} 换到了框架的 {@code sys_config}；SMTP 服务器与端口
  * 不再单独配置，由邮箱服务商（{@link MailProvider}）决定，所以这里按旧 SMTP 主机反推服务商。
  * <p>
  * 只在「旧配置有发件邮箱」且「新配置还没有发件邮箱」时执行一次，成功后删掉旧行，
- * 避免覆盖用户在参数设置页改过的值；迁移失败只记日志，不影响启动。
+ * 避免覆盖用户在系统参数页改过的值；迁移失败只记日志，不影响启动。
  */
 @Slf4j
 @Component
@@ -52,7 +52,7 @@ public class LegacyEmailConfigMigrator implements ApplicationRunner {
         try {
             migrate();
         } catch (Exception e) {
-            log.warn("旧邮件配置迁移失败，请到「系统管理 - 参数设置 - 邮件发送」手工填写：{}", e.toString());
+            log.warn("旧邮件配置迁移失败，请到「系统管理 - 系统参数 - 邮件发送」手工填写：{}", e.toString());
         }
     }
 
@@ -69,7 +69,7 @@ public class LegacyEmailConfigMigrator implements ApplicationRunner {
 
         MailProvider provider = detectProvider(legacy, username);
         if (provider == null) {
-            log.warn("无法识别旧邮件配置的邮箱类型（SMTP {}），请到「系统管理 - 参数设置 - 邮件发送」重新选择",
+            log.warn("无法识别旧邮件配置的邮箱类型（SMTP {}），请到「系统管理 - 系统参数 - 邮件发送」重新选择",
                     StrUtil.blankToDefault(legacy.get(LEGACY_SMTP_HOST), "未配置"));
             return;
         }
@@ -88,7 +88,7 @@ public class LegacyEmailConfigMigrator implements ApplicationRunner {
 
         sysConfigService.update(values);
         deleteLegacyRows();
-        log.info("已将旧的邮件配置迁移到「参数设置 - 邮件发送」（{}）", provider.label());
+        log.info("已将旧的邮件配置迁移到「系统参数 - 邮件发送」（{}）", provider.label());
     }
 
     private Map<String, String> legacyValues() {

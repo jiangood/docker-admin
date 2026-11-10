@@ -4,7 +4,7 @@ import cn.hutool.core.util.StrUtil;
 import io.github.jiangood.docker.admin.dao.HostAgentConfigRepository;
 import io.github.jiangood.docker.admin.dao.HostRepository;
 import io.github.jiangood.docker.admin.entity.Host;
-import io.github.jiangood.docker.admin.proxy.ProxySettings;
+import io.github.jiangood.openadmin.framework.proxy.ProxySettings;
 import io.github.jiangood.openadmin.framework.data.specification.Spec;
 import io.github.jiangood.openadmin.framework.data.BaseService;
 import lombok.RequiredArgsConstructor;

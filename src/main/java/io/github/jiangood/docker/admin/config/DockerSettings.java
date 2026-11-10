@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 
 /**
- * 读取「系统管理 - 参数设置」里的容器相关配置。
+ * 读取「系统管理 - 系统参数」里的容器相关配置。
  * <p>
  * 停止容器的宽限期（SIGTERM → SIGKILL 之间的等待）来自「容器运行」分组：
  * docker-java 的 {@code stopContainerCmd} 默认写死 {@code t=10}（不是「不传参数」），
@@ -33,7 +33,7 @@ public class DockerSettings {
     private final SysConfigService sysConfigService;
 
     /**
-     * 参数设置里未填写 agent 镜像地址时使用的默认值（yml / 环境变量可覆盖）。
+     * 系统参数里未填写 agent 镜像地址时使用的默认值（yml / 环境变量可覆盖）。
      */
     @Value("${docker.agent.repository:" + AgentImageUtils.DEFAULT_REPOSITORY + "}")
     private String defaultAgentRepository;
@@ -54,7 +54,7 @@ public class DockerSettings {
     }
 
     /**
-     * 实际生效的 agent 镜像地址（不含 tag）：参数设置值优先，留空时用 yml / 环境变量的默认地址。
+     * 实际生效的 agent 镜像地址（不含 tag）：系统参数值优先，留空时用 yml / 环境变量的默认地址。
      * <p>
      * 这里不做格式校验，与旧实现一致：真正拼镜像时由
      * {@link AgentImageUtils#resolveImage(String, String)} 校验并给出可读错误。

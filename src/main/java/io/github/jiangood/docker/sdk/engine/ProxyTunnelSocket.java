@@ -1,7 +1,7 @@
 package io.github.jiangood.docker.sdk.engine;
 
 import cn.hutool.core.util.StrUtil;
-import io.github.jiangood.docker.admin.proxy.ProxySettings;
+import io.github.jiangood.openadmin.framework.proxy.ProxySettings;
 
 import java.io.ByteArrayOutputStream;
 import java.io.EOFException;

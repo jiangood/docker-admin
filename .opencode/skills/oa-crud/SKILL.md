@@ -476,10 +476,10 @@ export default class extends React.Component {
 
 ### YAML 菜单定义
 
-业务项目在 `src/main/resources/application-menu*.yml` 中定义自己的菜单（Map 格式，key 为菜单 id，`pid` 表达父子关系）。框架的 `SysMenuRepositoryImpl` 扫描 `classpath*:application-menu*.yml` 自动合并，框架默认菜单与业务菜单互不干扰。
+业务项目在 `src/main/resources/menu-*.yml` 中定义自己的菜单（Map 格式，key 为菜单 id，`pid` 表达父子关系）。框架的 `SysMenuRepositoryImpl` 扫描 `classpath*:menu.yml` + `classpath*:menu-*.yml` 自动合并，框架默认菜单与业务菜单互不干扰。旧名 `application-menu*.yml` 已不再识别。
 
 ```yaml
-# src/main/resources/application-menu-customer.yml
+# src/main/resources/menu-customer.yml
 menus:
   customer:
     name: 客户管理
