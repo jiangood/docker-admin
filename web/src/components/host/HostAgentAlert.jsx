@@ -289,6 +289,18 @@ export default class extends React.Component {
                     <li>终端里执行命令会直接影响宿主机，删除、覆盖文件等危险操作请谨慎。</li>
                 </ul>
 
+                <Typography.Title level={5}>会话保持</Typography.Title>
+                <ul style={{margin: '0 0 8px 18px', padding: 0}}>
+                    <li>shell 保存在平台服务端：切走页面、刷新或短暂断网后会自动重连，并回放断开期间的输出，
+                        长耗时命令不会中断。
+                    </li>
+                    <li>没有窗口连接超过 30 分钟时会话自动结束；点右上角「新建会话」可立即换一个干净的 shell，
+                        点「重新连接」只重建连接、保留当前 shell 与历史。
+                    </li>
+                    <li>平台重启、辅助容器重建或切换挂载目录后会话会丢失（shell 运行在辅助容器内）。</li>
+                    <li>同一个会话同时只允许一个窗口使用：新窗口打开会接管，旧窗口收到提示后停止自动重连。</li>
+                </ul>
+
                 <Typography.Title level={5}>挂载目录</Typography.Title>
                 <ul style={{margin: '0 0 8px 18px', padding: 0}}>
                     <li>挂载目录来自「工具 - 主机 Agent」的配置，留空时首次默认 <code>/home</code>。</li>

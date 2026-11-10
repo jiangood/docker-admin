@@ -117,16 +117,30 @@ git tag vx.y.z && git push && git push origin vx.y.z
   接口仍保留，权限码 `host:file`，路径相对于当前挂载目录，空串表示挂载目录本身）；
   容器常驻，删除容器不会删除宿主机文件。重建 `latest` 会先尝试拉取，拉取失败但本地已有镜像时继续使用本地镜像。
   Agent 面板用一块 `Card` 承载：标题是「主机名 · Agent + 状态徽标（运行中 / 已停止 / 未部署）」，
-  右上角 `extra` 依次是重新连接（图标）、重新部署（配置与容器不一致时出现）、切换挂载目录、部署、帮助（图标），
+  右上角 `extra` 依次是重新连接（图标，保留当前 shell）、新建会话（图标，换一个干净 shell）、
+  重新部署（配置与容器不一致时出现）、切换挂载目录、部署、帮助（图标），
   正文只有终端（`styles={{body: {padding: 12}}}`）；异常 / 待处理提示（状态读取失败、
   配置与容器不一致、无 `host:save` 权限）以 Alert 形式出现在终端上方，正常状态不占空间；
   容器状态、提示与按钮由 `HostAgentAlert` 通过 render prop 交给 `HostAgentTab` 组装，
   弹窗仍由 `HostAgentAlert` 自己渲染（避免重复请求 agent 状态）。当前目录不在标题重复展示（只在「切换挂载目录」弹窗里），
   终端区没有工具条（`HostCli` 只渲染 xterm，
-  重新连接由 `HostAgentTab` 通过 ref 调 `HostCli.reconnect`）；
+  重新连接由 `HostAgentTab` 通过 ref 调 `HostCli.reconnect`，新建会话调 `HostCli.newSession`）；
   文件的上传 / 下载与查看 / 编辑 / 删除 / 重命名 / 新建目录都在终端里完成；
   权限、目录、文件操作等长说明收进问号弹窗（`HostAgentAlert`），页面上不再堆 Alert；
   终端连接成功后不弹通知、也不往终端回滚区写 banner，进入终端即可直接使用。
+  **终端会话默认保持到浏览器之外**：`HostCliSessionRegistry` 持有 `docker exec` 出来的 shell，
+  WebSocket 只是订阅者，断开（切走页面 / 刷新 / 断网 / 代理空闲超时）不会杀命令，
+  输出继续写进 256 KB 的 `ByteRingBuffer`，重连时先回放再实时转发；
+  会话按 `userId + hostId + tabToken` 隔离，tabToken 存在 `sessionStorage`（`HostCli` 生成，
+  URL 为 `/admin/ws/host-cli/{hostId}?session=...`），因此刷新或返回页面能接回同一个 shell。
+  没有窗口连接超过 30 分钟、或用户敲 `exit` 后会话回收（`HostCliSessionRegistry` 自带
+  60 秒一轮的回收线程，不走 Quartz；停机时 `@PreDestroy` 全部关闭）；每用户最多 3 个会话，
+  超出时淘汰最久未用的已断开会话。同一会话只允许一个窗口：后连上的接管，旧连接按
+  `4001` 关闭，前端收到该关闭码后停止自动重连。
+  前端 `ContainerTerminal` 在 `autoReconnect` 模式下按 0.5→1→2→4→8→10 秒退避重连（最多 10 次，
+  保留终端内容），并每 25 秒发 `{"type":"ping"}` 心跳，避免 nginx / 隧道按空闲连接断开。
+  **容器控制台不参与持久化**（`ContainerConsole` 不传 `autoReconnect`），行为与以前一致；
+  平台重启或辅助容器重建 / 切换目录后主机终端会话也会丢失（shell 运行在辅助容器内）。
 - **容器详情页：** 容器不再用弹窗 / 内嵌页签展示，统一走独立页面 `/container/view`
   （`web/src/pages/container/view.jsx`，pageMeta「容器详情」）。参数为 `hostId` + `containerId`（主机维度）
   或 `appId`（应用维度，走 `admin/app/containerDetail` 与 `/admin/ws/log/{appId}`），

@@ -1,6 +1,6 @@
 import React from 'react'
 import {Alert, Button, Card, Space, Tooltip} from 'antd'
-import {CloudServerOutlined, ReloadOutlined} from '@ant-design/icons'
+import {CloudServerOutlined, PlusOutlined, ReloadOutlined} from '@ant-design/icons'
 import {PermUtils} from '@jiangood/open-admin'
 import HostAgentAlert from './HostAgentAlert'
 import HostCli from './HostCli'
@@ -27,6 +27,13 @@ export default class extends React.Component {
         const cli = this.cli.current
         if (cli) {
             cli.reconnect()
+        }
+    }
+
+    newCliSession = () => {
+        const cli = this.cli.current
+        if (cli) {
+            cli.newSession()
         }
     }
 
@@ -58,10 +65,16 @@ export default class extends React.Component {
 
         const deployed = !!(status && status.deployed)
         const reconnect = deployed
-            ? <Tooltip title='重新连接终端'>
-                <Button type='text' shape='circle' icon={<ReloadOutlined/>}
-                        onClick={this.reconnectCli}/>
-            </Tooltip>
+            ? <Space size={0}>
+                <Tooltip title='重新连接终端（保留当前 shell 与历史）'>
+                    <Button type='text' shape='circle' icon={<ReloadOutlined/>}
+                            onClick={this.reconnectCli}/>
+                </Tooltip>
+                <Tooltip title='新建会话（结束当前 shell，换一个干净的）'>
+                    <Button type='text' shape='circle' icon={<PlusOutlined/>}
+                            onClick={this.newCliSession}/>
+                </Tooltip>
+            </Space>
             : null
 
         const body = <HostCli ref={this.cli} hostId={hostId} status={status} height={height}/>
