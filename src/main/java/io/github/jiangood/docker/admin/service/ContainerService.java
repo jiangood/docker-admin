@@ -71,6 +71,18 @@ public class ContainerService {
      */
     private static final Duration CONTAINER_VERIFY_TIMEOUT = Duration.ofSeconds(10);
 
+    /**
+     * 清理构建临时容器的兜底超时。容器可能很多，每台都要 inspect 一次再逐个删除，
+     * 比单容器操作慢；但仍不应让前端一直停在「清理中」。
+     */
+    private static final Duration BUILD_LEFTOVER_TIMEOUT = Duration.ofMinutes(3);
+
+    /** 平台应用容器的标签，见 {@link DockerClientManager#getAppLabelFilter(String)}。 */
+    private static final String APP_LABEL = "app.name";
+
+    /** docker compose 创建的容器带此标签，清理时一律跳过。 */
+    private static final String COMPOSE_LABEL = "com.docker.compose.project";
+
     /** 无 ls 时从 archive 接口推断出的修改时间格式，与 {@code ls --time-style=long-iso} 对齐。 */
     private static final DateTimeFormatter MTIME_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
@@ -323,6 +335,100 @@ public class ContainerService {
             throw new IllegalStateException(e.getMessage()
                     + "。无法确认容器是否已删除，请登录宿主机执行 docker ps -a 检查", e);
         }
+    }
+
+    /**
+     * 清理构建失败 / 中断后残留的临时容器，返回实际删除的数量。
+     * <p>
+     * 「经典」构建器（{@code POST /build}）每执行一步都会创建临时容器，正常情况下由
+     * {@code rm=1} 在构建结束时删除；构建被取消、平台重启或宿主机异常时可能残留，
+     * 表现为一串已停止、名字随机的容器。它们没有专用标签，只能按
+     * {@link #isBuildLeftover(InspectContainerResponse)} 里的特征识别，
+     * 所以界面上仍要求用户二次确认。
+     */
+    public int pruneBuildLeftovers(Host host) {
+        DockerClient client = dockerClientManager.getClient(host);
+        try {
+            return dockerClientManager.callWithTimeout(BUILD_LEFTOVER_TIMEOUT, "清理构建临时容器",
+                    () -> removeBuildLeftovers(client));
+        } catch (IllegalStateException e) {
+            throw new IllegalStateException(e.getMessage()
+                    + "。宿主机可能卡在存储挂载或 docker 守护进程无响应，请登录宿主机检查", e);
+        } finally {
+            IOUtils.closeQuietly(client);
+        }
+    }
+
+    private int removeBuildLeftovers(DockerClient client) {
+        List<Container> containers = client.listContainersCmd().withShowAll(true).exec();
+        int removed = 0;
+        for (Container c : containers) {
+            // 先用列表里已有的状态 / 标签粗筛，避免对每个停止容器都发一次 inspect
+            if (!mayBeBuildLeftover(c)) {
+                continue;
+            }
+            try {
+                if (!isBuildLeftover(client.inspectContainerCmd(c.getId()).exec())) {
+                    continue;
+                }
+                client.removeContainerCmd(c.getId())
+                        .withForce(true)
+                        // 构建步骤里 VOLUME 产生的匿名卷一并回收；命名卷不受影响
+                        .withRemoveVolumes(true)
+                        .exec();
+                removed++;
+                log.info("已清理构建临时容器 {} ({})", shortId(c.getId()), firstName(c.getNames()));
+            } catch (NotFoundException e) {
+                // 并发删除或上一次请求其实已完成：删除是幂等的
+                log.info("构建临时容器 {} 已不存在", shortId(c.getId()));
+            } catch (Exception e) {
+                // 一个容器删不掉不应该让整轮清理失败，记录后继续
+                log.warn("清理构建临时容器 {} 失败: {}", shortId(c.getId()), e.getMessage());
+            }
+        }
+        return removed;
+    }
+
+    /** 不需要 inspect 的粗筛：只保留已停止、且不带平台 / Agent / Compose 标签的容器。 */
+    private static boolean mayBeBuildLeftover(Container c) {
+        String state = c.getState();
+        if (!"created".equals(state) && !"exited".equals(state)) {
+            return false;
+        }
+        Map<String, String> labels = c.getLabels();
+        return labels == null
+                || (!labels.containsKey(APP_LABEL)
+                && !labels.containsKey(HostAgentService.LABEL_AGENT)
+                && !labels.containsKey(COMPOSE_LABEL));
+    }
+
+    /**
+     * 构建临时容器的特征：已停止、日志驱动为 none、不是平台应用 / Agent / Compose 容器。
+     * <p>
+     * 构建器创建中间容器时固定写入 {@code LogConfig=none}（所以构建过程中的容器看不到日志），
+     * 这是与普通容器最可靠的区分点；应用容器、Agent 容器和 compose 容器另外用标签排除。
+     */
+    private static boolean isBuildLeftover(InspectContainerResponse r) {
+        ContainerState state = r.getState();
+        if (state == null || Boolean.TRUE.equals(state.getRunning())) {
+            return false;
+        }
+        String status = state.getStatus();
+        if (!"created".equals(status) && !"exited".equals(status)) {
+            return false;
+        }
+        ContainerConfig cfg = r.getConfig();
+        if (cfg != null && cfg.getLabels() != null) {
+            Map<String, String> labels = cfg.getLabels();
+            if (labels.containsKey(APP_LABEL)
+                    || labels.containsKey(HostAgentService.LABEL_AGENT)
+                    || labels.containsKey(COMPOSE_LABEL)) {
+                return false;
+            }
+        }
+        HostConfig hostConfig = r.getHostConfig();
+        LogConfig logConfig = hostConfig == null ? null : hostConfig.getLogConfig();
+        return logConfig != null && logConfig.getType() == LogConfig.LoggingType.NONE;
     }
 
     /**

@@ -228,6 +228,22 @@ public class ContainerController {
         return AjaxResult.ok().msg("删除指令已发送");
     }
 
+    /**
+     * 清理构建失败 / 中断后残留的临时容器（已停止、日志驱动 none、不属于本平台或 Compose）。
+     * <p>
+     * 经典构建器不给中间容器打标签，无法精确列举「这是哪次构建留下的」，
+     * 因此这里按特征自动识别，界面上仍需用户二次确认。
+     */
+    @HasPermission("container:operate")
+    @RequestMapping("pruneBuildLeftovers")
+    public AjaxResult pruneBuildLeftovers(String hostId) {
+        int removed = containerService.pruneBuildLeftovers(requireHost(hostId));
+        String msg = removed > 0
+                ? "已清理 " + removed + " 个构建临时容器"
+                : "没有需要清理的构建临时容器";
+        return AjaxResult.ok().msg(msg).data(removed);
+    }
+
     // ------------------------------------------------------------------ 工具
 
     private Host requireHost(String hostId) {

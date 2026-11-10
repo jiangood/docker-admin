@@ -1,4 +1,4 @@
-import {Alert, Button, Card, Col, Descriptions, Empty, Input, Popconfirm, Progress, Result, Row, Segmented, Space, Spin, Statistic, Table, Tabs, Tag, Tooltip, Typography} from 'antd'
+import {Alert, Button, Card, Col, Descriptions, Empty, Input, Popconfirm, Progress, Result, Row, Segmented, Space, Spin, Statistic, Table, Tabs, Tag, Tooltip, Typography, message} from 'antd'
 import React from 'react'
 import dayjs from 'dayjs'
 import {DeleteOutlined, ExportOutlined, ImportOutlined, ReloadOutlined} from '@ant-design/icons'
@@ -160,6 +160,10 @@ export default class extends React.Component {
         images: [],
         imagesLoading: false,
         imageKeyword: '',
+        // 清理悬空镜像可能持续较久，期间按钮保持 loading，避免重复提交后看不出进度
+        pruneLoading: false,
+        // 清理构建临时容器同样要逐个 inspect / 删除，按钮单独 loading
+        pruneContainersLoading: false,
 
         // 实时用量（docker stats）：由后端每 10 分钟的采集任务写入内存快照，页面只读
         usage: null,
@@ -330,13 +334,50 @@ export default class extends React.Component {
             .then(() => this.loadImages(id))
     }
 
-    pruneImages = () => {
+    /**
+     * 清理悬空（无标签）镜像。prune 可能要跑几十秒，期间给出明确的「清理中」提示，
+     * 成功 / 失败后再刷新镜像列表与主机信息，避免点了以后看起来毫无反应。
+     */
+    pruneImages = async () => {
         const id = this.state.id
-        HttpClient.post('admin/host/pruneImages', null, {id})
-            .then(() => {
-                this.loadImages(id)
-                this.loadInfo(id)
-            })
+        if (!id || this.state.pruneLoading) {
+            return
+        }
+        this.setState({pruneLoading: true})
+        const hide = message.loading('正在清理悬空镜像，请稍候…', 0)
+        try {
+            await HttpClient.post('admin/host/pruneImages', null, {id})
+            this.loadImages(id)
+            this.loadInfo(id)
+        } catch (e) {
+            // 失败提示由 HttpClient 统一弹出
+        } finally {
+            hide()
+            this.setState({pruneLoading: false})
+        }
+    }
+
+    /**
+     * 清理构建失败 / 中断后残留的临时容器。
+     * 后端按「已停止 + 日志驱动 none + 非平台 / Compose 容器」识别，数量多时要逐个处理。
+     */
+    pruneBuildLeftovers = async () => {
+        const id = this.state.id
+        if (!id || this.state.pruneContainersLoading) {
+            return
+        }
+        this.setState({pruneContainersLoading: true})
+        const hide = message.loading('正在清理构建临时容器，请稍候…', 0)
+        try {
+            await HttpClient.post('admin/container/pruneBuildLeftovers', null, {hostId: id})
+            this.loadContainers(id)
+            this.loadInfo(id)
+        } catch (e) {
+            // 失败提示由 HttpClient 统一弹出
+        } finally {
+            hide()
+            this.setState({pruneContainersLoading: false})
+        }
     }
 
     /**
@@ -538,7 +579,8 @@ export default class extends React.Component {
 
     render() {
         const {host, hostLoading, info, infoError, containers, containersLoading,
-            images, imagesLoading, imageKeyword, activeTab, usageLoading} = this.state
+            images, imagesLoading, imageKeyword, pruneLoading, pruneContainersLoading,
+            activeTab, usageLoading} = this.state
 
         if (hostLoading) {
             return <Page padding><Spin/></Page>
@@ -549,6 +591,7 @@ export default class extends React.Component {
 
         const canContainerFile = PermUtils.hasPermission('container:file')
         const canContainerExec = PermUtils.hasPermission('container:exec')
+        const canContainerOperate = PermUtils.hasPermission('container:operate')
 
         const containerColumns = [
             {
@@ -650,8 +693,8 @@ export default class extends React.Component {
                 <Button icon={<ImportOutlined/>}
                         onClick={() => this.importModalRef.current.show()}>导入 tar 镜像</Button>
                 <Popconfirm title='清理悬空（无标签）镜像？正在被使用的镜像不会被清理'
-                            onConfirm={this.pruneImages}>
-                    <Button danger>清理悬空镜像</Button>
+                            onConfirm={() => { this.pruneImages() }}>
+                    <Button danger loading={pruneLoading}>清理悬空镜像</Button>
                 </Popconfirm>
             </Space>}
         </div>
@@ -660,10 +703,29 @@ export default class extends React.Component {
             {
                 key: 'containers',
                 label: `容器 (${containers.length})`,
-                children: <Table rowKey='id' size='small' loading={containersLoading}
-                                 dataSource={containers} columns={containerColumns}
-                                 pagination={{pageSize: 20, showSizeChanger: true}}
-                                 locale={{emptyText: <Empty description='暂无容器'/>}}/>
+                children: <>
+                    {/* 构建失败 / 取消后经典构建器可能留下已停止的中间容器，这里提供一键回收 */}
+                    <div className='mb-3'
+                         style={{display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap'}}>
+                        <Typography.Text type='secondary' style={{fontSize: 12}}>
+                            构建失败或中断后，主机上可能残留已停止的临时容器
+                        </Typography.Text>
+                        {canContainerOperate &&
+                            <Popconfirm
+                                title='清理构建临时容器？'
+                                description='只删除已停止、日志驱动为 none、且不属于本平台或 Compose 的容器，运行中的容器不受影响；容器产生的匿名卷会一并回收。'
+                                okText='开始清理'
+                                okButtonProps={{danger: true}}
+                                onConfirm={() => { this.pruneBuildLeftovers() }}>
+                                <Button danger style={{marginLeft: 'auto'}}
+                                        loading={pruneContainersLoading}>清理构建临时容器</Button>
+                            </Popconfirm>}
+                    </div>
+                    <Table rowKey='id' size='small' loading={containersLoading}
+                           dataSource={containers} columns={containerColumns}
+                           pagination={{pageSize: 20, showSizeChanger: true}}
+                           locale={{emptyText: <Empty description='暂无容器'/>}}/>
+                </>
             },
             {
                 key: 'images',

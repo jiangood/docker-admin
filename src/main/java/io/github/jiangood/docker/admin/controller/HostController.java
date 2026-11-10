@@ -309,7 +309,10 @@ public class HostController  {
     public AjaxResult pruneImages(String id) {
         Host host = requireHost(id);
         long reclaimed = hostDockerService.pruneImages(host);
-        return AjaxResult.ok().msg("已清理悬空镜像，回收空间 " + formatBytes(reclaimed)).data(reclaimed);
+        String msg = reclaimed > 0
+                ? "已清理悬空镜像，回收空间 " + formatBytes(reclaimed)
+                : "没有可清理的悬空镜像";
+        return AjaxResult.ok().msg(msg).data(reclaimed);
     }
 
     /**

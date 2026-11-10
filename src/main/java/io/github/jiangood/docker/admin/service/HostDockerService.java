@@ -39,6 +39,14 @@ public class HostDockerService {
      */
     private static final Duration TEST_TIMEOUT = Duration.ofSeconds(15);
 
+    /**
+     * 清理悬空镜像的兜底超时。
+     * <p>
+     * docker-java 的 responseTimeout 是 1 小时（拉镜像需要），而 prune 正常应在秒级到分钟级返回；
+     * 宿主机存储卡死或 SSH 传输层反复重试时，前端会一直停在「清理中」，因此单独收紧。
+     */
+    private static final Duration PRUNE_TIMEOUT = Duration.ofMinutes(5);
+
     @Resource
     private DockerClientManager dockerClientManager;
 
@@ -95,9 +103,11 @@ public class HostDockerService {
 
     /**
      * 清理悬空（无标签）镜像，返回回收的字节数。
+     * <p>
+     * 带兜底超时：宿主机一侧卡住时不能让前端一直等 docker-java 的 1 小时 responseTimeout。
      */
     public long pruneImages(Host host) {
-        return withClient(host, client -> {
+        return withClient(host, PRUNE_TIMEOUT, "清理悬空镜像", client -> {
             PruneResponse response = client.pruneCmd(PruneType.IMAGES)
                     .withDangling(true)
                     .exec();
@@ -183,6 +193,29 @@ public class HostDockerService {
             return action.apply(client);
         } catch (DockerException | BusinessException e) {
             // docker 自身的业务错误与已经友好的提示原样上抛，不再包装成连接失败
+            throw e;
+        } catch (Exception e) {
+            log.warn("连接容器引擎失败：{}", e.toString());
+            throw new BusinessException("连接容器引擎失败：" + rootMessage(e));
+        } finally {
+            IOUtils.closeQuietly(client);
+        }
+    }
+
+    /**
+     * 与 {@link #withClient(Host, Function)} 相同，但给这次调用加兜底超时。
+     * <p>
+     * 超时后抛出的 {@link IllegalStateException} 消息可直接展示给用户；客户端在 finally 中关闭，
+     * 关闭会取消在途请求并断开 SSH 会话，避免调用线程一直挂到全局 responseTimeout。
+     */
+    private <T> T withClient(Host host, Duration timeout, String action, Function<DockerClient, T> call) {
+        DockerClient client = null;
+        try {
+            client = dockerClientManager.getClient(host);
+            DockerClient ready = client;
+            return dockerClientManager.callWithTimeout(timeout, action, () -> call.apply(ready));
+        } catch (DockerException | IllegalStateException e) {
+            // docker 自身的业务错误、已友好的提示与兜底超时（IllegalStateException）原样上抛
             throw e;
         } catch (Exception e) {
             log.warn("连接容器引擎失败：{}", e.toString());
