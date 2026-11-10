@@ -194,16 +194,9 @@ function HostResourceBoard() {
         },
         {
             title: '容器',
-            children: [
-                {
-                    title: '运行中', dataIndex: 'containersRunning',
-                    render: (value, record) => record.reachable ? (value ?? 0) : '-'
-                },
-                {
-                    title: '总数', dataIndex: 'containersTotal',
-                    render: (value, record) => record.reachable ? (value ?? 0) : '-'
-                },
-            ]
+            render: (_, record) => record.reachable
+                ? `${record.containersRunning ?? 0} / ${record.containersTotal ?? 0}`
+                : '-'
         },
         {title: '镜像', dataIndex: 'images', render: v => v == null ? '-' : v},
     ]
