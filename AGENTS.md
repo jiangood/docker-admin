@@ -153,6 +153,13 @@ git tag vx.y.z && git push && git push origin vx.y.z
   前端删除后无论成败都刷新容器列表，容器确实不在了才关弹窗。
   典型卡死原因：容器内进程卡在不可中断（D）状态（如 bind 挂载的 NFS 失联），SIGKILL 也要等内核返回，
   此时 stop 与 rm 会一起超时，需在宿主机上看 `ps` 的 D 状态、`dmesg` 的 hung task 与 `mount`。
+- **清理构建临时容器：** 主机详情「容器」Tab 的按钮走 `admin/container/pruneBuildLeftovers`
+  （权限 `container:operate`，`ContainerService#pruneBuildLeftovers`），删除经典构建器
+  （`POST /build`）在构建失败 / 取消后残留的中间容器。
+  这些容器没有专用标签、名字随机，只能按特征识别：已停止（created / exited）、
+  **日志驱动为 `none`**（构建器创建中间容器时固定写 `LogConfig=none`）、
+  不带 `app.name` / Agent / `com.docker.compose.project` 标签。
+  因此按钮始终带 Popconfirm 二次确认；单个容器删除失败只记日志，不影响整轮清理。
 - **参数设置里的容器分组：** 「系统管理 - 参数设置」新增三组，全部由
   `DockerConfigProvider` 用 `Configs.group(...)` 声明（框架 `ConfigRegistry` 自动收集所有
   `ConfigProvider` Bean）：
@@ -206,6 +213,13 @@ git tag vx.y.z && git push && git push origin vx.y.z
   框架 `JobAutoRegistrar` 会先把带 `@JobDescription` 的类补建成「无 cron、默认禁用」的空壳行，
   且顺序早于 `ApplicationRunner`，所以只判断「jobClass 是否存在」会让任务永远不触发；
   有 cron 的行（用户配置过）一律不碰，没有 cron 的空壳行补上默认 cron 并启用。
+- **应用 Webhook 触发升级：** 应用详情「部署」Tab 的「Webhook 触发升级」开关控制外部调用，
+  地址为 `admin/public/app-webhook/{token}`（`AppWebhookController`，免登录，鉴权只靠随机 token）。
+  默认关闭（`App.webhookEnabled`）；令牌由 `@PrePersist` 生成、`AppWebhookTokenRunner` 为存量应用补齐，
+  重置令牌与开关走 `app:webhook` 权限（菜单里的「自动触发」）。
+  调用默认强制拉取镜像再部署，可传 `{"tag":"x.y.z"}` 切换版本、`{"forcePull":false}` 跳过拉取，
+  也兼容项目 webhook 的 `refs/tags/xxx` 与 `tag_name`；触发方式记为 `DeployTrigger.WEBHOOK`。
+  复制应用会生成新令牌并默认关闭开关。
 - **主机接入代理：** 远程 TCP 可选 HTTP / SOCKS5 连接代理，界面与邮件代理一样只填一行地址
   （`http://192.168.1.10:8080`、`http://user:pass@192.168.1.10:8080`、`socks5://user:pass@192.168.1.10:1080`，
   不写 scheme 按 http，端口必填，留空表示不使用；密码回显为 `***`，保存时保持 `***` 或省略密码表示沿用已存密码）。
