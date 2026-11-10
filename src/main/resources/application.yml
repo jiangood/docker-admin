@@ -9,6 +9,12 @@ server:
     context-path: /docker-admin  # 本地开发上下文；容器部署由镜像内置的 SERVER_SERVLET_CONTEXT_PATH=/ 覆盖为根路径
     session:
       cookie:
+        # 浏览器识别 cookie 只看 name + domain + path，**不看端口**。这台机器（192.168.100.101）上
+        # 还部署着 workbench(:8906)、cvs(:8900) 等其他 open-admin 应用，若都用默认的 JSESSIONID，
+        # 它们会覆盖同一个 cookie：切换应用就把对方顶下线，被顶掉的会话还会继续占
+        # sys.maximum-sessions 名额，最后表现为「用着用着要重新登录」+「该账号已在别处登录」。
+        # 代价：改名后浏览器里旧的 JSESSIONID 失效，升级后所有人（含自己）重新登录一次。
+        name: DOCKER_ADMIN_SESSION
         # WebSocket 端点不做 Origin 校验（代理/隧道下 Spring 的同源判定必然失败），
         # 跨站防护依赖这里：跨站页面发起的 WebSocket 握手不带 Cookie，因而过不了握手拦截器的鉴权。
         # 不要改成 none。

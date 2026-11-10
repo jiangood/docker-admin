@@ -278,6 +278,10 @@ git tag vx.y.z && git push && git push origin vx.y.z
   另注意 `sys.maximum-sessions: 2`：3.2.0 起超过上限会**拒绝新登录**（提示
   `sys.concurrent-login-blocked-message`，旧会话继续有效），与空闲过期的「登录已过期」文案不同，
   排查掉线先看提示语；要恢复「新登录顶掉最早会话」旧行为需设 `sys.max-sessions-prevents-login: false`。
+  **同主机多套 open-admin 应用必须区分会话 cookie 名**：浏览器只看 `name + domain + path`，**不看端口**，
+  与 workbench(:8906)、cvs(:8900) 共用默认的 `JSESSIONID` 时会互相覆盖、互相顶下线（2026-11 生产实际踩过，
+  表现为随机掉线 + 会话累计占满上限）。本项目用 `server.servlet.session.cookie.name: DOCKER_ADMIN_SESSION`，
+  新增同域应用时记得取一个不同的名字；更彻底的做法是给每套应用独立域名。
 - **构建并发（新的覆盖旧的）：** 同一项目用固定代码目录，不能并行构建。新的触发（手动、重试或 Webhook）
   会先取消正在跑的旧构建（`ProjectService.cancelProcessingBuilds` → `stopBuild`），新任务在 `@Async` 线程里
   等旧构建退出代码目录后再开始，触发接口立即返回。取消靠 `cancelledBuilds` 标记 + 检查点
