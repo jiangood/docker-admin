@@ -140,6 +140,7 @@ function HostResourceBoard() {
         return render(usage)
     }
 
+    // 不设列宽：交给浏览器按内容自适应，避免固定宽度把剩余空间全推给主机列
     const columns = [
         {
             title: '主机', dataIndex: 'name',
@@ -147,7 +148,7 @@ function HostResourceBoard() {
                 onClick={() => PageUtils.open('/host/view?id=' + record.id)}>{name}</LinkButton>
         },
         {
-            title: '状态', dataIndex: 'reachable', width: 90,
+            title: '状态', dataIndex: 'reachable',
             render: (reachable, record) => reachable
                 ? <Tag color='green'>可用</Tag>
                 : <Tooltip title={record.error || '无法连接'}><Tag color='red'>不可用</Tag></Tooltip>
@@ -156,22 +157,19 @@ function HostResourceBoard() {
             title: 'CPU',
             children: [
                 {
-                    title: '使用率', width: 120,
+                    title: '使用率',
                     render: (_, record) => usageCell(record, usage => <InlineUsage
                         percent={usage.cpuPercent}
                         text={formatPercent(usage.cpuPercent)}
                         hint='容器合计占主机 CPU 的比例'/>)
                 },
                 {
-                    // 核心数直接展示，不再只放在悬浮提示里；主机核数优先取静态概览，缺失时退回实时采集
-                    title: '核数', width: 110,
-                    render: (_, record) => usageCell(record, usage => {
-                        const used = usage.cpuCoresUsed == null ? null : toNumber(usage.cpuCoresUsed)
-                        const total = record.cpus ?? usage.cpus
-                        return <Typography.Text style={{fontSize: 12, whiteSpace: 'nowrap'}}>
-                            {used == null ? '-' : used.toFixed(2)} / {total == null ? '-' : total} 核
-                        </Typography.Text>
-                    })
+                    // 只显示主机核数；优先取静态概览，缺失时退回实时采集，不依赖采集是否成功
+                    title: '核数',
+                    render: (_, record) => {
+                        const total = record.cpus ?? usageMap[record.id]?.cpus
+                        return total == null ? '-' : `${total} 核`
+                    }
                 },
             ]
         },
@@ -179,14 +177,14 @@ function HostResourceBoard() {
             title: '内存',
             children: [
                 {
-                    title: '使用率', width: 120,
+                    title: '使用率',
                     render: (_, record) => usageCell(record, usage =>
                         <InlineUsage percent={usage.memPercent}
                                      text={formatPercent(usage.memPercent)}
                                      hint='容器内存合计占主机内存的比例，不含容器之外的进程与页面缓存'/>)
                 },
                 {
-                    title: '用量', width: 160,
+                    title: '用量',
                     render: (_, record) => usageCell(record, usage =>
                         <Typography.Text style={{fontSize: 12, whiteSpace: 'nowrap'}}>
                             {formatBytes(usage.memUsed)} / {formatBytes(record.memory)}
@@ -198,16 +196,16 @@ function HostResourceBoard() {
             title: '容器',
             children: [
                 {
-                    title: '运行中', dataIndex: 'containersRunning', width: 80,
+                    title: '运行中', dataIndex: 'containersRunning',
                     render: (value, record) => record.reachable ? (value ?? 0) : '-'
                 },
                 {
-                    title: '总数', dataIndex: 'containersTotal', width: 80,
+                    title: '总数', dataIndex: 'containersTotal',
                     render: (value, record) => record.reachable ? (value ?? 0) : '-'
                 },
             ]
         },
-        {title: '镜像', dataIndex: 'images', width: 80, render: v => v == null ? '-' : v},
+        {title: '镜像', dataIndex: 'images', render: v => v == null ? '-' : v},
     ]
 
     const extra = <Space size={12}>
