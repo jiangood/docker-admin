@@ -102,7 +102,6 @@ function HostResourceBoard() {
     }
 
     const hosts = data?.hosts || []
-    const unreachable = hosts.filter(h => !h.reachable)
     const running = data?.containersRunning || 0
     const containers = data?.containersTotal || 0
     const containerPercent = containers > 0 ? Math.round((running / containers) * 100) : 0
@@ -233,11 +232,6 @@ function HostResourceBoard() {
             : failed && !data
                 ? null
                 : <>
-                    {unreachable.length > 0 &&
-                        <Alert type='warning' showIcon className='mb-4'
-                               message={`${unreachable.length} / ${data.hostTotal} 台主机暂时无法连接，未计入汇总`}
-                               description={unreachable.map(h => h.name).join('、')}/>}
-
                     <Row gutter={[16, 16]}>
                         <Col flex='1 1 150px'>
                             <Statistic title='主机'
