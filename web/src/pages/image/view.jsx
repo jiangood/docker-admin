@@ -3,6 +3,7 @@ import {CloudSyncOutlined, DownloadOutlined} from '@ant-design/icons'
 import React from 'react'
 import {HttpClient, Page, PageUtils, Perm, PermActions, UrlUtils} from "@jiangood/open-admin"
 import LogView from '../../components/LogView'
+import EnvVarsModal from '../../components/EnvVarsModal'
 import LinkButton from '../../components/LinkButton'
 import RemoteTagSyncModal from '../../components/RemoteTagSyncModal'
 import {formatBytes, formatTime} from "../../components/container/utils"
@@ -21,6 +22,7 @@ const POLL_INTERVAL = 3000
 export default class extends React.Component {
 
     tagSyncModalRef = React.createRef()
+    envModalRef = React.createRef()
     pollTimer = null
 
     state = {
@@ -288,8 +290,12 @@ export default class extends React.Component {
                                     render: (list) => (list && list.length) ? list.join(', ') : '-'
                                 },
                                 {
-                                    title: '声明环境变量', dataIndex: 'envs',
-                                    render: (list) => (list && list.length) ? list.join(', ') : '-'
+                                    title: '声明环境变量', dataIndex: 'envs', width: 120,
+                                    render: (list, record) => (list && list.length)
+                                        ? <LinkButton onClick={() => this.envModalRef.current.show(list, record.tag)}>
+                                            {list.length} 个
+                                        </LinkButton>
+                                        : '-'
                                 },
                                 {
                                     title: '操作', width: 150,
@@ -343,6 +349,7 @@ export default class extends React.Component {
                 <RemoteTagSyncModal ref={this.tagSyncModalRef}
                                     onClose={this.loadImage}
                                     onSuccess={this.loadImage}/>
+                <EnvVarsModal ref={this.envModalRef}/>
             </Card>
 
             <Drawer title={drawer ? `导出 ${drawer.tag}` : '导出'}
