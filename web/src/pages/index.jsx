@@ -23,29 +23,18 @@ import {formatBytes, formatClock, formatPercent, toNumber, usageColor} from '../
  */
 const USAGE_INTERVAL_MILLIS = 30_000
 
-/** 主机资源表格里的「运行 / 总数」小进度条。 */
-function ContainerBar({running, total}) {
-    const used = running || 0
-    const all = total || 0
-    const percent = all > 0 ? Math.round((used / all) * 100) : 0
-    return <div style={{width: 120}}>
-        <Typography.Text type='secondary' style={{fontSize: 12}}>{used} / {all}</Typography.Text>
-        <Progress percent={percent} showInfo={false} size='small'/>
-    </div>
-}
-
 /**
- * 用量条：文本 + 进度条，hint 放进 tooltip；空值不画「0%」避免误解。
+ * 单行用量：进度条与文本并排，保证每个单元格只有一行，行高不会被撑成三行。
+ * hint 放进 tooltip；空值不画「0%」避免误解。
  */
-function UsageBar({percent, text, sub, hint}) {
+function InlineUsage({percent, text, hint}) {
     const valid = percent !== null && percent !== undefined && Number.isFinite(Number(percent))
-    const body = <div style={{width: 150}}>
-        <Typography.Text type={valid ? undefined : 'secondary'} style={{fontSize: 12}}>{text}</Typography.Text>
+    const body = <Space size={8} style={{whiteSpace: 'nowrap'}}>
         <Progress percent={valid ? Math.min(100, Math.max(0, Number(percent))) : 0}
-                  showInfo={false} size='small'
+                  showInfo={false} size='small' style={{width: 56, marginBottom: 0}}
                   strokeColor={valid ? usageColor(percent) : '#d9d9d9'}/>
-        {sub ? <Typography.Text type='secondary' style={{fontSize: 12}}>{sub}</Typography.Text> : null}
-    </div>
+        <Typography.Text type={valid ? undefined : 'secondary'} style={{fontSize: 12}}>{text}</Typography.Text>
+    </Space>
     return hint ? <Tooltip title={hint}>{body}</Tooltip> : body
 }
 
@@ -132,6 +121,26 @@ function HostResourceBoard() {
         ? Math.min(100, (memoryUsed / memoryTotal) * 100)
         : null
 
+    /**
+     * 统一的「实时用量」取值：不可连接 / 采集失败 / 尚未采集都给占位，
+     * 避免每个拆分出来的列重复判断一遍。
+     */
+    const usageCell = (record, render) => {
+        if (!record.reachable) {
+            return '-'
+        }
+        const usage = usageMap[record.id]
+        if (!usage) {
+            return <Typography.Text type='secondary'>采集中…</Typography.Text>
+        }
+        if (!usage.reachable) {
+            return <Tooltip title={usage.error || '采集失败'}>
+                <Typography.Text type='secondary'>-</Typography.Text>
+            </Tooltip>
+        }
+        return render(usage)
+    }
+
     const columns = [
         {
             title: '主机', dataIndex: 'name',
@@ -139,64 +148,67 @@ function HostResourceBoard() {
                 onClick={() => PageUtils.open('/host/view?id=' + record.id)}>{name}</LinkButton>
         },
         {
-            title: '状态', dataIndex: 'reachable', width: 100,
+            title: '状态', dataIndex: 'reachable', width: 90,
             render: (reachable, record) => reachable
                 ? <Tag color='green'>可用</Tag>
                 : <Tooltip title={record.error || '无法连接'}><Tag color='red'>不可用</Tag></Tooltip>
         },
         {
-            title: 'CPU', width: 170,
-            render: (_, record) => {
-                if (!record.reachable) {
-                    return '-'
-                }
-                const usage = usageMap[record.id]
-                if (!usage) {
-                    return <Typography.Text type='secondary'>采集中…</Typography.Text>
-                }
-                if (!usage.reachable) {
-                    return <Tooltip title={usage.error || '采集失败'}>
-                        <Typography.Text type='secondary'>-</Typography.Text>
-                    </Tooltip>
-                }
-                // 核心数直接展示，不再只放在悬浮提示里；主机核数优先取静态概览，缺失时退回实时采集
-                const coresUsed = usage.cpuCoresUsed == null ? null : toNumber(usage.cpuCoresUsed)
-                const coresTotal = record.cpus ?? usage.cpus
-                return <UsageBar percent={usage.cpuPercent}
-                                 text={formatPercent(usage.cpuPercent)}
-                                 sub={`${coresUsed == null ? '-' : coresUsed.toFixed(2)}`
-                                     + ` / ${coresTotal == null ? '-' : coresTotal} 核`}
-                                 hint={`容器合计 ${coresUsed == null ? '-' : coresUsed.toFixed(2)} 核`
-                                     + ` / 主机 ${coresTotal == null ? '-' : coresTotal} 核`}/>
-            }
+            title: 'CPU',
+            children: [
+                {
+                    title: '使用率', width: 120,
+                    render: (_, record) => usageCell(record, usage => <InlineUsage
+                        percent={usage.cpuPercent}
+                        text={formatPercent(usage.cpuPercent)}
+                        hint='容器合计占主机 CPU 的比例'/>)
+                },
+                {
+                    // 核心数直接展示，不再只放在悬浮提示里；主机核数优先取静态概览，缺失时退回实时采集
+                    title: '核数', width: 110,
+                    render: (_, record) => usageCell(record, usage => {
+                        const used = usage.cpuCoresUsed == null ? null : toNumber(usage.cpuCoresUsed)
+                        const total = record.cpus ?? usage.cpus
+                        return <Typography.Text style={{fontSize: 12, whiteSpace: 'nowrap'}}>
+                            {used == null ? '-' : used.toFixed(2)} / {total == null ? '-' : total} 核
+                        </Typography.Text>
+                    })
+                },
+            ]
         },
         {
-            title: '内存', width: 190,
-            render: (_, record) => {
-                if (!record.reachable) {
-                    return '-'
-                }
-                const usage = usageMap[record.id]
-                if (!usage) {
-                    return <Typography.Text type='secondary'>采集中…</Typography.Text>
-                }
-                if (!usage.reachable) {
-                    return <Tooltip title={usage.error || '采集失败'}>
-                        <Typography.Text type='secondary'>-</Typography.Text>
-                    </Tooltip>
-                }
-                return <UsageBar percent={usage.memPercent}
-                                 text={`${formatBytes(usage.memUsed)} / ${formatBytes(record.memory)}`}
-                                 hint='容器内存合计，不含容器之外的进程与页面缓存'/>
-            }
+            title: '内存',
+            children: [
+                {
+                    title: '使用率', width: 120,
+                    render: (_, record) => usageCell(record, usage =>
+                        <InlineUsage percent={usage.memPercent}
+                                     text={formatPercent(usage.memPercent)}
+                                     hint='容器内存合计占主机内存的比例，不含容器之外的进程与页面缓存'/>)
+                },
+                {
+                    title: '用量', width: 160,
+                    render: (_, record) => usageCell(record, usage =>
+                        <Typography.Text style={{fontSize: 12, whiteSpace: 'nowrap'}}>
+                            {formatBytes(usage.memUsed)} / {formatBytes(record.memory)}
+                        </Typography.Text>)
+                },
+            ]
         },
         {
-            title: '容器', width: 140,
-            render: (_, record) => record.reachable
-                ? <ContainerBar running={record.containersRunning} total={record.containersTotal}/>
-                : '-'
+            title: '容器',
+            children: [
+                {
+                    title: '运行中', dataIndex: 'containersRunning', width: 80,
+                    render: (value, record) => record.reachable ? (value ?? 0) : '-'
+                },
+                {
+                    title: '总数', dataIndex: 'containersTotal', width: 80,
+                    render: (value, record) => record.reachable ? (value ?? 0) : '-'
+                },
+            ]
         },
-        {title: '镜像', dataIndex: 'images', width: 90, render: v => v == null ? '-' : v},
+        {title: '镜像', dataIndex: 'images', width: 80, render: v => v == null ? '-' : v},
     ]
 
     const extra = <Space size={12}>
