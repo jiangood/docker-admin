@@ -1,5 +1,6 @@
 package io.github.jiangood.docker.admin.service;
 
+import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.extra.spring.SpringUtil;
 import com.github.dockerjava.api.DockerClient;
@@ -48,6 +49,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
 
 @Service
 @Slf4j
@@ -80,6 +82,12 @@ public class AppService extends BaseService<App> {
 
     /** 定时检查失败后的重试间隔：不按完整检查间隔等待，避免一次网络抖动拖一整天 */
     private static final Duration SCHEDULED_UPDATE_RETRY_DELAY = Duration.ofMinutes(10);
+
+    /**
+     * 镜像标签格式（与 Docker 对 tag 的约束一致）：字母数字下划线开头，最长 128 字符。
+     * Webhook 传入的版本号按此校验，避免拼出非法镜像引用。
+     */
+    private static final Pattern IMAGE_TAG_PATTERN = Pattern.compile("^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$");
 
     Set<String> deployingList = ConcurrentHashMap.newKeySet();
 
@@ -801,6 +809,68 @@ public class AppService extends BaseService<App> {
         SpringUtil.getBean(getClass()).deploy(app, forcePull);
     }
 
+    // ---------------- Webhook 触发升级 ----------------
+
+    /**
+     * 开启 / 关闭 Webhook 触发升级。
+     */
+    @Transactional
+    public App updateWebhookEnabled(String id, boolean enabled) {
+        App app = appRepository.findById(id).orElse(null);
+        Assert.notNull(app, "应用不存在");
+        app.setWebhookEnabled(enabled);
+        return appRepository.save(app);
+    }
+
+    /**
+     * 重置 Webhook 令牌，旧地址立即失效。
+     */
+    @Transactional
+    public App resetWebhookToken(String id) {
+        App app = appRepository.findById(id).orElse(null);
+        Assert.notNull(app, "应用不存在");
+        app.setWebhookToken(RandomUtil.randomString(32));
+        return appRepository.save(app);
+    }
+
+    /**
+     * Webhook 入口：按 token 找到应用并触发一次升级部署。
+     * <p>
+     * 与项目构建 webhook 的差异：应用不是「构建」而是「重新部署」，因此默认强制拉取镜像，
+     * 保证同 tag 被重新推送时也能拿到新内容；请求里可以显式传 {@code forcePull=false} 关闭。
+     *
+     * @param tag       目标版本；为空时沿用应用当前版本
+     * @param forcePull 是否强制拉取镜像；为空时按 true 处理
+     * @return 给调用方看的简短结果
+     */
+    public String triggerByWebhookToken(String token, String tag, Boolean forcePull) {
+        App app = appRepository.findByWebhookToken(token);
+        Assert.notNull(app, "无效的 webhook token");
+        if (!Boolean.TRUE.equals(app.getWebhookEnabled())) {
+            log.info("应用「{}」未开启 Webhook 触发升级，忽略本次请求", app.getName());
+            return "该应用未开启 Webhook 触发升级，已忽略";
+        }
+        if (isDeploying(app.getId())) {
+            log.info("应用「{}」正在部署中，忽略本次 Webhook 触发", app.getName());
+            return "应用正在部署中，已忽略本次触发";
+        }
+
+        String targetTag = StrUtil.trimToNull(tag);
+        if (targetTag != null) {
+            Assert.isTrue(IMAGE_TAG_PATTERN.matcher(targetTag).matches(),
+                    "版本格式不正确，只能是字母、数字、下划线、点或短横线：" + targetTag);
+            if (!targetTag.equals(app.getImageTag())) {
+                app.setImageTag(targetTag);
+                appRepository.save(app);
+            }
+        }
+
+        boolean pull = forcePull == null || forcePull;
+        // 通过代理调用，保证 @Async 生效；接口立即返回，进度看「部署日志」
+        SpringUtil.getBean(getClass()).deploy(app, pull, DeployTrigger.WEBHOOK);
+        return "部署已触发：" + StrUtil.blankToDefault(targetTag, app.getImageTag());
+    }
+
     private void deleteContainer(App app) {
         DockerClient client = dockerManager.getClient(app.getHost());
         try {
@@ -1129,9 +1199,13 @@ public class AppService extends BaseService<App> {
                 "updateUser", "updateTime", "logUrl", "config",
                 // 复制出来的应用默认不开启定时更新，避免多出一份没人预期的自动拉取；间隔偏好保留
                 "scheduledUpdate", "scheduledUpdateLastCheckTime",
-                "scheduledUpdateLastSuccess", "scheduledUpdateLastResult");
+                "scheduledUpdateLastSuccess", "scheduledUpdateLastResult",
+                // Webhook 令牌必须重新生成，不能与原应用共用；开关默认关闭
+                "webhookToken", "webhookEnabled");
         newApp.setName(newName);
         newApp.setHost(host);
+        newApp.setWebhookToken(null);
+        newApp.setWebhookEnabled(false);
         newApp.setScheduledUpdate(false);
         newApp.setScheduledUpdateIntervalMinutes(app.getScheduledUpdateIntervalMinutes());
         if (app.getConfig() != null) {

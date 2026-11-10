@@ -1,6 +1,6 @@
 import React from "react";
-import {Alert, AutoComplete, Button, Divider, Form, Input, message, Modal, Select, Skeleton, Space, Switch, Tag, Tooltip, Typography} from "antd";
-import {FieldRemoteSelect, HttpClient, PageUtils, Perm, PermUtils} from "@jiangood/open-admin";
+import {Alert, AutoComplete, Button, Divider, Form, Input, message, Modal, Popconfirm, Select, Skeleton, Space, Switch, Tag, Tooltip, Typography} from "antd";
+import {FieldRemoteSelect, HttpClient, PageUtils, Perm, PermUtils, UrlUtils} from "@jiangood/open-admin";
 import {DEFAULT_UPDATE_INTERVAL, UPDATE_INTERVAL_OPTIONS} from "./updateSchedule";
 
 /**
@@ -17,6 +17,10 @@ export default class extends React.Component {
 
         // 定时更新设置保存中
         savingScheduledUpdate: false,
+
+        // Webhook 开关 / 重置令牌请求中
+        savingWebhook: false,
+        resettingWebhook: false,
     }
 
     componentDidMount() {
@@ -72,6 +76,46 @@ export default class extends React.Component {
             this.props.onChange && this.props.onChange({refreshApp: true})
         }).finally(() => {
             this.setState({savingScheduledUpdate: false})
+        })
+    }
+
+    /**
+     * Webhook 地址：与项目构建 webhook 一致，由「站点地址 + 上下文路径 + 随机令牌」组成。
+     * 令牌还没生成时返回空串，页面不展示地址。
+     */
+    webhookUrl = () => {
+        const token = this.state.app?.webhookToken
+        if (!token) {
+            return ''
+        }
+        return window.location.origin + UrlUtils.contextPath('/admin/public/app-webhook/' + token)
+    }
+
+    /** 开启 / 关闭 Webhook 触发升级 */
+    saveWebhook = enabled => {
+        if (this.state.savingWebhook) {
+            return
+        }
+        this.setState({savingWebhook: true})
+        HttpClient.get('admin/app/setWebhook', {id: this.id, enabled}).then(rs => {
+            this.setState({app: rs.data || {}})
+            // 顶部信息卡也展示 Webhook 状态，同步刷新父级
+            this.props.onChange && this.props.onChange({refreshApp: true})
+        }).finally(() => {
+            this.setState({savingWebhook: false})
+        })
+    }
+
+    /** 重置令牌：旧地址立即失效 */
+    resetWebhook = () => {
+        if (this.state.resettingWebhook) {
+            return
+        }
+        this.setState({resettingWebhook: true})
+        HttpClient.get('admin/app/resetWebhook', {id: this.id}).then(rs => {
+            this.setState({app: rs.data || {}})
+        }).finally(() => {
+            this.setState({resettingWebhook: false})
         })
     }
 
@@ -172,6 +216,7 @@ export default class extends React.Component {
         }
 
         const canDeploy = PermUtils.hasPermission('app:deploy')
+        const canWebhook = PermUtils.hasPermission('app:webhook')
         const scheduledUpdate = !!app.scheduledUpdate
         const intervalMinutes = Number(app.scheduledUpdateIntervalMinutes) || DEFAULT_UPDATE_INTERVAL
         const containerState = this.props.containerState
@@ -240,6 +285,46 @@ export default class extends React.Component {
                 <Alert className='mt-3' type='info' showIcon
                        title='容器当前未运行，定时更新不会执行'/>
             )}
+
+            <Divider className='mt-3 mb-3'/>
+
+            <div style={rowStyle}>
+                <div style={{flex: '1 1 320px'}}>
+                    <div>Webhook 触发升级</div>
+                    <Typography.Text type='secondary'>
+                        开启后外部 CI/CD 可 POST 该地址，平台拉取镜像并重新部署；请求体可选 {'{"tag":"1.2.3"}'}，
+                        不传则沿用当前版本
+                    </Typography.Text>
+                    <div style={{marginTop: 4}}>
+                        {app.webhookToken
+                            ? <Typography.Text code copyable={{text: this.webhookUrl()}}
+                                               style={{wordBreak: 'break-all'}}>
+                                {this.webhookUrl()}
+                              </Typography.Text>
+                            : <Typography.Text type='secondary'>Webhook 令牌尚未生成</Typography.Text>}
+                    </div>
+                    <Typography.Text type='secondary'>
+                        默认强制拉取镜像；JSON 里传 {'{"forcePull":false}'} 可跳过拉取
+                    </Typography.Text>
+                    {!canWebhook && <div>
+                        <Typography.Text type='secondary'>无「自动触发」权限，仅可查看</Typography.Text>
+                    </div>}
+                </div>
+                <Space wrap>
+                    <Popconfirm title='重置 Webhook 令牌？'
+                                description='旧地址会立即失效，需要同步更新外部 CI/CD 中的 Webhook 地址。'
+                                okText='重置'
+                                cancelText='取消'
+                                onConfirm={this.resetWebhook}>
+                        <Button disabled={!canWebhook || !app.webhookToken}
+                                loading={this.state.resettingWebhook}>重置地址</Button>
+                    </Popconfirm>
+                    <Switch checked={!!app.webhookEnabled}
+                            loading={this.state.savingWebhook}
+                            disabled={!canWebhook}
+                            onChange={this.saveWebhook}/>
+                </Space>
+            </div>
 
             <Divider className='mt-3 mb-3'/>
 

@@ -28,6 +28,7 @@ menus:
       - {name: 删除, code: app:delete}
       - {name: 部署, code: app:deploy}
       - {name: 迁移, code: app:migrate}
+      - {name: 自动触发, code: app:webhook}
   divider-app:
     pid: biz
     type: divider

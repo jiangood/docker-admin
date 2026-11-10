@@ -31,6 +31,9 @@ public enum DeployTrigger {
     BUILD,
 
     @DictItem(label = "定时更新")
-    SCHEDULE
+    SCHEDULE,
+
+    @DictItem(label = "Webhook 触发")
+    WEBHOOK
 
 }

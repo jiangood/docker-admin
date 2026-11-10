@@ -367,6 +367,12 @@ export default class extends React.Component {
                             : <Typography.Text type='secondary'>未开启</Typography.Text>}
                     </Item>
 
+                    <Item label='Webhook'>
+                        {app.webhookEnabled
+                            ? <Tag color='green'>已开启</Tag>
+                            : <Typography.Text type='secondary'>未开启</Typography.Text>}
+                    </Item>
+
                     <Item label='状态'>
                         {containerLoading ? '检测中…' :
                             <Tag color={stateColor(state)}>
