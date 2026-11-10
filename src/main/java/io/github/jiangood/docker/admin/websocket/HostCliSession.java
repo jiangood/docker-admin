@@ -38,6 +38,8 @@ public class HostCliSession {
     private int rows = 24;
     /** 最后收到用户输入 / 心跳的时间。 */
     private long lastActiveAt = System.currentTimeMillis();
+    /** 最后一次输出或输入的时间：断开后用它判断是否还在干活，持续输出的长任务不会被回收。 */
+    private long lastIoAt = System.currentTimeMillis();
     /** 失去订阅者的时间；0 表示当前有订阅者。 */
     private long detachedAt = System.currentTimeMillis();
     private volatile boolean closed;
@@ -106,6 +108,8 @@ public class HostCliSession {
     void onOutput(byte[] chunk) {
         synchronized (lock) {
             buffer.append(chunk);
+            // 有输出就刷新 I/O 时间：断开后依靠它判断命令是否还在干活（例如 docker pull 进度）
+            lastIoAt = System.currentTimeMillis();
             if (ready && ws != null) {
                 sendBinaryLocked(chunk);
             }
@@ -120,6 +124,7 @@ public class HostCliSession {
         synchronized (lock) {
             target = exec;
             lastActiveAt = System.currentTimeMillis();
+            lastIoAt = lastActiveAt;
         }
         if (target != null) {
             target.write(data);
@@ -182,9 +187,17 @@ public class HostCliSession {
         }
     }
 
-    boolean isIdleExpired(long idleMillis, long now) {
+    long getLastIoAt() {
         synchronized (lock) {
-            return ws == null && detachedAt > 0 && now - detachedAt >= idleMillis;
+            return lastIoAt;
+        }
+    }
+
+    /** 是否该回收：由 {@link CliSessionRetention} 统一判定（静默窗口 + 断开硬上限）。 */
+    boolean isReclaimable(long quietMillis, long maxDetachedMillis, long now) {
+        synchronized (lock) {
+            return CliSessionRetention.shouldReclaim(ws != null, detachedAt, lastIoAt, now,
+                    quietMillis, maxDetachedMillis);
         }
     }
 

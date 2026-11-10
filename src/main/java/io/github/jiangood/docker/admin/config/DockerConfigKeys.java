@@ -41,6 +41,23 @@ public final class DockerConfigKeys {
     /** 默认构建主机（{@code t_host.id}），留空表示不设置默认值。 */
     public static final String DEFAULT_BUILD_HOST_ID = "docker.default.build-host-id";
 
+    /**
+     * 主机终端会话：断开后「多久没有输出 / 输入」才回收（分钟）。
+     * <p>
+     * 注意计时基准是最后一次输出或输入，而不是断开时刻：长耗时任务（例如 docker pull
+     * 十几 G 的镜像）持续刷进度时会一直保活。
+     */
+    public static final String CLI_SESSION_IDLE_MINUTES = "docker.cli.session-idle-minutes";
+    public static final int DEFAULT_CLI_SESSION_IDLE_MINUTES = 30;
+    public static final int MIN_CLI_SESSION_IDLE_MINUTES = 1;
+    public static final int MAX_CLI_SESSION_IDLE_MINUTES = 1440;
+
+    /** 主机终端会话：不管有没有输出，断开超过多少小时强制回收，防止僵尸会话无限占用。 */
+    public static final String CLI_SESSION_MAX_DETACHED_HOURS = "docker.cli.session-max-detached-hours";
+    public static final int DEFAULT_CLI_SESSION_MAX_DETACHED_HOURS = 24;
+    public static final int MIN_CLI_SESSION_MAX_DETACHED_HOURS = 1;
+    public static final int MAX_CLI_SESSION_MAX_DETACHED_HOURS = 168;
+
     private DockerConfigKeys() {
     }
 }

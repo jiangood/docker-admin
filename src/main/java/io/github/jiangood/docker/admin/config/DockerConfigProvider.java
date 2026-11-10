@@ -74,6 +74,23 @@ public class DockerConfigProvider implements ConfigProvider {
                                 .hint("只填镜像仓库地址，不要带 tag 或 digest，例如 "
                                         + AgentImageUtils.DEFAULT_REPOSITORY
                                         + "；tag 在每台主机部署时选择。留空使用 application.yml 的默认地址。")),
+                Configs.group("docker-cli", "主机终端", 57)
+                        .description("「工具 - 主机 Agent」终端的会话保持策略；shell 在辅助容器内运行")
+                        .add(Configs.integer(DockerConfigKeys.CLI_SESSION_IDLE_MINUTES,
+                                        "断开后保留（无输出，分钟）")
+                                .defaultValue(DockerConfigKeys.DEFAULT_CLI_SESSION_IDLE_MINUTES)
+                                .min(DockerConfigKeys.MIN_CLI_SESSION_IDLE_MINUTES)
+                                .max(DockerConfigKeys.MAX_CLI_SESSION_IDLE_MINUTES)
+                                .hint("浏览器断开后，终端会话保留多久。计时基准是最后一次输出或输入，"
+                                        + "所以 docker pull 这类持续刷进度的长任务会一直保活；"
+                                        + "命令彻底安静下来后才开始计时。"))
+                        .add(Configs.integer(DockerConfigKeys.CLI_SESSION_MAX_DETACHED_HOURS,
+                                        "断开最长保留（小时）")
+                                .defaultValue(DockerConfigKeys.DEFAULT_CLI_SESSION_MAX_DETACHED_HOURS)
+                                .min(DockerConfigKeys.MIN_CLI_SESSION_MAX_DETACHED_HOURS)
+                                .max(DockerConfigKeys.MAX_CLI_SESSION_MAX_DETACHED_HOURS)
+                                .hint("不管有没有输出，浏览器断开超过这个时间就强制回收会话，"
+                                        + "避免 tail -f 之类的会话无限占用。")),
                 Configs.group("docker-logs", "容器日志", 60)
                         .description("容器日志时间段查询、下载与回看窗口的全局限制")
                         .add(Configs.integer(DockerConfigKeys.LOG_RANGE_TAIL, "最大行数")

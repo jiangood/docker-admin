@@ -116,9 +116,9 @@ git tag vx.y.z && git push && git push origin vx.y.z
   **界面不再提供上传 / 下载按钮**：文件操作统一在终端里做（后端 `admin/host/file` 的 `upload` / `download`
   接口仍保留，权限码 `host:file`，路径相对于当前挂载目录，空串表示挂载目录本身）；
   容器常驻，删除容器不会删除宿主机文件。重建 `latest` 会先尝试拉取，拉取失败但本地已有镜像时继续使用本地镜像。
-  Agent 面板用一块 `Card` 承载：标题是「主机名 · Agent + 状态徽标（运行中 / 已停止 / 未部署）」，
-  右上角 `extra` 依次是重新连接（图标，保留当前 shell）、新建会话（图标，换一个干净 shell）、
-  重新部署（配置与容器不一致时出现）、切换挂载目录、部署、帮助（图标），
+  Agent 面板用一块 `Card` 承载：标题只有「主机名 · Agent」，
+  右上角 `extra` 依次是状态徽标（运行中 / 已停止 / 未部署，读取中显示转圈）、重新连接（图标，保留当前 shell）、
+  新建会话（图标，换一个干净 shell）、重新部署（配置与容器不一致时出现）、切换挂载目录、部署、帮助（图标），
   正文只有终端（`styles={{body: {padding: 12}}}`）；异常 / 待处理提示（状态读取失败、
   配置与容器不一致、无 `host:save` 权限）以 Alert 形式出现在终端上方，正常状态不占空间；
   容器状态、提示与按钮由 `HostAgentAlert` 通过 render prop 交给 `HostAgentTab` 组装，
@@ -133,9 +133,16 @@ git tag vx.y.z && git push && git push origin vx.y.z
   输出继续写进 256 KB 的 `ByteRingBuffer`，重连时先回放再实时转发；
   会话按 `userId + hostId + tabToken` 隔离，tabToken 存在 `sessionStorage`（`HostCli` 生成，
   URL 为 `/admin/ws/host-cli/{hostId}?session=...`），因此刷新或返回页面能接回同一个 shell。
-  没有窗口连接超过 30 分钟、或用户敲 `exit` 后会话回收（`HostCliSessionRegistry` 自带
-  60 秒一轮的回收线程，不走 Quartz；停机时 `@PreDestroy` 全部关闭）；每用户最多 3 个会话，
-  超出时淘汰最久未用的已断开会话。同一会话只允许一个窗口：后连上的接管，旧连接按
+  **回收判定看「是否还在干活」**：断开后以「最后一次输出 / 输入」为基准，
+  静默超过 `docker.cli.session-idle-minutes`（默认 30 分钟）才回收，
+  因此 `docker pull` 十几 G 镜像这类持续刷进度的长任务不会因为浏览器关掉而被杀；
+  另有断开硬上限 `docker.cli.session-max-detached-hours`（默认 24 小时），
+  不管有没有输出都回收，避免 `tail -f` 之类无限占用。
+  两个参数在「系统管理 - 系统参数 - 主机终端」维护（`SysConfigService` 30 秒缓存，改完最多一分钟生效）；
+  完全没有输出、但仍在运行的长命令（如 `sleep 3600`）仍按静默窗口回收。
+  `HostCliSessionRegistry` 自带 60 秒一轮的回收线程（不走 Quartz），停机时 `@PreDestroy` 全部关闭；
+  用户敲 `exit` 立即回收。每用户最多 3 个会话，超出时淘汰最久未用的已断开会话。
+  同一会话只允许一个窗口：后连上的接管，旧连接按
   `4001` 关闭，前端收到该关闭码后停止自动重连。
   前端 `ContainerTerminal` 在 `autoReconnect` 模式下按 0.5→1→2→4→8→10 秒退避重连（最多 10 次，
   保留终端内容），并每 25 秒发 `{"type":"ping"}` 心跳，避免 nginx / 隧道按空闲连接断开。

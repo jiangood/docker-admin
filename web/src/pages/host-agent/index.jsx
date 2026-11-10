@@ -78,7 +78,7 @@ export default class extends React.Component {
             render: (_, record) => (
                 <PermActions size='small' actions={[
                     {
-                        label: '终端', perm: 'host:cli',
+                        label: '终端', perm: 'host:cli', type: 'primary',
                         onClick: () => PageUtils.open('/host-agent/view?id=' + record.id),
                     },
                     {label: '修改', perm: 'host-agent:save', onClick: () => this.handleEdit(record)},

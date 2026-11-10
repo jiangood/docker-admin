@@ -6,8 +6,9 @@ import HostAgentAlert from './HostAgentAlert'
 import HostCli from './HostCli'
 
 /**
- * 主机 Agent 面板：整块用 Card 承载，标题是「主机名 · Agent + 容器状态」，
- * 重新连接、切换挂载目录、部署与帮助都放在 Card 右上角（extra），正文只有终端。
+ * 主机 Agent 面板：整块用 Card 承载，标题是「主机名 · Agent」，
+ * 容器状态（运行中 / 已停止 / 未部署）连同重新连接、切换挂载目录、部署与帮助都放在
+ * Card 右上角（extra），正文只有终端。
  * <p>
  * 不提供删除与上传 / 下载入口：删除走主机详情「容器」Tab（辅助容器即普通容器），
  * 文件的上传 / 下载、查看、编辑、重命名、新建目录等操作统一在终端里完成。
@@ -44,10 +45,9 @@ export default class extends React.Component {
         }
     }
 
-    renderTitle = (summary, host) => <Space size={8} align='center' wrap>
+    renderTitle = host => <Space size={8} align='center' wrap>
         <CloudServerOutlined/>
         <span>{host ? host.name : '主机'} · Agent</span>
-        {summary}
     </Space>
 
     render() {
@@ -57,7 +57,7 @@ export default class extends React.Component {
         const height = this.props.height || 680
 
         if (!canCli) {
-            return <Card title={this.renderTitle(null, host)}>
+            return <Card title={this.renderTitle(host)}>
                 <Alert type='warning' showIcon
                        title='缺少 host:cli 权限，无法使用主机 Agent'/>
             </Card>
@@ -84,8 +84,11 @@ export default class extends React.Component {
                                defaultRoot={this.props.defaultRoot}
                                onConfigChange={this.props.onConfigChange}
                                extra={reconnect}>
-            {({summary, notice, actions}) => <Card title={this.renderTitle(summary, host)}
-                                                  extra={<Space size={8} wrap>{actions}</Space>}
+            {({summary, notice, actions}) => <Card title={this.renderTitle(host)}
+                                                  extra={<Space size={8} align='center' wrap>
+                                                      {summary}
+                                                      {actions}
+                                                  </Space>}
                                                   styles={{body: {padding: 12}}}>
                 {notice}
                 {body}

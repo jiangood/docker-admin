@@ -1,5 +1,6 @@
 package io.github.jiangood.docker.admin.websocket;
 
+import io.github.jiangood.docker.admin.config.DockerSettings;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.service.ContainerService;
 import io.github.jiangood.docker.admin.service.HostAgentService;
@@ -11,6 +12,7 @@ import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -42,9 +44,6 @@ public class HostCliSessionRegistry {
     /** 单会话回放缓冲：256 KB 大约够回放上万行普通输出。 */
     static final int BUFFER_BYTES = 256 * 1024;
 
-    /** 没有浏览器连着时，会话保留多久。 */
-    static final long IDLE_MILLIS = 30 * 60 * 1000L;
-
     /** 连接还在但完全没有心跳 / 输入的时间上限（浏览器异常退出时兜底回收僵尸连接）。 */
     static final long ABANDONED_MILLIS = 2 * 60 * 60 * 1000L;
 
@@ -69,6 +68,10 @@ public class HostCliSessionRegistry {
 
     @Resource
     private ContainerService containerService;
+
+    /** 会话保留策略来自「系统管理 - 系统参数 - 主机终端」，30 秒缓存，改完最多一分钟生效。 */
+    @Resource
+    private DockerSettings dockerSettings;
 
     @PostConstruct
     void startSweeper() {
@@ -196,6 +199,9 @@ public class HostCliSessionRegistry {
     private void sweep() {
         try {
             long now = System.currentTimeMillis();
+            long quietMillis = Duration.ofMinutes(dockerSettings.cliSessionIdleMinutes()).toMillis();
+            long maxDetachedMillis = Duration.ofHours(dockerSettings.cliSessionMaxDetachedHours()).toMillis();
+
             for (Map.Entry<String, HostCliSession> entry : sessions.entrySet()) {
                 HostCliSession session = entry.getValue();
 
@@ -209,15 +215,21 @@ public class HostCliSessionRegistry {
                     continue;
                 }
 
-                if (!session.isIdleExpired(IDLE_MILLIS, now)) {
+                if (!session.isReclaimable(quietMillis, maxDetachedMillis, now)) {
                     continue;
                 }
-                if (sessions.remove(entry.getKey(), session)) {
-                    log.info("回收空闲主机终端会话 host={} user={} key={} 空闲={}秒",
-                            session.getHostId(), session.getUserId(), session.getKey(),
-                            (now - session.getIdleSince()) / 1000);
-                    session.closeQuietly();
+                if (!sessions.remove(entry.getKey(), session)) {
+                    continue;
                 }
+
+                long detachedSeconds = (now - session.getIdleSince()) / 1000;
+                long quietSeconds = (now - Math.max(session.getIdleSince(), session.getLastIoAt())) / 1000;
+                boolean overMaxDetached = now - session.getIdleSince() >= maxDetachedMillis;
+                log.info("回收主机终端会话 host={} user={} key={}（{}，断开 {} 秒）",
+                        session.getHostId(), session.getUserId(), session.getKey(),
+                        overMaxDetached ? "超过最长断开时间" : "静默 " + quietSeconds + " 秒",
+                        detachedSeconds);
+                session.closeQuietly();
             }
         } catch (Exception e) {
             log.warn("回收主机终端会话失败: {}", e.getMessage(), e);

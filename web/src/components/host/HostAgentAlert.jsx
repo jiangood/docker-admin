@@ -4,7 +4,7 @@ import {CloudServerOutlined, FolderOpenOutlined, QuestionCircleOutlined} from '@
 import {HttpClient, PermUtils} from '@jiangood/open-admin'
 
 /**
- * Agent 容器状态与操作：把「标题（状态）」「提示（异常）」「按钮（部署 / 切换挂载目录 / 帮助）」
+ * Agent 容器状态与操作：把「状态」「提示（异常）」「按钮（部署 / 切换挂载目录 / 帮助）」
  * 通过 render prop 交给外层 Card，自己只负责取状态、弹窗和请求。
  * <p>
  * 目录决定终端里的挂载基准，所以切换入口也在这一层；镜像、目录、权限等说明统一收进问号弹窗。
@@ -294,9 +294,12 @@ export default class extends React.Component {
                     <li>shell 保存在平台服务端：切走页面、刷新或短暂断网后会自动重连，并回放断开期间的输出，
                         长耗时命令不会中断。
                     </li>
-                    <li>没有窗口连接超过 30 分钟时会话自动结束；点右上角「新建会话」可立即换一个干净的 shell，
-                        点「重新连接」只重建连接、保留当前 shell 与历史。
+                    <li>只要终端还在产出（例如 <code>docker pull</code> 刷进度），会话就一直保留；
+                        断开后连续 30 分钟没有输出 / 输入才回收，断开超过 24 小时则强制回收。
+                        两个值可在「系统管理 - 系统参数 - 主机终端」调整。
                     </li>
+                    <li>完全没有输出、仍在运行的长命令（如 <code>sleep 3600</code>）仍按上面的静默时间回收。</li>
+                    <li>点右上角「新建会话」可立即换一个干净的 shell，点「重新连接」只重建连接、保留当前 shell 与历史。</li>
                     <li>平台重启、辅助容器重建或切换挂载目录后会话会丢失（shell 运行在辅助容器内）。</li>
                     <li>同一个会话同时只允许一个窗口使用：新窗口打开会接管，旧窗口收到提示后停止自动重连。</li>
                 </ul>

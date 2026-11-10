@@ -90,6 +90,25 @@ public class DockerSettings {
                 DockerConfigKeys.DEFAULT_LOG_DOWNLOAD_DAYS, 1, DockerConfigKeys.MAX_LOG_DOWNLOAD_DAYS);
     }
 
+    /**
+     * 主机终端会话：断开后「多久没有输出 / 输入」才回收（分钟）。
+     * 30 秒缓存，改完系统参数最多一分钟生效。
+     */
+    public int cliSessionIdleMinutes() {
+        return readInt(DockerConfigKeys.CLI_SESSION_IDLE_MINUTES,
+                DockerConfigKeys.DEFAULT_CLI_SESSION_IDLE_MINUTES,
+                DockerConfigKeys.MIN_CLI_SESSION_IDLE_MINUTES,
+                DockerConfigKeys.MAX_CLI_SESSION_IDLE_MINUTES);
+    }
+
+    /** 主机终端会话：断开超过多少小时强制回收（不管有没有输出）。 */
+    public int cliSessionMaxDetachedHours() {
+        return readInt(DockerConfigKeys.CLI_SESSION_MAX_DETACHED_HOURS,
+                DockerConfigKeys.DEFAULT_CLI_SESSION_MAX_DETACHED_HOURS,
+                DockerConfigKeys.MIN_CLI_SESSION_MAX_DETACHED_HOURS,
+                DockerConfigKeys.MAX_CLI_SESSION_MAX_DETACHED_HOURS);
+    }
+
     private String readString(String key) {
         try {
             return StrUtil.trimToNull(sysConfigService.getString(key));
