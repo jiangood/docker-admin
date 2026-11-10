@@ -12,6 +12,7 @@ import com.github.dockerjava.api.exception.ConflictException;
 import com.github.dockerjava.api.exception.NotFoundException;
 import com.github.dockerjava.api.model.*;
 import com.github.dockerjava.core.command.ExecStartResultCallback;
+import io.github.jiangood.docker.admin.config.DockerSettings;
 import io.github.jiangood.docker.admin.dto.ContainerDetailVo;
 import io.github.jiangood.docker.admin.dto.ContainerFileVo;
 import io.github.jiangood.docker.admin.dto.ContainerSummaryVo;
@@ -55,6 +56,9 @@ public class ContainerService {
     /**
      * 容器启停删的兜底超时：docker-java 的 responseTimeout 是 1 小时（拉镜像需要），
      * 而这类命令本该秒回，宿主机存储卡住（如 bind 源目录在无响应的 NFS 上）时必须尽快失败。
+     * <p>
+     * 停止 / 重启不用这个值：它们要覆盖「参数设置 - 容器运行」里的宽限期，
+     * 由 {@link DockerSettings#budget()} 计算（宽限期 + 30 秒响应预算）。
      */
     private static final Duration CONTAINER_ACTION_TIMEOUT = Duration.ofSeconds(120);
 
@@ -75,6 +79,9 @@ public class ContainerService {
 
     @Resource
     private DockerClientManager dockerClientManager;
+
+    @Resource
+    private DockerSettings dockerSettings;
 
     // ------------------------------------------------------------------ 列表
 
@@ -259,15 +266,17 @@ public class ContainerService {
     }
 
     public void stop(Host host, String containerId) {
+        int stopGraceSeconds = dockerSettings.graceSeconds();
+        Duration stopBudget = dockerSettings.budget();
         try {
-            withClient(host, "停止容器 " + containerId, client -> client.stopContainerCmd(containerId).exec());
+            withClient(host, "停止容器 " + containerId, stopBudget,
+                    client -> client.stopContainerCmd(containerId).withTimeout(stopGraceSeconds).exec());
         } catch (IllegalStateException e) {
-            // docker stop 是「SIGTERM → 等 10 秒 → SIGKILL」，正常情况下十几秒内必回；
+            // docker stop 是「SIGTERM → 等宽限期 → SIGKILL」，宽限期在「参数设置 - 容器运行」里配置（默认 60 秒）；
             // 超时多半是容器里有进程卡在不可中断（D）状态，回查一次确认实际状态再报错
             Boolean stopped = isStopped(host, containerId);
             if (Boolean.TRUE.equals(stopped)) {
-                log.warn("停止容器 {} 未在 {} 秒内返回，但回查确认容器已停止", containerId,
-                        CONTAINER_ACTION_TIMEOUT.toSeconds());
+                log.warn("停止容器 {} 未在 {} 秒内返回，但回查确认容器已停止", containerId, stopBudget.toSeconds());
                 return;
             }
             if (Boolean.FALSE.equals(stopped)) {
@@ -281,7 +290,10 @@ public class ContainerService {
     }
 
     public void restart(Host host, String containerId) {
-        withClient(host, "重启容器 " + containerId, client -> client.restartContainerCmd(containerId).exec());
+        // 重启同样先 SIGTERM 再等宽限期，宽限期与停止保持一致
+        int stopGraceSeconds = dockerSettings.graceSeconds();
+        withClient(host, "重启容器 " + containerId, dockerSettings.budget(),
+                client -> client.restartContainerCmd(containerId).withTimeout(stopGraceSeconds).exec());
     }
 
     public void remove(Host host, String containerId, boolean force) {
@@ -371,11 +383,17 @@ public class ContainerService {
      * 超时值是 docker-java 全局 responseTimeout（1 小时，拉镜像需要）之外的收紧：
      * 宿主机存储卡住（如 bind 源目录在无响应的 NFS 上）时，这些命令不会返回，
      * 前端请求会一直挂着，因此这里限时失败并给出可操作的错误消息。
+     * <p>
+     * 带 {@code timeout} 的重载给停止 / 重启用，超时预算要覆盖容器自身的退出宽限期。
      */
     private void withClient(Host host, String action, ClientAction run) {
+        withClient(host, action, CONTAINER_ACTION_TIMEOUT, run);
+    }
+
+    private void withClient(Host host, String action, Duration timeout, ClientAction run) {
         DockerClient client = dockerClientManager.getClient(host);
         try {
-            dockerClientManager.callWithTimeout(CONTAINER_ACTION_TIMEOUT, action, () -> {
+            dockerClientManager.callWithTimeout(timeout, action, () -> {
                 run.run(client);
                 return null;
             });

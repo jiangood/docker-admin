@@ -13,6 +13,7 @@ import com.github.dockerjava.api.model.Mount;
 import com.github.dockerjava.api.model.MountType;
 import com.github.dockerjava.api.model.PullResponseItem;
 import com.github.dockerjava.api.model.RestartPolicy;
+import io.github.jiangood.docker.admin.config.DockerSettings;
 import io.github.jiangood.docker.admin.dto.HostAgentVo;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.util.AgentImageUtils;
@@ -67,7 +68,7 @@ public class HostAgentService {
     private ContainerService containerService;
 
     @Resource
-    private SystemConfigService systemConfigService;
+    private DockerSettings dockerSettings;
 
     @Resource
     private HostAgentConfigService hostAgentConfigService;
@@ -138,7 +139,7 @@ public class HostAgentService {
         String tag = AgentImageUtils.normalizeTag(
                 StrUtil.blankToDefault(StrUtil.trimToNull(requestedTag),
                         hostAgentConfigService.resolveImageTag(host.getId())));
-        String image = AgentImageUtils.resolveImage(systemConfigService.getAgentRepository(), tag);
+        String image = AgentImageUtils.resolveImage(dockerSettings.agentRepository(), tag);
 
         synchronized (deployLocks.computeIfAbsent(host.getId(), key -> new Object())) {
             DockerClient client = null;
@@ -256,7 +257,7 @@ public class HostAgentService {
     // ------------------------------------------------------------------ 容器生命周期
 
     private HostAgentVo status(DockerClient client, Host host, String requestedTag, String requestedRoot) {
-        String repository = systemConfigService.getAgentRepository();
+        String repository = dockerSettings.agentRepository();
         String tag = AgentImageUtils.normalizeTag(
                 StrUtil.blankToDefault(StrUtil.trimToNull(requestedTag),
                         hostAgentConfigService.resolveImageTag(host.getId())));

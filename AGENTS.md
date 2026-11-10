@@ -86,7 +86,7 @@ git tag vx.y.z && git push && git push origin vx.y.z
   主机列表与主机详情都不再有 Agent 入口。部署 / 切换目录成功后会把实际 tag 与目录回写到配置
   （`HostAgentService` 部署完成后按 hostId 定位配置，必要时自动补一条）；状态接口支持
   `tag` / `root` 覆写，用于按配置显示「需要重新部署」。删除配置只删记录，不会删除目标主机上的容器。
-  镜像分两层配置：全局设置只保存镜像地址
+  镜像分两层配置：参数设置只保存镜像地址
   （`docker.agent.repository`，默认 `ghcr.io/jiangood/docker-admin-agent`，不含 tag），
   每条配置选择 tag（默认 `latest`），实际镜像 = 地址 + `:` + tag。
   agent 镜像内置 `docker-cli` 和 `docker compose`，另装了一批常用运维工具
@@ -129,13 +129,13 @@ git tag vx.y.z && git push && git push origin vx.y.z
   或 `appId`（应用维度，走 `admin/app/containerDetail` 与 `/admin/ws/log/{appId}`），
   `tab=logs|info|files|console` 直达对应页签。页面上方是基本信息与启动 / 停止 / 重启 / 删除，
   下方是横向页签（日志 / 文件 / 终端 / 详情）；主机详情的容器列表、监控表跳到这里（应用详情「容器日志」只保留日志，不再提供跳转入口）。
-  容器日志页签上方的「停止 / 继续滚动」控制是否跟随新日志，「下载日志」下载最近 N 天（全局设置，默认 7 天）
+  容器日志页签上方的「停止 / 继续滚动」控制是否跟随新日志，「下载日志」下载最近 N 天（参数设置，默认 7 天）
   的 .log 文件（应用维度走 `admin/app/containerLogDownload`，主机维度走 `admin/container/logDownload`）；
   请求范围早于下载窗口会被拒绝，未选时间范围时按最近 N 天。
   时间范围选择器按 `since`/`until`（秒级时间戳）查询历史日志，走 `admin/app/containerLogs` /
   `admin/container/logs`，返回末尾最多「最大行数」（默认 10000 行）并带 Docker 时间戳（前端转本地时区展示）；
   筛选后切为静态展示、不再自动滚动，下载按钮也带上同一时间段；「返回实时日志」恢复 WebSocket tail。
-  最大行数与下载天数在「设置 - 全局设置 - 容器日志」维护，对应 `t_system_config` 的
+  最大行数与下载天数在「系统管理 - 参数设置 - 容器日志」维护，对应 `sys_config` 的
   `docker.logs.range-tail`（默认 10000）与 `docker.logs.download-days`（默认 7）。
   删除前需二次确认，运行 / 暂停 / 重启中的容器必须勾选「强制删除」，成功后关闭当前页签。
   页面页签开启 `destroyOnHidden`，切走即断开日志 / 终端
@@ -145,7 +145,7 @@ git tag vx.y.z && git push && git push origin vx.y.z
   弹窗展示实时日志、已写入大小与速度（每秒 / 每分钟）、保存路径与下载按钮；SSH 下载经 SFTP 流式转发，不在平台侧重复落盘。
   任务状态只存内存（`HostImageExportService`），tar 不自动删除，由用户按路径自行清理。
 - **容器启停删的兜底超时与超时后回查：** 主机详情 / 应用详情的容器操作都走
-  `DockerClientManager#callWithTimeout`（容器操作 120 秒、应用部署里的停止 60 秒 / 删除 60 秒），
+  `DockerClientManager#callWithTimeout`（启动 / 删除 120 秒，停止 / 重启 = 宽限期 + 30 秒响应预算），
   不让请求挂满 docker-java 的 1 小时 `responseTimeout`。
   **stop / remove 超时后会再用 10 秒预算 inspect 回查真实状态**：容器已经停掉 / 删掉就按成功返回
   （`ContainerService#isStopped` / `#isGone`），否则错误消息里写明「仍然运行 / 仍然存在 / 无法确认」
@@ -153,6 +153,22 @@ git tag vx.y.z && git push && git push origin vx.y.z
   前端删除后无论成败都刷新容器列表，容器确实不在了才关弹窗。
   典型卡死原因：容器内进程卡在不可中断（D）状态（如 bind 挂载的 NFS 失联），SIGKILL 也要等内核返回，
   此时 stop 与 rm 会一起超时，需在宿主机上看 `ps` 的 D 状态、`dmesg` 的 hung task 与 `mount`。
+- **参数设置里的容器分组：** 「系统管理 - 参数设置」新增三组，全部由
+  `DockerConfigProvider` 用 `Configs.group(...)` 声明（框架 `ConfigRegistry` 自动收集所有
+  `ConfigProvider` Bean）：
+  - 「容器运行」`docker.container.stop-timeout-seconds`（默认 60，范围 1~600）——停止容器的宽限期，
+    决定 SIGTERM 到 SIGKILL 之间的等待时间，等价 compose 的 `stop_grace_period`；
+  - 「主机辅助容器」`docker.agent.repository`——只填镜像地址（不含 tag），留空用 yml 默认值；
+  - 「容器日志」`docker.logs.range-tail`（默认 10000）与 `docker.logs.download-days`（默认 7）。
+  
+  读取集中在 `DockerSettings`（宽限期用 `#graceSeconds()`，配置缺失 / 越界回落默认值；
+  平台调用预算用 `#budget()` = 宽限期 + 30 秒）。旧 `t_system_config` 里同名的三个 `docker.*`
+  键由 `LegacyDockerConfigMigrator` 在启动时一次性搬到 `sys_config`（新配置已有值则不覆盖，成功后删旧行）；
+  「设置 - 全局设置」页面现在只剩默认注册中心与默认构建主机。
+  **docker-java 的 `stopContainerCmd` 默认写死 `t=10`**（不是不传参），所以部署（`AppService#deploy`）、
+  应用停止 / 删除、主机维度的停止与重启都必须显式 `.withTimeout(graceSeconds)`；
+  宿主机上手工 `docker stop` 仍按容器自身配置（docker-java 3.7.1 不支持写 `HostConfig.StopTimeout`），
+  Agent 辅助容器的停止保持默认 10 秒（它不需要优雅退出）。
 - **首页资源概览分两条链路：** 静态容量走 `admin/home/hostSummary`（`docker info`，30 秒缓存，首屏用），
   实时用量走 `admin/home/hostUsage`（首页）与 `admin/host/usage`（主机详情「监控」Tab），
   数据由 Quartz 定时任务「主机用量采集」（`HostUsageCollectJob`，每 10 分钟）写进 `HostUsageService` 的内存缓存。
@@ -233,7 +249,7 @@ git tag vx.y.z && git push && git push origin vx.y.z
   超时上限见 `BUILD_SLOT_WAIT_MILLIS`；等待是进程内的，多实例部署下不跨实例生效。
 - **邮件通知：** 发件账号由**框架**「系统管理 - 参数设置 - 邮件发送」维护（`sys_config` 的
   `email.provider/username/password/from.name/proxy`，由框架 `MailConfigProvider` 声明），
-  本项目的「设置 - 全局设置」只保留默认资源、agent 镜像与容器日志限制；旧版 `t_system_config` 里的 `email.*`
+  本项目的「设置 - 全局设置」只保留默认注册中心与默认构建主机；旧版 `t_system_config` 里的 `email.*`
   由 `LegacyEmailConfigMigrator` 在启动时一次性搬到 `sys_config`（按旧 SMTP 主机反推邮箱服务商，
   成功后删掉旧行；新配置已填发件邮箱时不动）。
   SMTP 服务器/端口/加密方式由框架的 `MailProvider` 模板决定（QQ、腾讯企业邮、163/126、Outlook/M365、

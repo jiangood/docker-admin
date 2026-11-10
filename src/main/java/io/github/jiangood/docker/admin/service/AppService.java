@@ -8,6 +8,7 @@ import com.github.dockerjava.api.command.CreateContainerResponse;
 import com.github.dockerjava.api.exception.NotFoundException;
 import com.github.dockerjava.api.model.*;
 import io.github.jiangood.docker.admin.BuildSuccessEvent;
+import io.github.jiangood.docker.admin.config.DockerSettings;
 import io.github.jiangood.docker.admin.dao.AppRepository;
 import io.github.jiangood.docker.admin.dao.DeployLogRepository;
 import io.github.jiangood.docker.admin.dao.HostRepository;
@@ -61,9 +62,11 @@ public class AppService extends BaseService<App> {
     /**
      * 容器启停删的兜底超时：docker-java 的 responseTimeout 是 1 小时（拉镜像需要），
      * 但这类命令本该秒回，宿主机存储卡死时必须尽快失败，不能让部署线程一直挂着。
+     * <p>
+     * 停止的预算不在这里：它必须比「参数设置 - 容器运行」里的宽限期更长，
+     * 见 {@link DockerSettings#budget()}。
      */
     private static final Duration CONTAINER_START_TIMEOUT = Duration.ofSeconds(120);
-    private static final Duration CONTAINER_STOP_TIMEOUT = Duration.ofSeconds(60);
     private static final Duration CONTAINER_REMOVE_TIMEOUT = Duration.ofSeconds(60);
 
     /** 部署前探测 bind 源目录的超时（仅本机部署时探测） */
@@ -83,6 +86,7 @@ public class AppService extends BaseService<App> {
     private final AppRepository appRepository;
     private final HostRepository hostRepository;
     private final DeployLogRepository deployLogRepository;
+    private final DockerSettings dockerSettings;
 
     @Resource
     DockerClientManager dockerManager;
@@ -224,8 +228,10 @@ public class AppService extends BaseService<App> {
                 String oldContainerId = container.getId();
                 if (container.getState().equals("running")) {
                     fileLog.info("停止容器{}", container.getNames());
-                    dockerManager.callWithTimeout(CONTAINER_STOP_TIMEOUT, "停止容器 " + oldContainerId, () -> {
-                        dc.stopContainerCmd(oldContainerId).exec();
+                    // 宽限期来自「参数设置 - 容器运行」，默认 60 秒（docker-java 不传时写死 10 秒）
+                    int stopGraceSeconds = dockerSettings.graceSeconds();
+                    dockerManager.callWithTimeout(dockerSettings.budget(), "停止容器 " + oldContainerId, () -> {
+                        dc.stopContainerCmd(oldContainerId).withTimeout(stopGraceSeconds).exec();
                         return null;
                     });
                 }
@@ -667,9 +673,13 @@ public class AppService extends BaseService<App> {
         DockerClient client = dockerManager.getClient(app.getHost());
         try {
             List<Container> list = getContainer(app.getName(), client);
+            int stopGraceSeconds = dockerSettings.graceSeconds();
 
             for (Container container : list) {
-                client.stopContainerCmd(container.getId()).exec();
+                dockerManager.callWithTimeout(dockerSettings.budget(), "停止容器 " + container.getId(), () -> {
+                    client.stopContainerCmd(container.getId()).withTimeout(stopGraceSeconds).exec();
+                    return null;
+                });
             }
         } finally {
             IOUtils.closeQuietly(client);
@@ -797,13 +807,14 @@ public class AppService extends BaseService<App> {
             Map<String, String> labels = dockerManager.getAppLabelFilter(app.getName());
             List<Container> list = client.listContainersCmd().withLabelFilter(labels).withShowAll(true).exec();
             log.info("已有容器个数 {}", list.size());
+            int stopGraceSeconds = dockerSettings.graceSeconds();
 
             list.forEach(c -> {
                 if (c.getState().equals("running")) {
                     log.info("正在停止容器 {}", c);
                     // 与主机维度的容器操作一致：容器卡在不可中断状态时不能让请求挂满一小时
-                    dockerManager.callWithTimeout(CONTAINER_STOP_TIMEOUT, "停止容器 " + c.getId(), () -> {
-                        client.stopContainerCmd(c.getId()).exec();
+                    dockerManager.callWithTimeout(dockerSettings.budget(), "停止容器 " + c.getId(), () -> {
+                        client.stopContainerCmd(c.getId()).withTimeout(stopGraceSeconds).exec();
                         return null;
                     });
                 }

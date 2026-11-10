@@ -6,12 +6,12 @@ import io.github.jiangood.docker.base.OrgAccessTool;
 import io.github.jiangood.openadmin.framework.perm.HasPermission;
 import io.github.jiangood.docker.admin.dao.DeployLogRepository;
 import io.github.jiangood.docker.admin.dto.ContainerVo;
+import io.github.jiangood.docker.admin.config.DockerSettings;
 import io.github.jiangood.docker.admin.entity.App;
 import io.github.jiangood.docker.admin.entity.DeployLog;
 import io.github.jiangood.docker.admin.entity.DeployTrigger;
 import io.github.jiangood.docker.admin.service.AppService;
 import io.github.jiangood.docker.admin.service.ContainerService;
-import io.github.jiangood.docker.admin.service.SystemConfigService;
 import io.github.jiangood.docker.admin.websocket.DockerLogService;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import io.github.jiangood.openadmin.modules.logviewer.service.FileLogService;
@@ -72,7 +72,7 @@ public class AppController {
     private DockerLogService dockerLogService;
 
     @Resource
-    private SystemConfigService systemConfigService;
+    private DockerSettings dockerSettings;
 
     @HasPermission("app:view")
     @RequestMapping("list")
@@ -164,7 +164,7 @@ public class AppController {
         Assert.notNull(container, "容器未部署");
         assertTimeRange(since, until);
         return AjaxResult.ok().data(dockerLogService.readContainerLogs(app.getHost(), container.getId(),
-                since, until, systemConfigService.getLogRangeTail()));
+                since, until, dockerSettings.logRangeTail()));
     }
 
     /**
@@ -181,7 +181,7 @@ public class AppController {
         Assert.notNull(container, "容器未部署");
         assertTimeRange(since, until);
 
-        int days = systemConfigService.getLogDownloadDays();
+        int days = dockerSettings.logDownloadDays();
         Integer downloadSince = resolveDownloadSince(since, days);
         assertTimeRange(downloadSince, until);
         String fileName = StrUtil.blankToDefault(app.getName(), "app")
@@ -189,7 +189,7 @@ public class AppController {
         DownloadTool.prepareDownload(response, DownloadTool.safeFileName(fileName), "text/plain;charset=UTF-8");
         try (OutputStream out = response.getOutputStream()) {
             dockerLogService.writeContainerLogs(app.getHost(), container.getId(), downloadSince, until,
-                    systemConfigService.getLogRangeTail(), out);
+                    dockerSettings.logRangeTail(), out);
             out.flush();
         }
     }

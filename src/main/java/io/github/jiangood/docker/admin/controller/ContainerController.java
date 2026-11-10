@@ -1,5 +1,6 @@
 package io.github.jiangood.docker.admin.controller;
 
+import io.github.jiangood.docker.admin.config.DockerSettings;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.dto.ContainerDetailVo;
 import io.github.jiangood.docker.admin.dto.ContainerFileVo;
@@ -7,7 +8,6 @@ import io.github.jiangood.docker.admin.dto.ContainerFileWriteRequest;
 import io.github.jiangood.docker.admin.dto.ContainerSummaryVo;
 import io.github.jiangood.docker.admin.service.ContainerService;
 import io.github.jiangood.docker.admin.service.HostService;
-import io.github.jiangood.docker.admin.service.SystemConfigService;
 import io.github.jiangood.docker.admin.util.ContainerPermTool;
 import io.github.jiangood.docker.admin.websocket.DockerLogService;
 import io.github.jiangood.openadmin.framework.perm.HasPermission;
@@ -42,7 +42,7 @@ public class ContainerController {
     private DockerLogService dockerLogService;
 
     @Resource
-    private SystemConfigService systemConfigService;
+    private DockerSettings dockerSettings;
 
     // ------------------------------------------------------------------ 查看
 
@@ -74,7 +74,7 @@ public class ContainerController {
         Assert.hasText(containerId, "containerId 不能为空");
         assertTimeRange(since, until);
         return AjaxResult.ok().data(dockerLogService.readContainerLogs(host, containerId, since, until,
-                systemConfigService.getLogRangeTail()));
+                dockerSettings.logRangeTail()));
     }
 
     /**
@@ -89,14 +89,14 @@ public class ContainerController {
         Assert.hasText(containerId, "containerId 不能为空");
         assertTimeRange(since, until);
 
-        int days = systemConfigService.getLogDownloadDays();
+        int days = dockerSettings.logDownloadDays();
         Integer downloadSince = resolveDownloadSince(since, days);
         assertTimeRange(downloadSince, until);
         String fileName = "container-" + (containerId.length() > 12 ? containerId.substring(0, 12) : containerId) + ".log";
         DownloadTool.prepareDownload(response, DownloadTool.safeFileName(fileName), "text/plain;charset=UTF-8");
         try (OutputStream out = response.getOutputStream()) {
             dockerLogService.writeContainerLogs(host, containerId, downloadSince, until,
-                    systemConfigService.getLogRangeTail(), out);
+                    dockerSettings.logRangeTail(), out);
             out.flush();
         }
     }

@@ -38,7 +38,7 @@
 
 ```text
 名称      docker-admin-agent
-镜像      <全局设置里的地址>:<主机选择的 tag>
+镜像      <参数设置里的地址>:<主机选择的 tag>
 挂载      <挂载目录>        -> /host                        # 文件管理入口
           <挂载目录>        -> <挂载目录>（原样绝对路径）     # 让 compose 的相对 bind 路径与宿主机一致
           /var/run/docker.sock -> /var/run/docker.sock        # 容器内 docker 直接操作宿主机 daemon（可用 docker.agent.socket-path 改源）
@@ -347,7 +347,7 @@ Docker VMM 的已知问题：嵌套 bind mount（一个 bind 里再挂一个 vol
 1. 「工具 - 主机 Agent」→ 新增配置（选择主机、镜像 tag、挂载目录）；
 2. 行操作「终端」打开 Agent 页；未部署时点「部署」，选择 Agent 镜像 tag（留空 = `latest`）；
 3. 「切换挂载目录」会用新目录**重建容器**，终端断开并自动重连；部署 / 切换成功后配置会自动回写；
-4. 镜像地址在「设置 - 全局设置」维护（`docker.agent.repository`，默认
+4. 镜像地址在「系统管理 - 参数设置 - 主机辅助容器」维护（`docker.agent.repository`，默认
    `ghcr.io/jiangood/docker-admin-agent`，**只填地址不带 tag**），
    每条配置保存自己的 tag，实际镜像 = 地址 + `:` + tag；
 5. 更换 tag：在「工具 - 主机 Agent」修改配置，回到终端页点「重新部署」；

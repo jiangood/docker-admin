@@ -9,9 +9,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * 全局设置接口：默认资源与主机辅助容器镜像。
+ * 全局设置接口：默认注册中心与默认构建主机。
  * <p>
- * 邮件发件账号已改为框架「参数设置 - 邮件发送」维护（{@code admin/sys-config} + {@code admin/mail/test}）。
+ * 邮件发件账号、容器运行 / 主机辅助容器 / 容器日志都已改为框架「系统管理 - 参数设置」维护
+ * （{@code admin/sys-config}），这里不再提供对应接口，避免出现第二个配置入口。
  */
 @RestController
 @Slf4j
@@ -35,40 +36,5 @@ public class SystemConfigController {
                 .msg("保存成功");
     }
 
-    @HasPermission("system-config:view")
-    @GetMapping("agent")
-    public AjaxResult agent() {
-        return AjaxResult.ok().data(service.getAgentSettings());
-    }
-
-    @Log("全局设置-保存辅助容器镜像")
-    @HasPermission("system-config:save")
-    @PostMapping("agent")
-    public AjaxResult saveAgent(@RequestBody AgentSettingsInput request) {
-        service.saveAgentSettings(request == null ? null : request.repository());
-        return AjaxResult.ok().data(service.getAgentSettings()).msg("保存成功");
-    }
-
-    @HasPermission("system-config:view")
-    @GetMapping("logs")
-    public AjaxResult logs() {
-        return AjaxResult.ok().data(service.getLogSettings());
-    }
-
-    @Log("全局设置-保存容器日志")
-    @HasPermission("system-config:save")
-    @PostMapping("logs")
-    public AjaxResult saveLogs(@RequestBody LogSettingsInput request) {
-        service.saveLogSettings(request == null ? null : request.rangeTail(),
-                request == null ? null : request.downloadDays());
-        return AjaxResult.ok().data(service.getLogSettings()).msg("保存成功");
-    }
-
     public record DefaultsRequest(String defaultRegistryId, String defaultBuildHostId) {}
-
-    public record AgentSettingsInput(String repository) {
-    }
-
-    public record LogSettingsInput(Integer rangeTail, Integer downloadDays) {
-    }
 }
