@@ -15,6 +15,4 @@ public interface AppRepository extends BaseRepository<App, String> {
 
     boolean existsByName(String name);
 
-    App findByWebhookToken(String webhookToken);
-
 }

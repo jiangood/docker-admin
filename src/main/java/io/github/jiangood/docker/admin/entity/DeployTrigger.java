@@ -33,6 +33,10 @@ public enum DeployTrigger {
     @DictItem(label = "定时更新")
     SCHEDULE,
 
+    /**
+     * 遗留值：应用 Webhook 触发升级功能已移除，仅历史部署日志里还存有该值。
+     * 删掉枚举常量会导致 Hibernate 读到旧记录时反序列化失败，部署日志列表打不开。
+     */
     @DictItem(label = "Webhook 触发")
     WEBHOOK
 

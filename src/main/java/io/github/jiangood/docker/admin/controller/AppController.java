@@ -388,31 +388,6 @@ public class AppController {
                 .data(app);
     }
 
-    /**
-     * 开启 / 关闭 Webhook 触发升级。关闭后平台仍保留令牌，只是不再接受外部调用。
-     */
-    @HasPermission("app:webhook")
-    @RequestMapping("setWebhook")
-    public AjaxResult setWebhook(String id, boolean enabled) {
-        assertAppAccess(id);
-        App app = service.updateWebhookEnabled(id, enabled);
-        return AjaxResult.ok()
-                .msg(enabled ? "已开启 Webhook 触发升级" : "已关闭 Webhook 触发升级")
-                .data(app);
-    }
-
-    /**
-     * 重置 Webhook 令牌，旧地址立即失效。
-     */
-    @HasPermission("app:webhook")
-    @RequestMapping("resetWebhook")
-    public AjaxResult resetWebhook(String id) {
-        assertAppAccess(id);
-        App app = service.resetWebhookToken(id);
-        return AjaxResult.ok().msg("已重置，请同步更新外部系统中的旧地址").data(app);
-    }
-
-
     @HasPermission("app:save")
     @RequestMapping("start/{appId}")
     public AjaxResult start(@PathVariable String appId) {

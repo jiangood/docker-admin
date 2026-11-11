@@ -1,7 +1,5 @@
 package io.github.jiangood.docker.admin.entity;
 
-import cn.hutool.core.util.RandomUtil;
-import cn.hutool.core.util.StrUtil;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import io.github.jiangood.docker.admin.entity.converter.AppConfigConverter;
 import io.github.jiangood.openadmin.util.annotation.Remark;
@@ -111,21 +109,6 @@ public class App extends BaseEntity {
     String scheduledUpdateLastResult;
 
 
-    /**
-     * Webhook 令牌：外部 CI/CD 通过 {@code admin/public/app-webhook/{token}} 触发一次升级部署。
-     * 与项目构建的 webhook 一样，鉴权只依赖 URL 里的随机 token。
-     */
-    @Remark("Webhook 令牌")
-    @Column(unique = true)
-    String webhookToken;
-
-    /**
-     * 是否允许通过 Webhook 触发升级。默认关闭，需要用户显式开启，避免误触发重建容器。
-     */
-    @Remark("Webhook 触发升级")
-    Boolean webhookEnabled;
-
-
     @Transient
     String logUrl;
 
@@ -139,12 +122,6 @@ public class App extends BaseEntity {
 
     @PrePersist
     public void prePersist() {
-        if (StrUtil.isBlank(webhookToken)) {
-            webhookToken = RandomUtil.randomString(32);
-        }
-        if (webhookEnabled == null) {
-            webhookEnabled = false;
-        }
         if (autoDeploy == null) {
             autoDeploy = true;
         }
