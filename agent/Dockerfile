@@ -63,6 +63,10 @@ RUN apk add --no-cache \
         procps \
         htop
 
+# Alpine 里 vi 默认指向 BusyBox 内置 applet（精简版，不支持 :set fileformat 等），
+# 把 vi 软链到完整版 vim，敲 vi 就是 vim。
+RUN ln -sf /usr/bin/vim /usr/local/bin/vi
+
 # ZMODEM 上传 / 下载需要 rz / sz（见文件顶部的编译阶段）。
 # lrzsz 编译出来是 lrz / lsz，rz / sz 是 make install 时建的软链，这里手动补上。
 COPY --from=lrzsz /usr/local/bin/lrz /usr/local/bin/lsz /usr/local/bin/
