@@ -5,6 +5,11 @@ on:
     tags:
       - 'v*'
 
+env:
+  # buildx 默认会把构建记录(.dockerbuild)作为 artifact 上传,纯发布用不到
+  DOCKER_BUILD_SUMMARY: false
+  DOCKER_BUILD_RECORD_UPLOAD: false
+
 jobs:
   build:
 
