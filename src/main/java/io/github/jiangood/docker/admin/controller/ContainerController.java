@@ -168,7 +168,7 @@ public class ContainerController {
         }
     }
 
-    /** 上传本地文件到容器内目录（path 为目录，同名文件会被覆盖）。 */
+    /** 上传本地文件到容器内目录（path 为目录）。目标位置已有同名文件 / 目录时拒绝，不允许覆盖。 */
     @HasPermission("container:file")
     @PostMapping("upload")
     public AjaxResult upload(String hostId, String containerId, String path,
@@ -182,6 +182,11 @@ public class ContainerController {
         Assert.hasText(filename, "文件名不能为空");
         String dir = (path == null || path.isBlank()) ? "/" : path;
         String target = dir.endsWith("/") ? dir + filename : dir + "/" + filename;
+        String kind = containerService.fileKind(host, containerId, target);
+        if (kind != null) {
+            throw new BusinessException(("dir".equals(kind) ? "容器内已存在同名目录 " : "容器内已存在同名文件 ")
+                    + target + "，不允许覆盖，请先删除或改名后再上传");
+        }
         containerService.writeFile(host, containerId, target, file.getBytes());
         return AjaxResult.ok().msg("已上传 " + filename);
     }

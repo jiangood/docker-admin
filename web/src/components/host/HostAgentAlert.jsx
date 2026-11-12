@@ -319,9 +319,10 @@ export default class extends React.Component {
 
                 <Typography.Title level={5}>文件操作</Typography.Title>
                 <Typography.Paragraph>
-                    页面不再提供上传 / 下载按钮：该目录同时按原始绝对路径挂进容器，
-                    在终端里用 <code>cp</code> / <code>rsync</code> / <code>scp</code> / <code>curl</code>
-                    等命令上传下载，查看、编辑、删除、重命名、新建目录也都在终端里完成。
+                    点右上角「上传文件」可把本地文件上传到挂载目录：弹窗里逐级选择目标路径，目标目录里已有
+                    同名文件 / 目录时不允许覆盖。下载、查看、编辑、删除、重命名、新建目录等其余操作都在终端里用
+                    <code>cp</code> / <code>rsync</code> / <code>scp</code> / <code>curl</code>
+                    等命令完成。
                 </Typography.Paragraph>
 
                 <Typography.Title level={5}>镜像</Typography.Title>

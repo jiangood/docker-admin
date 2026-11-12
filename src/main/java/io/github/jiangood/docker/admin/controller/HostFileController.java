@@ -62,7 +62,19 @@ public class HostFileController {
     }
 
     /**
-     * 上传文件到挂载目录（或其中的子目录），同名文件会被覆盖。
+     * 列出挂载目录（或其子目录）下的条目，供 Agent 面板「上传文件」弹窗逐级选择目标路径。
+     * <p>
+     * {@code path} 相对于当前挂载目录，留空表示挂载目录本身。
+     */
+    @HasPermission("host:file")
+    @RequestMapping("list")
+    public AjaxResult list(String hostId, String path) {
+        Host host = requireHost(hostId);
+        return AjaxResult.ok().data(hostFileService.list(host, path));
+    }
+
+    /**
+     * 上传文件到挂载目录（或其中的子目录）。目标位置已有同名文件 / 目录时拒绝，不允许覆盖。
      */
     @HasPermission("host:file")
     @PostMapping("upload")

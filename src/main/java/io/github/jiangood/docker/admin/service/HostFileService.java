@@ -1,5 +1,7 @@
 package io.github.jiangood.docker.admin.service;
 
+import cn.hutool.core.util.StrUtil;
+import io.github.jiangood.docker.admin.dto.AgentFileVo;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.util.HostRootPolicy;
 import io.github.jiangood.openadmin.util.BusinessException;
@@ -8,6 +10,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.io.OutputStream;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -143,11 +147,53 @@ public class HostFileService {
     }
 
     /**
+     * 列出挂载目录（或其子目录）下的条目，供 Agent 面板「上传文件」弹窗逐级选择目标路径。
+     * <p>
+     * {@code dir} 相对挂载目录，空串表示挂载目录本身；经辅助容器执行 ls 读取，
+     * {@code -p} 给目录条目带末尾斜杠用于区分类型，{@code -N} 保证名字不被转义改写。
+     */
+    public List<AgentFileVo> list(Host host, String dir) {
+        HostAgentService.AgentContext context = hostAgentService.requireRunning(host);
+        String rel = HostRootPolicy.normalizeRelativePath(dir);
+        String target = HostRootPolicy.toAgentPath(rel);
+        ContainerService.CommandResult result = containerService.exec(host, context.containerId(),
+                List.of("sh", "-c", "ls -1A -p -N \"$1\"", "sh", target));
+        if (result.exitCode() != 0) {
+            String stderr = StrUtil.trimToEmpty(result.stderr());
+            throw new BusinessException(stderr.isBlank()
+                    ? (rel.isEmpty() ? "无法读取挂载目录" : "目录不存在或不可读：" + rel)
+                    : stderr);
+        }
+        List<AgentFileVo> list = new ArrayList<>();
+        for (String line : result.stdout().split("\n")) {
+            if (line.isBlank()) {
+                continue;
+            }
+            boolean isDir = line.endsWith("/");
+            AgentFileVo vo = new AgentFileVo();
+            vo.setName(isDir ? line.substring(0, line.length() - 1) : line);
+            vo.setType(isDir ? "dir" : "file");
+            list.add(vo);
+        }
+        list.sort(Comparator
+                .comparing((AgentFileVo f) -> !"dir".equals(f.getType()))
+                .thenComparing(AgentFileVo::getName, Comparator.nullsLast(String::compareToIgnoreCase)));
+        return list;
+    }
+
+    /**
      * 上传文件到挂载目录下的 dir，文件名只允许单层名称。
+     * <p>
+     * 目标位置已有同名文件 / 目录时拒绝，不允许覆盖：宿主机上的现有文件可能正被服务使用。
      */
     public void upload(Host host, String dir, String filename, byte[] content) {
         String safeName = HostRootPolicy.normalizeName(filename);
         String rel = HostRootPolicy.joinRelative(dir, safeName);
+        HostAgentService.AgentContext context = hostAgentService.requireRunning(host);
+        String target = HostRootPolicy.toAgentPath(rel);
+        if (containerService.exec(host, context.containerId(), testCmd("-e", target)).exitCode() == 0) {
+            throw new BusinessException("挂载目录下已存在 " + rel + "，不允许覆盖，请先删除或改名后再上传");
+        }
         write(host, rel, content);
     }
 

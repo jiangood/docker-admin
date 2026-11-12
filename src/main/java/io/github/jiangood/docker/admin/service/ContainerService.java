@@ -872,6 +872,45 @@ public class ContainerService {
     }
 
     /**
+     * 判断容器内路径的状态：「dir」/「file」（其它已存在项也算 file）/ {@code null}（不存在）。
+     * <p>
+     * 上传文件前用它防止覆盖：优先用容器内的 sh test（快）；distroless / scratch 等没有 sh
+     * 的镜像回退到 Docker archive 接口，直接尝试打开目标，404 即不存在
+     * （archive 对已停止的容器同样可用，exec 失败后仍能兜底）。
+     */
+    public String fileKind(Host host, String containerId, String path) {
+        DockerClient client = dockerClientManager.getClient(host);
+        try {
+            try {
+                CommandResult result = execCapture(client, containerId, List.of("sh", "-c",
+                        "if [ -d \"$1\" ]; then echo dir; elif [ -e \"$1\" ]; then echo file; fi", "sh", path));
+                if (result.exitCode == 0) {
+                    String kind = StrUtil.trimToEmpty(result.stdout);
+                    return kind.isEmpty() ? null : kind;
+                }
+                // test 退出非 0 按不存在处理；若随后写入失败，由写入本身报错
+                return null;
+            } catch (RuntimeException e) {
+                log.debug("容器 {} 执行 test 失败，改用 archive 接口: {}", containerId, e.getMessage());
+            }
+            try (InputStream in = client.copyArchiveFromContainerCmd(containerId, path).exec();
+                 TarArchiveInputStream tar = new TarArchiveInputStream(in)) {
+                TarArchiveEntry entry = tar.getNextEntry();
+                if (entry == null) {
+                    return null;
+                }
+                return entry.isDirectory() ? "dir" : "file";
+            } catch (NotFoundException e) {
+                return null;
+            } catch (IOException e) {
+                throw new RuntimeException("无法检查文件是否存在: " + path, e);
+            }
+        } finally {
+            IOUtils.closeQuietly(client);
+        }
+    }
+
+    /**
      * 删除容器内文件 / 目录（递归）。
      * <p>
      * Docker API 没有删除容器内文件的接口，这里经 exec 在容器内执行 {@code rm -rf}；

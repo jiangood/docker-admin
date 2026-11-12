@@ -113,19 +113,22 @@ git tag vx.y.z && git push && git push origin vx.y.z
   （不支持 bind mount 自动共享），不支持 Windows 容器主机。
   辅助容器由 `host:save` 显式部署（`admin/host/agent/deploy`；界面不提供删除容器的按钮：
   工具页的「删除」只删配置记录，需要删除容器时走主机详情「容器」Tab，因为辅助容器就是普通容器），CLI WebSocket 用 `host:cli`；
-  **界面不再提供上传 / 下载按钮**：文件操作统一在终端里做（后端 `admin/host/file` 的 `upload` / `download`
-  接口仍保留，权限码 `host:file`，路径相对于当前挂载目录，空串表示挂载目录本身）；
+  **界面提供「上传文件」按钮**（右上角图标，需 `host:file` 权限且辅助容器运行中）：`AgentUpload`
+  弹窗里经 `admin/host/file/list` 逐级浏览挂载目录、选择目标路径后经 `upload` 上传，
+  路径相对于当前挂载目录、空串表示挂载目录本身；同名文件 / 目录已存在时后端拒绝（不允许覆盖）。
+  下载等其余文件操作统一在终端里做（`admin/host/file` 的 `download` 接口仍保留，权限码 `host:file`）；
   容器常驻，删除容器不会删除宿主机文件。重建 `latest` 会先尝试拉取，拉取失败但本地已有镜像时继续使用本地镜像。
   Agent 面板用一块 `Card` 承载：标题只有「主机名 · Agent」，
   右上角 `extra` 依次是状态徽标（运行中 / 已停止 / 未部署，读取中显示转圈）、重新连接（图标，保留当前 shell）、
-  新建会话（图标，换一个干净 shell）、重新部署（配置与容器不一致时出现）、切换挂载目录、部署、帮助（图标），
+  新建会话（图标，换一个干净 shell）、上传文件（图标，`host:file` 且辅助容器运行中才出现）、
+  重新部署（配置与容器不一致时出现）、切换挂载目录、部署、帮助（图标），
   正文只有终端（`styles={{body: {padding: 12}}}`）；异常 / 待处理提示（状态读取失败、
   配置与容器不一致、无 `host:save` 权限）以 Alert 形式出现在终端上方，正常状态不占空间；
   容器状态、提示与按钮由 `HostAgentAlert` 通过 render prop 交给 `HostAgentTab` 组装，
   弹窗仍由 `HostAgentAlert` 自己渲染（避免重复请求 agent 状态）。当前目录不在标题重复展示（只在「切换挂载目录」弹窗里），
   终端区没有工具条（`HostCli` 只渲染 xterm，
   重新连接由 `HostAgentTab` 通过 ref 调 `HostCli.reconnect`，新建会话调 `HostCli.newSession`）；
-  文件的上传 / 下载与查看 / 编辑 / 删除 / 重命名 / 新建目录都在终端里完成；
+  文件的下载与查看 / 编辑 / 删除 / 重命名 / 新建目录都在终端里完成（上传走右上角「上传文件」按钮）；
   权限、目录、文件操作等长说明收进问号弹窗（`HostAgentAlert`），页面上不再堆 Alert；
   终端连接成功后不弹通知、也不往终端回滚区写 banner，进入终端即可直接使用。
   **终端会话默认保持到浏览器之外**：`HostCliSessionRegistry` 持有 `docker exec` 出来的 shell，
@@ -153,6 +156,9 @@ git tag vx.y.z && git push && git push origin vx.y.z
   或 `appId`（应用维度，走 `admin/app/containerDetail` 与 `/admin/ws/log/{appId}`），
   `tab=logs|info|files|console` 直达对应页签。页面上方是基本信息与启动 / 停止 / 重启 / 删除，
   下方是横向页签（日志 / 文件 / 终端 / 详情）；主机详情的容器列表、监控表跳到这里（应用详情「容器日志」只保留日志，不再提供跳转入口）。
+  文件页签的上传不允许覆盖：前端先按当前目录列表预检同名条目，后端 `admin/container/upload`
+  再用 `ContainerService#fileKind`（容器内 sh test 优先、distroless 回退 Docker archive 接口）兜底，
+  已存在同名文件 / 目录一律拒绝。
   容器日志页签上方的「停止 / 继续滚动」控制是否跟随新日志，「下载日志」下载最近 N 天（系统参数，默认 7 天）
   的 .log 文件（应用维度走 `admin/app/containerLogDownload`，主机维度走 `admin/container/logDownload`）；
   请求范围早于下载窗口会被拒绝，未选时间范围时按最近 N 天。

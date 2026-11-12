@@ -148,8 +148,13 @@ export default class extends React.Component {
 
     uploadFiles = files => {
         const {hostId, containerId} = this.props
-        const {path} = this.state
+        const {path, files: entries} = this.state
         files.forEach(file => {
+            // 预检：当前目录里已有同名条目就不发请求，后端上传前还会再做一次存在性检查兜底
+            if (entries.some(e => e.name === file.name)) {
+                message.warning(`容器内已存在 ${file.name}，不允许覆盖，请先删除或改名后再上传`)
+                return
+            }
             const form = new FormData()
             form.append('file', file)
             this.uploadingCount += 1
