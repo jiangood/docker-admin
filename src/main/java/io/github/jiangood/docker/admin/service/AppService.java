@@ -305,6 +305,22 @@ public class AppService extends BaseService<App> {
                 }
             }
 
+            // 用户自定义 labels（docker run --label）：先放用户标签，再放平台编排标签，
+            // 保证 app.name 等平台标签不被覆盖（应用容器按 app.name 查找/启停/删除）
+            Map<String, String> labels = new HashMap<>();
+            if (cfg.getLabels() != null) {
+                for (App.Label l : cfg.getLabels()) {
+                    if (l == null || StrUtil.isBlank(l.getName())) {
+                        continue;
+                    }
+                    labels.put(l.getName(), StrUtil.nullToEmpty(l.getValue()));
+                }
+                if (!labels.isEmpty()) {
+                    fileLog.info("用户自定义 labels={}", labels);
+                }
+            }
+            labels.putAll(dockerManager.getAppLabelFilter(app.getName()));
+
 
             // 是否自动启动
             hostConfig.withRestartPolicy(RestartPolicy.onFailureRestart(5));
@@ -348,7 +364,7 @@ public class AppService extends BaseService<App> {
             CreateContainerCmd containerCmd = client.createContainerCmd(image);
             containerCmd
                     .withName(app.getName())
-                    .withLabels(dockerManager.getAppLabelFilter(app.getName()))
+                    .withLabels(labels)
                     .withHostConfig(hostConfig)
                     .withExposedPorts(exposedPorts) // 使用应用配置中的端口
                     .withEnv(envs);

@@ -7,7 +7,7 @@
  *   imageUrl: string,             // 镜像地址（不含 tag）
  *   imageTag: string,             // 镜像版本，缺省 latest
  *   config: {                     // 对应 App.AppConfig
- *     networkMode, ports, binds, envs, cmd, extraHosts, deviceRequests
+ *     networkMode, ports, binds, envs, labels, cmd, extraHosts, deviceRequests
  *   },
  *   warnings: string[]            // 未识别/被忽略的参数提示
  * }
@@ -141,6 +141,7 @@ export function parseDockerRun(command) {
         ports: [],
         binds: [],
         envs: [],
+        labels: [],
         cmd: '',
         extraHosts: '',
         deviceRequests: [],
@@ -223,6 +224,15 @@ export function parseDockerRun(command) {
         }
     }
 
+    const parseLabel = (spec) => {
+        const idx = spec.indexOf('=')
+        if (idx >= 0) {
+            config.labels.push({name: spec.slice(0, idx), value: spec.slice(idx + 1)})
+        } else {
+            config.labels.push({name: spec, value: ''})
+        }
+    }
+
     const parseGpus = (spec) => {
         let count = -1
         const s = String(spec).replace(/["']/g, '')
@@ -293,6 +303,10 @@ export function parseDockerRun(command) {
                 case '-e':
                 case '--env':
                     parseEnv(val)
+                    break
+                case '-l':
+                case '--label':
+                    parseLabel(val)
                     break
                 case '--network':
                 case '--net':

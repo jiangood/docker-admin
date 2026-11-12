@@ -164,6 +164,12 @@ public class App extends BaseEntity {
         List<EnvVar> envs = new ArrayList<>();
 
         /**
+         * 容器 labels（键值对），对应 docker run --label。
+         * 平台自身的编排标签（app.name 等）始终保留，用户标签不会覆盖。
+         */
+        List<Label> labels = new ArrayList<>();
+
+        /**
          *   host:主机模式（同主机IP）
          *   bridge:桥接（虚拟IP，NAT）
          *   none:  无需网络'
@@ -215,6 +221,17 @@ public class App extends BaseEntity {
     @JsonIgnoreProperties(ignoreUnknown = true)
     @Data
     public static class EnvVar {
+        String name;
+        String value;
+
+    }
+
+    /**
+     * 容器 label（键值对），对应 docker run --label，与 EnvVar 同构。
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    @Data
+    public static class Label {
         String name;
         String value;
 

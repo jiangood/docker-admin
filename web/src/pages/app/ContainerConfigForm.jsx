@@ -4,7 +4,7 @@ import EditTable from "../../components/EditTable";
 import {HttpClient} from "@jiangood/open-admin";
 
 /**
- * 容器配置（复用组件）：端口 / 卷 / 环境变量 / 启动命令 / 网络 / extraHosts / 设备请求。
+ * 容器配置（复用组件）：端口 / 卷 / 环境变量 / 容器标签 / 启动命令 / 网络 / extraHosts / 设备请求。
  *
  * 直接绑定父 Form 中以 namePrefix 为前缀的字段，放在父 Form 内使用：
  *   <ContainerConfigForm namePrefix={['config']} imageUrl={...} imageTag={...}/>
@@ -38,6 +38,11 @@ const bindsColumns = [
 const envColumns = [
     {title: '变量名', dataIndex: 'name', dataType: 'Input'},
     {title: '变量值', dataIndex: 'value', dataType: 'Input'},
+]
+
+const labelsColumns = [
+    {title: '键', dataIndex: 'name', dataType: 'Input'},
+    {title: '值', dataIndex: 'value', dataType: 'Input'},
 ]
 
 const deviceColumns = [
@@ -88,6 +93,7 @@ function normalize(meta, cfg, appName) {
     const next = {...(cfg || {})}
     next.networkMode = next.networkMode || 'bridge'
     next.envs = next.envs || []
+    next.labels = next.labels || []
     next.deviceRequests = next.deviceRequests || []
 
     // 字段已存在（含清空后的空数组、docker run 解析结果）就不再覆盖：
@@ -244,6 +250,15 @@ export default function ContainerConfigForm({namePrefix, imageUrl, imageTag, app
         </Form.Item>
     )
 
+    const labelsItem = (
+        <Form.Item label='容器标签' name={name('labels')} style={itemStyle}
+                   tooltip='容器 labels（docker run --label），常用于监控、备份等第三方工具按标签识别容器；平台自身的编排标签不受影响'>
+            <EditTable columns={labelsColumns}
+                       defaultRow={{name: '', value: ''}}
+                       extra='暂无标签'/>
+        </Form.Item>
+    )
+
     const deviceItem = (
         <Form.Item label='设备请求' name={name('deviceRequests')} style={itemStyle}
                    tooltip='GPU 等设备透传，对应 docker run --gpus；需目标主机已安装 nvidia-container-toolkit'>
@@ -261,6 +276,7 @@ export default function ContainerConfigForm({namePrefix, imageUrl, imageTag, app
             {portsItem}
             {bindsItem}
             {envsItem}
+            {labelsItem}
             {deviceItem}
             <Row gutter={16}>
                 <Col span={12}>{cmdItem}</Col>
@@ -274,6 +290,7 @@ export default function ContainerConfigForm({namePrefix, imageUrl, imageTag, app
         {portsItem}
         {bindsItem}
         {envsItem}
+        {labelsItem}
         {cmdItem}
         {extraHostsItem}
         {deviceItem}
