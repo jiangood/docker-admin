@@ -226,8 +226,8 @@ export default class extends React.Component {
                 : <Button type='primary' icon={<CloudServerOutlined/>}
                           onClick={this.openDeploy}>部署辅助容器</Button>)}
             <Tooltip title='辅助容器说明'>
-                <Button type='text' shape='circle' icon={<QuestionCircleOutlined/>}
-                        onClick={() => this.setState({helpOpen: true})}/>
+                <Button type='text' icon={<QuestionCircleOutlined/>}
+                        onClick={() => this.setState({helpOpen: true})}>帮助</Button>
             </Tooltip>
         </>
 

@@ -77,18 +77,18 @@ export default class extends React.Component {
         const extra = <Space size={0}>
             {deployed && <>
                 <Tooltip title='重新连接终端（保留当前 shell 与历史）'>
-                    <Button type='text' shape='circle' icon={<ReloadOutlined/>}
-                            onClick={this.reconnectCli}/>
+                    <Button type='text' icon={<ReloadOutlined/>}
+                            onClick={this.reconnectCli}>重新连接</Button>
                 </Tooltip>
                 <Tooltip title='新建会话（结束当前 shell，换一个干净的）'>
-                    <Button type='text' shape='circle' icon={<PlusOutlined/>}
-                            onClick={this.newCliSession}/>
+                    <Button type='text' icon={<PlusOutlined/>}
+                            onClick={this.newCliSession}>新建会话</Button>
                 </Tooltip>
             </>}
             {uploadable &&
                 <Tooltip title='上传文件到挂载目录（在弹窗里选择目标路径，同名文件不允许覆盖）'>
-                    <Button type='text' shape='circle' icon={<UploadOutlined/>}
-                            onClick={() => this.upload.current.open()}/>
+                    <Button type='text' icon={<UploadOutlined/>}
+                            onClick={() => this.upload.current.open()}>上传文件</Button>
                 </Tooltip>}
         </Space>
 
