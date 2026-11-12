@@ -198,6 +198,17 @@ public class ContainerController {
         return AjaxResult.ok().msg("保存成功");
     }
 
+    /** 删除容器内文件 / 目录（递归）。Docker API 没有删除接口，需容器内有 rm 命令。 */
+    @HasPermission("container:file")
+    @RequestMapping("deleteFile")
+    public AjaxResult deleteFile(String hostId, String containerId, String path) {
+        Host host = requireHost(hostId);
+        Assert.hasText(containerId, "containerId 不能为空");
+        Assert.hasText(path, "path 不能为空");
+        containerService.deleteFile(host, containerId, path);
+        return AjaxResult.ok().msg("已删除 " + path);
+    }
+
     // ------------------------------------------------------------------ 操作
 
     @HasPermission("container:operate")

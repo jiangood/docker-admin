@@ -250,6 +250,11 @@ export default class extends React.Component {
             .map(p => 'http://' + ip + ':' + p.publicPort)
     }
 
+    /** 打开容器详情页（应用维度），默认打开日志页签 */
+    openContainer = () => {
+        PageUtils.open(`/container/view?appId=${encodeURIComponent(this.state.app.id)}`)
+    }
+
     openDeploy = () => {
         this.setState({deployLoading: true})
         HttpClient.get('admin/app/versions', {id: this.state.app.id}).then(rs => {
@@ -353,6 +358,7 @@ export default class extends React.Component {
                 <Button disabled={state !== 'exited'} loading={starting} onClick={this.start}>启动</Button>
                 <Button disabled={state !== 'running'} loading={stopping} onClick={this.stop}>停止</Button>
                 <Button onClick={this.openDeploy} loading={state === 'deploying' || deployLoading} type="primary">重新部署</Button>
+                <Button disabled={!container.id} onClick={this.openContainer}>容器详情</Button>
             </Space>}>
 
 

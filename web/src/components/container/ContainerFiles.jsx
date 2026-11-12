@@ -1,9 +1,11 @@
 import React from "react";
-import {Alert, Breadcrumb, Button, Divider, Empty, Input, message, Modal, Space, Spin, Table, Tooltip, Typography, Upload} from "antd";
+import {Alert, Breadcrumb, Button, Divider, Empty, Input, message, Modal, Popconfirm, Space, Spin, Table, Tooltip, Typography, Upload} from "antd";
 import {
     ArrowUpOutlined,
+    DeleteOutlined,
     DownloadOutlined,
     EditOutlined,
+    EyeOutlined,
     FileAddOutlined,
     FileOutlined,
     FolderOutlined,
@@ -17,7 +19,23 @@ import {editorMode, isEditable, joinPath} from "../fileUtils";
 import {formatBytes} from "./utils";
 
 /**
- * 容器文件浏览：目录导航、文本预览、文件/目录下载、上传文件、在线编辑文本文件（yml / toml 等）。
+ * 禁止删除的系统关键路径（与后端 ContainerService#PROTECTED_DELETE_PATHS 保持一致，两边同步维护）：
+ * 这些路径的删除按钮置灰，后端同样会拦截。目录只保护路径本身，其下的文件仍可按需删除。
+ */
+const PROTECTED_DELETE_PATHS = new Set([
+    '/bin', '/sbin', '/usr', '/lib', '/lib64', '/lib32', '/libx32',
+    '/boot', '/etc', '/root', '/home', '/run', '/var/run',
+    '/proc', '/sys', '/dev',
+    '/etc/passwd', '/etc/shadow', '/etc/group', '/etc/gshadow',
+    '/etc/hosts', '/etc/hostname', '/etc/resolv.conf', '/etc/nsswitch.conf', '/etc/profile',
+])
+
+const isProtectedDeletePath = path =>
+    PROTECTED_DELETE_PATHS.has(path) ||
+    path.startsWith('/proc/') || path.startsWith('/sys/') || path.startsWith('/dev/')
+
+/**
+ * 容器文件浏览：目录导航、文本预览、文件/目录下载、上传文件、在线编辑文本文件（yml / toml 等）、删除文件/目录。
  * 需要 container:file 权限。
  */
 export default class extends React.Component {
@@ -115,6 +133,17 @@ export default class extends React.Component {
             fileName: isDir ? record.name + '.tar' : record.name,
         }).catch(() => {
         }).finally(() => hide())
+    }
+
+    /** 删除容器内文件 / 目录（递归），容器内需有 rm 命令。 */
+    remove = record => {
+        const {hostId, containerId} = this.props
+        HttpClient.get('admin/container/deleteFile', {hostId, containerId, path: record.path}, {toastError: false})
+            .then(rs => {
+                message.success(rs.message || '已删除')
+                this.refresh()
+            })
+            .catch(e => message.error(e.message || '删除失败'))
     }
 
     uploadFiles = files => {
@@ -235,21 +264,41 @@ export default class extends React.Component {
             {title: '权限', dataIndex: 'mode', width: 130},
             {title: '修改时间', dataIndex: 'mtime', width: 170},
             {
-                title: '操作', width: 190,
-                render: (_, record) => <Space>
+                title: '操作', width: 130,
+                render: (_, record) => <Space size={0}>
                     {record.type === 'file' &&
-                        <Button size='small' type='link' onClick={() => this.preview(record)}>预览</Button>}
+                        <Tooltip title='预览'>
+                            <Button size='small' type='link' icon={<EyeOutlined/>}
+                                    onClick={() => this.preview(record)}/>
+                        </Tooltip>}
                     {record.type === 'file' && (
                         isEditable(record)
-                            ? <Button size='small' type='link' icon={<EditOutlined/>}
-                                      onClick={() => this.openEditor(record)}>编辑</Button>
+                            ? <Tooltip title='编辑'>
+                                <Button size='small' type='link' icon={<EditOutlined/>}
+                                        onClick={() => this.openEditor(record)}/>
+                            </Tooltip>
                             : <Tooltip title='二进制或超过 256KB 的文件不支持在线编辑，请下载后修改'>
-                                <Button size='small' type='link' icon={<EditOutlined/>} disabled>编辑</Button>
+                                <Button size='small' type='link' icon={<EditOutlined/>} disabled/>
                             </Tooltip>
                     )}
                     {record.type !== 'link' &&
-                        <Button size='small' type='link' icon={<DownloadOutlined/>}
-                                onClick={() => this.download(record)}>下载</Button>}
+                        <Tooltip title='下载'>
+                            <Button size='small' type='link' icon={<DownloadOutlined/>}
+                                    onClick={() => this.download(record)}/>
+                        </Tooltip>}
+                    {record.type !== 'link' && !isProtectedDeletePath(record.path) &&
+                        <Popconfirm title={`确定删除 ${record.name} 吗？`}
+                                    description={record.type === 'dir' ? '目录会递归删除其中的全部内容，且不可恢复' : '删除后不可恢复'}
+                                    okText='删除' okButtonProps={{danger: true}} cancelText='取消'
+                                    onConfirm={() => this.remove(record)}>
+                            <Tooltip title='删除'>
+                                <Button size='small' type='link' danger icon={<DeleteOutlined/>}/>
+                            </Tooltip>
+                        </Popconfirm>}
+                    {record.type !== 'link' && isProtectedDeletePath(record.path) &&
+                        <Tooltip title='系统关键路径，禁止删除（目录内的文件仍可按需删除）'>
+                            <Button size='small' type='link' icon={<DeleteOutlined/>} disabled/>
+                        </Tooltip>}
                 </Space>
             },
         ]

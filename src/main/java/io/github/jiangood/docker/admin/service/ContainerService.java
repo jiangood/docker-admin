@@ -54,6 +54,22 @@ public class ContainerService {
     private static final int PREVIEW_MAX_BYTES = 262144;
 
     /**
+     * 禁止删除的系统关键路径：删掉这些目录/文件容器基本就无法运行了。
+     * <ul>
+     *   <li>目录按「路径本身」精确保护，其下的文件仍可按需删除（如 /etc/nginx/conf.d/xx.conf）；</li>
+     *   <li>/proc、/sys、/dev 是内核伪文件系统，本来就没有用户数据，整个前缀保护。</li>
+     * </ul>
+     * 前端 {@code web/src/components/container/ContainerFiles.jsx} 有同名置灰列表，两边需同步维护。
+     */
+    private static final List<String> PROTECTED_DELETE_PATHS = List.of(
+            "/bin", "/sbin", "/usr", "/lib", "/lib64", "/lib32", "/libx32",
+            "/boot", "/etc", "/root", "/home", "/run", "/var/run",
+            "/proc", "/sys", "/dev",
+            "/etc/passwd", "/etc/shadow", "/etc/group", "/etc/gshadow",
+            "/etc/hosts", "/etc/hostname", "/etc/resolv.conf", "/etc/nsswitch.conf", "/etc/profile");
+    private static final List<String> PROTECTED_DELETE_PREFIXES = List.of("/proc/", "/sys/", "/dev/");
+
+    /**
      * 容器启停删的兜底超时：docker-java 的 responseTimeout 是 1 小时（拉镜像需要），
      * 而这类命令本该秒回，宿主机存储卡住（如 bind 源目录在无响应的 NFS 上）时必须尽快失败。
      * <p>
@@ -852,6 +868,31 @@ public class ContainerService {
                     new FileAttrs(mode > 0 ? mode : 0644, uid, gid));
         } finally {
             IOUtils.closeQuietly(client);
+        }
+    }
+
+    /**
+     * 删除容器内文件 / 目录（递归）。
+     * <p>
+     * Docker API 没有删除容器内文件的接口，这里经 exec 在容器内执行 {@code rm -rf}；
+     * distroless / scratch 等不含 rm 的镜像无法删除，只能通过容器终端操作。
+     */
+    public void deleteFile(Host host, String containerId, String path) {
+        String target = normalizePath(path);
+        if ("/".equals(target)) {
+            throw new BusinessException("不能删除根目录");
+        }
+        if (PROTECTED_DELETE_PREFIXES.stream().anyMatch(target::startsWith)) {
+            throw new BusinessException("禁止删除系统伪文件系统 " + target + "（/proc、/sys、/dev 内没有用户数据）");
+        }
+        if (PROTECTED_DELETE_PATHS.contains(target)) {
+            throw new BusinessException("禁止删除系统关键路径 " + target + "（容器运行依赖，目录内的文件仍可按需删除）");
+        }
+        try {
+            execOrThrow(host, containerId, List.of("rm", "-rf", target));
+        } catch (BusinessException e) {
+            String stderr = StrUtil.trimToEmpty(e.getMessage());
+            throw new BusinessException(stderr.isBlank() ? "删除失败" : "删除失败: " + stderr);
         }
     }
 
