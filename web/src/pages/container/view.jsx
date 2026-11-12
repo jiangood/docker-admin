@@ -218,16 +218,20 @@ export default class extends React.Component {
                 key: 'files',
                 label: '文件',
                 children: <div style={{height: paneHeight, overflow: 'auto'}}>
-                    {running
-                        ? <ContainerFiles hostId={hostId} containerId={targetId}/>
-                        : <Alert type='warning' showIcon title='容器未运行，无法浏览文件'/>}
+                    {!hostId && !appId
+                        ? <Alert type='warning' showIcon title='缺少主机信息，无法浏览文件'/>
+                        : running
+                            ? <ContainerFiles hostId={hostId} containerId={targetId}/>
+                            : <Alert type='warning' showIcon title='容器未运行，无法浏览文件'/>}
                 </div>
             },
             {
                 key: 'console',
                 label: '终端',
-                children: <ContainerConsole hostId={hostId} containerId={targetId} running={running}
-                                            height={paneHeight}/>
+                children: !hostId && !appId
+                    ? <Alert type='warning' showIcon title='缺少主机信息，无法打开终端'/>
+                    : <ContainerConsole hostId={hostId} containerId={targetId} running={running}
+                                            height={paneHeight}/>,
             },
             {
                 key: 'info',

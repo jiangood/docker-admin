@@ -250,9 +250,12 @@ export default class extends React.Component {
             .map(p => 'http://' + ip + ':' + p.publicPort)
     }
 
-    /** 打开容器详情页（应用维度），默认打开日志页签 */
+    /** 打开容器详情页（应用维度），默认打开日志页签。
+     *  附带 hostId：文件 / 终端页签走主机维度接口（admin/container/*），缺少 hostId 会报「hostId 不能为空」。 */
     openContainer = () => {
-        PageUtils.open(`/container/view?appId=${encodeURIComponent(this.state.app.id)}`)
+        const hostId = this.state.app.host?.id
+        PageUtils.open(`/container/view?appId=${encodeURIComponent(this.state.app.id)}`
+            + (hostId ? `&hostId=${encodeURIComponent(hostId)}` : ''))
     }
 
     openDeploy = () => {
