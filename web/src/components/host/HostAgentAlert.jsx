@@ -1,10 +1,10 @@
 import React from 'react'
-import {Alert, Badge, Button, Input, Modal, Space, Spin, Tooltip, Typography, message} from 'antd'
-import {CloudServerOutlined, FolderOpenOutlined, QuestionCircleOutlined} from '@ant-design/icons'
+import {Alert, Badge, Button, Input, Modal, Popconfirm, Space, Spin, Tooltip, Typography, message} from 'antd'
+import {CloudServerOutlined, FolderOpenOutlined, QuestionCircleOutlined, SyncOutlined} from '@ant-design/icons'
 import {HttpClient, PermUtils} from '@jiangood/open-admin'
 
 /**
- * Agent 容器状态与操作：把「状态」「提示（异常）」「按钮（部署 / 切换挂载目录 / 帮助）」
+ * Agent 容器状态与操作：把「状态」「提示（异常）」「按钮（更新 / 重新部署 / 切换挂载目录 / 部署 / 帮助）」
  * 通过 render prop 交给外层 Card，自己只负责取状态、弹窗和请求。
  * <p>
  * 目录决定终端里的挂载基准，所以切换入口也在这一层；镜像、目录、权限等说明统一收进问号弹窗。
@@ -24,6 +24,7 @@ export default class extends React.Component {
         rootOpen: false,
         rootInput: '',
         rootSubmitting: false,
+        updating: false,
         tag: 'latest',
         submitting: false,
     }
@@ -136,6 +137,30 @@ export default class extends React.Component {
             .finally(() => this.setState({rootSubmitting: false}))
     }
 
+    /**
+     * 更新镜像：按当前配置的 tag 重新拉取并重建辅助容器。
+     * latest 会强制拉取远端最新镜像；固定版本 tag（如 v4.8.40）本地已有时直接复用，
+     * 升级固定版本应先在「工具 - 主机 Agent」配置里改 tag，再点「重新部署」。
+     */
+    update = () => {
+        const {hostId, defaultTag, defaultRoot} = this.props
+        const {status} = this.state
+        const tag = defaultTag || (status && status.tag)
+        this.setState({updating: true})
+        HttpClient.post('admin/host/agent/deploy', null,
+            {id: hostId, tag, root: defaultRoot, recreate: true})
+            .then(rs => {
+                message.success((rs && rs.message) || '辅助容器已更新')
+                this.notifyConfigChange()
+                this.load()
+            })
+            .catch(() => {
+                // 重建失败时旧容器可能已经删掉，刷新状态让按钮回到「部署」
+                this.load()
+            })
+            .finally(() => this.setState({updating: false}))
+    }
+
     /** 卡片标题里的状态块：加载中 / 运行中 / 已停止 / 未部署。 */
     renderSummary() {
         const {status, loading, error} = this.state
@@ -176,7 +201,7 @@ export default class extends React.Component {
     }
 
     render() {
-        const {status, deployOpen, helpOpen, rootOpen, rootInput, rootSubmitting} = this.state
+        const {status, deployOpen, helpOpen, rootOpen, rootInput, rootSubmitting, updating} = this.state
         const canSave = PermUtils.hasPermission('host:save')
         const deployed = !!(status && status.deployed)
         const {extra, children} = this.props
@@ -190,6 +215,13 @@ export default class extends React.Component {
                                 onClick={this.openDeploy}>重新部署</Button>}
                     <Button icon={<FolderOpenOutlined/>}
                             onClick={this.openRootModal}>切换挂载目录</Button>
+                    {status && !status.needsRebuild &&
+                        <Popconfirm title='更新辅助容器镜像？'
+                                    description='将按当前 tag 重新拉取镜像并重建容器，终端会话会中断'
+                                    okText='更新'
+                                    onConfirm={this.update}>
+                            <Button icon={<SyncOutlined/>} loading={updating}>更新</Button>
+                        </Popconfirm>}
                 </>
                 : <Button type='primary' icon={<CloudServerOutlined/>}
                           onClick={this.openDeploy}>部署辅助容器</Button>)}
@@ -330,6 +362,11 @@ export default class extends React.Component {
                     镜像地址在「系统管理 - 系统参数 - 主机辅助容器」维护（不含 tag）；镜像 tag 与挂载目录在
                     「工具 - 主机 Agent」的配置里维护。配置与容器实际参数不一致时，
                     面板右上角会出现「重新部署」，点它即可按配置重建容器。
+                </Typography.Paragraph>
+                <Typography.Paragraph>
+                    agent 镜像发新版后，点右上角「更新」即可升级：会按当前 tag 重新拉取镜像并重建容器
+                    （tag 为 latest 时强制拉取远端最新镜像；固定版本 tag 本地已有时直接复用，
+                    升级固定版本请先在配置里改 tag 再点「重新部署」）。更新会中断终端会话，会话会自动重连。
                 </Typography.Paragraph>
 
                 {status && status.deployed && <>
