@@ -290,7 +290,7 @@ export default class extends React.Component {
                     ) : null}
                     onClose={() => this.setState({logVisible: false})}>
                 {logVisible && logId
-                    ? <LogView key={logId} url={'/admin/ws/build-test-log/' + logId} websocket={true}/>
+                    ? <LogView key={logId} url={'/admin/ws/task-log/' + logId} websocket={true}/>
                     : null}
             </Drawer>
 

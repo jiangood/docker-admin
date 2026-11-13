@@ -80,6 +80,46 @@ git tag vx.y.z && git push && git push origin vx.y.z
   页面（`web/src/pages/image-sync/index.jsx`）是 ProTable + 工具栏三个「增加」按钮
   （同步到注册中心 / 同步到主机 / 经执行主机中转），每个按钮打开 `ImageSyncModal` 对应模式，
   提交后弹窗原地切换为实时日志；行内「查看日志」用抽屉回看。
+- **任务中心（通用长任务框架，9 条链路全部接入）：** 后台长任务统一登记到
+  `t_task_log`（`TaskLog`，`ddl-auto: update` 自动建表）：`logId`（即日志文件名）唯一，
+  `type` / `title` / `status`（RUNNING/SUCCESS/FAILED）/ `permission`（查看该任务日志所需权限码）/
+  `error` / `progress`（JSON 快照，可选）/ `triggerUser` / `endTime` / `timeSpend`。
+  **唯一的日志 WS 端点**是 `/admin/ws/task-log/{logId}`（handler 复用 `SyncLogWebSocketHandler`），
+  配唯一的 `TaskLogHandshakeInterceptor`：logId 格式白名单 + 必须存在对应任务记录 +
+  按该记录的 `permission` 字段鉴权（可挡掉「猜日志文件名」的访问）；旧的 7 个业务日志端点
+  （sync-log / build-log / deploy-log / build-test-log / image-export-log / image-import-log /
+  image-download-log / host-image-export-log）与其拦截器**已删除**，前端 `LogView` 一律连 task-log。
+  各类型的 logId 与 permission 约定（见 `TaskLog` 的 TYPE_* 常量）：
+  <ul>
+    <li>`build`：logId = 构建记录 id，permission `project:view`（ProjectService）</li>
+    <li>`deploy`：logId = 部署记录 id，permission `app:view`（AppService#doDeploy；**通用端点不做
+        组织数据权限校验**，部署日志的组织隔离由应用页入口承担）</li>
+    <li>`build-test`：`build-test-<rand>`，permission `build-test:view`（BuildTestService，不落库，
+        平台重启任务丢失但有 t_task_log 记录兜底）</li>
+    <li>`image-sync`：`sync-<rand>`，permission `image-sync:view`（ImageSyncService，业务明细仍在
+        `t_image_sync_log`，双写）</li>
+    <li>`image-export` / `image-import` / `image-download` / `host-image-export` / `agent-deploy`：
+        `类型-<rand>`，permission 分别为 `image:export` / `image:import` /
+        `image-download:download` / `host:image` / `host:list`</li>
+  </ul>
+  接入模式统一「先校验、后登记、异步收尾」：请求线程同步完成参数校验与业务占位
+  （如构建测试的 runningLogId.compareAndSet）后调 `TaskLogService.start(logId, type, title,
+  permission, triggerUser)`（LongTaskRunner#start 生成随机 logId 的走 `LongTaskRunner.start`），
+  `@Async` 方法体里 `FileLog.bind` → 工作 → finally 里
+  **先 `taskLogService.finish(logId, success, error)` 写库，再 `FileLog.unbind()`、
+  `taskLogRegistry.finish(logId)`**（顺序不能反：WS 检测到任务结束关闭连接后，
+  前端刷新任务列表必须能拿到终态）。取消走 `TaskLogRegistry#cancel`（关登记的可中断资源，
+  如 docker 拉取/构建流），任务线程在下一个检查点失败退出、按取消原因收尾。
+  前端通用组件 `web/src/components/TaskLogDrawer.jsx`（包 `LogView`）；「工具 - 任务中心」页
+  （`/task`，权限 `task:view` 与 `task:cancel`）ProTable 列出全部任务，运行中的任务页面可见时
+  每 10 秒轮询刷新，行内可看日志（抽屉）、可取消。`TaskLogStartupSweeper`（ApplicationRunner）
+  启动时把遗留 RUNNING 行标记为 FAILED「平台重启，任务中断」。Agent 部署/更新/切换挂载目录
+  已异步化：`admin/host/agent/deploy` 与 `admin/host/agent/root` 同步校验参数后立即返回 logId，
+  弹窗（`HostAgentAlert`）原地切换为实时日志，任务结束（WS 关闭）自动刷新状态与配置；
+  首次拉 260 MB agent 镜像不再阻塞 HTTP 请求。**新增长任务必须接这套框架**：登记 TaskLog、
+  日志走 FileLog、实时输出连 task-log 端点，不要再新开 WS 端点 / 拦截器。
+  `PlatformVersion` 只认带本项目 `Start-Class` 的 manifest——classpath 上依赖 jar 的
+  `META-INF/MANIFEST.MF`（如 open-admin 3.2.0）会被跳过，未打包运行时不做 agent 版本比较。
 - **主机文件管理 / Docker CLI：** Agent 是「工具」菜单下的独立工具（`/host-agent`，
   ProTable 页面 `web/src/pages/host-agent/index.jsx`），配置存 `t_host_agent_config`
   （`HostAgentConfig`，表由 `ddl-auto: update` 自动创建）：一条配置绑定一台主机

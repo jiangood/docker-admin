@@ -80,7 +80,7 @@ export default class extends React.Component {
                     mask={{closable: false}}
                     onClose={() => this.setState({logVisible: false})}>
                 {logVisible && logId
-                    ? <LogView key={logId} url={'/admin/ws/image-download-log/' + logId}
+                    ? <LogView key={logId} url={'/admin/ws/task-log/' + logId}
                                websocket={true} onClose={this.onLogClose}/>
                     : null}
             </Drawer>

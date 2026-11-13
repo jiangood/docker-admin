@@ -221,7 +221,7 @@ export default class extends React.Component {
                     : <Alert type='success' showIcon
                              message='导出完成，点击右上角「下载」保存 tar；下载后临时文件即删除'/>}
             <LogView key={task.logId}
-                     url={'/admin/ws/image-export-log/' + task.logId}
+                     url={'/admin/ws/task-log/' + task.logId}
                      websocket={true}
                      height={460}
                      onClose={this.onExportFinished}/>

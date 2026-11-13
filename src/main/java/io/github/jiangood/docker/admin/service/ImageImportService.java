@@ -9,12 +9,13 @@ import com.github.dockerjava.api.model.LoadResponseItem;
 import com.github.dockerjava.api.model.PushResponseItem;
 import io.github.jiangood.docker.admin.entity.ImageTag;
 import io.github.jiangood.docker.admin.entity.Registry;
-import io.github.jiangood.docker.admin.websocket.ImageImportLogHandshakeInterceptor;
+import io.github.jiangood.docker.admin.websocket.TaskLogHandshakeInterceptor;
 import io.github.jiangood.docker.admin.websocket.TaskLogRegistry;
 import io.github.jiangood.docker.base.FileLog;
 import io.github.jiangood.docker.sdk.engine.DefaultCallback;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.springframework.scheduling.annotation.Async;
@@ -47,6 +48,7 @@ import java.util.regex.Pattern;
  * 指定镜像名时只允许归档里只有一个镜像，便于改名重新发布。
  */
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class ImageImportService {
 
@@ -78,6 +80,8 @@ public class ImageImportService {
     private final ImageImportRegistry importRegistry;
 
     private final TaskLogRegistry taskLogRegistry;
+
+    private final TaskLogService taskLogService;
 
     /**
      * 同步校验用户填写的镜像名与版本，让错误在开始上传前就能返回。
@@ -161,6 +165,12 @@ public class ImageImportService {
         } finally {
             FileUtil.del(tar);
             IOUtils.closeQuietly(client);
+            // 先写库再结束任务：日志 WS 断开后前端刷新任务列表即可拿到终态
+            try {
+                taskLogService.finish(logId, success, message);
+            } catch (Exception ex) {
+                log.warn("写入任务记录失败: logId={} {}", logId, ex.getMessage());
+            }
             FileLog.unbind();
             taskLogRegistry.finish(logId);
             importRegistry.finish(logId, success
@@ -183,7 +193,7 @@ public class ImageImportService {
     }
 
     public boolean isValidLogId(String logId) {
-        return logId != null && ImageImportLogHandshakeInterceptor.LOG_ID_PATTERN.matcher(logId).matches();
+        return logId != null && TaskLogHandshakeInterceptor.LOG_ID_PATTERN.matcher(logId).matches();
     }
 
     /**

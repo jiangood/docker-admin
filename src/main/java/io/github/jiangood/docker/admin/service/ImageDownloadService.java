@@ -19,6 +19,7 @@ import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import io.github.jiangood.openadmin.util.SpringTool;
 import jakarta.annotation.Resource;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.springframework.scheduling.annotation.Async;
@@ -52,6 +53,7 @@ import java.util.regex.Pattern;
  * 过程写入 {@code {日志目录}/{logId}.log}，前端通过 WebSocket 实时查看。
  */
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class ImageDownloadService {
 
@@ -85,6 +87,9 @@ public class ImageDownloadService {
 
     @Resource
     TaskLogRegistry taskLogRegistry;
+
+    @Resource
+    TaskLogService taskLogService;
 
     @Resource
     HostService hostService;
@@ -181,14 +186,24 @@ public class ImageDownloadService {
     public void download(String logId, ImageDownloadRequest p) {
         taskLogRegistry.start(logId);
         FileLog.bind(logId);
+        boolean success = false;
+        String error = null;
         try {
             saveToHost(logId, p.getHostId(), p.getImage(), true, null);
             fileLog.info("镜像下载完成");
+            success = true;
         } catch (Exception e) {
             // 面向用户只给一行原因，堆栈留给后端排查
+            error = e.getMessage();
             fileLog.error("镜像下载失败: {}", e.getMessage());
             fileLog.debug("镜像下载失败详情", e);
         } finally {
+            // 先写库再结束任务：日志 WS 断开后前端刷新任务列表即可拿到终态
+            try {
+                taskLogService.finish(logId, success, error);
+            } catch (Exception ex) {
+                log.warn("写入任务记录失败: logId={} {}", logId, ex.getMessage());
+            }
             FileLog.unbind();
             taskLogRegistry.finish(logId);
         }

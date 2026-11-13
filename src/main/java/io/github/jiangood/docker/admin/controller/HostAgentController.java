@@ -38,18 +38,23 @@ public class HostAgentController {
         return AjaxResult.ok().data(hostAgentService.status(requireHost(id), tag, root));
     }
 
+    /**
+     * 部署辅助容器（含「更新」）。同步校验参数并登记任务后立即返回 logId，
+     * 拉镜像与重建容器走异步任务，前端据此打开实时日志。
+     */
     @Log("主机-部署辅助容器")
     @HasPermission("host:save")
     @PostMapping("deploy")
     public AjaxResult deploy(String id, String root, String tag, Boolean recreate) {
         Host host = requireHost(id);
-        return AjaxResult.ok().msg("辅助容器已就绪")
-                .data(hostAgentService.deploy(host, root, tag, recreate != null && recreate));
+        String logId = hostAgentService.startDeploy(host, root, tag, recreate != null && recreate, "部署辅助容器");
+        return AjaxResult.ok().data(logId).msg("部署已开始");
     }
 
     /**
      * 文件面板的「切换目录」：用新目录重建辅助容器，容器成功起来后才保存目录。
      * 属于基础设施变更（会重启容器、断开 CLI），因此同样要求 {@code host:save}。
+     * 同样走异步任务，前端按返回的 logId 打开实时日志。
      */
     @Log("主机-切换文件目录")
     @HasPermission("host:save")
@@ -58,8 +63,8 @@ public class HostAgentController {
         Host host = requireHost(id);
         Assert.hasText(root, "请填写宿主机目录");
         String normalized = HostRootPolicy.normalizeRoot(root);
-        return AjaxResult.ok().msg("文件目录已切换到 " + normalized)
-                .data(hostAgentService.deploy(host, normalized, null, false));
+        String logId = hostAgentService.startDeploy(host, normalized, null, false, "切换挂载目录");
+        return AjaxResult.ok().data(logId).msg("切换已开始");
     }
 
     @Log("主机-删除辅助容器")

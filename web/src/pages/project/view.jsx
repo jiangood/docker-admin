@@ -605,7 +605,7 @@ export default class extends React.Component {
              footer={null}
              onCancel={this.closeLog}>
         {logRow
-          ? <LogView url={'/admin/ws/build-log/' + logRow.id} websocket={true}/>
+          ? <LogView url={'/admin/ws/task-log/' + logRow.id} websocket={true}/>
           : null}
       </Modal>
 

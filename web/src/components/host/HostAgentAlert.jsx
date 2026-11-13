@@ -2,6 +2,7 @@ import React from 'react'
 import {Alert, Badge, Button, Input, Modal, Space, Spin, Tooltip, Typography, message} from 'antd'
 import {CloudServerOutlined, FolderOpenOutlined, QuestionCircleOutlined, SyncOutlined} from '@ant-design/icons'
 import {HttpClient, PermUtils} from '@jiangood/open-admin'
+import TaskLogDrawer from '../TaskLogDrawer'
 
 /**
  * Agent 容器状态与操作：把「状态」「提示（异常）」「按钮（更新 / 重新部署 / 切换挂载目录 / 部署 / 帮助）」
@@ -28,6 +29,8 @@ export default class extends React.Component {
         updating: false,
         tag: 'latest',
         submitting: false,
+        logId: null,
+        logVisible: false,
     }
 
     componentDidMount() {
@@ -90,10 +93,11 @@ export default class extends React.Component {
         HttpClient.post('admin/host/agent/deploy', null,
             {id: hostId, tag: tagValue, root: defaultRoot})
             .then(rs => {
-                message.success((rs && rs.message) || '辅助容器已就绪')
+                // 部署是异步任务：接口返回 logId，弹窗原地切换为实时日志
+                message.success((rs && rs.message) || '部署已开始')
                 this.setState({deployOpen: false})
                 this.notifyConfigChange()
-                this.load()
+                this.openLog(rs.data)
             })
             .catch(() => {
                 // 部署失败时容器可能已经被删掉，重新读一次状态，让按钮回到「部署」
@@ -125,10 +129,11 @@ export default class extends React.Component {
         this.setState({rootSubmitting: true})
         HttpClient.post('admin/host/agent/root', null, {id: hostId, root: value}, {toastError: false})
             .then(rs => {
-                message.success((rs && rs.message) || '目录已切换')
+                // 切换是异步任务（重建容器）：弹窗原地切换为实时日志
+                message.success((rs && rs.message) || '切换已开始')
                 this.setState({rootOpen: false})
                 this.notifyConfigChange()
-                this.load()
+                this.openLog(rs.data)
             })
             .catch(e => {
                 message.error(e.message || '切换挂载目录失败')
@@ -151,10 +156,11 @@ export default class extends React.Component {
         HttpClient.post('admin/host/agent/deploy', null,
             {id: hostId, tag, root: defaultRoot, recreate: true})
             .then(rs => {
-                message.success((rs && rs.message) || '辅助容器已更新')
+                // 更新是异步任务：接口返回 logId，弹窗原地切换为实时日志
+                message.success((rs && rs.message) || '更新已开始')
                 this.setState({updateOpen: false})
                 this.notifyConfigChange()
-                this.load()
+                this.openLog(rs.data)
             })
             .catch(() => {
                 // 重建失败时旧容器可能已经删掉，刷新状态让按钮回到「部署」
@@ -162,6 +168,26 @@ export default class extends React.Component {
                 this.load()
             })
             .finally(() => this.setState({updating: false}))
+    }
+
+    openLog = logId => {
+        if (logId) {
+            this.setState({logId, logVisible: true})
+        }
+    }
+
+    /**
+     * 部署 / 更新 / 切换目录任务结束（日志 WS 关闭）时刷新状态与配置：
+     * 成功则版本徽标与按钮恢复正常，失败则按钮回到「部署」。
+     */
+    onLogEnd = () => {
+        this.load()
+        this.notifyConfigChange()
+    }
+
+    closeLog = () => {
+        this.setState({logVisible: false})
+        this.onLogEnd()
     }
 
     /** 卡片标题里的状态块：加载中 / 运行中 / 已停止 / 未部署，后面跟着镜像版本号。 */
@@ -219,7 +245,8 @@ export default class extends React.Component {
     }
 
     render() {
-        const {status, deployOpen, helpOpen, rootOpen, rootInput, rootSubmitting, updateOpen, updating} = this.state
+        const {status, deployOpen, helpOpen, rootOpen, rootInput, rootSubmitting, updateOpen, updating,
+            logId, logVisible} = this.state
         const canSave = PermUtils.hasPermission('host:save')
         const deployed = !!(status && status.deployed)
         const {extra, children} = this.props
@@ -256,6 +283,11 @@ export default class extends React.Component {
             {this.renderRootModal(rootOpen, rootInput, rootSubmitting)}
             {this.renderUpdateModal(updateOpen)}
             {this.renderHelpModal()}
+
+            <TaskLogDrawer open={logVisible} logId={logId}
+                           title='Agent 任务日志'
+                           onClose={this.closeLog}
+                           onEnd={this.onLogEnd}/>
         </>
     }
 
@@ -332,6 +364,7 @@ export default class extends React.Component {
                       onCancel={() => this.setState({updateOpen: false})}>
             <Typography.Paragraph>
                 将按当前 tag 重新拉取镜像并重建辅助容器，终端会话会中断并自动重连。
+                任务在后台执行，确认后弹窗会切换为实时日志（任务中心也可查看）。
             </Typography.Paragraph>
             <div style={{fontSize: 12, lineHeight: 1.8}}>
                 <div>镜像：<code>{image}</code></div>

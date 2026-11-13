@@ -24,6 +24,7 @@ import io.github.jiangood.docker.admin.entity.Project;
 import io.github.jiangood.docker.admin.service.registry.RegistryV2Client;
 import io.github.jiangood.docker.admin.util.ImageUrlUtils;
 import io.github.jiangood.docker.admin.websocket.TaskLogRegistry;
+import io.github.jiangood.docker.admin.entity.TaskLog;
 import io.github.jiangood.docker.base.FileLog;
 import io.github.jiangood.docker.sdk.engine.DefaultCallback;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
@@ -106,6 +107,8 @@ public class AppService extends BaseService<App> {
     @Resource
     TaskLogRegistry taskLogRegistry;
 
+    TaskLogService taskLogService;
+
     /**
      * 保存应用：新建走 create，编辑走 update。
      */
@@ -158,6 +161,7 @@ public class AppService extends BaseService<App> {
         // saveAndFlush 抛异常时实体的 id 已被 @PrePersist 填好，不能再用 isNew() 判断是否落库
         boolean logSaved = false;
         boolean success = false;
+        String error = null;
         try {
             // 每次部署落一条独立记录，并以其 id 作为日志文件名：前端「部署日志」按部署记录
             // 列表展示，各次部署的日志互不混在一起（不再用 appId 绑定日志文件）。
@@ -173,6 +177,10 @@ public class AppService extends BaseService<App> {
             // saveAndFlush：立即拿到底层生成的 id，绑定日志文件时才有值（与 BuildLogService.saveLog 一致）
             deployLog = deployLogRepository.saveAndFlush(deployLog);
             logSaved = true;
+
+            // 登记通用任务记录（logId 即部署记录 id），任务中心可统一查看与回放日志
+            taskLogService.start(deployLog.getId(), TaskLog.TYPE_DEPLOY,
+                    deployLog.getAppName() + " · 部署", "app:view", taskLogService.currentTriggerUser());
 
             FileLog.bind(deployLog.getId());
             // 登记为运行中的任务：前端「部署日志」用 WebSocket 实时 tail 本文件，
@@ -401,6 +409,7 @@ public class AppService extends BaseService<App> {
             fileLog.info("部署阶段结束");
             success = true;
         } catch (Exception e) {
+            error = e.getMessage();
             fileLog.error("部署失败", e);
         } finally {
             // 先收尾数据库记录，再用内层 try/finally 保证「部署中」标记无论记录成败都会清掉。
@@ -411,6 +420,8 @@ public class AppService extends BaseService<App> {
                     deployLog.setSuccess(success);
                     deployLog.setCompleteTime(LocalDateTime.now());
                     deployLogRepository.save(deployLog);
+                    // 先写任务记录再标记结束：日志 WS 断开后前端刷新任务列表即可拿到终态
+                    taskLogService.finish(deployLog.getId(), success, error);
                     // 标记任务结束：前端 WS 收到后补发剩余内容并断开
                     taskLogRegistry.finish(deployLog.getId());
                 }

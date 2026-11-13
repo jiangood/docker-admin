@@ -4,9 +4,11 @@ import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
 import io.github.jiangood.docker.admin.dto.HostImageExportTaskView;
 import io.github.jiangood.docker.admin.entity.Host;
+import io.github.jiangood.docker.admin.entity.TaskLog;
 import io.github.jiangood.docker.admin.websocket.TaskLogRegistry;
 import io.github.jiangood.docker.base.FileLog;
 import jakarta.annotation.Resource;
+import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
@@ -29,9 +31,13 @@ import java.util.regex.Pattern;
  * 但已生成的 tar 仍在主机上，可按日志里的路径取用。
  */
 @Service
+@Slf4j
 public class HostImageExportService {
 
     private static final Logger fileLog = FileLog.logger();
+
+    @Resource
+    private TaskLogService taskLogService;
 
     /**
      * 镜像标识白名单：镜像 ID（sha256:...）与 repo:tag 都要放行，且不能含空白。
@@ -124,6 +130,10 @@ public class HostImageExportService {
             tasksByLogId.remove(old.logId);
         }
         tasksByLogId.put(logId, task);
+        // 登记通用任务记录，任务中心可查看与回放（在标记运行中之前，保证 WS 鉴权能查到记录）
+        taskLogService.start(logId, TaskLog.TYPE_HOST_IMAGE_EXPORT,
+                "导出主机镜像 " + host.getName() + " · " + ref,
+                "host:image", taskLogService.currentTriggerUser());
         // 在请求线程先标记运行中：前端拿到 logId 后可能立刻连日志 WebSocket，
         // 若等 @Async 线程起来再登记，日志流会误判任务已结束而提前关闭
         taskLogRegistry.start(logId);
@@ -138,6 +148,8 @@ public class HostImageExportService {
         Task task = tasksByLogId.get(logId);
         taskLogRegistry.start(logId);
         FileLog.bind(logId);
+        boolean success = false;
+        String error = null;
         try {
             ImageDownloadService.TarResult result = imageDownloadService.saveToHost(
                     logId, hostId, image, false, task == null ? null : task::progress);
@@ -145,14 +157,22 @@ public class HostImageExportService {
                 task.complete(result);
             }
             fileLog.info("导出完成，可以下载了");
+            success = true;
         } catch (Exception e) {
             // 面向用户只给一行原因，堆栈留给后端排查
+            error = e.getMessage();
             fileLog.error("镜像导出失败: {}", e.getMessage());
             fileLog.debug("镜像导出失败详情", e);
             if (task != null) {
                 task.fail();
             }
         } finally {
+            // 先写库再结束任务：日志 WS 断开后前端刷新任务列表即可拿到终态
+            try {
+                taskLogService.finish(logId, success, error);
+            } catch (Exception ex) {
+                log.warn("写入任务记录失败: logId={} {}", logId, ex.getMessage());
+            }
             FileLog.unbind();
             taskLogRegistry.finish(logId);
         }

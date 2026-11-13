@@ -141,7 +141,7 @@ export default class extends React.Component {
                     mask={{closable: false}}
                     onClose={this.closeLog}>
                 {logVisible && logId
-                    ? <LogView key={logId} url={'/admin/ws/sync-log/' + logId} websocket={true}
+                    ? <LogView key={logId} url={'/admin/ws/task-log/' + logId} websocket={true}
                                onClose={this.reload}/>
                     : null}
             </Drawer>

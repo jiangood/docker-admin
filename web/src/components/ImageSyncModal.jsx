@@ -334,7 +334,7 @@ export default class ImageSyncModal extends React.Component {
         return <>
             <Alert type='info' showIcon className='mb-4'
                    title='同步已开始，日志会实时输出；关闭本窗口不影响后台任务，可稍后在「同步记录」中回看'/>
-            <LogView key={logId} url={'/admin/ws/sync-log/' + logId} websocket={true} height={400}
+            <LogView key={logId} url={'/admin/ws/task-log/' + logId} websocket={true} height={400}
                      onClose={() => this.props.onSuccess?.()}/>
         </>
     }

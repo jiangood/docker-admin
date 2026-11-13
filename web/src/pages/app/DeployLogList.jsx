@@ -172,7 +172,7 @@ export default class extends React.Component {
         // 进行中：日志文件可能刚创建，走 WebSocket 实时 tail
         if (log.success == null && !this.state.watchStopped[key]) {
             return <LogView key={key + '-' + (this.state.watchAttempts[key] || 0)}
-                            url={'/admin/ws/deploy-log/' + key} websocket={true}
+                            url={'/admin/ws/task-log/' + key} websocket={true}
                             onClose={() => this.handleLogClose(key)}/>
         }
         if (!log.logExists) {

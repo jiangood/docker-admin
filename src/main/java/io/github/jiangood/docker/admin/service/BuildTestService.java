@@ -9,6 +9,7 @@ import com.github.dockerjava.api.model.BuildResponseItem;
 import io.github.jiangood.docker.admin.dto.BuildTestRequest;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.entity.Registry;
+import io.github.jiangood.docker.admin.entity.TaskLog;
 import io.github.jiangood.docker.admin.util.BuildContextUtils;
 import io.github.jiangood.docker.admin.websocket.TaskLogRegistry;
 import io.github.jiangood.docker.base.FileLog;
@@ -76,6 +77,9 @@ public class BuildTestService {
     @Resource
     TaskLogRegistry taskLogRegistry;
 
+    @Resource
+    TaskLogService taskLogService;
+
     /**
      * 当前运行的构建测试任务 logId。构建节点与默认镜像名都是共用的，同一时间只允许一个任务。
      */
@@ -98,11 +102,21 @@ public class BuildTestService {
     }
 
     /**
-     * 触发构建测试：先同步占位（并发提交时直接报错），再转异步执行。
+     * 触发构建测试：先同步占位（并发提交时直接报错），登记通用任务记录后再转异步执行。
      */
     public void start(String logId, BuildTestRequest p) {
         if (!runningLogId.compareAndSet(null, logId)) {
             throw new BusinessException("已有构建测试任务正在运行，请先等待完成或取消");
+        }
+        try {
+            taskLogService.start(logId, TaskLog.TYPE_BUILD_TEST,
+                    "构建测试 " + StrUtil.sub(StrUtil.trim(p.getGitUrl()), 0, 120),
+                    "build-test:view", taskLogService.currentTriggerUser());
+            taskLogRegistry.start(logId);
+        } catch (RuntimeException e) {
+            // 登记失败时释放占位，避免下次触发被卡住
+            runningLogId.compareAndSet(logId, null);
+            throw e;
         }
         // 通过代理调用 @Async 方法，避免自调用失效
         SpringUtil.getBean(BuildTestService.class).build(logId, p);
@@ -180,9 +194,12 @@ public class BuildTestService {
         FileLog.bind(logId);
         DockerClient client = null;
         File workDir = null;
+        boolean success = false;
+        String error = null;
         try {
             if (cancelRequested.contains(logId)) {
                 fileLog.info("构建已取消");
+                error = "已取消";
                 return;
             }
 
@@ -260,9 +277,12 @@ public class BuildTestService {
             }
 
             fileLog.info("构建测试成功: {}", targetImage);
+            success = true;
         } catch (Exception e) {
+            error = e.getMessage();
             if (cancelRequested.contains(logId)) {
                 fileLog.info("构建已取消: {}", e.getMessage());
+                error = StrUtil.blankToDefault(error, "已取消");
             } else {
                 fileLog.error("构建测试失败: {}", e.getMessage(), e);
             }
@@ -273,6 +293,12 @@ public class BuildTestService {
                 GitTool.deleteCloneDir(workDir);
             }
             GitTool.cleanupCloneDirs();
+            // 先写库再结束任务：日志 WS 断开后前端刷新任务列表即可拿到终态
+            try {
+                taskLogService.finish(logId, success, error);
+            } catch (Exception ex) {
+                log.warn("写入任务记录失败: logId={} {}", logId, ex.getMessage());
+            }
             FileLog.unbind();
             cancelRequested.remove(logId);
             taskLogRegistry.finish(logId);

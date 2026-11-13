@@ -256,7 +256,7 @@ export default class HostImageExportModal extends React.Component {
                           ]}/>
 
             <LogView key={task.logId}
-                     url={'/admin/ws/host-image-export-log/' + task.logId}
+                     url={'/admin/ws/task-log/' + task.logId}
                      websocket={true}
                      height={320}
                      onClose={this.onLogClose}/>

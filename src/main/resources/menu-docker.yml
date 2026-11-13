@@ -129,3 +129,11 @@ menus:
       - {name: 查看, code: site-monitor:view}
       - {name: 保存, code: site-monitor:save}
       - {name: 删除, code: site-monitor:delete}
+  task-center:
+    pid: tool
+    name: 任务中心
+    path: /task
+    icon: UnorderedListOutlined
+    perms:
+      - {name: 查看, code: task:view}
+      - {name: 取消, code: task:cancel}

@@ -198,7 +198,7 @@ export default class ImageImportModal extends React.Component {
                     ? <Alert type='error' showIcon message='导入失败' description={task.message}/>
                     : <Alert type='info' showIcon message='正在载入归档并推送到注册中心，进度见下方日志'/>}
             <LogView key={logId}
-                     url={'/admin/ws/image-import-log/' + logId}
+                     url={'/admin/ws/task-log/' + logId}
                      websocket={true}
                      height={420}
                      onClose={this.onLogClose}/>

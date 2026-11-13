@@ -11,6 +11,7 @@ import io.github.jiangood.docker.admin.dto.ImageSyncRequest;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.entity.ImageSyncLog;
 import io.github.jiangood.docker.admin.entity.Registry;
+import io.github.jiangood.docker.admin.entity.TaskLog;
 import io.github.jiangood.docker.admin.websocket.TaskLogRegistry;
 import io.github.jiangood.docker.base.FileLog;
 import io.github.jiangood.docker.sdk.engine.DefaultCallback;
@@ -58,6 +59,8 @@ public class ImageSyncService {
 
     @Resource
     TaskLogRegistry taskLogRegistry;
+
+    TaskLogService taskLogService;
 
     @Resource
     HostService hostService;
@@ -139,10 +142,15 @@ public class ImageSyncService {
 
     /**
      * 先落库「同步中」记录再起异步任务：接口返回时页面刷新即可看到这条记录。
+     * 同时登记通用任务记录（t_task_log），任务中心可统一查看与回放日志。
      */
     public ImageSyncLog startRecord(String logId, ImageSyncRequest p) {
-        return syncLogService.start(logId, syncTypeOf(p), p.getSourceImage(), StrUtil.trim(p.getHostId()),
-                StrUtil.trim(p.getTargetHostId()));
+        ImageSyncLog syncLog = syncLogService.start(logId, syncTypeOf(p), p.getSourceImage(),
+                StrUtil.trim(p.getHostId()), StrUtil.trim(p.getTargetHostId()));
+        taskLogService.start(logId, TaskLog.TYPE_IMAGE_SYNC,
+                "镜像同步 " + StrUtil.sub(StrUtil.trim(p.getSourceImage()), 0, 120),
+                "image-sync:view", taskLogService.currentTriggerUser());
+        return syncLog;
     }
 
     @Async
@@ -175,6 +183,11 @@ public class ImageSyncService {
                 syncLogService.finish(syncLog, success, error);
             } catch (Exception e) {
                 fileLog.warn("写入同步记录失败: {}", e.getMessage());
+            }
+            try {
+                taskLogService.finish(logId, success, error);
+            } catch (Exception e) {
+                fileLog.warn("写入任务记录失败: {}", e.getMessage());
             }
             FileLog.unbind();
             taskLogRegistry.finish(logId);

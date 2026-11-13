@@ -1,8 +1,8 @@
 package io.github.jiangood.docker.admin.service;
 
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.extra.spring.SpringUtil;
 import com.github.dockerjava.api.DockerClient;
-import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.command.InspectContainerResponse;
 import com.github.dockerjava.api.command.InspectImageResponse;
 import com.github.dockerjava.api.exception.DockerException;
@@ -17,15 +17,22 @@ import com.github.dockerjava.api.model.RestartPolicy;
 import io.github.jiangood.docker.admin.config.DockerSettings;
 import io.github.jiangood.docker.admin.dto.HostAgentVo;
 import io.github.jiangood.docker.admin.entity.Host;
+import io.github.jiangood.docker.admin.entity.TaskLog;
+import io.github.jiangood.docker.admin.service.LongTaskRunner;
 import io.github.jiangood.docker.admin.util.AgentImageUtils;
 import io.github.jiangood.docker.admin.util.HostRootPolicy;
 import io.github.jiangood.docker.admin.util.PlatformVersion;
+import io.github.jiangood.docker.admin.websocket.TaskLogRegistry;
+import io.github.jiangood.docker.base.FileLog;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
+import io.github.jiangood.docker.sdk.engine.DefaultCallback;
 import io.github.jiangood.openadmin.util.BusinessException;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
+import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -51,7 +58,12 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 public class HostAgentService {
 
+    private static final Logger fileLog = FileLog.logger();
+
     public static final String CONTAINER_NAME = "docker-admin-agent";
+
+    /** 任务类型（任务中心展示与 logId 前缀），见 {@link TaskLog#TYPE_AGENT_DEPLOY}。 */
+    private static final String TASK_TYPE = TaskLog.TYPE_AGENT_DEPLOY;
 
     public static final String LABEL_AGENT = "io.github.jiangood.docker-admin.agent";
     public static final String LABEL_ROOT = LABEL_AGENT + ".root";
@@ -77,6 +89,15 @@ public class HostAgentService {
 
     @Resource
     private HostAgentConfigService hostAgentConfigService;
+
+    @Resource
+    private HostService hostService;
+
+    @Resource
+    private LongTaskRunner longTaskRunner;
+
+    @Resource
+    private TaskLogRegistry taskLogRegistry;
 
     @Value("${docker.agent.socket-path:/var/run/docker.sock}")
     private String socketPath;
@@ -149,6 +170,7 @@ public class HostAgentService {
         synchronized (deployLocks.computeIfAbsent(host.getId(), key -> new Object())) {
             DockerClient client = null;
             try {
+                fileLog.info("检查现有辅助容器…");
                 client = dockerClientManager.getClient(host);
 
                 InspectContainerResponse existing = inspect(client);
@@ -165,8 +187,12 @@ public class HostAgentService {
                             start(client);
                             waitRunning(client);
                         }
+                        fileLog.info("容器参数未变化，直接复用");
                         persist(host, root, tag);
                         return status(client, host, tag, root);
+                    }
+                    if (!same) {
+                        fileLog.info("配置与容器实际参数不一致，将重建容器");
                     }
                 }
 
@@ -176,17 +202,21 @@ public class HostAgentService {
 
                 if (existing != null) {
                     // 目录/镜像配置变了，或用户点了「重建」：旧容器直接重建
+                    fileLog.info("删除旧辅助容器…");
                     removeAgent(client);
                 }
 
+                fileLog.info("创建辅助容器…");
                 createAgent(client, root, image);
                 start(client);
                 waitRunning(client);
+                fileLog.info("校验挂载目录…");
                 assertMountDirectory(host, client, root);
 
                 // 容器成功起来后才落库：切换目录失败时保留旧目录，
                 // 「重新部署」还能按原目录恢复，不会把主机卡在一个无效目录上
                 persist(host, root, tag);
+                fileLog.info("部署完成");
                 return status(client, host, tag, root);
             } catch (BusinessException e) {
                 throw e;
@@ -206,6 +236,52 @@ public class HostAgentService {
      */
     private void persist(Host host, String root, String tag) {
         hostAgentConfigService.saveDeployedConfig(host, tag, root);
+    }
+
+    /**
+     * 以长任务方式部署辅助容器（部署 / 更新 / 切换挂载目录共用）：
+     * 同步完成参数校验并登记任务记录后立即返回 logId，实际拉镜像与重建容器在
+     * {@code @Async} 线程里执行，前端通过 {@code /admin/ws/task-log/{logId}} 实时查看。
+     * <p>
+     * 首次部署要拉取约 260 MB 的 agent 镜像，同步阻塞会让 HTTP 请求挂几分钟，因此走任务。
+     *
+     * @param action 任务描述（部署辅助容器 / 更新辅助容器 / 切换挂载目录），任务中心标题用
+     * @return logId，前端用它打开实时日志
+     */
+    public String startDeploy(Host host, String requestedRoot, String requestedTag, boolean recreate, String action) {
+        // 参数校验保持同步：目录不合法、主机不存在等错误直接返回给前端，不产生任务记录
+        String root = HostRootPolicy.normalizeRoot(
+                StrUtil.blankToDefault(StrUtil.trimToNull(requestedRoot),
+                        hostAgentConfigService.resolveFileRoot(host.getId())));
+        HostRootPolicy.assertValidRoot(root);
+        String tag = AgentImageUtils.normalizeTag(
+                StrUtil.blankToDefault(StrUtil.trimToNull(requestedTag),
+                        hostAgentConfigService.resolveImageTag(host.getId())));
+
+        String title = host.getName() + " · " + action + "（" + root + "）";
+        String logId = longTaskRunner.start(TASK_TYPE, title, "host:list");
+        // 通过代理调用，保证 @Async 生效
+        SpringUtil.getBean(getClass()).deployAsync(logId, host.getId(), root, tag, recreate);
+        return logId;
+    }
+
+    /**
+     * 异步执行部署。参数在 {@link #startDeploy} 里已校验，这里只按 hostId 重新加载主机
+     * （调用线程传来的实体跨线程复用不安全）。
+     */
+    @Async
+    public void deployAsync(String logId, String hostId, String root, String tag, boolean recreate) {
+        longTaskRunner.execute(logId, () -> {
+            Host host = hostService.findById(hostId)
+                    .orElseThrow(() -> new BusinessException("主机不存在或已删除"));
+            fileLog.info("开始部署主机 {} 的辅助容器", host.getName());
+            fileLog.info("镜像 tag: {}  挂载目录: {}", tag, root);
+            if (recreate) {
+                fileLog.info("更新模式：按当前 tag 重新拉取镜像并重建容器");
+            }
+            deploy(host, root, tag, recreate);
+            fileLog.info("辅助容器已就绪");
+        });
     }
 
     public void remove(Host host) {
@@ -344,10 +420,14 @@ public class HostAgentService {
         }
 
         try {
-            log.info("拉取辅助镜像 {}{}", image, exists ? "（尝试更新）" : "");
-            ResultCallback.Adapter<PullResponseItem> callback = new ResultCallback.Adapter<>() {
-            };
+            fileLog.info("拉取辅助镜像 {}{}", image, exists ? "（尝试更新）" : "");
+            // DefaultCallback 会把逐层进度写入当前任务的日志文件（bind 同一个 logId），
+            // 并登记为可中断资源：任务中心点「取消」时关掉响应流即可中断拉取
+            String logId = FileLog.currentLogId();
+            DefaultCallback<PullResponseItem> callback = new DefaultCallback<>(logId);
+            taskLogRegistry.register(logId, callback);
             client.pullImageCmd(repoOf(image)).withTag(tagOf(image)).exec(callback).awaitCompletion();
+            fileLog.info("镜像已就绪");
         } catch (Exception e) {
             if (exists) {
                 log.warn("辅助镜像 {} 拉取失败，使用本地已有镜像: {}", image, rootMessage(e));

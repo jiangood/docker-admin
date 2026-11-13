@@ -55,28 +55,7 @@ public class WebSocketConfig implements WebSocketConfigurer {
     private SyncLogWebSocketHandler syncLogHandler;
 
     @Resource
-    private SyncLogHandshakeInterceptor syncLogHandshakeInterceptor;
-
-    @Resource
-    private BuildTestLogHandshakeInterceptor buildTestLogHandshakeInterceptor;
-
-    @Resource
-    private BuildLogHandshakeInterceptor buildLogHandshakeInterceptor;
-
-    @Resource
-    private ImageExportLogHandshakeInterceptor imageExportLogHandshakeInterceptor;
-
-    @Resource
-    private ImageImportLogHandshakeInterceptor imageImportLogHandshakeInterceptor;
-
-    @Resource
-    private ImageDownloadLogHandshakeInterceptor imageDownloadLogHandshakeInterceptor;
-
-    @Resource
-    private HostImageExportLogHandshakeInterceptor hostImageExportLogHandshakeInterceptor;
-
-    @Resource
-    private DeployLogHandshakeInterceptor deployLogHandshakeInterceptor;
+    private TaskLogHandshakeInterceptor taskLogHandshakeInterceptor;
 
     @Resource
     private HostCliWebSocketHandler hostCliHandler;
@@ -100,29 +79,9 @@ public class WebSocketConfig implements WebSocketConfigurer {
         // 主机 Docker CLI（辅助容器内的交互式 shell）
         register(registry, hostCliHandler, "/admin/ws/host-cli/{hostId}", hostCliHandshakeInterceptor);
 
-        // 镜像同步实时日志
-        register(registry, syncLogHandler, "/admin/ws/sync-log/{logId}", syncLogHandshakeInterceptor);
-
-        // 构建测试实时日志（复用同一日志 tail 处理器）
-        register(registry, syncLogHandler, "/admin/ws/build-test-log/{logId}", buildTestLogHandshakeInterceptor);
-
-        // 镜像构建实时日志（复用同一日志 tail 处理器）
-        register(registry, syncLogHandler, "/admin/ws/build-log/{logId}", buildLogHandshakeInterceptor);
-
-        // 镜像导出实时日志（复用同一日志 tail 处理器）
-        register(registry, syncLogHandler, "/admin/ws/image-export-log/{logId}", imageExportLogHandshakeInterceptor);
-
-        // 镜像导入实时日志（复用同一日志 tail 处理器）
-        register(registry, syncLogHandler, "/admin/ws/image-import-log/{logId}", imageImportLogHandshakeInterceptor);
-
-        // 镜像下载 tar 实时日志（复用同一日志 tail 处理器）
-        register(registry, syncLogHandler, "/admin/ws/image-download-log/{logId}", imageDownloadLogHandshakeInterceptor);
-
-        // 主机详情页镜像导出实时日志（复用同一日志 tail 处理器）
-        register(registry, syncLogHandler, "/admin/ws/host-image-export-log/{logId}", hostImageExportLogHandshakeInterceptor);
-
-        // 部署实时日志（复用同一日志 tail 处理器，logId 即部署记录 id）
-        register(registry, syncLogHandler, "/admin/ws/deploy-log/{logId}", deployLogHandshakeInterceptor);
+        // 通用任务实时日志（镜像同步、构建、部署、导出等长任务统一走这里；
+        // 鉴权依据任务记录 t_task_log 的 permission 字段，见 TaskLogHandshakeInterceptor）
+        register(registry, syncLogHandler, "/admin/ws/task-log/{logId}", taskLogHandshakeInterceptor);
     }
 
     /**

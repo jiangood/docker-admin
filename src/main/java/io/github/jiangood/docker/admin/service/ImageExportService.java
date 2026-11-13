@@ -7,7 +7,7 @@ import com.github.dockerjava.api.command.InspectImageResponse;
 import com.github.dockerjava.api.model.PullResponseItem;
 import io.github.jiangood.docker.admin.dto.ImageExportTaskView;
 import io.github.jiangood.docker.admin.entity.ImageTag;
-import io.github.jiangood.docker.admin.websocket.ImageExportLogHandshakeInterceptor;
+import io.github.jiangood.docker.admin.websocket.TaskLogHandshakeInterceptor;
 import io.github.jiangood.docker.admin.websocket.TaskLogRegistry;
 import io.github.jiangood.docker.base.FileLog;
 import io.github.jiangood.docker.sdk.engine.DefaultCallback;
@@ -84,6 +84,9 @@ public class ImageExportService {
     @Resource
     TaskLogRegistry taskLogRegistry;
 
+    @Resource
+    TaskLogService taskLogService;
+
     /**
      * 后台导出镜像。异常只写进导出日志（前端在日志里可见），不向上抛。
      * <p>
@@ -98,6 +101,7 @@ public class ImageExportService {
         DockerClient client = null;
         File target = null;
         boolean success = false;
+        String error = null;
         try {
             File dir = exportDir();
             Assert.state(dir.isDirectory() || dir.mkdirs(), "导出目录不可用: " + dir.getAbsolutePath());
@@ -142,6 +146,7 @@ public class ImageExportService {
             fileLog.info("导出完成，可以下载了");
         } catch (Exception e) {
             // 进度日志面向用户，只给一行可读信息；堆栈留给后端排查
+            error = e.getMessage();
             fileLog.error("镜像导出失败: {}", e.getMessage());
             fileLog.debug("镜像导出失败详情", e);
         } finally {
@@ -149,11 +154,16 @@ public class ImageExportService {
                 FileUtil.del(target);
             }
             IOUtils.closeQuietly(client);
+            // 先写库再结束任务：日志 WS 断开后前端刷新任务列表即可拿到终态
+            try {
+                taskLogService.finish(logId, success, error);
+            } catch (Exception ex) {
+                log.warn("写入任务记录失败: logId={} {}", logId, ex.getMessage());
+            }
             FileLog.unbind();
             taskLogRegistry.finish(logId);
-            exportRegistry.finish(logId, success
-                    ? ImageExportRegistry.Status.SUCCESS
-                    : ImageExportRegistry.Status.FAILED);
+            exportRegistry.finish(logId,
+                    success ? ImageExportRegistry.Status.SUCCESS : ImageExportRegistry.Status.FAILED);
         }
     }
 
@@ -275,7 +285,7 @@ public class ImageExportService {
      * logId 同时也是日志文件名与临时文件名，必须以此白名单约束，防止目录穿越。
      */
     public boolean isValidLogId(String logId) {
-        return logId != null && ImageExportLogHandshakeInterceptor.LOG_ID_PATTERN.matcher(logId).matches();
+        return logId != null && TaskLogHandshakeInterceptor.LOG_ID_PATTERN.matcher(logId).matches();
     }
 
     // ------------------------------------------------------------------ 内部

@@ -30,6 +30,7 @@ import io.github.jiangood.docker.admin.util.BuildContextUtils;
 import io.github.jiangood.docker.admin.util.ImageUrlUtils;
 import io.github.jiangood.docker.admin.util.VersionUtils;
 import io.github.jiangood.docker.admin.websocket.TaskLogRegistry;
+import io.github.jiangood.docker.admin.entity.TaskLog;
 import io.github.jiangood.docker.sdk.engine.DefaultCallback;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import io.github.jiangood.openadmin.framework.data.BaseService;
@@ -104,6 +105,8 @@ public class ProjectService extends BaseService<Project> {
 
     @Resource
     TaskLogRegistry taskLogRegistry;
+
+    TaskLogService taskLogService;
 
     @Resource
     SysUserRepository sysUserRepository;
@@ -587,6 +590,12 @@ public class ProjectService extends BaseService<Project> {
 
         BuildLog buildLog = createProcessingLog(p);
 
+        // 登记通用任务记录（logId 即构建记录 id），任务中心可统一查看与回放日志
+        taskLogService.start(buildLog.getId(), TaskLog.TYPE_BUILD,
+                buildLog.getProjectName() + " · 构建"
+                        + (StrUtil.isNotBlank(buildLog.getBranch()) ? "（分支 " + buildLog.getBranch() + "）" : ""),
+                "project:view", taskLogService.currentTriggerUser());
+
         // 任务在调度前就标记为运行中：前端触发后会立刻打开日志窗口，
         // 若此时尚未标记，日志 WebSocket 会误判任务已结束而提前关闭连接。
         taskLogRegistry.start(buildLog.getId());
@@ -599,6 +608,7 @@ public class ProjectService extends BaseService<Project> {
             // 任务没派发成功（如线程池已满）时把记录标记为失败，否则会一直显示「构建中」
             taskLogRegistry.finish(buildLog.getId());
             stopBuild(buildLog.getId());
+            taskLogService.finish(buildLog.getId(), false, e.getMessage());
             throw e;
         }
     }
@@ -818,6 +828,7 @@ public class ProjectService extends BaseService<Project> {
             buildLog.setCompleteTime(LocalDateTime.now());
             buildLog.setTimeSpend(Duration.between(buildLog.getCreateTime(), buildLog.getCompleteTime()).toMillis());
             buildLog = buildLogService.save(buildLog);
+            taskLogService.finish(logId, true, null);
             fileLog.info("已更新构建日志{}", buildLog);
 
 
@@ -840,6 +851,7 @@ public class ProjectService extends BaseService<Project> {
                 buildLog.setCompleteTime(LocalDateTime.now());
                 buildLog.setTimeSpend(Duration.between(buildLog.getCreateTime(), buildLog.getCompleteTime()).toMillis());
                 buildLog = buildLogService.save(buildLog);
+                taskLogService.finish(logId, false, e.getMessage());
                 // 被取消的构建已经由 stopBuild 记录为失败，不再重复发结束通知
                 if (!isBuildCancelled(logId)) {
                     publishBuildResult(buildLog);
@@ -856,6 +868,13 @@ public class ProjectService extends BaseService<Project> {
             }
             buildThreadMap.remove(logId);
             cancelledBuilds.remove(logId);
+            // 同步通用任务记录：提前 return 的取消路径（克隆后放弃、推送前放弃）BuildLog 仍停留在
+            // 处理中，这里统一按「已取消」收尾；finish 对已结束的记录是空操作，不会覆盖成功/失败
+            try {
+                taskLogService.finish(logId, false, "构建已取消或被更新的构建取代");
+            } catch (Exception ex) {
+                log.warn("写入任务记录失败: logId={} {}", logId, ex.getMessage());
+            }
             FileLog.unbind();
             taskLogRegistry.finish(logId);
         }
