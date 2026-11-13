@@ -1,4 +1,4 @@
-import {Form, Input, Popconfirm, Select, Tag, Tooltip, message} from 'antd'
+import {Button, Form, Input, Modal, Select, Tag, Tooltip, message} from 'antd'
 import React from 'react'
 import {DateUtils, HttpClient, Page, PermActions, PermUtils, ProTable} from '@jiangood/open-admin'
 import TaskLogDrawer from '../../components/TaskLogDrawer'
@@ -92,26 +92,30 @@ export default class extends React.Component {
                 : v != null ? DateUtils.friendlyTotalTime(v) : '-',
         },
         {
-            title: '操作', dataIndex: 'option', valueType: 'option', width: 150,
+            title: '操作', dataIndex: 'option', valueType: 'option', width: 120, fixed: 'right',
             render: (_, row) => <>
                 <PermActions size='small' actions={[
-                    {label: '查看日志', perm: 'task:view', onClick: () => this.openLog(row.logId)},
+                    {label: '日志', perm: 'task:view', onClick: () => this.openLog(row.logId)},
                 ]}/>
                 {row.status === 'RUNNING' && PermUtils.hasPermission('task:cancel') &&
-                    <Popconfirm title='确定取消该任务？' onConfirm={() => this.cancel(row)}>
-                        <a>取消</a>
-                    </Popconfirm>}
+                    <Button type='link' size='small' danger onClick={() => this.confirmCancel(row)}>取消</Button>}
             </>,
         },
     ]
 
+    confirmCancel = row => {
+        Modal.confirm({
+            title: '确定取消该任务？',
+            okText: '确定',
+            cancelText: '取消',
+            onOk: () => this.cancel(row),
+        })
+    }
+
     cancel = row => {
-        HttpClient.post('admin/sys/task/cancel', null, {logId: row.logId})
+        return HttpClient.post('admin/sys/task/cancel', null, {logId: row.logId})
             .then(rs => {
                 message.success((rs && rs.message) || '已请求取消')
-                this.reload()
-            })
-            .catch(() => {
             })
             .finally(() => this.reload())
     }
