@@ -16,6 +16,7 @@ import java.util.jar.Manifest;
  * 版本来源：spring-boot-maven-plugin 打 fat jar 时默认把项目版本写进
  * {@code META-INF/MANIFEST.MF} 的 {@code Implementation-Version}。
  * 本地 IDE 直接跑（未打包）时读不到，返回 null，调用方据此跳过比较、不告警。
+ * classpath 上依赖 jar 也可能自带同名 manifest（无 {@code Start-Class}），同样视为未打包。
  */
 @Slf4j
 public final class PlatformVersion {
@@ -46,13 +47,20 @@ public final class PlatformVersion {
 
     private static String readVersion() {
         // Spring Boot 可执行 jar 的类加载器无法把 manifest 属性注入 Package（LaunchedURLClassLoader
-        // 不读嵌套 jar 的属性），所以直接读 classpath 根上的 MANIFEST.MF 并解析
+        // 不读嵌套 jar 的属性），所以直接读 classpath 根上的 MANIFEST.MF 并解析。
+        // 注意：未打包运行（IDE / spring-boot:run）时 classpath 上最先命中的 META-INF/MANIFEST.MF
+        // 可能来自依赖 jar（如 open-admin 的 3.2.0），必须用 Start-Class 校验归属——
+        // 只有本平台 fat jar 的 manifest 才带 spring-boot 打包写入的 Start-Class。
         InputStream in = PlatformVersion.class.getClassLoader().getResourceAsStream("META-INF/MANIFEST.MF");
         if (in == null) {
             return null;
         }
         try (in) {
-            String version = new Manifest(in).getMainAttributes().getValue("Implementation-Version");
+            java.util.jar.Attributes main = new Manifest(in).getMainAttributes();
+            if (!"io.github.jiangood.docker.DockerAdminBootApplication".equals(main.getValue("Start-Class"))) {
+                return null;
+            }
+            String version = main.getValue("Implementation-Version");
             return version == null || version.isBlank() ? null : version.trim();
         } catch (IOException e) {
             log.debug("读取平台版本号失败: {}", e.getMessage());
