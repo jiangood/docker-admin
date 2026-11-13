@@ -184,7 +184,7 @@ public class AppService extends BaseService<App> {
             taskLogService.start(deployLog.getId(), SysTaskLog.TYPE_DEPLOY,
                     deployLog.getAppName() + " · 部署", "app:view", taskLogService.currentTriggerUser());
 
-            TaskLog.bind(deployLog.getId());
+            TaskLog.bind("task/" + deployLog.getId());
             // 登记为运行中的任务：前端「部署日志」用 WebSocket 实时 tail 本文件，
             // 未登记时 WS 会立刻判定任务已结束并断开（与构建 / 镜像同步一致）。
             taskLogRegistry.start(deployLog.getId());

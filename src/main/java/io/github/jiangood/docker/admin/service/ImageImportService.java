@@ -111,7 +111,7 @@ public class ImageImportService {
     @Async
     public void importTar(String logId, File tar, String registryId, String imageName, String tag) {
         taskLogRegistry.start(logId);
-        TaskLog.bind(logId);
+        TaskLog.bind("task/" + logId);
 
         DockerClient client = null;
         boolean success = false;

@@ -55,7 +55,7 @@ public class SyncLogWebSocketHandler extends TextWebSocketHandler {
     }
 
     private void streamLog(WebSocketSession session, String logId) {
-        File file = new File(logPath(), logId + ".log");
+        File file = resolveLogFile(logId);
         // 已发送到的字节偏移：日志文件会随任务持续增长，只读增量部分，
         // 避免每次轮询整文件重读（大日志下是 O(n²)）。
         long sent = 0;
@@ -193,6 +193,20 @@ public class SyncLogWebSocketHandler extends TextWebSocketHandler {
             }
             return read == size ? chunk : java.util.Arrays.copyOf(chunk, read);
         }
+    }
+
+    private static File resolveLogFile(String logId) {
+        File base = new File(logPath());
+        File taskFile = new File(base, "task/" + logId + ".log");
+        if (taskFile.exists()) {
+            return taskFile;
+        }
+        File plainFile = new File(base, logId + ".log");
+        if (plainFile.exists()) {
+            return plainFile;
+        }
+        // 默认指向新路径（task/{logId}.log），任务开始写入后会自动创建
+        return taskFile;
     }
 
     private static String logPath() {

@@ -192,7 +192,7 @@ public class BuildTestService {
     @Async
     public void build(String logId, BuildTestRequest p) {
         taskLogRegistry.start(logId);
-        TaskLog.bind(logId);
+        TaskLog.bind("task/" + logId);
         DockerClient client = null;
         File workDir = null;
         boolean success = false;
@@ -265,7 +265,7 @@ public class BuildTestService {
                     .withDockerfile(dockerfileFile);
 
             // 登记到注册表，页面「取消构建」即关闭该响应流中断构建
-            DefaultCallback<BuildResponseItem> buildCallback = new DefaultCallback<>(logId);
+            DefaultCallback<BuildResponseItem> buildCallback = new DefaultCallback<>("task/" + logId);
             taskLogRegistry.register(logId, buildCallback);
 
             buildImageCmd.exec(buildCallback).awaitCompletion();

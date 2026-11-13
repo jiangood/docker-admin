@@ -186,7 +186,7 @@ public class ImageDownloadService {
     @Async
     public void download(String logId, ImageDownloadRequest p) {
         taskLogRegistry.start(logId);
-        TaskLog.bind(logId);
+        TaskLog.bind("task/" + logId);
         boolean success = false;
         String error = null;
         try {

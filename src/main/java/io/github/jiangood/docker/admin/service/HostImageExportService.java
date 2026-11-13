@@ -148,7 +148,7 @@ public class HostImageExportService {
     public void export(String logId, String hostId, String image) {
         Task task = tasksByLogId.get(logId);
         taskLogRegistry.start(logId);
-        TaskLog.bind(logId);
+        TaskLog.bind("task/" + logId);
         boolean success = false;
         String error = null;
         try {

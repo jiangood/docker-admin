@@ -160,6 +160,7 @@ export default class extends React.Component {
 
             <TaskLogDrawer open={logVisible} logId={logId}
                            title='任务日志'
+                           transport='ws'
                            onClose={this.closeLog}
                            onEnd={this.reload}/>
         </Page>

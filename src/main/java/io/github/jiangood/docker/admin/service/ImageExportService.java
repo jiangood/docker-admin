@@ -96,7 +96,7 @@ public class ImageExportService {
     @Async
     public void export(String logId, String imageUrl, String tag) {
         taskLogRegistry.start(logId);
-        TaskLog.bind(logId);
+        TaskLog.bind("task/" + logId);
 
         String fullUrl = imageUrl + ":" + tag;
         DockerClient client = null;

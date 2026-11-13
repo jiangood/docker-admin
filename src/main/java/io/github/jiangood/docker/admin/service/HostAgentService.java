@@ -424,7 +424,7 @@ public class HostAgentService {
             // DefaultCallback 会把逐层进度写入当前任务的日志文件（bind 同一个 logId），
             // 并登记为可中断资源：任务中心点「取消」时关掉响应流即可中断拉取
             String logId = TaskLog.currentKey();
-            DefaultCallback<PullResponseItem> callback = new DefaultCallback<>(logId);
+            DefaultCallback<PullResponseItem> callback = new DefaultCallback<>("task/" + logId);
             taskLogRegistry.register(logId, callback);
             client.pullImageCmd(repoOf(image)).withTag(tagOf(image)).exec(callback).awaitCompletion();
             fileLog.info("镜像已就绪");

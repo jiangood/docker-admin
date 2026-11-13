@@ -158,7 +158,7 @@ public class ImageSyncService {
     @Async
     public void sync(String logId, ImageSyncRequest p, ImageSyncLog syncLog) {
         taskLogRegistry.start(logId);
-        TaskLog.bind(logId);
+        TaskLog.bind("task/" + logId);
         boolean success = false;
         String error = null;
         try {

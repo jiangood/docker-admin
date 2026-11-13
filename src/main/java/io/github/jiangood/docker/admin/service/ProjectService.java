@@ -662,7 +662,7 @@ public class ProjectService extends BaseService<Project> {
         DockerClient client = null;
         File workDir = null;
         boolean slotAcquired = false;
-        TaskLog.bind(logId);
+        TaskLog.bind("task/" + logId);
         try {
             project = projectRepository.findById(projectId).orElse(null);
             Assert.notNull(project, "项目不存在");
@@ -749,7 +749,7 @@ public class ProjectService extends BaseService<Project> {
                     + "，请检查项目配置的构建上下文：" + BuildContextUtils.display(context));
 
             fileLog.info("向docker发送构建指令");
-            DefaultCallback<BuildResponseItem> buildCallback = new DefaultCallback<>(logId);
+            DefaultCallback<BuildResponseItem> buildCallback = new DefaultCallback<>("task/" + logId);
             buildThreadMap.put(logId, buildCallback);
 
             fileLog.info("是否拉取基础镜像 withPull {}", p.isPull());
@@ -805,7 +805,7 @@ public class ProjectService extends BaseService<Project> {
             // 推送版本号与 latest（开启「仅构建 latest」时只推 latest）
             for (String pushTag : tagsToPush) {
                 fileLog.info("推送镜像 {}", pushTag);
-                client.pushImageCmd(pushTag).exec(new DefaultCallback<>(logId)).awaitCompletion();
+                client.pushImageCmd(pushTag).exec(new DefaultCallback<>("task/" + logId)).awaitCompletion();
                 fileLog.info("推送镜像结束 {}", pushTag);
             }
 
