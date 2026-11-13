@@ -1,5 +1,5 @@
 import React from 'react'
-import {Alert, Badge, Button, Input, Modal, Popconfirm, Space, Spin, Tooltip, Typography, message} from 'antd'
+import {Alert, Badge, Button, Input, Modal, Space, Spin, Tooltip, Typography, message} from 'antd'
 import {CloudServerOutlined, FolderOpenOutlined, QuestionCircleOutlined, SyncOutlined} from '@ant-design/icons'
 import {HttpClient, PermUtils} from '@jiangood/open-admin'
 
@@ -24,6 +24,7 @@ export default class extends React.Component {
         rootOpen: false,
         rootInput: '',
         rootSubmitting: false,
+        updateOpen: false,
         updating: false,
         tag: 'latest',
         submitting: false,
@@ -151,11 +152,13 @@ export default class extends React.Component {
             {id: hostId, tag, root: defaultRoot, recreate: true})
             .then(rs => {
                 message.success((rs && rs.message) || '辅助容器已更新')
+                this.setState({updateOpen: false})
                 this.notifyConfigChange()
                 this.load()
             })
             .catch(() => {
                 // 重建失败时旧容器可能已经删掉，刷新状态让按钮回到「部署」
+                this.setState({updateOpen: false})
                 this.load()
             })
             .finally(() => this.setState({updating: false}))
@@ -216,7 +219,7 @@ export default class extends React.Component {
     }
 
     render() {
-        const {status, deployOpen, helpOpen, rootOpen, rootInput, rootSubmitting, updating} = this.state
+        const {status, deployOpen, helpOpen, rootOpen, rootInput, rootSubmitting, updateOpen, updating} = this.state
         const canSave = PermUtils.hasPermission('host:save')
         const deployed = !!(status && status.deployed)
         const {extra, children} = this.props
@@ -231,12 +234,8 @@ export default class extends React.Component {
                     <Button icon={<FolderOpenOutlined/>}
                             onClick={this.openRootModal}>切换挂载目录</Button>
                     {status && !status.needsRebuild &&
-                        <Popconfirm title='更新辅助容器镜像？'
-                                    description='将按当前 tag 重新拉取镜像并重建容器，终端会话会中断'
-                                    okText='更新'
-                                    onConfirm={this.update}>
-                            <Button icon={<SyncOutlined/>} loading={updating}>更新</Button>
-                        </Popconfirm>}
+                        <Button icon={<SyncOutlined/>} loading={updating}
+                                onClick={() => this.setState({updateOpen: true})}>更新</Button>}
                 </>
                 : <Button type='primary' icon={<CloudServerOutlined/>}
                           onClick={this.openDeploy}>部署辅助容器</Button>)}
@@ -255,6 +254,7 @@ export default class extends React.Component {
 
             {this.renderDeployModal()}
             {this.renderRootModal(rootOpen, rootInput, rootSubmitting)}
+            {this.renderUpdateModal(updateOpen)}
             {this.renderHelpModal()}
         </>
     }
@@ -311,6 +311,36 @@ export default class extends React.Component {
                 </div>
                 <div>Docker VMM 还需先在 Settings → Resources → File sharing 共享该目录（不支持自动共享）。</div>
                 <div>切换会用新目录重建辅助容器，终端会切到新目录并断开自动重连；不支持 /、/etc 等系统目录。</div>
+            </div>
+        </Modal>
+    }
+
+    /**
+     * 更新确认弹窗：按当前 tag 重新拉取镜像并重建容器，终端会话会中断并自动重连。
+     * 展示当前版本与最新版本，方便确认这次更新会升级到哪个版本。
+     */
+    renderUpdateModal(updateOpen) {
+        const {status} = this.state
+        const repository = (status && status.repository) || ''
+        const tag = this.props.defaultTag || (status && status.tag) || 'latest'
+        const image = repository ? `${repository}:${tag}` : tag
+        return <Modal open={updateOpen} width={560}
+                      title='更新辅助容器镜像'
+                      okText='更新'
+                      confirmLoading={this.state.updating}
+                      onOk={this.update}
+                      onCancel={() => this.setState({updateOpen: false})}>
+            <Typography.Paragraph>
+                将按当前 tag 重新拉取镜像并重建辅助容器，终端会话会中断并自动重连。
+            </Typography.Paragraph>
+            <div style={{fontSize: 12, lineHeight: 1.8}}>
+                <div>镜像：<code>{image}</code></div>
+                {status && status.agentVersion && status.platformVersion &&
+                    <div>版本：<code>{status.agentVersion}</code>
+                        {' → '}{<code>{status.platformVersion}</code>}</div>}
+                <div>tag 为 latest 时强制拉取远端最新镜像；固定版本 tag（如 <code>v4.8.40</code>）
+                    本地已有时直接复用，升级固定版本请先在「工具 - 主机 Agent」配置里改 tag 再点「重新部署」。
+                </div>
             </div>
         </Modal>
     }
