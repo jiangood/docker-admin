@@ -57,7 +57,7 @@ public class TaskLogHandshakeInterceptor implements HandshakeInterceptor {
             return false;
         }
         if (!hasPermission(task.getPermission())) {
-            log.warn("任务日志 WebSocket 握手被拒绝，缺少权限 {}（logId={}）", task.getPermission(), logId);
+            log.warn("任务日志 WebSocket 握手被拒绝，缺少权限或未登录（permission={}，logId={}）", task.getPermission(), logId);
             response.setStatusCode(HttpStatus.FORBIDDEN);
             return false;
         }
@@ -69,9 +69,9 @@ public class TaskLogHandshakeInterceptor implements HandshakeInterceptor {
         if (user == null) {
             return false;
         }
+        // permission 为空表示仅需登录用户即可查看
         if (permission == null || permission.isBlank()) {
-            // 任务登记时必须带权限码；缺失视为不可通过通用端点查看
-            return false;
+            return true;
         }
         Set<String> permissions = user.getPermissions();
         return permissions != null && (permissions.contains("*") || permissions.contains(permission));
