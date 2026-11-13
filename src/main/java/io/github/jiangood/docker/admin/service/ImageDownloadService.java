@@ -12,8 +12,8 @@ import com.jcraft.jsch.Session;
 import com.jcraft.jsch.SftpATTRS;
 import io.github.jiangood.docker.admin.dto.ImageDownloadRequest;
 import io.github.jiangood.docker.admin.entity.Host;
-import io.github.jiangood.docker.admin.websocket.TaskLogRegistry;
-import io.github.jiangood.docker.base.FileLog;
+import io.github.jiangood.openadmin.modules.task.registry.TaskLogRegistry;
+import io.github.jiangood.openadmin.modules.logviewer.util.TaskLog;
 import io.github.jiangood.docker.sdk.engine.DefaultCallback;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import io.github.jiangood.openadmin.util.SpringTool;
@@ -35,6 +35,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.List;
 import java.util.regex.Pattern;
+import io.github.jiangood.openadmin.modules.task.service.SysTaskLogService;
 
 /**
  * 主机镜像 tar：在指定主机上执行 {@code docker save}，把镜像保存成 tar 包。
@@ -57,7 +58,7 @@ import java.util.regex.Pattern;
 @RequiredArgsConstructor
 public class ImageDownloadService {
 
-    private static final Logger fileLog = FileLog.logger();
+    private static final Logger fileLog = TaskLog.logger();
 
     /**
      * SSH 主机上的 tar 存放目录。
@@ -89,7 +90,7 @@ public class ImageDownloadService {
     TaskLogRegistry taskLogRegistry;
 
     @Resource
-    TaskLogService taskLogService;
+    SysTaskLogService taskLogService;
 
     @Resource
     HostService hostService;
@@ -185,7 +186,7 @@ public class ImageDownloadService {
     @Async
     public void download(String logId, ImageDownloadRequest p) {
         taskLogRegistry.start(logId);
-        FileLog.bind(logId);
+        TaskLog.bind(logId);
         boolean success = false;
         String error = null;
         try {
@@ -204,7 +205,7 @@ public class ImageDownloadService {
             } catch (Exception ex) {
                 log.warn("写入任务记录失败: logId={} {}", logId, ex.getMessage());
             }
-            FileLog.unbind();
+            TaskLog.unbind();
             taskLogRegistry.finish(logId);
         }
     }

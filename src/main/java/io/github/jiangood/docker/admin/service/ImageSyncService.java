@@ -11,9 +11,9 @@ import io.github.jiangood.docker.admin.dto.ImageSyncRequest;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.entity.ImageSyncLog;
 import io.github.jiangood.docker.admin.entity.Registry;
-import io.github.jiangood.docker.admin.entity.TaskLog;
-import io.github.jiangood.docker.admin.websocket.TaskLogRegistry;
-import io.github.jiangood.docker.base.FileLog;
+import io.github.jiangood.openadmin.modules.task.entity.SysTaskLog;
+import io.github.jiangood.openadmin.modules.task.registry.TaskLogRegistry;
+import io.github.jiangood.openadmin.modules.logviewer.util.TaskLog;
 import io.github.jiangood.docker.sdk.engine.DefaultCallback;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import jakarta.annotation.Resource;
@@ -31,6 +31,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.regex.Pattern;
+import io.github.jiangood.openadmin.modules.task.service.SysTaskLogService;
 
 /**
  * 镜像同步：借助一台网络通畅的主机拉取公共镜像，推送到平台注册中心，
@@ -45,7 +46,7 @@ import java.util.regex.Pattern;
 @RequiredArgsConstructor
 public class ImageSyncService {
 
-    private static final Logger fileLog = FileLog.logger();
+    private static final Logger fileLog = TaskLog.logger();
 
     /**
      * 注册中心镜像名规则（与 Docker 的仓库名一致）：小写字母/数字，分隔符不可连续或结尾。
@@ -60,7 +61,8 @@ public class ImageSyncService {
     @Resource
     TaskLogRegistry taskLogRegistry;
 
-    TaskLogService taskLogService;
+    @Resource
+    SysTaskLogService taskLogService;
 
     @Resource
     HostService hostService;
@@ -147,7 +149,7 @@ public class ImageSyncService {
     public ImageSyncLog startRecord(String logId, ImageSyncRequest p) {
         ImageSyncLog syncLog = syncLogService.start(logId, syncTypeOf(p), p.getSourceImage(),
                 StrUtil.trim(p.getHostId()), StrUtil.trim(p.getTargetHostId()));
-        taskLogService.start(logId, TaskLog.TYPE_IMAGE_SYNC,
+        taskLogService.start(logId, SysTaskLog.TYPE_IMAGE_SYNC,
                 "镜像同步 " + StrUtil.sub(StrUtil.trim(p.getSourceImage()), 0, 120),
                 "image-sync:view", taskLogService.currentTriggerUser());
         return syncLog;
@@ -156,7 +158,7 @@ public class ImageSyncService {
     @Async
     public void sync(String logId, ImageSyncRequest p, ImageSyncLog syncLog) {
         taskLogRegistry.start(logId);
-        FileLog.bind(logId);
+        TaskLog.bind(logId);
         boolean success = false;
         String error = null;
         try {
@@ -189,7 +191,7 @@ public class ImageSyncService {
             } catch (Exception e) {
                 fileLog.warn("写入任务记录失败: {}", e.getMessage());
             }
-            FileLog.unbind();
+            TaskLog.unbind();
             taskLogRegistry.finish(logId);
         }
     }

@@ -10,7 +10,7 @@ import io.github.jiangood.docker.admin.dto.RemoteSyncResult;
 import io.github.jiangood.docker.admin.entity.App;
 import io.github.jiangood.docker.admin.entity.Image;
 import io.github.jiangood.docker.admin.entity.ImageTag;
-import io.github.jiangood.docker.admin.entity.TaskLog;
+import io.github.jiangood.openadmin.modules.task.entity.SysTaskLog;
 import io.github.jiangood.docker.admin.service.ImageExportRegistry;
 import io.github.jiangood.docker.admin.service.ImageExportService;
 import io.github.jiangood.docker.admin.service.ImageImportRegistry;
@@ -20,7 +20,7 @@ import io.github.jiangood.docker.admin.service.ImageService;
 import io.github.jiangood.docker.admin.service.ImageTagService;
 import io.github.jiangood.docker.admin.service.RegistryService;
 import io.github.jiangood.docker.admin.service.RemoteSyncService;
-import io.github.jiangood.docker.admin.service.TaskLogService;
+import io.github.jiangood.openadmin.modules.task.service.SysTaskLogService;
 import io.github.jiangood.docker.base.OrgAccessTool;
 import io.github.jiangood.openadmin.framework.auth.LoginTool;
 import io.github.jiangood.openadmin.framework.data.specification.Spec;
@@ -88,7 +88,7 @@ public class ImageController {
     private ImageManualService imageManualService;
 
     @Resource
-    private TaskLogService taskLogService;
+    private SysTaskLogService taskLogService;
 
     @HasPermission("image:view")
     @RequestMapping("page")
@@ -276,7 +276,7 @@ public class ImageController {
 
         String logId = "export-" + RandomUtil.randomString(16);
         imageExportRegistry.register(logId, imageUrl, tag);
-        taskLogService.start(logId, TaskLog.TYPE_IMAGE_EXPORT,
+        taskLogService.start(logId, SysTaskLog.TYPE_IMAGE_EXPORT,
                 "导出镜像 " + imageUrl + ":" + tag, "image:export", taskLogService.currentTriggerUser());
         imageExportService.export(logId, imageUrl, tag);
         return AjaxResult.ok().data(logId).msg("导出已开始");
@@ -392,7 +392,7 @@ public class ImageController {
         }
 
         imageImportRegistry.register(logId);
-        taskLogService.start(logId, TaskLog.TYPE_IMAGE_IMPORT,
+        taskLogService.start(logId, SysTaskLog.TYPE_IMAGE_IMPORT,
                 "导入镜像归档 " + StrUtil.sub(filename, 0, 120), "image:import", taskLogService.currentTriggerUser());
         imageImportService.importTar(logId, target, registryId, name, version);
         return AjaxResult.ok().data(logId).msg("已开始导入");

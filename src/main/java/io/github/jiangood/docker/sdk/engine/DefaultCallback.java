@@ -4,7 +4,7 @@ import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.StrUtil;
 import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.model.ResponseItem;
-import io.github.jiangood.docker.base.FileLog;
+import io.github.jiangood.openadmin.modules.logviewer.util.TaskLog;
 import org.slf4j.Logger;
 
 import java.io.Closeable;
@@ -13,7 +13,7 @@ import java.util.concurrent.CountDownLatch;
 
 public class DefaultCallback<T extends ResponseItem> implements ResultCallback<T> {
 
-    private static final Logger fileLog = FileLog.logger();
+    private static final Logger fileLog = TaskLog.logger();
 
     private static final String TAB = "    ";
 
@@ -41,7 +41,7 @@ public class DefaultCallback<T extends ResponseItem> implements ResultCallback<T
         this.stream = stream;
         this.closed = false;
 
-        FileLog.bind(this.logFileId);
+        TaskLog.bind(this.logFileId);
     }
 
     @Override
@@ -93,7 +93,7 @@ public class DefaultCallback<T extends ResponseItem> implements ResultCallback<T
         } catch (IOException e) {
             throw new RuntimeException(e);
         } finally {
-            FileLog.unbind();
+            TaskLog.unbind();
         }
     }
 
@@ -105,7 +105,7 @@ public class DefaultCallback<T extends ResponseItem> implements ResultCallback<T
         } catch (IOException e) {
             throw new RuntimeException(e);
         } finally {
-            FileLog.unbind();
+            TaskLog.unbind();
         }
     }
 

@@ -3,7 +3,7 @@ package io.github.jiangood.docker.base.tool;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
-import io.github.jiangood.docker.base.FileLog;
+import io.github.jiangood.openadmin.modules.logviewer.util.TaskLog;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import org.apache.commons.io.FileUtils;
@@ -43,7 +43,7 @@ import java.util.List;
 
 public class GitTool {
 
-    private static final Logger fileLog = FileLog.logger();
+    private static final Logger fileLog = TaskLog.logger();
 
     @AllArgsConstructor
     @Data

@@ -3,9 +3,9 @@ package io.github.jiangood.docker.admin.controller;
 import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
 import io.github.jiangood.docker.admin.dto.ImageDownloadRequest;
-import io.github.jiangood.docker.admin.entity.TaskLog;
+import io.github.jiangood.openadmin.modules.task.entity.SysTaskLog;
 import io.github.jiangood.docker.admin.service.ImageDownloadService;
-import io.github.jiangood.docker.admin.service.TaskLogService;
+import io.github.jiangood.openadmin.modules.task.service.SysTaskLogService;
 import io.github.jiangood.openadmin.framework.perm.HasPermission;
 import io.github.jiangood.openadmin.util.dto.AjaxResult;
 import jakarta.annotation.Resource;
@@ -29,7 +29,7 @@ public class ImageDownloadController {
     private ImageDownloadService service;
 
     @Resource
-    private TaskLogService taskLogService;
+    private SysTaskLogService taskLogService;
 
     /**
      * 触发下载，立即返回 logId，供前端打开实时日志。
@@ -40,7 +40,7 @@ public class ImageDownloadController {
         // 参数校验同步执行，便于把错误直接返回给前端
         service.validate(request);
         String logId = "image-download-" + RandomUtil.randomString(16);
-        taskLogService.start(logId, TaskLog.TYPE_IMAGE_DOWNLOAD,
+        taskLogService.start(logId, SysTaskLog.TYPE_IMAGE_DOWNLOAD,
                 "下载镜像 " + StrUtil.sub(request.getImage(), 0, 120),
                 "image-download:download", taskLogService.currentTriggerUser());
         service.download(logId, request);

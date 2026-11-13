@@ -12,7 +12,7 @@ import io.github.jiangood.docker.admin.service.registry.RemoteImageMeta;
 import io.github.jiangood.docker.admin.util.ImageTimeUtils;
 import io.github.jiangood.docker.admin.util.ImageUrlUtils;
 import io.github.jiangood.docker.admin.util.VersionUtils;
-import io.github.jiangood.docker.base.FileLog;
+import io.github.jiangood.openadmin.modules.logviewer.util.TaskLog;
 import io.github.jiangood.openadmin.framework.data.BaseService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -38,7 +38,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ImageTagService extends BaseService<ImageTag> {
 
-    private static final Logger fileLog = FileLog.logger();
+    private static final Logger fileLog = TaskLog.logger();
 
     /**
      * 可变的浮动版本号，取「最新版本」时排除。

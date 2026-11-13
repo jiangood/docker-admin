@@ -11,7 +11,7 @@ import cn.hutool.extra.spring.SpringUtil;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.command.BuildImageCmd;
 import com.github.dockerjava.api.model.BuildResponseItem;
-import io.github.jiangood.docker.base.FileLog;
+import io.github.jiangood.openadmin.modules.logviewer.util.TaskLog;
 import io.github.jiangood.docker.base.tool.GitCredential;
 import io.github.jiangood.docker.base.tool.GitTool;
 import io.github.jiangood.docker.admin.BuildResultEvent;
@@ -29,8 +29,8 @@ import io.github.jiangood.docker.admin.entity.Registry;
 import io.github.jiangood.docker.admin.util.BuildContextUtils;
 import io.github.jiangood.docker.admin.util.ImageUrlUtils;
 import io.github.jiangood.docker.admin.util.VersionUtils;
-import io.github.jiangood.docker.admin.websocket.TaskLogRegistry;
-import io.github.jiangood.docker.admin.entity.TaskLog;
+import io.github.jiangood.openadmin.modules.task.registry.TaskLogRegistry;
+import io.github.jiangood.openadmin.modules.task.entity.SysTaskLog;
 import io.github.jiangood.docker.sdk.engine.DefaultCallback;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import io.github.jiangood.openadmin.framework.data.BaseService;
@@ -61,6 +61,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
+import io.github.jiangood.openadmin.modules.task.service.SysTaskLogService;
 
 
 @Service
@@ -68,7 +69,7 @@ import java.util.regex.Pattern;
 @RequiredArgsConstructor
 public class ProjectService extends BaseService<Project> {
 
-    private static final Logger fileLog = FileLog.logger();
+    private static final Logger fileLog = TaskLog.logger();
 
     private final ProjectRepository projectRepository;
 
@@ -106,7 +107,8 @@ public class ProjectService extends BaseService<Project> {
     @Resource
     TaskLogRegistry taskLogRegistry;
 
-    TaskLogService taskLogService;
+    @Resource
+    SysTaskLogService taskLogService;
 
     @Resource
     SysUserRepository sysUserRepository;
@@ -591,7 +593,7 @@ public class ProjectService extends BaseService<Project> {
         BuildLog buildLog = createProcessingLog(p);
 
         // 登记通用任务记录（logId 即构建记录 id），任务中心可统一查看与回放日志
-        taskLogService.start(buildLog.getId(), TaskLog.TYPE_BUILD,
+        taskLogService.start(buildLog.getId(), SysTaskLog.TYPE_BUILD,
                 buildLog.getProjectName() + " · 构建"
                         + (StrUtil.isNotBlank(buildLog.getBranch()) ? "（分支 " + buildLog.getBranch() + "）" : ""),
                 "project:view", taskLogService.currentTriggerUser());
@@ -660,7 +662,7 @@ public class ProjectService extends BaseService<Project> {
         DockerClient client = null;
         File workDir = null;
         boolean slotAcquired = false;
-        FileLog.bind(logId);
+        TaskLog.bind(logId);
         try {
             project = projectRepository.findById(projectId).orElse(null);
             Assert.notNull(project, "项目不存在");
@@ -875,7 +877,7 @@ public class ProjectService extends BaseService<Project> {
             } catch (Exception ex) {
                 log.warn("写入任务记录失败: logId={} {}", logId, ex.getMessage());
             }
-            FileLog.unbind();
+            TaskLog.unbind();
             taskLogRegistry.finish(logId);
         }
     }

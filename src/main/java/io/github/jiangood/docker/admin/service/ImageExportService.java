@@ -8,8 +8,8 @@ import com.github.dockerjava.api.model.PullResponseItem;
 import io.github.jiangood.docker.admin.dto.ImageExportTaskView;
 import io.github.jiangood.docker.admin.entity.ImageTag;
 import io.github.jiangood.docker.admin.websocket.TaskLogHandshakeInterceptor;
-import io.github.jiangood.docker.admin.websocket.TaskLogRegistry;
-import io.github.jiangood.docker.base.FileLog;
+import io.github.jiangood.openadmin.modules.task.registry.TaskLogRegistry;
+import io.github.jiangood.openadmin.modules.logviewer.util.TaskLog;
 import io.github.jiangood.docker.sdk.engine.DefaultCallback;
 import jakarta.annotation.Resource;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +28,7 @@ import java.io.OutputStream;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
+import io.github.jiangood.openadmin.modules.task.service.SysTaskLogService;
 
 /**
  * 镜像导出：从注册中心把镜像拉到本机 docker，再以 {@code docker save} 的 docker-archive 格式
@@ -54,7 +55,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ImageExportService {
 
-    private static final Logger fileLog = FileLog.logger();
+    private static final Logger fileLog = TaskLog.logger();
 
     /**
      * 临时 tar 目录（系统临时目录下，数据不重要、用完即弃）。
@@ -85,7 +86,7 @@ public class ImageExportService {
     TaskLogRegistry taskLogRegistry;
 
     @Resource
-    TaskLogService taskLogService;
+    SysTaskLogService taskLogService;
 
     /**
      * 后台导出镜像。异常只写进导出日志（前端在日志里可见），不向上抛。
@@ -95,7 +96,7 @@ public class ImageExportService {
     @Async
     public void export(String logId, String imageUrl, String tag) {
         taskLogRegistry.start(logId);
-        FileLog.bind(logId);
+        TaskLog.bind(logId);
 
         String fullUrl = imageUrl + ":" + tag;
         DockerClient client = null;
@@ -160,7 +161,7 @@ public class ImageExportService {
             } catch (Exception ex) {
                 log.warn("写入任务记录失败: logId={} {}", logId, ex.getMessage());
             }
-            FileLog.unbind();
+            TaskLog.unbind();
             taskLogRegistry.finish(logId);
             exportRegistry.finish(logId,
                     success ? ImageExportRegistry.Status.SUCCESS : ImageExportRegistry.Status.FAILED);
@@ -296,7 +297,7 @@ public class ImageExportService {
             // 空 tag 会被 Docker 理解为「拉取该仓库全部 tag」。
             client.pullImageCmd(imageUrl)
                     .withTag(tag)
-                    .exec(new DefaultCallback<PullResponseItem>(FileLog.currentLogId()))
+                    .exec(new DefaultCallback<PullResponseItem>(TaskLog.currentKey()))
                     .awaitCompletion();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

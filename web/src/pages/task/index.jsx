@@ -106,7 +106,7 @@ export default class extends React.Component {
     ]
 
     cancel = row => {
-        HttpClient.post('admin/task/cancel', null, {logId: row.logId})
+        HttpClient.post('admin/sys/task/cancel', null, {logId: row.logId})
             .then(rs => {
                 message.success((rs && rs.message) || '已请求取消')
                 this.reload()
@@ -151,7 +151,7 @@ export default class extends React.Component {
                               ]}/>
                           </Form.Item>
                       </>}
-                      request={params => HttpClient.get('admin/task/page', params)}
+                      request={params => HttpClient.get('admin/sys/task/page', params)}
                       columns={this.columns}/>
 
             <TaskLogDrawer open={logVisible} logId={logId}

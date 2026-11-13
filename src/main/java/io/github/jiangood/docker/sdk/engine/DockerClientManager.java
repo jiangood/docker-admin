@@ -16,7 +16,7 @@ import com.jcraft.jsch.UserInfo;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.entity.Registry;
 import io.github.jiangood.openadmin.framework.proxy.ProxySettings;
-import io.github.jiangood.docker.base.FileLog;
+import io.github.jiangood.openadmin.modules.logviewer.util.TaskLog;
 import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.springframework.stereotype.Service;
@@ -39,7 +39,7 @@ import java.util.function.Supplier;
 @Service
 public class DockerClientManager {
 
-    private static final Logger fileLog = FileLog.logger();
+    private static final Logger fileLog = TaskLog.logger();
 
     private static final Duration CONNECTION_TIMEOUT = Duration.ofSeconds(10);
     private static final Duration RESPONSE_TIMEOUT = Duration.ofSeconds(3600);

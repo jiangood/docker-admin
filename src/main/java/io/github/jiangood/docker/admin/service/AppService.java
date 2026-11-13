@@ -23,9 +23,9 @@ import io.github.jiangood.docker.admin.entity.ImageTag;
 import io.github.jiangood.docker.admin.entity.Project;
 import io.github.jiangood.docker.admin.service.registry.RegistryV2Client;
 import io.github.jiangood.docker.admin.util.ImageUrlUtils;
-import io.github.jiangood.docker.admin.websocket.TaskLogRegistry;
-import io.github.jiangood.docker.admin.entity.TaskLog;
-import io.github.jiangood.docker.base.FileLog;
+import io.github.jiangood.openadmin.modules.task.registry.TaskLogRegistry;
+import io.github.jiangood.openadmin.modules.task.entity.SysTaskLog;
+import io.github.jiangood.openadmin.modules.logviewer.util.TaskLog;
 import io.github.jiangood.docker.sdk.engine.DefaultCallback;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import io.github.jiangood.openadmin.framework.data.BaseService;
@@ -49,13 +49,14 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import io.github.jiangood.openadmin.modules.task.service.SysTaskLogService;
 
 @Service
 @Slf4j
 @RequiredArgsConstructor
 public class AppService extends BaseService<App> {
 
-    private static final Logger fileLog = FileLog.logger();
+    private static final Logger fileLog = TaskLog.logger();
 
     /** 可变标签：镜像内容会随推送变化，本地同名镜像无法证明与仓库一致 */
     private static final String LATEST_TAG = "latest";
@@ -107,7 +108,8 @@ public class AppService extends BaseService<App> {
     @Resource
     TaskLogRegistry taskLogRegistry;
 
-    TaskLogService taskLogService;
+    @Resource
+    SysTaskLogService taskLogService;
 
     /**
      * 保存应用：新建走 create，编辑走 update。
@@ -179,10 +181,10 @@ public class AppService extends BaseService<App> {
             logSaved = true;
 
             // 登记通用任务记录（logId 即部署记录 id），任务中心可统一查看与回放日志
-            taskLogService.start(deployLog.getId(), TaskLog.TYPE_DEPLOY,
+            taskLogService.start(deployLog.getId(), SysTaskLog.TYPE_DEPLOY,
                     deployLog.getAppName() + " · 部署", "app:view", taskLogService.currentTriggerUser());
 
-            FileLog.bind(deployLog.getId());
+            TaskLog.bind(deployLog.getId());
             // 登记为运行中的任务：前端「部署日志」用 WebSocket 实时 tail 本文件，
             // 未登记时 WS 会立刻判定任务已结束并断开（与构建 / 镜像同步一致）。
             taskLogRegistry.start(deployLog.getId());
@@ -430,7 +432,7 @@ public class AppService extends BaseService<App> {
             } finally {
                 IOUtils.closeQuietly(client);
                 deployingList.remove(appId);
-                FileLog.unbind();
+                TaskLog.unbind();
             }
         }
 

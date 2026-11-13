@@ -17,13 +17,13 @@ import com.github.dockerjava.api.model.RestartPolicy;
 import io.github.jiangood.docker.admin.config.DockerSettings;
 import io.github.jiangood.docker.admin.dto.HostAgentVo;
 import io.github.jiangood.docker.admin.entity.Host;
-import io.github.jiangood.docker.admin.entity.TaskLog;
-import io.github.jiangood.docker.admin.service.LongTaskRunner;
+import io.github.jiangood.openadmin.modules.task.entity.SysTaskLog;
+import io.github.jiangood.openadmin.modules.task.service.LongTaskRunner;
 import io.github.jiangood.docker.admin.util.AgentImageUtils;
 import io.github.jiangood.docker.admin.util.HostRootPolicy;
 import io.github.jiangood.docker.admin.util.PlatformVersion;
-import io.github.jiangood.docker.admin.websocket.TaskLogRegistry;
-import io.github.jiangood.docker.base.FileLog;
+import io.github.jiangood.openadmin.modules.task.registry.TaskLogRegistry;
+import io.github.jiangood.openadmin.modules.logviewer.util.TaskLog;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import io.github.jiangood.docker.sdk.engine.DefaultCallback;
 import io.github.jiangood.openadmin.util.BusinessException;
@@ -58,12 +58,12 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 public class HostAgentService {
 
-    private static final Logger fileLog = FileLog.logger();
+    private static final Logger fileLog = TaskLog.logger();
 
     public static final String CONTAINER_NAME = "docker-admin-agent";
 
-    /** 任务类型（任务中心展示与 logId 前缀），见 {@link TaskLog#TYPE_AGENT_DEPLOY}。 */
-    private static final String TASK_TYPE = TaskLog.TYPE_AGENT_DEPLOY;
+    /** 任务类型（任务中心展示与 logId 前缀），见 {@link SysTaskLog#TYPE_AGENT_DEPLOY}。 */
+    private static final String TASK_TYPE = SysTaskLog.TYPE_AGENT_DEPLOY;
 
     public static final String LABEL_AGENT = "io.github.jiangood.docker-admin.agent";
     public static final String LABEL_ROOT = LABEL_AGENT + ".root";
@@ -423,7 +423,7 @@ public class HostAgentService {
             fileLog.info("拉取辅助镜像 {}{}", image, exists ? "（尝试更新）" : "");
             // DefaultCallback 会把逐层进度写入当前任务的日志文件（bind 同一个 logId），
             // 并登记为可中断资源：任务中心点「取消」时关掉响应流即可中断拉取
-            String logId = FileLog.currentLogId();
+            String logId = TaskLog.currentKey();
             DefaultCallback<PullResponseItem> callback = new DefaultCallback<>(logId);
             taskLogRegistry.register(logId, callback);
             client.pullImageCmd(repoOf(image)).withTag(tagOf(image)).exec(callback).awaitCompletion();

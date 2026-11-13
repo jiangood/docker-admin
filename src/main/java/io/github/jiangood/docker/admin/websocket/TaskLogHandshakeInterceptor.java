@@ -1,7 +1,7 @@
 package io.github.jiangood.docker.admin.websocket;
 
-import io.github.jiangood.docker.admin.dao.TaskLogRepository;
-import io.github.jiangood.docker.admin.entity.TaskLog;
+import io.github.jiangood.openadmin.modules.task.repository.SysTaskLogRepository;
+import io.github.jiangood.openadmin.modules.task.entity.SysTaskLog;
 import io.github.jiangood.openadmin.framework.auth.LoginTool;
 import io.github.jiangood.openadmin.framework.config.security.LoginUser;
 import jakarta.annotation.Resource;
@@ -37,7 +37,7 @@ public class TaskLogHandshakeInterceptor implements HandshakeInterceptor {
     public static final Pattern LOG_ID_PATTERN = Pattern.compile("^[A-Za-z0-9_-]{1,64}$");
 
     @Resource
-    private TaskLogRepository taskLogRepository;
+    private SysTaskLogRepository taskLogRepository;
 
     @Override
     public boolean beforeHandshake(ServerHttpRequest request, ServerHttpResponse response,
@@ -50,7 +50,7 @@ public class TaskLogHandshakeInterceptor implements HandshakeInterceptor {
             return false;
         }
 
-        TaskLog task = taskLogRepository.findByLogId(logId).orElse(null);
+        SysTaskLog task = taskLogRepository.findByLogId(logId).orElse(null);
         if (task == null) {
             log.warn("任务日志 WebSocket 握手被拒绝，任务记录不存在: {}", logId);
             response.setStatusCode(HttpStatus.NOT_FOUND);

@@ -4,9 +4,9 @@ import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
 import io.github.jiangood.docker.admin.dto.HostImageExportTaskView;
 import io.github.jiangood.docker.admin.entity.Host;
-import io.github.jiangood.docker.admin.entity.TaskLog;
-import io.github.jiangood.docker.admin.websocket.TaskLogRegistry;
-import io.github.jiangood.docker.base.FileLog;
+import io.github.jiangood.openadmin.modules.task.entity.SysTaskLog;
+import io.github.jiangood.openadmin.modules.task.registry.TaskLogRegistry;
+import io.github.jiangood.openadmin.modules.logviewer.util.TaskLog;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
@@ -19,6 +19,7 @@ import java.io.OutputStream;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
+import io.github.jiangood.openadmin.modules.task.service.SysTaskLogService;
 
 /**
  * 主机详情页的镜像导出：把主机上已有的镜像用 {@code docker save} 打成 tar，留在主机上供下载。
@@ -34,10 +35,10 @@ import java.util.regex.Pattern;
 @Slf4j
 public class HostImageExportService {
 
-    private static final Logger fileLog = FileLog.logger();
+    private static final Logger fileLog = TaskLog.logger();
 
     @Resource
-    private TaskLogService taskLogService;
+    private SysTaskLogService taskLogService;
 
     /**
      * 镜像标识白名单：镜像 ID（sha256:...）与 repo:tag 都要放行，且不能含空白。
@@ -131,7 +132,7 @@ public class HostImageExportService {
         }
         tasksByLogId.put(logId, task);
         // 登记通用任务记录，任务中心可查看与回放（在标记运行中之前，保证 WS 鉴权能查到记录）
-        taskLogService.start(logId, TaskLog.TYPE_HOST_IMAGE_EXPORT,
+        taskLogService.start(logId, SysTaskLog.TYPE_HOST_IMAGE_EXPORT,
                 "导出主机镜像 " + host.getName() + " · " + ref,
                 "host:image", taskLogService.currentTriggerUser());
         // 在请求线程先标记运行中：前端拿到 logId 后可能立刻连日志 WebSocket，
@@ -147,7 +148,7 @@ public class HostImageExportService {
     public void export(String logId, String hostId, String image) {
         Task task = tasksByLogId.get(logId);
         taskLogRegistry.start(logId);
-        FileLog.bind(logId);
+        TaskLog.bind(logId);
         boolean success = false;
         String error = null;
         try {
@@ -173,7 +174,7 @@ public class HostImageExportService {
             } catch (Exception ex) {
                 log.warn("写入任务记录失败: logId={} {}", logId, ex.getMessage());
             }
-            FileLog.unbind();
+            TaskLog.unbind();
             taskLogRegistry.finish(logId);
         }
     }

@@ -9,10 +9,10 @@ import com.github.dockerjava.api.model.BuildResponseItem;
 import io.github.jiangood.docker.admin.dto.BuildTestRequest;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.entity.Registry;
-import io.github.jiangood.docker.admin.entity.TaskLog;
+import io.github.jiangood.openadmin.modules.task.entity.SysTaskLog;
 import io.github.jiangood.docker.admin.util.BuildContextUtils;
-import io.github.jiangood.docker.admin.websocket.TaskLogRegistry;
-import io.github.jiangood.docker.base.FileLog;
+import io.github.jiangood.openadmin.modules.task.registry.TaskLogRegistry;
+import io.github.jiangood.openadmin.modules.logviewer.util.TaskLog;
 import io.github.jiangood.docker.base.tool.GitCredential;
 import io.github.jiangood.docker.base.tool.GitTool;
 import io.github.jiangood.docker.sdk.engine.DefaultCallback;
@@ -32,6 +32,7 @@ import java.util.Collections;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
+import io.github.jiangood.openadmin.modules.task.service.SysTaskLogService;
 
 /**
  * 构建测试：以 Git 仓库（或指定子目录）为构建上下文，用粘贴的 Dockerfile 覆盖后，在默认构建节点上本地构建镜像。
@@ -42,7 +43,7 @@ import java.util.concurrent.atomic.AtomicReference;
 @Slf4j
 public class BuildTestService {
 
-    private static final Logger fileLog = FileLog.logger();
+    private static final Logger fileLog = TaskLog.logger();
 
     /**
      * 覆盖仓库中的 Dockerfile 文件名，路径相对构建上下文目录。
@@ -78,7 +79,7 @@ public class BuildTestService {
     TaskLogRegistry taskLogRegistry;
 
     @Resource
-    TaskLogService taskLogService;
+    SysTaskLogService taskLogService;
 
     /**
      * 当前运行的构建测试任务 logId。构建节点与默认镜像名都是共用的，同一时间只允许一个任务。
@@ -109,7 +110,7 @@ public class BuildTestService {
             throw new BusinessException("已有构建测试任务正在运行，请先等待完成或取消");
         }
         try {
-            taskLogService.start(logId, TaskLog.TYPE_BUILD_TEST,
+            taskLogService.start(logId, SysTaskLog.TYPE_BUILD_TEST,
                     "构建测试 " + StrUtil.sub(StrUtil.trim(p.getGitUrl()), 0, 120),
                     "build-test:view", taskLogService.currentTriggerUser());
             taskLogRegistry.start(logId);
@@ -191,7 +192,7 @@ public class BuildTestService {
     @Async
     public void build(String logId, BuildTestRequest p) {
         taskLogRegistry.start(logId);
-        FileLog.bind(logId);
+        TaskLog.bind(logId);
         DockerClient client = null;
         File workDir = null;
         boolean success = false;
@@ -299,7 +300,7 @@ public class BuildTestService {
             } catch (Exception ex) {
                 log.warn("写入任务记录失败: logId={} {}", logId, ex.getMessage());
             }
-            FileLog.unbind();
+            TaskLog.unbind();
             cancelRequested.remove(logId);
             taskLogRegistry.finish(logId);
             runningLogId.compareAndSet(logId, null);

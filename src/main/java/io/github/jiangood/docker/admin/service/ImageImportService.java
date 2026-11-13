@@ -10,8 +10,8 @@ import com.github.dockerjava.api.model.PushResponseItem;
 import io.github.jiangood.docker.admin.entity.ImageTag;
 import io.github.jiangood.docker.admin.entity.Registry;
 import io.github.jiangood.docker.admin.websocket.TaskLogHandshakeInterceptor;
-import io.github.jiangood.docker.admin.websocket.TaskLogRegistry;
-import io.github.jiangood.docker.base.FileLog;
+import io.github.jiangood.openadmin.modules.task.registry.TaskLogRegistry;
+import io.github.jiangood.openadmin.modules.logviewer.util.TaskLog;
 import io.github.jiangood.docker.sdk.engine.DefaultCallback;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +30,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.regex.Pattern;
+import jakarta.annotation.Resource;
+import io.github.jiangood.openadmin.modules.task.service.SysTaskLogService;
 
 /**
  * 镜像导入：把用户上传的 {@code docker save} 归档载入 docker，再推送到平台注册中心，
@@ -52,7 +54,7 @@ import java.util.regex.Pattern;
 @RequiredArgsConstructor
 public class ImageImportService {
 
-    private static final Logger fileLog = FileLog.logger();
+    private static final Logger fileLog = TaskLog.logger();
 
     /**
      * 上传归档的临时目录（系统临时目录下，任务结束即删）。
@@ -81,7 +83,8 @@ public class ImageImportService {
 
     private final TaskLogRegistry taskLogRegistry;
 
-    private final TaskLogService taskLogService;
+    @Resource
+    private SysTaskLogService taskLogService;
 
     /**
      * 同步校验用户填写的镜像名与版本，让错误在开始上传前就能返回。
@@ -108,7 +111,7 @@ public class ImageImportService {
     @Async
     public void importTar(String logId, File tar, String registryId, String imageName, String tag) {
         taskLogRegistry.start(logId);
-        FileLog.bind(logId);
+        TaskLog.bind(logId);
 
         DockerClient client = null;
         boolean success = false;
@@ -171,7 +174,7 @@ public class ImageImportService {
             } catch (Exception ex) {
                 log.warn("写入任务记录失败: logId={} {}", logId, ex.getMessage());
             }
-            FileLog.unbind();
+            TaskLog.unbind();
             taskLogRegistry.finish(logId);
             importRegistry.finish(logId, success
                     ? ImageImportRegistry.Status.SUCCESS

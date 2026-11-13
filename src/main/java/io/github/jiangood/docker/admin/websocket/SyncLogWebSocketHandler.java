@@ -16,6 +16,7 @@ import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import io.github.jiangood.openadmin.modules.task.registry.TaskLogRegistry;
 
 /**
  * 后台任务实时日志 WebSocket（镜像同步、构建、部署等）。
