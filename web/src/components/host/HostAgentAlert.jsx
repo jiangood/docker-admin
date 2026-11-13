@@ -161,7 +161,7 @@ export default class extends React.Component {
             .finally(() => this.setState({updating: false}))
     }
 
-    /** 卡片标题里的状态块：加载中 / 运行中 / 已停止 / 未部署。 */
+    /** 卡片标题里的状态块：加载中 / 运行中 / 已停止 / 未部署，后面跟着镜像版本号。 */
     renderSummary() {
         const {status, loading, error} = this.state
         if (error) {
@@ -176,8 +176,18 @@ export default class extends React.Component {
         if (!status || !status.deployed) {
             return <Badge status='default' text='未部署'/>
         }
-        return <Badge status={status.running ? 'success' : 'default'}
-                      text={status.running ? '运行中' : '已停止'}/>
+        return <Space size={6}>
+            <Badge status={status.running ? 'success' : 'default'}
+                   text={status.running ? '运行中' : '已停止'}/>
+            <Tooltip title={status.updateAvailable && status.platformVersion
+                ? `最新版本 ${status.platformVersion}，点「更新」可升级`
+                : 'agent 镜像内置的版本号（终端里 echo $AGENT_VERSION 也能看到）'}>
+                <Typography.Text type={status.updateAvailable ? 'warning' : 'secondary'} style={{fontSize: 12}}>
+                    {status.agentVersion || '版本未知'}
+                    {status.updateAvailable && status.platformVersion && <>{' → '}{status.platformVersion}</>}
+                </Typography.Text>
+            </Tooltip>
+        </Space>
     }
 
     /** 卡片正文顶部的提示：只有异常 / 需要处理时才出现，正常状态不占空间。 */
@@ -193,6 +203,11 @@ export default class extends React.Component {
         if (status && status.needsRebuild) {
             return <Alert className='mb-3' type='warning' showIcon
                           title='配置与容器实际参数不一致（镜像 tag 或挂载目录已变更），点「重新部署」即可应用'/>
+        }
+        if (status && status.updateAvailable) {
+            return <Alert className='mb-3' type='info' showIcon
+                          title={<span>agent 镜像有新版本 {status.platformVersion}（当前
+                              {status.agentVersion || '未知'}），点「更新」按当前 tag 重新拉取并重建容器即可升级</span>}/>
         }
         if (!PermUtils.hasPermission('host:save') && !(status && status.deployed)) {
             return <Alert className='mb-3' type='info' showIcon title='需要 host:save 权限才能部署辅助容器'/>
@@ -375,6 +390,13 @@ export default class extends React.Component {
                         <li>镜像：<code>{status.image || '-'}</code>
                             {status.mountedImage && status.mountedImage !== status.image &&
                                 <>（实际：<code>{status.mountedImage}</code>）</>}
+                        </li>
+                        <li>镜像版本：<code>{status.agentVersion || '未知（本功能上线前的旧镜像）'}</code>
+                            {status.updateAvailable && status.platformVersion &&
+                                <>（最新：<code>{status.platformVersion}</code>）</>}
+                            {status.agentVersion &&
+                                <>，终端里 <code>echo $AGENT_VERSION</code>、
+                                    <code>cat /etc/docker-admin-agent-release</code> 也能看到</>}
                         </li>
                         <li>挂载目录：<code>{status.mountedRoot || '-'}</code></li>
                         <li>docker.sock：<code>{status.socketPath || '-'}</code></li>

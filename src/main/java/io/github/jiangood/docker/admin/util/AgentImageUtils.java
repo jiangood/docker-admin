@@ -69,4 +69,31 @@ public final class AgentImageUtils {
     public static String resolveImage(String repository, String tag) {
         return normalizeRepository(repository) + ":" + normalizeTag(tag);
     }
+
+    /** 本地手动构建镜像时 Dockerfile 里的版本回落值，与平台版本没有对应关系。 */
+    public static final String DEV_VERSION = "dev";
+
+    /**
+     * agent 镜像是否落后：agent 镜像与平台<b>同 tag 发版</b>，平台自身版本即最新 agent 版本，
+     * 版本号不同即落后（用户可能刻意固定旧 tag，这正是要提示的场景）。
+     * <p>
+     * 只对「默认官方镜像 + 实际版本可读 + 不是本地 dev 构建」比较：
+     * 自定义 repository 的镜像版本号与平台没有对应关系，读了也只会误报。
+     */
+    public static boolean isOutdated(String repository, String agentVersion, String platformVersion) {
+        if (platformVersion == null || agentVersion == null
+                || DEV_VERSION.equals(agentVersion)
+                || !DEFAULT_REPOSITORY.equals(repository)) {
+            return false;
+        }
+        // 镜像 label 存的是发布 tag（v4.8.88，带 v），Maven Implementation-Version 是 4.8.88（不带 v），
+        // 比较前把前导 v 去掉
+        return !stripLeadingV(platformVersion).equalsIgnoreCase(stripLeadingV(agentVersion));
+    }
+
+    private static String stripLeadingV(String version) {
+        return version.startsWith("v") || version.startsWith("V")
+                ? version.substring(1)
+                : version;
+    }
 }

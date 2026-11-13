@@ -124,6 +124,14 @@ git tag vx.y.z && git push && git push origin vx.y.z
   重新部署（配置与容器不一致时出现）、切换挂载目录、更新（低频操作排在后面，配置一致时出现，
   按当前 tag 重新拉取镜像并重建容器，latest 强制拉取，供 agent 镜像发新版后升级）、部署、帮助，
   以上按钮均为图标 + 文字，长说明收进各自的 Tooltip / 问号弹窗。
+  **agent 镜像自我记录版本号**：CI 发版时经 build-args 把 tag 写进镜像三处
+  （OCI label `org.opencontainers.image.version`、ENV `AGENT_VERSION`、
+  `/etc/docker-admin-agent-release` 文件，本地构建回落为 `dev`，见 `agent/Dockerfile`）。
+  平台 `HostAgentService.status` 读实际镜像的 label 回显 `agentVersion`（标题徽标旁 + 帮助弹窗），
+  并与平台自身版本（fat jar manifest 的 `Implementation-Version`，`PlatformVersion` 读取）
+  比较——agent 与平台同 tag 发版，版本不同即提示「更新」（`updateAvailable`，Info Alert + 标题里
+  `v4.8.40 → v4.8.88`，比较时去掉前导 `v`）。仅默认官方镜像参与比较：自定义
+  `docker.agent.repository`、旧镜像无 label、本地 dev 构建、未打包运行时都跳过判定，避免误报。
   正文只有终端（`styles={{body: {padding: 12}}}`）；异常 / 待处理提示（状态读取失败、
   配置与容器不一致、无 `host:save` 权限）以 Alert 形式出现在终端上方，正常状态不占空间；
   容器状态、提示与按钮由 `HostAgentAlert` 通过 render prop 交给 `HostAgentTab` 组装，

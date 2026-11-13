@@ -48,4 +48,20 @@ class AgentImageUtilsTest {
         assertEquals("ghcr.io/jiangood/docker-admin-agent:v4.8.40",
                 AgentImageUtils.resolveImage(null, "v4.8.40"));
     }
+
+    @Test
+    void outdatedRequiresComparableVersions() {
+        String repo = AgentImageUtils.DEFAULT_REPOSITORY;
+
+        // 版本号可读且不同 → 落后（用户固定旧 tag 也算，这正是要提示的场景）
+        assertEquals(true, AgentImageUtils.isOutdated(repo, "v4.8.40", "4.8.88"));
+        // 同版本 → 不落后
+        assertEquals(false, AgentImageUtils.isOutdated(repo, "v4.8.88", "4.8.88"));
+        // 自定义镜像仓库：版本号与平台没有对应关系，不判
+        assertEquals(false, AgentImageUtils.isOutdated("registry.local/docker-admin-agent", "v4.8.40", "4.8.88"));
+        // 旧镜像没写版本 label / 本地 dev 构建 / 平台版本读不到：都没有可比对象，不判
+        assertEquals(false, AgentImageUtils.isOutdated(repo, null, "4.8.88"));
+        assertEquals(false, AgentImageUtils.isOutdated(repo, AgentImageUtils.DEV_VERSION, "4.8.88"));
+        assertEquals(false, AgentImageUtils.isOutdated(repo, "v4.8.40", null));
+    }
 }

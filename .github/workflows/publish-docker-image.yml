@@ -53,6 +53,10 @@ jobs:
       with:
         context: ./agent
         push: true
+        # 把发布 tag 写进镜像：OCI label + ENV + /etc/docker-admin-agent-release，
+        # 平台据此展示 agent 版本，并按「agent 与平台同 tag 发版」提示是否可更新
+        build-args: |
+          AGENT_VERSION=${{ github.ref_name }}
         tags: |
           ghcr.io/${{ github.repository_owner }}/docker-admin-agent:latest
           ghcr.io/${{ github.repository_owner }}/docker-admin-agent:${{ github.ref_name }}

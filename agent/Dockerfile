@@ -16,9 +16,21 @@ RUN apk add --no-cache gcc musl-dev make curl tar \
 
 FROM alpine:3.21
 
+# 版本号：CI 在 v* tag 上构建时传入（如 v4.8.88），本地手动构建回落为 dev。
+# 三处落地，互为备份：
+#   - OCI label：docker inspect / 平台 inspectImageCmd 读取，用于「是否最新版」判定
+#   - ENV：终端里 echo $AGENT_VERSION 即可看到（平台创建容器时只追加 env，不清空镜像 env）
+#   - /etc/docker-admin-agent-release：仿 /etc/os-release 的文件，脚本里可 cat
+ARG AGENT_VERSION=dev
+
 LABEL org.opencontainers.image.title="docker-admin-agent" \
       org.opencontainers.image.description="Helper container for docker-admin host file management and Docker CLI" \
-      org.opencontainers.image.source="https://github.com/jiangood/docker-admin"
+      org.opencontainers.image.source="https://github.com/jiangood/docker-admin" \
+      org.opencontainers.image.version="${AGENT_VERSION}"
+
+ENV AGENT_VERSION=${AGENT_VERSION}
+
+RUN printf 'NAME=docker-admin-agent\nVERSION=%s\n' "${AGENT_VERSION}" > /etc/docker-admin-agent-release
 
 # docker-cli：docker 命令；docker-cli-compose：docker compose；
 # ca-certificates：agent 内执行 docker pull/push 时校验 TLS；tzdata：让 docker.agent.tz 生效。

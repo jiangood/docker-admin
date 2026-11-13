@@ -4,6 +4,7 @@ import cn.hutool.core.util.StrUtil;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.command.InspectContainerResponse;
+import com.github.dockerjava.api.command.InspectImageResponse;
 import com.github.dockerjava.api.exception.DockerException;
 import com.github.dockerjava.api.exception.NotFoundException;
 import com.github.dockerjava.api.exception.NotModifiedException;
@@ -18,6 +19,7 @@ import io.github.jiangood.docker.admin.dto.HostAgentVo;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.util.AgentImageUtils;
 import io.github.jiangood.docker.admin.util.HostRootPolicy;
+import io.github.jiangood.docker.admin.util.PlatformVersion;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import io.github.jiangood.openadmin.util.BusinessException;
 import jakarta.annotation.Resource;
@@ -55,6 +57,9 @@ public class HostAgentService {
     public static final String LABEL_ROOT = LABEL_AGENT + ".root";
     public static final String LABEL_IMAGE = LABEL_AGENT + ".image";
     public static final String LABEL_SOCKET = LABEL_AGENT + ".socket";
+
+    /** agent 镜像内置的版本号 label，CI 发版时写入发布 tag（见 agent/Dockerfile）。 */
+    public static final String OCI_LABEL_VERSION = "org.opencontainers.image.version";
 
     private static final String AGENT_MOUNT = HostRootPolicy.AGENT_MOUNT;
     private static final String SOCKET_TARGET = "/var/run/docker.sock";
@@ -292,7 +297,32 @@ public class HostAgentService {
         vo.setNeedsRebuild(!Objects.equals(vo.getDesiredRoot(), vo.getMountedRoot())
                 || !Objects.equals(image, labels.get(LABEL_IMAGE))
                 || !Objects.equals(socketPath, labels.get(LABEL_SOCKET)));
+        vo.setAgentVersion(agentImageVersion(client, vo.getMountedImage()));
+        vo.setPlatformVersion(PlatformVersion.get());
+        vo.setUpdateAvailable(AgentImageUtils.isOutdated(
+                repository, vo.getAgentVersion(), vo.getPlatformVersion()));
         return vo;
+    }
+
+    /**
+     * 读取实际运行镜像内置的版本号（OCI label）。旧版本镜像没有该 label，返回 null。
+     */
+    private String agentImageVersion(DockerClient client, String image) {
+        if (StrUtil.isBlank(image)) {
+            return null;
+        }
+        try {
+            InspectImageResponse imageInfo = client.inspectImageCmd(image).exec();
+            if (imageInfo.getConfig() == null || imageInfo.getConfig().getLabels() == null) {
+                return null;
+            }
+            String version = imageInfo.getConfig().getLabels().get(OCI_LABEL_VERSION);
+            return StrUtil.isBlank(version) ? null : version.trim();
+        } catch (Exception e) {
+            // 镜像刚被清理等场景不影响状态展示，只是看不到版本号
+            log.debug("读取辅助镜像版本失败: {}", image, e);
+            return null;
+        }
     }
 
     private InspectContainerResponse inspect(DockerClient client) {
