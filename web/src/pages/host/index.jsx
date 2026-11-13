@@ -365,20 +365,20 @@ export default class extends React.Component {
                                         </div>
                                     </Form.Item>
 
-                                    <Form.Item label='自定义请求头'
+                                    <Form.Item label='请求头'
                                                tooltip={<div style={{width: 460}}>每次请求 Docker 时附带的请求头
                                                    （供代理、网关或隧道校验）：左边是名称
                                                    （header name），右边是值。<br/>
                                                    <b>名称为空则不发送该请求头</b>；值照原样发送，需要
                                                    <b>Bearer</b> 自己写在值里；清空即删除。
                                                    <br/><b>经 http-tunnel（ht）访问远端 Docker</b>：ht 用
-                                                   <code>X-HTTP-TUNNEL-TOKEN</code> 这个请求认证头校验访客，
-                                                   名称填 <code>X-HTTP-TUNNEL-TOKEN</code>，值填
+                                                   <code>X-Auth</code> 这个请求认证头校验访客，
+                                                   名称填 <code>X-Auth</code>，值填
                                                    <code>ht.toml</code> 里的 <code>token</code>。</div>}
                                                extra={<div style={{marginTop: 4}}>
                                                    名称为空则不发送。示例：<code>Authorization</code> /
                                                    <code>Bearer xxxxxx</code>；
-                                                   <code>X-HTTP-TUNNEL-TOKEN</code> /
+                                                   <code>X-Auth</code> /
                                                    http-tunnel 令牌（<code>ht.toml</code> 的 <code>token</code>）。
                                                </div>}>
                                         <Space.Compact style={{width: '100%'}}>
@@ -392,7 +392,7 @@ export default class extends React.Component {
                                                            }
                                                        })]}>
                                                 <Input allowClear style={{width: '42%'}}
-                                                       placeholder='名称，如 X-HTTP-TUNNEL-TOKEN'/>
+                                                       placeholder='名称，如 X-Auth'/>
                                             </Form.Item>
                                             <Form.Item name='headerValue' noStyle>
                                                 <Input.Password autoComplete='new-password'

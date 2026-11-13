@@ -191,7 +191,7 @@ public class HostService extends BaseService<Host> {
             return;
         }
         host.setIp(StrUtil.trim(host.getIp()));
-        // 自定义请求头：原样保留，空就是空（名称为空则不发送请求头）
+        // 请求头：原样保留，空就是空（名称为空则不发送请求头）
         host.setHeaderName(StrUtil.trimToNull(host.getHeaderName()));
         host.setHeaderValue(StrUtil.trimToNull(host.getHeaderValue()));
         String dockerHost = StrUtil.trim(host.getDockerHost());

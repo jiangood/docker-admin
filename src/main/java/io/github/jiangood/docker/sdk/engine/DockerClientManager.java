@@ -331,7 +331,7 @@ public class DockerClientManager {
                     .build();
         }
 
-        // 用户配置的自定义请求头：名称为空就不发（不做任何兜底），值也原样发送
+        // 用户配置的请求头：名称为空就不发（不做任何兜底），值也原样发送
         String headerName = host == null ? null : StrUtil.trimToNull(host.getHeaderName());
         String headerValue = host == null ? null : host.getHeaderValue();
         if (headerName != null && StrUtil.isNotBlank(headerValue)) {

@@ -33,7 +33,7 @@ function connectionLabel(host) {
     return label
 }
 
-/** 自定义请求头展示：名称为空就是不发送，不臆造默认名称 */
+/** 请求头展示：名称为空就是不发送，不臆造默认名称 */
 function headerLabel(host) {
     if (!host || host.connectionType !== 'tcp') {
         return '-'
@@ -768,7 +768,7 @@ export default class extends React.Component {
                 ? [{key: 'proxy', label: '连接代理', children: proxyLabel(host), span: 3}]
                 : []),
             ...(isTcp && host?.headerConfigured
-                ? [{key: 'header', label: '自定义请求头', children: headerLabel(host), span: 3}]
+                ? [{key: 'header', label: '请求头', children: headerLabel(host), span: 3}]
                 : []),
             {key: 'os', label: '操作系统', children: info?.os || '-'},
             {key: 'arch', label: '架构', children: info?.arch || '-'},

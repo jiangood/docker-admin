@@ -266,7 +266,7 @@ git tag vx.y.z && git push && git push origin vx.y.z
   只有启用代理的 TCP 主机走它，直连主机仍用官方 `ApacheDockerHttpClient`。
 - **内网穿透说明页已移除：** 原来的 `/tunnel` 页面（`web/src/pages/tunnel/index.jsx`）与菜单项已删除，
   前端不再有 `tunnel:view` 权限码。http-tunnel 自身的部署与使用以项目文档为准；
-  主机「自定义请求头」里关于 `X-HTTP-TUNNEL-TOKEN` 的提示仍保留。
+  主机「请求头」配置保留（示例用 http-tunnel 的 `X-Auth`，值为 `ht.toml` 的 `token`）。
 - **构建上下文：** `Project.context` 相对仓库根目录，留空表示仓库根；填写时不带前导 `/`（后端兼容历史的 `/admin`，保存时归一化）。
   `dockerfile` 同样相对仓库根目录、不带前导 `/`，且必须位于上下文内（如 `context=admin` + `dockerfile=admin/Dockerfile`）。
   前端表格/详情直接原样展示上下文（空即空，不再显示「仓库根目录」），输入框失焦时自动去掉前导 `/`。

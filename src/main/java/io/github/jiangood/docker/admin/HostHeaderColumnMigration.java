@@ -8,7 +8,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 /**
- * 一次性数据搬迁：主机的自定义请求头值列从 {@code auth_header} 改名为 {@code header_value}。
+ * 一次性数据搬迁：主机的请求头值列从 {@code auth_header} 改名为 {@code header_value}。
  * <p>
  * 为什么要这个类：Hibernate 的 {@code ddl-auto=update} 只会新增列、不会改名，改名之后老库会变成
  * 「新列 header_value 空着 + 旧列 auth_header 留着老值」，已配好的请求头会静默失效（代理直接 401），
@@ -34,11 +34,11 @@ public class HostHeaderColumnMigration {
             int rows = jdbcTemplate.update("update t_host set header_value = auth_header"
                     + " where header_value is null and auth_header is not null");
             if (rows > 0) {
-                log.info("自定义请求头值已从旧列 auth_header 搬到 header_value，共 {} 台主机", rows);
+                log.info("主机请求头值已从旧列 auth_header 搬到 header_value，共 {} 台主机", rows);
             }
         } catch (Exception e) {
             // 老列不存在等情况：没有东西可搬，不影响启动
-            log.debug("跳过自定义请求头值搬迁: {}", e.toString());
+            log.debug("跳过请求头值搬迁: {}", e.toString());
         }
     }
 

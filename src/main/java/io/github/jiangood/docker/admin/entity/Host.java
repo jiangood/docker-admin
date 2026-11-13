@@ -90,8 +90,8 @@ public class Host extends BaseEntity {
     String sshPassword;
 
     /**
-     * 自定义请求头名称：代理要求的头名（header name），如 docker-api-auth 用
-     * {@code Authorization}、http-tunnel 用它约定的自定义 key。
+     * 请求头名称：代理要求的头名（header name），如 docker-api-auth 用
+     * {@code Authorization}、http-tunnel 用 {@code X-Auth}。
      * <p>
      * <b>空就是空</b>：名称为空则该请求头不会发送（也不会替用户补 {@code Authorization}）。
      * 值也原样发送，需要 {@code Bearer} 前缀请自己写在值里。
@@ -101,11 +101,11 @@ public class Host extends BaseEntity {
      * getter 只要返回非空，列表查询就会被无条件加上 {@code header_name like '%xxx%'}，
      * 把该列为 NULL 的历史数据全部过滤掉。
      */
-    @Remark("自定义请求头")
+    @Remark("请求头")
     String headerName;
 
     /**
-     * 自定义请求头的值：{@link #headerName} 对应的值，照原样发送（不自动补 {@code Bearer}）。
+     * 请求头的值：{@link #headerName} 对应的值，照原样发送（不自动补 {@code Bearer}）。
      * <p>
      * 回传前端（编辑弹窗要回显，才能改、才能删）。<b>空就是空</b>：保存时留空即删除该请求头。
      * <p>

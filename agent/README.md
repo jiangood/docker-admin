@@ -193,8 +193,8 @@ docker run -d --name my-agent \
   ```
 
   证书文件名必须是 `ca.pem`、`cert.pem`、`key.pem`。
-- 需要经隧道 / 反向代理并带自定义请求头时，docker CLI 没有传 header 的选项
-  （平台侧的「自定义请求头」是平台自己实现的），独立使用只能走 TLS 或代理：
+- 需要经隧道 / 反向代理并带请求头（如 http-tunnel 的 `X-Auth`）时，docker CLI 没有传
+  header 的选项（平台侧的「请求头」是平台自己实现的），独立使用只能走 TLS 或代理：
   `-e HTTPS_PROXY=...` / `-e NO_PROXY=...`。
 
 ### 和平台部署的差异
