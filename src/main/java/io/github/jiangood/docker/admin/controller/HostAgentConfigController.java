@@ -67,4 +67,27 @@ public class HostAgentConfigController {
         return AjaxResult.ok().msg("删除成功");
     }
 
+    /**
+     * 读取某主机的常用命令（终端页「常用命令」抽屉用）。
+     * 命令只在终端场景下使用，权限与 host-cli 保持一致。
+     */
+    @HasPermission("host:cli")
+    @RequestMapping("commands")
+    public AjaxResult commands(String hostId) {
+        return AjaxResult.ok().data(service.findCommands(hostId));
+    }
+
+    /**
+     * 整体保存某主机的常用命令：body 是命令数组，hostId 走查询参数
+     * （与前端 {@code HttpClient.post(url, body, params)} 对齐）。
+     */
+    @Log("主机 Agent-常用命令保存")
+    @HasPermission("host:cli")
+    @PostMapping("commands/save")
+    public AjaxResult saveCommands(String hostId,
+            @RequestBody List<HostAgentConfig.AgentCommand> commands) {
+        List<HostAgentConfig.AgentCommand> saved = service.saveCommands(hostId, commands);
+        return AjaxResult.ok().msg("保存成功").data(saved);
+    }
+
 }

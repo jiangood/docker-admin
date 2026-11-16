@@ -164,6 +164,14 @@ git tag vx.y.z && git push && git push origin vx.y.z
   重新部署（配置与容器不一致时出现）、切换挂载目录、更新（低频操作排在后面，配置一致时出现，
   按当前 tag 重新拉取镜像并重建容器，latest 强制拉取，供 agent 镜像发新版后升级）、部署、帮助，
   以上按钮均为图标 + 文字，长说明收进各自的 Tooltip / 问号弹窗。
+  **常用命令**：deployed 时 extra 里在「新建会话」后多一个「常用命令」下拉（`AgentCommands`，
+  点按钮直接弹菜单，点菜单项即敲进终端，`mask` 不挡终端）。命令**非全局、按主机各存一份**，
+  存在 `t_host_agent_config` 的 `commands` 字段（JSON text 列，`AgentCommandListConverter` 与
+  `HostAgentConfig.AgentCommand` 嵌套类承载，不单独建表），**最多 10 条**。点击命令把命令原样
+  敲进终端（`ContainerTerminal#input` 发 `{"type":"input"}` 帧，**不带回车**，人工确认后才执行，
+  换行命令前后端都拒绝）；菜单底部「管理命令」打开弹窗做增删改，整体覆盖保存。
+  接口 `admin/host-agent-config/commands`（读）与 `commands/save`（整体覆盖保存，
+  校验 ≤10 条、命令 ≤500 字符），权限复用 `host:cli`，不新增权限码。
   **agent 镜像自我记录版本号**：CI 发版时经 build-args 把 tag 写进镜像三处
   （OCI label `org.opencontainers.image.version`、ENV `AGENT_VERSION`、
   `/etc/docker-admin-agent-release` 文件，本地构建回落为 `dev`，见 `agent/Dockerfile`）。

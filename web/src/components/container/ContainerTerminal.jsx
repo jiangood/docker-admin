@@ -345,6 +345,27 @@ export default class extends React.Component {
         }
     }
 
+    /**
+     * 供父组件调用：把文本原样敲进终端（如「常用命令」抽屉点击某条命令）。
+     * <p>
+     * 不带换行也不回车：回显由服务端 PTY 负责，用户补好参数、人工回车后才执行；
+     * 连接未打开时静默忽略（shell 起来前点击不算数）。
+     */
+    input(text) {
+        const ws = this.ws
+        if (!text || !ws || ws.readyState !== WebSocket.OPEN) {
+            return
+        }
+        try {
+            ws.send(JSON.stringify({type: 'input', data: this.toBase64(text)}))
+        } catch (e) {
+            // ignore
+        }
+        if (this.term) {
+            this.term.focus()
+        }
+    }
+
     /** 供父组件调用：立刻重建连接（保留终端内容），用于「重新连接」按钮。 */
     reconnect() {
         if (this.disposed) {

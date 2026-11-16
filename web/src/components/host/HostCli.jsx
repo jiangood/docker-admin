@@ -136,6 +136,13 @@ export default class extends React.Component {
         this.setState(state => ({key: state.key + 1}))
     }
 
+    /** 供父组件调用：把文本敲进终端（不回车），供「常用命令」抽屉点击命令时使用。 */
+    input = text => {
+        if (this.terminal.current) {
+            this.terminal.current.input(text)
+        }
+    }
+
     render() {
         const {hostId} = this.props
         const {deployed, key} = this.state

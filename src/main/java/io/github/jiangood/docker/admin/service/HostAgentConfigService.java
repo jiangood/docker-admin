@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.Assert;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -24,6 +25,11 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 public class HostAgentConfigService extends BaseService<HostAgentConfig> {
+
+    /** 常用命令的条数与长度上限：JSON 存在同一列里，避免无限膨胀。 */
+    private static final int MAX_COMMANDS = 10;
+    private static final int MAX_COMMAND_LENGTH = 500;
+    private static final int MAX_COMMAND_NAME_LENGTH = 50;
 
     private final HostService hostService;
 
@@ -87,6 +93,71 @@ public class HostAgentConfigService extends BaseService<HostAgentConfig> {
             return null;
         }
         return findByField(HostAgentConfig.Fields.hostId, hostId);
+    }
+
+    /**
+     * 读取某主机的常用命令列表；没有 Agent 配置或还没维护过时返回空列表。
+     */
+    public List<HostAgentConfig.AgentCommand> findCommands(String hostId) {
+        HostAgentConfig config = findByHostId(hostId);
+        if (config == null) {
+            return new ArrayList<>();
+        }
+        List<HostAgentConfig.AgentCommand> commands = config.getCommands();
+        return commands == null ? new ArrayList<>() : commands;
+    }
+
+    /**
+     * 整体保存某主机的常用命令列表：抽屉里新增 / 修改 / 删除后由前端整体提交，
+     * 只动 {@code commands} 这一列，不影响 tag / 目录等其它配置。
+     * 保存前统一清洗与校验，返回值以清洗结果为准（前端据此刷新列表）。
+     */
+    @Transactional
+    public List<HostAgentConfig.AgentCommand> saveCommands(String hostId, List<HostAgentConfig.AgentCommand> input) {
+        Assert.hasText(hostId, "缺少主机 id");
+        HostAgentConfig config = findByHostId(hostId);
+        if (config == null) {
+            throw new BusinessException("主机没有 Agent 配置，请先在「工具 - 主机 Agent」新增");
+        }
+        List<HostAgentConfig.AgentCommand> commands = normalizeCommands(input);
+        config.setCommands(commands);
+        save(config);
+        return commands;
+    }
+
+    /**
+     * 清洗与校验命令列表：trim 名称与正文、去掉空命令条目、限制条数与长度、不允许换行
+     * （点击命令是把正文敲进终端，混进换行会直接执行，违背「人工回车」的约定）。
+     */
+    private List<HostAgentConfig.AgentCommand> normalizeCommands(List<HostAgentConfig.AgentCommand> input) {
+        if (input == null) {
+            return new ArrayList<>();
+        }
+        if (input.size() > MAX_COMMANDS) {
+            throw new BusinessException("常用命令最多 " + MAX_COMMANDS + " 条");
+        }
+        List<HostAgentConfig.AgentCommand> commands = new ArrayList<>();
+        for (int i = 0; i < input.size(); i++) {
+            HostAgentConfig.AgentCommand item = input.get(i);
+            if (item == null) {
+                continue;
+            }
+            String command = StrUtil.trimToNull(item.getCommand());
+            if (command == null) {
+                continue;
+            }
+            if (command.contains("\n") || command.contains("\r")) {
+                throw new BusinessException("第 " + (i + 1) + " 条命令包含换行，请写在同一行");
+            }
+            if (command.length() > MAX_COMMAND_LENGTH) {
+                throw new BusinessException("第 " + (i + 1) + " 条命令超过 " + MAX_COMMAND_LENGTH + " 个字符");
+            }
+            HostAgentConfig.AgentCommand normalized = new HostAgentConfig.AgentCommand();
+            normalized.setName(StrUtil.trimToNull(StrUtil.sub(item.getName(), 0, MAX_COMMAND_NAME_LENGTH)));
+            normalized.setCommand(command);
+            commands.add(normalized);
+        }
+        return commands;
     }
 
     /**
