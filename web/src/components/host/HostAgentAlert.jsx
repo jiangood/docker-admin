@@ -1,13 +1,15 @@
 import React from 'react'
-import {Alert, Badge, Button, Input, Modal, Space, Spin, Tooltip, Typography, message} from 'antd'
-import {CloudServerOutlined, FolderOpenOutlined, QuestionCircleOutlined, SyncOutlined} from '@ant-design/icons'
+import {Alert, Badge, Button, Dropdown, Input, Modal, Space, Spin, Tooltip, Typography, message} from 'antd'
+import {CloudServerOutlined, FolderOpenOutlined, MoreOutlined, QuestionCircleOutlined, SyncOutlined} from '@ant-design/icons'
 import {HttpClient, PermUtils} from '@jiangood/open-admin'
 import TaskLogDrawer from '../TaskLogDrawer'
 
 /**
- * Agent 容器状态与操作：把「状态」「提示（异常）」「按钮（更新 / 重新部署 / 切换挂载目录 / 部署 / 帮助）」
- * 通过 render prop 交给外层 Card，自己只负责取状态、弹窗和请求。
+ * Agent 容器状态与操作：把「状态」「提示（异常）」「按钮」通过 render prop 交给外层 Card，
+ * 自己只负责取状态、弹窗和请求。
  * <p>
+ * 明面上只留主操作（未部署时的「部署辅助容器」、配置不一致时的「重新部署」，均 primary）
+ * 与一个「更多」下拉（低频操作：切换挂载目录 / 更新 / 帮助），保持工具栏整洁。
  * 目录决定终端里的挂载基准，所以切换入口也在这一层；镜像、目录、权限等说明统一收进问号弹窗。
  * 不提供「删除 Agent」入口：辅助容器就是普通容器，需要删除时走主机详情的「容器」Tab。
  * 用法：<HostAgentAlert hostId={id} onChange={fn}>{
@@ -190,6 +192,32 @@ export default class extends React.Component {
         this.onLogEnd()
     }
 
+    /** 「更多」下拉菜单项：deployed 时的低频容器操作 + 帮助（未部署时只有帮助）。 */
+    moreMenuItems() {
+        const {status} = this.state
+        const deployed = !!(status && status.deployed)
+        const items = []
+        if (deployed) {
+            items.push({key: 'root', icon: <FolderOpenOutlined/>, label: '切换挂载目录'})
+            if (status && !status.needsRebuild) {
+                items.push({key: 'update', icon: <SyncOutlined/>, label: '更新'})
+            }
+            items.push({type: 'divider'})
+        }
+        items.push({key: 'help', icon: <QuestionCircleOutlined/>, label: '帮助'})
+        return items
+    }
+
+    onMoreMenuClick = ({key}) => {
+        if (key === 'root') {
+            this.openRootModal()
+        } else if (key === 'update') {
+            this.setState({updateOpen: true})
+        } else if (key === 'help') {
+            this.setState({helpOpen: true})
+        }
+    }
+
     /** 卡片标题里的状态块：加载中 / 运行中 / 已停止 / 未部署，后面跟着镜像版本号。 */
     renderSummary() {
         const {status, loading, error} = this.state
@@ -209,7 +237,7 @@ export default class extends React.Component {
             <Badge status={status.running ? 'success' : 'default'}
                    text={status.running ? '运行中' : '已停止'}/>
             <Tooltip title={status.updateAvailable && status.platformVersion
-                ? `最新版本 ${status.platformVersion}，点「更新」可升级`
+                ? `最新版本 ${status.platformVersion}，点右上角「更多 - 更新」可升级`
                 : 'agent 镜像内置的版本号（终端里 echo $AGENT_VERSION 也能看到）'}>
                 <Typography.Text type={status.updateAvailable ? 'warning' : 'secondary'} style={{fontSize: 12}}>
                     {status.agentVersion || '版本未知'}
@@ -236,7 +264,7 @@ export default class extends React.Component {
         if (status && status.updateAvailable) {
             return <Alert className='mb-3' type='info' showIcon
                           title={<span>agent 镜像有新版本 {status.platformVersion}（当前
-                              {status.agentVersion || '未知'}），点「更新」按当前 tag 重新拉取并重建容器即可升级</span>}/>
+                              {status.agentVersion || '未知'}），点右上角「更多 - 更新」按当前 tag 重新拉取并重建容器即可升级</span>}/>
         }
         if (!PermUtils.hasPermission('host:save') && !(status && status.deployed)) {
             return <Alert className='mb-3' type='info' showIcon title='需要 host:save 权限才能部署辅助容器'/>
@@ -245,7 +273,7 @@ export default class extends React.Component {
     }
 
     render() {
-        const {status, deployOpen, helpOpen, rootOpen, rootInput, rootSubmitting, updateOpen, updating,
+        const {status, deployOpen, helpOpen, rootOpen, rootInput, rootSubmitting, updateOpen,
             logId, logVisible} = this.state
         const canSave = PermUtils.hasPermission('host:save')
         const deployed = !!(status && status.deployed)
@@ -253,23 +281,19 @@ export default class extends React.Component {
 
         const actions = <>
             {extra}
-            {canSave && (deployed
-                ? <>
-                    {status && status.needsRebuild &&
-                        <Button type='primary' icon={<CloudServerOutlined/>}
-                                onClick={this.openDeploy}>重新部署</Button>}
-                    <Button icon={<FolderOpenOutlined/>}
-                            onClick={this.openRootModal}>切换挂载目录</Button>
-                    {status && !status.needsRebuild &&
-                        <Button icon={<SyncOutlined/>} loading={updating}
-                                onClick={() => this.setState({updateOpen: true})}>更新</Button>}
-                </>
-                : <Button type='primary' icon={<CloudServerOutlined/>}
-                          onClick={this.openDeploy}>部署辅助容器</Button>)}
-            <Tooltip title='辅助容器说明'>
-                <Button type='text' icon={<QuestionCircleOutlined/>}
-                        onClick={() => this.setState({helpOpen: true})}>帮助</Button>
-            </Tooltip>
+            {canSave && !deployed &&
+                <Button type='primary' icon={<CloudServerOutlined/>}
+                        onClick={this.openDeploy}>部署辅助容器</Button>}
+            {canSave && deployed && status && status.needsRebuild &&
+                <Button type='primary' icon={<CloudServerOutlined/>}
+                        onClick={this.openDeploy}>重新部署</Button>}
+            <Dropdown menu={{
+                items: this.moreMenuItems(),
+                onClick: this.onMoreMenuClick,
+                style: {maxHeight: '60vh', overflowY: 'auto'},
+            }} trigger={['click']} placement='bottomRight'>
+                <Button type='text' icon={<MoreOutlined/>}>更多</Button>
+            </Dropdown>
         </>
 
         return <>
@@ -315,7 +339,7 @@ export default class extends React.Component {
             </div>
             <Typography.Text type='secondary' style={{display: 'block', marginTop: 12}}>
                 挂载目录来自 Agent 配置（当前 <code>{this.props.defaultRoot || (status && status.desiredRoot) || '/home'}</code>），
-                部署后可在右上角「切换挂载目录」调整，切换会重建容器。
+                部署后可在右上角「更多 - 切换挂载目录」调整，切换会重建容器。
             </Typography.Text>
         </Modal>
     }
@@ -417,7 +441,7 @@ export default class extends React.Component {
                 <Typography.Title level={5}>挂载目录</Typography.Title>
                 <ul style={{margin: '0 0 8px 18px', padding: 0}}>
                     <li>挂载目录来自「工具 - 主机 Agent」的配置，留空时首次默认 <code>/home</code>。</li>
-                    <li>在右上角点「切换挂载目录」按需切换，切换会用新目录重建容器，终端会断开并自动重连。</li>
+                    <li>在右上角「更多」菜单里点「切换挂载目录」按需切换，切换会用新目录重建容器，终端会断开并自动重连。</li>
                     <li>只接受 Docker daemon 可见的 Linux 绝对路径（以 / 开头）：
                         WSL 2 后端是 <code>/run/desktop/mnt/host/d/data</code>，
                         Docker VMM 是 <code>/host_mnt/d/data</code>，
@@ -442,7 +466,7 @@ export default class extends React.Component {
                     面板右上角会出现「重新部署」，点它即可按配置重建容器。
                 </Typography.Paragraph>
                 <Typography.Paragraph>
-                    agent 镜像发新版后，点右上角「更新」即可升级：会按当前 tag 重新拉取镜像并重建容器
+                    agent 镜像发新版后，点右上角「更多 - 更新」即可升级：会按当前 tag 重新拉取镜像并重建容器
                     （tag 为 latest 时强制拉取远端最新镜像；固定版本 tag 本地已有时直接复用，
                     升级固定版本请先在配置里改 tag 再点「重新部署」）。更新会中断终端会话，会话会自动重连。
                 </Typography.Paragraph>

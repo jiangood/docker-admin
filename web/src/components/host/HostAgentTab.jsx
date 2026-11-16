@@ -1,6 +1,6 @@
 import React from 'react'
-import {Alert, Button, Card, Space, Tooltip} from 'antd'
-import {CloudServerOutlined, PlusOutlined, ReloadOutlined, UploadOutlined} from '@ant-design/icons'
+import {Alert, Button, Card, Popconfirm, Space, Tooltip} from 'antd'
+import {CloudServerOutlined, PlusOutlined, ReloadOutlined, StopOutlined, UploadOutlined} from '@ant-design/icons'
 import {HttpClient, PermUtils} from '@jiangood/open-admin'
 import AgentCommands from './AgentCommands'
 import AgentUpload from './AgentUpload'
@@ -9,9 +9,13 @@ import HostCli from './HostCli'
 
 /**
  * 主机 Agent 面板：整块用 Card 承载，标题是「主机名 · Agent」，
- * 容器状态（运行中 / 已停止 / 未部署）连同重新连接、常用命令、上传文件、切换挂载目录、
- * 部署与帮助都放在 Card 右上角（extra），正文只有终端。
+ * 容器状态（运行中 / 已停止 / 未部署）连同重新连接、新建会话、关闭会话、常用命令、
+ * 上传文件与「更多」下拉（切换挂载目录 / 更新 / 帮助 / 重新部署）都放在 Card 右上角（extra），
+ * 正文只有终端。
  * <p>
+ * 会话保持让 shell 不因浏览器断开而中断，但也意味着服务端会一直占着资源；
+ * 「关闭会话」（需二次确认）是它的主动出口：立即结束 shell 并停止自动重连，
+ * 之后点「重新连接」可按需新建。
  * 常用命令（deployed 时出现）是 {@link AgentCommands} 下拉菜单：点菜单项把命令敲进终端
  * 但不回车，由用户确认后人工执行；命令按主机各自维护（存在 Agent 配置的 commands 字段里，
  * 非全局），「管理命令」打开弹窗增删改。
@@ -123,6 +127,15 @@ export default class extends React.Component {
                     <Button type='text' icon={<PlusOutlined/>}
                             onClick={this.newCliSession}>新建会话</Button>
                 </Tooltip>
+                <Popconfirm title='关闭当前终端会话？'
+                            description='服务端 shell 与运行中的命令会立即结束并释放资源，之后点「重新连接」可再次使用'
+                            okText='关闭会话'
+                            okButtonProps={{danger: true}}>
+                    <Tooltip title='关闭会话并释放服务端资源（shell 由服务端保持到浏览器之外，不用时可在此手动释放）'>
+                        <Button type='text' icon={<StopOutlined/>}
+                                onClick={() => this.cli.current && this.cli.current.endSession()}>关闭会话</Button>
+                    </Tooltip>
+                </Popconfirm>
                 <AgentCommands commands={this.state.commands}
                                onChange={this.saveCommands}
                                onInput={this.inputCommand}/>

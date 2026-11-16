@@ -23,6 +23,9 @@ public class HostCliSession {
     /** 会话已被其他窗口接管，前端收到这个关闭码后不再自动重连。 */
     static final int TAKEN_OVER_CODE = 4001;
 
+    /** 会话被用户主动关闭（「关闭会话」按钮），前端收到这个关闭码后不再自动重连。 */
+    static final int SESSION_CLOSED_CODE = 4002;
+
     private final String key;
     private final String hostId;
     private final String userId;
@@ -218,6 +221,11 @@ public class HostCliSession {
 
     /** 通知当前订阅者「会话结束」并关闭连接；前端会自动重连拿到新 shell。 */
     void notifyEnded(String text) {
+        notifyEnded(text, CloseStatus.NORMAL.getCode());
+    }
+
+    /** 通知当前订阅者「会话结束」并按指定关闭码断开连接（4001 / 4002 时前端不自动重连）。 */
+    void notifyEnded(String text, int code) {
         WebSocketSession socket;
         synchronized (lock) {
             socket = ws;
@@ -226,7 +234,7 @@ public class HostCliSession {
         }
         if (socket != null) {
             sendText(socket, text);
-            closeWith(socket, CloseStatus.NORMAL.getCode());
+            closeWith(socket, code);
         }
     }
 
@@ -295,7 +303,12 @@ public class HostCliSession {
     private static void closeWith(WebSocketSession socket, int code) {
         try {
             if (socket.isOpen()) {
-                socket.close(new CloseStatus(code, code == TAKEN_OVER_CODE ? "taken over" : "session ended"));
+                String reason = switch (code) {
+                    case TAKEN_OVER_CODE -> "taken over";
+                    case SESSION_CLOSED_CODE -> "session closed";
+                    default -> "session ended";
+                };
+                socket.close(new CloseStatus(code, reason));
             }
         } catch (Exception e) {
             log.debug("关闭主机终端连接失败: {}", e.getMessage());

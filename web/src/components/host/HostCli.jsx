@@ -136,6 +136,24 @@ export default class extends React.Component {
         this.setState(state => ({key: state.key + 1}))
     }
 
+    /**
+     * 关闭会话（「会话保持」的主动出口）：通知服务端立即结束 shell、释放 docker exec 资源，
+     * 并停止本终端的自动重连；之后点「重新连接」可按需新建 shell。
+     * <p>
+     * 走 HTTP 接口而不是 WebSocket 帧：浏览器临时断开（会话已在服务端但 WS 未挂接）时
+     * 帧发不出去，HTTP 按「用户 + 主机 + 标签页令牌」定位，两种状态下都能关掉。
+     */
+    endSession = () => {
+        return HttpClient.post('admin/host/cli/close', null,
+            {hostId: this.props.hostId, session: this.currentToken()})
+            .then(rs => {
+                if (this.terminal.current) {
+                    this.terminal.current.closeAndStop()
+                }
+                return rs
+            })
+    }
+
     /** 供父组件调用：把文本敲进终端（不回车），供「常用命令」抽屉点击命令时使用。 */
     input = text => {
         if (this.terminal.current) {

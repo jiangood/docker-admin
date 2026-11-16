@@ -30,6 +30,7 @@ import java.util.concurrent.TimeUnit;
  * <ul>
  *     <li>创建：第一次连上某个 key 时建立 shell；</li>
  *     <li>断开：WebSocket 关闭只清订阅者，shell 与输出缓冲都保留；</li>
+ *     <li>主动关闭：用户点「关闭会话」时立即结束 shell、释放资源（{@link #closeByKey}）；</li>
  *     <li>回收：后台线程每 60 秒清理「无订阅者且空闲超过 30 分钟」的会话，
  *     以及 shell 自己退出（用户输入 {@code exit}）的会话；</li>
  *     <li>停机：{@link #shutdown} 关闭全部 shell 与 Docker 客户端。</li>
@@ -163,6 +164,36 @@ public class HostCliSessionRegistry {
         }
         session.markClosed();
         closeLater(session);
+    }
+
+    /**
+     * 「关闭会话」HTTP 接口入口：按「用户 + 主机 + 标签页令牌」定位并关闭会话，
+     * 参数任一为空或该 key 下没有存活会话时返回 false。
+     */
+    public boolean closeFor(String userId, String hostId, String token) {
+        if (userId == null || hostId == null || token == null) {
+            return false;
+        }
+        return closeByKey(key(userId, hostId, token));
+    }
+
+    /**
+     * 按会话 key 主动关闭（HTTP 接口「关闭会话」用）：立即释放服务端 shell 与 Docker 客户端，
+     * 已挂接的浏览器连接按 {@link HostCliSession#SESSION_CLOSED_CODE} 断开，前端不再自动重连。
+     * 会话 key 里含登录用户 id，因此只能关闭当前用户自己的会话。
+     *
+     * @return false 表示该 key 下没有存活中的会话（从未打开过或已被回收）
+     */
+    public boolean closeByKey(String key) {
+        HostCliSession session = sessions.get(key);
+        if (session == null || session.isClosed()) {
+            return false;
+        }
+        closeSession(session);
+        // 关掉仍在挂接的浏览器连接：服务端下发提示后按 4002 断开，前端据此停止自动重连
+        session.notifyEnded("\r\n[会话已关闭，服务端资源已释放，点右上角「重新连接」可再次使用]\r\n",
+                HostCliSession.SESSION_CLOSED_CODE);
+        return true;
     }
 
     /** 关闭 exec 可能阻塞，统一交给回收线程；容器停止后线程池已关闭时退化为同步关闭。 */

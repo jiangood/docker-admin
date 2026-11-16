@@ -11,6 +11,9 @@ import io.github.jiangood.docker.admin.service.HostService;
 import io.github.jiangood.docker.admin.service.HostUsageService;
 import io.github.jiangood.docker.admin.service.HostUsageSampleService;
 import io.github.jiangood.docker.admin.util.ContainerPermTool;
+import io.github.jiangood.docker.admin.websocket.HostCliSessionRegistry;
+import io.github.jiangood.openadmin.framework.auth.LoginTool;
+import io.github.jiangood.openadmin.framework.config.security.LoginUser;
 import io.github.jiangood.openadmin.util.dto.AjaxResult;
 import io.github.jiangood.openadmin.util.dto.Option;
 import io.github.jiangood.openadmin.framework.data.specification.Spec;
@@ -52,6 +55,9 @@ public class HostController  {
     @Resource
     private HostUsageSampleService hostUsageSampleService;
 
+    @Resource
+    private HostCliSessionRegistry cliSessionRegistry;
+
     @HasPermission("host:list")
     @RequestMapping("page")
     public AjaxResult page(Host request, String searchText, @PageableDefault(direction = Sort.Direction.DESC, sort = "updateTime") Pageable pageable) throws Exception {
@@ -68,6 +74,25 @@ public class HostController  {
     public AjaxResult save(@RequestBody Host input, @RequestHeader("X-Body-Fields") List<String> updateFields) throws Exception {
         service.saveHost(input, updateFields);
         return AjaxResult.ok().msg("保存成功");
+    }
+
+    /**
+     * 关闭当前标签页的主机终端会话并释放服务端资源（「会话保持」的主动出口）：
+     * shell 与运行中的命令立即结束，浏览器连接按 4002 关闭码断开、不再自动重连；
+     * 之后点「重新连接」可按需新建 shell。
+     * <p>
+     * 会话 key 里含登录用户 id 与前端标签页令牌，因此只能关闭自己当前标签页的会话。
+     * 没有活跃会话时也返回成功（提示语区分），前端据此把终端切到「已关闭」状态。
+     */
+    @HasPermission("host:cli")
+    @PostMapping("cli/close")
+    public AjaxResult closeCliSession(String hostId, String session) {
+        LoginUser user = LoginTool.getUser();
+        Assert.notNull(user, "请先登录");
+        Assert.hasText(hostId, "hostId 不能为空");
+        Assert.hasText(session, "session 不能为空");
+        boolean closed = cliSessionRegistry.closeFor(user.getId(), hostId, session);
+        return AjaxResult.ok().msg(closed ? "会话已关闭" : "当前没有活跃的终端会话");
     }
 
     /**

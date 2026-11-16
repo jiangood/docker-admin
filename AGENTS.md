@@ -160,11 +160,13 @@ git tag vx.y.z && git push && git push origin vx.y.z
   容器常驻，删除容器不会删除宿主机文件。重建 `latest` 会先尝试拉取，拉取失败但本地已有镜像时继续使用本地镜像。
   Agent 面板用一块 `Card` 承载：标题只有「主机名 · Agent」，
   右上角 `extra` 依次是状态徽标（运行中 / 已停止 / 未部署，读取中显示转圈）、重新连接（保留当前 shell）、
-  新建会话（换一个干净 shell）、上传文件（`host:file` 且辅助容器运行中才出现）、
-  重新部署（配置与容器不一致时出现）、切换挂载目录、更新（低频操作排在后面，配置一致时出现，
-  按当前 tag 重新拉取镜像并重建容器，latest 强制拉取，供 agent 镜像发新版后升级）、部署、帮助，
-  以上按钮均为图标 + 文字，长说明收进各自的 Tooltip / 问号弹窗。
-  **常用命令**：deployed 时 extra 里在「新建会话」后多一个「常用命令」下拉（`AgentCommands`，
+  新建会话（换一个干净 shell）、关闭会话（Popconfirm 二次确认）、上传文件（`host:file` 且辅助容器运行中才出现）、
+  「更多」下拉（deployed 时是切换挂载目录、更新（配置一致时出现，按当前 tag 重新拉取镜像并重建容器，
+  latest 强制拉取，供 agent 镜像发新版后升级）、帮助；未部署时只有帮助），
+  再往后是 primary 的主操作：未部署时「部署辅助容器」、配置与容器不一致时「重新部署」。
+  常用按钮保持明面、低频操作收进「更多」以控制工具栏长度；以上按钮均为图标 + 文字，
+  长说明收进各自的 Tooltip / 问号弹窗。
+  **常用命令**：deployed 时 extra 里在「关闭会话」后多一个「常用命令」下拉（`AgentCommands`，
   点按钮直接弹菜单，点菜单项即敲进终端，`mask` 不挡终端）。命令**非全局、按主机各存一份**，
   存在 `t_host_agent_config` 的 `commands` 字段（JSON text 列，`AgentCommandListConverter` 与
   `HostAgentConfig.AgentCommand` 嵌套类承载，不单独建表），**最多 10 条**。点击命令把命令原样
@@ -185,7 +187,8 @@ git tag vx.y.z && git push && git push origin vx.y.z
   容器状态、提示与按钮由 `HostAgentAlert` 通过 render prop 交给 `HostAgentTab` 组装，
   弹窗仍由 `HostAgentAlert` 自己渲染（避免重复请求 agent 状态）。当前目录不在标题重复展示（只在「切换挂载目录」弹窗里），
   终端区没有工具条（`HostCli` 只渲染 xterm，
-  重新连接由 `HostAgentTab` 通过 ref 调 `HostCli.reconnect`，新建会话调 `HostCli.newSession`）；
+  重新连接由 `HostAgentTab` 通过 ref 调 `HostCli.reconnect`，新建会话调 `HostCli.newSession`，
+  关闭会话调 `HostCli.endSession`）；
   文件的下载与查看 / 编辑 / 删除 / 重命名 / 新建目录都在终端里完成（上传走右上角「上传文件」按钮）；
   权限、目录、文件操作等长说明收进问号弹窗（`HostAgentAlert`），页面上不再堆 Alert；
   终端连接成功后不弹通知、也不往终端回滚区写 banner，进入终端即可直接使用。
@@ -203,6 +206,13 @@ git tag vx.y.z && git push && git push origin vx.y.z
   完全没有输出、但仍在运行的长命令（如 `sleep 3600`）仍按静默窗口回收。
   `HostCliSessionRegistry` 自带 60 秒一轮的回收线程（不走 Quartz），停机时 `@PreDestroy` 全部关闭；
   用户敲 `exit` 立即回收。每用户最多 3 个会话，超出时淘汰最久未用的已断开会话。
+  **「关闭会话」是会话保持的主动出口**：Agent 面板按钮（Popconfirm 确认，会中断运行中的命令）
+  走 `admin/host/cli/close`（`HostCliSessionRegistry#closeFor`，权限 `host:cli`），
+  按 `userId + hostId + tabToken` 定位会话立即结束 shell——走 HTTP 而不是 WS 帧，
+  是因为浏览器临时断开（会话还在服务端但 WS 未挂接）时帧发不出去；已挂接的 WS 按
+  `4002` 关闭码断开，前端 `ContainerTerminal` 收到 4002 或用户已主动关闭时停止自动重连
+  （`closeAndStop` 置位关闭标记、清掉退避重连与心跳，`reconnect` 时复位），
+  之后点「重新连接」按需新建 shell。没有活跃会话时接口也返回成功（提示语区分）。
   同一会话只允许一个窗口：后连上的接管，旧连接按
   `4001` 关闭，前端收到该关闭码后停止自动重连。
   前端 `ContainerTerminal` 在 `autoReconnect` 模式下按 0.5→1→2→4→8→10 秒退避重连（最多 10 次，

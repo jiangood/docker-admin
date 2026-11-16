@@ -8,8 +8,13 @@ import "@xterm/xterm/css/xterm.css";
 const RETRY_DELAYS = [500, 1000, 2000, 4000, 8000, 10000]
 /** 失败这么多次后停下来，交给页面右上角的「重新连接」。 */
 const MAX_RETRY = 10
-/** 服务端明确表示「不要重连」的关闭码（会话被其他窗口接管）。 */
-const NO_RETRY_CODES = [4001]
+/** 服务端明确表示「不要重连」的关闭码（会话被其他窗口接管 / 被用户关闭）。 */
+const NO_RETRY_CODES = [4001, 4002]
+/** 关闭码含义，用于按码展示不同的提示文案。 */
+const NO_RETRY_MESSAGES = {
+    4001: '[会话已被其他窗口接管，本窗口不再自动重连]',
+    4002: '[会话已关闭，服务端资源已释放，点右上角「重新连接」可再次使用]',
+}
 /** 心跳间隔：喂给 nginx / 隧道，避免长时间无输出被当空闲连接掐掉。 */
 const HEARTBEAT_MILLIS = 25000
 
@@ -36,6 +41,8 @@ export default class extends React.Component {
     reconnectTimer = null
     heartbeatTimer = null
     retryCount = 0
+    /** 用户主动「关闭会话」后置位：期间不再自动重连，点「重新连接」时复位。 */
+    userClosed = false
     disposed = false
 
     componentDidMount() {
@@ -200,7 +207,7 @@ export default class extends React.Component {
 
     openSocket() {
         const {term} = this
-        if (this.disposed || !term) {
+        if (this.disposed || this.userClosed || !term) {
             return
         }
         this.clearReconnectTimer()
@@ -289,7 +296,15 @@ export default class extends React.Component {
             }
 
             if (ev && NO_RETRY_CODES.includes(ev.code)) {
-                term.write('\r\n\x1b[33m[会话已被其他窗口接管，本窗口不再自动重连]\x1b[0m\r\n')
+                const text = NO_RETRY_MESSAGES[ev.code] || '[连接已关闭，本窗口不再自动重连]'
+                term.write(`\r\n\x1b[33m${text}\x1b[0m\r\n`)
+                this.props.onStatus && this.props.onStatus('closed')
+                this.props.onClose && this.props.onClose()
+                return
+            }
+
+            if (this.userClosed) {
+                // 用户主动关闭会话（提示已由服务端 / closeAndStop 下发过），不再重连
                 this.props.onStatus && this.props.onStatus('closed')
                 this.props.onClose && this.props.onClose()
                 return
@@ -312,7 +327,7 @@ export default class extends React.Component {
 
     scheduleReconnect() {
         const {term} = this
-        if (!term) {
+        if (!term || this.userClosed) {
             return
         }
         if (this.retryCount >= MAX_RETRY) {
@@ -366,11 +381,32 @@ export default class extends React.Component {
         }
     }
 
+    /**
+     * 供父组件调用：用户点「关闭会话」后调用——置位关闭标记、停掉自动重连与心跳，
+     * 终端切到「已关闭」状态；服务端负责结束 shell（HTTP 接口 + 4002 关闭码）。
+     * WS 已挂接时提示由服务端下发，这里只在未连接时兜底写一条，避免重复。
+     */
+    closeAndStop() {
+        if (this.disposed) {
+            return
+        }
+        this.userClosed = true
+        this.clearReconnectTimer()
+        this.stopHeartbeat()
+        const ws = this.ws
+        if ((!ws || ws.readyState !== WebSocket.OPEN) && this.term) {
+            this.term.write('\r\n\x1b[33m[会话已关闭，服务端资源已释放，点右上角「重新连接」可再次使用]\x1b[0m\r\n')
+            this.props.onStatus && this.props.onStatus('closed')
+            this.props.onClose && this.props.onClose()
+        }
+    }
+
     /** 供父组件调用：立刻重建连接（保留终端内容），用于「重新连接」按钮。 */
     reconnect() {
         if (this.disposed) {
             return
         }
+        this.userClosed = false
         this.retryCount = 0
         this.clearReconnectTimer()
         this.stopHeartbeat()
