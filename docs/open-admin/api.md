@@ -62,6 +62,9 @@ public AjaxResult update(@RequestBody Customer input,
 - 部分更新场景可用 SpEL 的 `?:` 兜底，如 `${#input.name ?: #input.id}`，避免出现空的「」
 - **不要拼接密码、令牌等敏感字段**：`params` 会按字段名自动脱敏，`detail` 不会
 - 日志页的「操作详情」列来自 `detail`，请求参数在行详情抽屉里查看
+- 每条日志同时记录 IP 与浏览器指纹：前端 `HttpClient` 自动附加请求头 `X-Browser-Fingerprint`（值为浏览器本地缓存的设备特征哈希），日志页可按完整指纹或备注名筛选；指纹可被伪造，仅作辅助排查，不能作为安全凭证
+- 日志页可直接给指纹加备注（备注名 + 说明，如「张三的办公电脑-Chrome」），备注按指纹保存在 `sys_browser_fingerprint` 表，跨日志复用；只有**主动标注**过的指纹才会进入该表，未标注的指纹只存在于操作日志中，不会自动入库
+- 备注编辑/取消标记需要 `sys-log:write` 权限；在日志页点击指纹即可标记，已有标记时弹窗左下角提供「取消标记」，备注名和说明都留空保存也等同于取消标记
 - 登录/登出由框架手动写入（登录时尚未认证、登出时上下文已清空，切面拿不到操作者）：操作名为「认证-登录」「认证-登录失败」「认证-登出」，失败登录会记录原因（如「账号或密码错误」「账户已被锁定」），不记录请求参数，避免密码进入日志
 
 ### 工具类
@@ -174,7 +177,7 @@ public class OrderLogPermissionProvider implements LogKeyPermissionProvider {
 | 端点 | HTTP | 权限 | 说明 |
 |------|------|------|------|
 | `admin/sys-config/items` | GET | `sys-config:read` | 分组 + 元数据 + 当前生效值；隐藏项与只含隐藏项的分组不会返回 |
-| `admin/sys-config/system` | GET | `sys-config:read` | 只读系统参数（来自 `application.yml` / 代码默认值），返回 `{items:[{key,label,value,group}]}`；`group` 为 `runtime`（运行时状态，页面定时刷新）或 `startup`（启动期配置） |
+| `admin/sys-config/system` | GET | `sys-config:read` | 只读系统参数（来自 `application.yml` / 代码默认值），返回 `{items:[{key,label,value,group}]}`；`group` 为 `runtime`（运行时状态，页面定时刷新）、`version`（版本信息）或 `startup`（启动期配置） |
 | `admin/sys-config/update` | POST | `sys-config:update` | 只提交改动项：`{values:[{key,value}]}`；隐藏项会被拒绝 |
 | `admin/sys-config/reset` | POST | `sys-config:update` | `{keys:[...]}`；`keys` 为空表示全部恢复默认（保留隐藏项）；显式传隐藏项会被拒绝 |
 | `admin/sys-config/value` | GET | `sys-config:read` | 单键读取，查询参数 `key` |
@@ -306,7 +309,7 @@ mailService.sendAsync(MailMessage.builder()
 | `LinkButton` | 链接跳转按钮（`path` + `label`，通过 `PageUtils.open` 打开页面；`label` 已弃用，目标页请使用 `pageMeta.title`） |
 | `Link` | hash 路由跳转链接（`to`） |
 | `NamedIcon` | 通过名称渲染 Ant Design 图标（按需加载，`name`） |
-| `PermActions` | 权限操作区：数据驱动 `actions`（支持 `perm` 过滤、`more` 下拉、`size`）或按子元素 `perm` 属性过滤（不推荐） |
+| `PermActions` | 权限操作区：数据驱动 `actions`（支持 `perm` 过滤、`more` 下拉与 `visibleCount` 展示数、`size`）或按子元素 `perm` 属性过滤（不推荐） |
 | `Perm` | 权限控制容器（`code` 属性），无权限时不渲染子元素 |
 | `FormModal` | 表单弹框，通过 ref 调用 `open(values)`，`onFinish` 校验通过后回调 |
 | `ContextMenu` | 右键菜单（`x`/`y`/`items`/`onClick`/`onClose`） |
@@ -417,23 +420,27 @@ props：`title`、`onFinish(values)`、`onValuesChange`、`width`（默认 600�
 
 #### PermActions
 
-推荐使用 `actions` 数据驱动模式，按每个 action 的 `perm` 过滤；`more` 开启下拉折叠（多余操作进入 `...` 菜单），`size` 透传到按钮：
+推荐使用 `actions` 数据驱动模式，按每个 action 的 `perm` 过滤；`more` 开启下拉折叠（多余操作进入 `...` 菜单），`visibleCount` 控制直接展示多少个操作，`size` 透传到按钮：
 
 ```jsx
 import { PermActions } from '@jiangood/open-admin';
 
 <PermActions
     more
+    visibleCount={2}
     size="small"
     actions={[
         { label: '编辑', perm: 'sys-user:update', onClick: () => this.handleEdit(record) },
+        { label: '授权', perm: 'sys-user:grant-permission', onClick: () => this.permRef.current.show(record) },
         { label: '删除', perm: 'sys-user:delete', danger: true,
           confirm: '是否确定删除用户', onClick: () => this.handleDelete(record) },
     ]}
 />
 ```
 
-`PermAction` 字段：`label`、`perm`、`onClick`、`confirm`（确认提示）、`danger`、`disabled`、`icon`、`type`（`primary`/`dashed`/`link`/`text`，仅按钮生效）。`more` 为布尔值，开启后多余操作折叠进 `...` 下拉。
+`PermAction` 字段：`label`、`perm`、`onClick`、`confirm`（确认提示）、`danger`、`disabled`、`icon`、`type`（`primary`/`dashed`/`link`/`text`，仅按钮生效）。`more` 为布尔值，开启后多余操作折叠进 `...` 下拉；`visibleCount`（默认 `1`）指定 `more` 模式下直接展示的操作个数，常用操作可设为 `2` 或 `3` 避免被折叠。
+
+> `confirm` 在普通按钮上使用 Popconfirm，在 `more` 下拉中使用全局弹窗（`getModalApi().confirm`）。下拉菜单项点击后会关闭菜单，Popconfirm 会失去锚点，因此折叠项不再使用 Popconfirm。`danger` 为 `true` 时确认弹窗的「确定」按钮同步为危险色。
 
 > 传统 children 写法（包裹 `<Button perm="...">`）已不推荐，控制台会输出迁移提示，建议改用 `actions`。
 

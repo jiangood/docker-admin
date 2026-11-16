@@ -128,16 +128,16 @@ public class AppController {
 
     /**
      * 单次部署的日志正文（已结束的部署记录），运行中的日志由 WebSocket 实时 tail。
-     * <p>
-     * 按 {@code offset}/{@code length} 增量返回 {@code {content, nextOffset, eof}}，
-     * 前端用框架 {@code LogViewer} 按偏移续读，长日志也不会每次重读整文件。
+     *
+     * @deprecated 前端已改用框架 raw 全文接口 {@code /admin/sys/log/raw/task/{logId}}
+     *             （TaskLogViewer，权限仍由 t_task_log 的 {@code app:view} 承担），
+     *             本 offset 增量接口仅为兼容保留，后续版本可能移除。
      * <p>
      * 以前直接复用 open-admin 的 {@code admin/sys/log/{key}}，但该接口是「通用文件日志」：
      * 权限按日志 key 前缀注册、返回体也已改为增量 JSON，与本模块的部署日志语义对不上。
      * 部署日志属于业务资源，改由本模块提供读取接口，权限沿用 {@code app:view}。
-     * <p>
-     * 后续如需行级数据权限，在这里按 {@code deployLog.getAppId()} 调 {@code assertAppAccess} 即可。
      */
+    @Deprecated(since = "3.3.2", forRemoval = false)
     @HasPermission("app:view")
     @RequestMapping("deployLog/{id}")
     public AjaxResult deployLog(@PathVariable String id,

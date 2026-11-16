@@ -137,7 +137,7 @@ public class CvsMenuCustomizer implements MenuCustomizer {
 | 系统参数 | 运行时可改的全局配置：数据库只存覆盖值，`application.yml` 与代码默认值兜底；页面顶部只读展示最大并发会话数、会话超时、文件存储等启动期配置；业务模块实现 `ConfigProvider` 即可在通用配置页维护自己的参数 |
 | 定时任务 | 基于 Quartz，动态创建/暂停/恢复，继承 `BaseJob` + `@JobDescription`；`BaseJob.progress(...)` 上报运行进度，执行记录方式（每次/每小时/每天各一份记录）与保留期清理 |
 | 文件管理 | `sys.file.store-type` 配置（`LOCAL` / `S3`），统一上传下载预览；临时文件自动清理（TTL 可配置） |
-| 操作日志 | `@Log` 注解 + AOP 切面，异步记录（独立线程池 `operationLogExecutor`）；`@Log.detail` 或 `OperationLogContext` 记录人类可读详情，日志页支持详情列与行详情抽屉；登录/登出及失败登录由框架自动记录 |
+| 操作日志 | `@Log` 注解 + AOP 切面，异步记录（独立线程池 `operationLogExecutor`）；`@Log.detail` 或 `OperationLogContext` 记录人类可读详情，日志页支持详情列与行详情抽屉；每条日志记录 IP 与浏览器指纹（前端 `HttpClient` 自动附加请求头 `X-Browser-Fingerprint`），日志页可给指纹加备注名（如「张三的办公电脑」）并按备注筛选、可取消标记，便于判断是否为同一浏览器；只有主动标注过的指纹才写入指纹备注表，未标注的指纹不会自动入库；登录/登出及失败登录由框架自动记录 |
 | 在线用户 | 一个登录会话一行，展示账号/姓名/机构/IP/登录时间、最后活跃与最近操作（取自操作日志，按用户 + IP 匹配，可跳转日志），支持强制下线；在线记录在内存，仅单实例部署准确；登录会话默认落盘，正常重启后免登录，在线记录随用户请求自动恢复 |
 | 运行日志查看 | 在线查看日志文件 |
 | 邮件发送 | 内置 QQ/腾讯企业邮/163/126/Outlook/Gmail/阿里企业邮模板；配置在「系统参数 → 邮件发送」，业务注入 `MailService` 即可发送通知邮件，支持 HTML、附件与 HTTP/SOCKS5 代理 |

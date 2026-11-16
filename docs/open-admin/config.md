@@ -21,6 +21,7 @@
 | `server.servlet.session.persistent` | 优雅停机时把登录会话落盘，重启后恢复（重启免登录） | true |
 | `server.servlet.session.store-dir` | 会话落盘目录，需可写并位于持久卷 | /data/session |
 | `server.servlet.session.timeout` | 会话空闲超时，默认引用 `sys.session-idle-time` | 180m |
+| `server.servlet.session.cookie.name` | 会话 cookie 名；同一域名/IP 下部署多套应用时必须各不相同 | JSESSIONID |
 | `sys.concurrent-login-message` | 被并发登录顶下线或管理员强制下线时的提示文案 | 您的账号已在别处登录，请重新登录 |
 | `sys.concurrent-login-blocked-message` | 并发会话超限、新登录被阻止时的提示文案 | 该账号已在别处登录，请先退出后再登录 |
 | `sys.login-expired-message` | 会话空闲超时/未登录时的提示文案（经 `/admin/public/site-info` 下发给前端） | 登录已过期，请重新登录 |
@@ -41,7 +42,23 @@
 
 > 「在线用户」列表复用同一套会话注册表，记录保存在内存，**仅单实例部署准确**；应用重启后会话本身会恢复，在线记录则随用户下一次请求自动补登记（重启后尚未访问的用户不会立即出现在列表里）。多实例部署请先引入 Spring Session 等共享会话方案，否则各节点只能看到本节点登录的用户。
 
-> **并发登录策略**：默认 `sys.maximum-sessions=1` 且 `sys.max-sessions-prevents-login=true`，同一账号同时只允许一个在线会话，再次登录会被拒绝并提示 `sys.concurrent-login-blocked-message`。被阻止的用户需要先在原设备退出、让管理员在「在线用户」强制下线，或等待会话空闲超时（`sys.session-idle-time`）后再登录。若希望新登录直接顶掉旧会话，把 `sys.max-sessions-prevents-login` 设为 `false`。
+> **同域多套应用必须区分 session cookie 名**：浏览器识别 cookie 只看 `name + domain + path`，**不看端口**。同一台主机（或同一域名）上部署多套 open-admin 应用、且都使用根路径（`server.servlet.context-path: /`）时，它们会共用同一个 `JSESSIONID`，互相覆盖对方 cookie 里的会话 id，表现为「用着用着就要求重新登录」；被覆盖的会话在服务端仍然存活，还会继续占用 `sys.maximum-sessions` 名额（见下方「并发登录策略」）。
+>
+> 给每套应用配置不同的 cookie 名即可隔离：
+>
+> ```yaml
+> server:
+>   servlet:
+>     session:
+>       cookie:
+>         name: DOCKER_ADMIN_SESSION   # 每套应用取不同值，建议「大写应用名 + _SESSION」
+> ```
+>
+> 更彻底的做法是给每套应用独立域名（cookie 天然按域名隔离）。各应用使用**互不嵌套**的非根 `context-path`（如 `/a`、`/b`）时，cookie 的 path 不同，也不会互相覆盖；但嵌套路径（如 `/a` 与 `/a/b`）仍会互相干扰。
+>
+> 启动日志会打印实际生效的 `name / path / timeout / persistent`，出现「莫名掉线」时先对比两个应用的值。
+
+> **并发登录策略**：默认 `sys.maximum-sessions=1` 且 `sys.max-sessions-prevents-login=true`，同一账号同时只允许一个在线会话，再次登录会被拒绝并提示 `sys.concurrent-login-blocked-message`。被阻止的用户需要先在原设备退出、让管理员在「在线用户」强制下线，或等待会话空闲超时（`sys.session-idle-time`）后再登录。若希望新登录直接顶掉旧会话，把 `sys.max-sessions-prevents-login` 设为 `false`。若用户频繁「莫名掉线」且会话在服务端仍然存活，先排查上一条「同域多套应用必须区分 session cookie 名」。
 
 > 本地想验证个人中心「登录设备」的多处登录提示，可用 `local` profile 启动（`-Dspring-boot.run.profiles=local` 或环境变量 `SPRING_PROFILES_ACTIVE=local`），该 profile 将 `sys.maximum-sessions` 设为 `3`。
 
@@ -56,13 +73,15 @@
 
 ### 只读系统参数
 
-页面右侧用两张只读卡片分别展示「运行时状态」和「启动期配置」：前者是系统启动时间与数据库连接池用量，后者是 `application.yml` / 代码默认值的当前生效值，便于确认部署状态、定位连接不足等问题；这些值不能在页面修改，改完 `application.yml` 后需重启。「运行时状态」卡片每 15 秒自动刷新（浏览器标签页隐藏时暂停），方便观察「已运行」时长与连接池水位。
+页面右侧用两张只读卡片分别展示「运行时状态」和「启动期配置」：第一张是运行时长（以标签突出）与数据库连接池用量，底部另起一行展示系统版本与框架版本（含构建时间）；第二张是 `application.yml` / 代码默认值的当前生效值。这些值不能在页面修改，改完 `application.yml` 后需重启；保留版本信息便于确认部署状态，结合连接池水位可定位连接不足等问题。「运行时状态」卡片每 15 秒自动刷新（浏览器标签页隐藏时暂停），方便观察运行时长与连接池水位。
 
 | 展示名 | 配置键 | 说明 |
 |--------|--------|------|
-| 系统启动时间 | - | JVM 启动时刻，带「已运行」时长；重启后该值变化即说明服务已重新部署 |
+| 运行时长 | - | JVM 启动至今的时长；重启后归零即说明服务已重新部署 |
 | 数据库连接 | `spring.datasource.url` | 当前生效的 JDBC URL（取连接池实际值）；`//用户:密码@` 与 `password=` 形式的密码已脱敏 |
 | 连接池 | `spring.datasource.hikari` | Hikari 实时用量：活动 / 空闲 / 上限 / 等待线程；非 Hikari 数据源不展示 |
+| 系统版本 | `sys.app-version` | 业务项目（本系统）版本号；打包运行附带构建时间（如 2026/8/1 11:30） |
+| 框架版本 | `sys.framework-version` | open-admin 版本号；打包运行附带构建时间（如 2026/8/1 11:30） |
 | 最大并发会话数 | `sys.maximum-sessions` | 同一账号同时在线会话上限 |
 | 并发超限策略 | `sys.max-sessions-prevents-login` | `true` 阻止新登录，`false` 踢出旧会话 |
 | 会话空闲超时 | `sys.session-idle-time` | 单位分钟 |
@@ -74,7 +93,7 @@
 | 数据目录 | `sys.data-file-dir` | 缓存 / 数据目录 |
 | 日志目录 | `logging.file.path` | 文件日志目录 |
 
-> 只读卡片不返回 S3 密钥、邮箱授权码、代理密码等敏感值，JDBC URL 中的密码同样脱敏；除启动时间、连接池用量外，其余项都是启动期配置，改完需重启。
+> 只读卡片不返回 S3 密钥、邮箱授权码、代理密码等敏感值，JDBC URL 中的密码同样脱敏；除运行时长、连接池用量、版本信息外，其余项都是启动期配置，改完需重启。
 
 ### 内置配置项
 
@@ -280,7 +299,6 @@ public List<String> deprecatedKeys() {
 
 - 数据文件、上传文件、日志均在 `/data` 下，容器部署请持久化该目录（见 `docker-compose/docker-compose.yml`）
 - 本地开发可用 `-Ddb_path=./data/db/open-admin` 覆盖
-- 切换 MySQL：`--spring.profiles.active=mysql`；容器部署用环境变量 `SPRING_PROFILES_ACTIVE=prod,mysql`（需保留 `prod`）。连接参数直接写在 `application-mysql.yml`，需要覆盖时用 `SPRING_DATASOURCE_URL` / `SPRING_DATASOURCE_USERNAME` / `SPRING_DATASOURCE_PASSWORD`
 - 业务项目自行配置数据源；推荐同样默认 H2、可选 MySQL（参考 open-admin-example）
 - 建表由 JPA 完成，种子数据由 `SeedDataInitializer` 幂等写入（不覆盖已有记录）
 
