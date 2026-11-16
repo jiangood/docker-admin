@@ -1,5 +1,5 @@
 {
-  "version": "4.8.93",
+  "version": "4.8.94",
   "devDependencies": {
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.0.0",
@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@ant-design/icons": "^6.0.0",
-    "@jiangood/open-admin": "3.3.0",
+    "@jiangood/open-admin": "3.3.1",
     "@melloware/react-logviewer": "^6.3.4",
     "@tinymce/tinymce-react": "^6.0.0",
     "@xterm/addon-fit": "^0.10.0",
