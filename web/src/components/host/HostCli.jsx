@@ -1,6 +1,6 @@
 import React from 'react'
 import {Alert, Empty} from 'antd'
-import {PermUtils} from '@jiangood/open-admin'
+import {HttpClient, PermUtils} from '@jiangood/open-admin'
 import ContainerTerminal from '../container/ContainerTerminal'
 import {wsHostCliUrl} from './utils'
 

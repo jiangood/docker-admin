@@ -130,10 +130,10 @@ export default class extends React.Component {
                 <Popconfirm title='关闭当前终端会话？'
                             description='服务端 shell 与运行中的命令会立即结束并释放资源，之后点「重新连接」可再次使用'
                             okText='关闭会话'
-                            okButtonProps={{danger: true}}>
+                            okButtonProps={{danger: true}}
+                            onConfirm={() => this.cli.current && this.cli.current.endSession()}>
                     <Tooltip title='关闭会话并释放服务端资源（shell 由服务端保持到浏览器之外，不用时可在此手动释放）'>
-                        <Button type='text' icon={<StopOutlined/>}
-                                onClick={() => this.cli.current && this.cli.current.endSession()}>关闭会话</Button>
+                        <Button type='text' icon={<StopOutlined/>}>关闭会话</Button>
                     </Tooltip>
                 </Popconfirm>
                 <AgentCommands commands={this.state.commands}
