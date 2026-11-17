@@ -1,5 +1,5 @@
 import React from 'react'
-import {Alert, Badge, Button, Dropdown, Input, Modal, Space, Spin, Tooltip, Typography, message} from 'antd'
+import {Alert, Badge, Button, Dropdown, Input, Modal, Space, Spin, Typography, message} from 'antd'
 import {CloudServerOutlined, FolderOpenOutlined, MoreOutlined, QuestionCircleOutlined, SyncOutlined} from '@ant-design/icons'
 import {HttpClient, PermUtils} from '@jiangood/open-admin'
 import TaskLogDrawer from '../TaskLogDrawer'
@@ -9,7 +9,7 @@ import TaskLogDrawer from '../TaskLogDrawer'
  * 自己只负责取状态、弹窗和请求。
  * <p>
  * 明面上只留主操作（未部署时的「部署辅助容器」、配置不一致时的「重新部署」，均 primary）
- * 与一个「更多」下拉（低频操作：切换挂载目录 / 更新 / 帮助），保持工具栏整洁。
+ * 与一个「更多」下拉（低频操作：切换挂载目录 / 检查更新 / 帮助），保持工具栏整洁。
  * 目录决定终端里的挂载基准，所以切换入口也在这一层；镜像、目录、权限等说明统一收进问号弹窗。
  * 不提供「删除 Agent」入口：辅助容器就是普通容器，需要删除时走主机详情的「容器」Tab。
  * 用法：<HostAgentAlert hostId={id} onChange={fn}>{
@@ -29,6 +29,7 @@ export default class extends React.Component {
         rootSubmitting: false,
         updateOpen: false,
         updating: false,
+        check: null,
         tag: 'latest',
         submitting: false,
         logId: null,
@@ -146,9 +147,32 @@ export default class extends React.Component {
     }
 
     /**
+     * 检查更新：读注册中心里当前 tag 指向的 manifest 摘要与主机上实际镜像比较，
+     * 已是最新则只提示，不发请求；发现新镜像才打开更新弹窗，由用户确认后执行更新。
+     * 摘要一致但版本落后于平台版本（固定了旧版本 tag）时，更新镜像没有意义，提示先改 tag。
+     */
+    checkUpdate = () => {
+        const {hostId} = this.props
+        message.loading({content: '正在检查更新…', key: 'agent-update-check', duration: 0})
+        HttpClient.get('admin/host/agent/check-update', {id: hostId}, {toastError: false})
+            .then(rs => {
+                const check = rs.data || {}
+                if (check.upToDate) {
+                    message.success({content: check.message || '已是最新版本', key: 'agent-update-check'})
+                } else if (check.digestUpToDate) {
+                    message.warning({content: check.message, key: 'agent-update-check', duration: 8})
+                } else {
+                    message.success({content: check.message || '发现新版本', key: 'agent-update-check'})
+                    this.setState({check, updateOpen: true})
+                }
+            })
+            .catch(e => message.error({content: e.message || '检查更新失败', key: 'agent-update-check'}))
+    }
+
+    /**
      * 更新镜像：按当前配置的 tag 重新拉取并重建辅助容器。
-     * latest 会强制拉取远端最新镜像；固定版本 tag（如 v4.8.40）本地已有时直接复用，
-     * 升级固定版本应先在「工具 - 主机 Agent」配置里改 tag，再点「重新部署」。
+     * 仅在「检查更新」发现注册中心里有新镜像后调用；无论 latest 还是固定版本 tag 都会先
+     * 尝试拉取远端，拉取失败但本地已有镜像时继续使用本地镜像。
      */
     update = () => {
         const {hostId, defaultTag, defaultRoot} = this.props
@@ -192,15 +216,25 @@ export default class extends React.Component {
         this.onLogEnd()
     }
 
-    /** 「更多」下拉菜单项：deployed 时的低频容器操作 + 帮助（未部署时只有帮助）。 */
+    /**
+     * 「更多」下拉菜单项：deployed 时的版本信息（仅展示、不可点）+ 低频容器操作 + 帮助
+     * （未部署时只有帮助）。agent 与平台同 tag 发版，落后于平台版本时附上最新版本。
+     */
     moreMenuItems() {
         const {status} = this.state
         const deployed = !!(status && status.deployed)
         const items = []
         if (deployed) {
+            items.push({key: 'version', disabled: true,
+                label: `当前版本 ${status.agentVersion || '未知'}`})
+            if (status && status.updateAvailable && status.platformVersion) {
+                items.push({key: 'latest-version', disabled: true,
+                    label: `最新版本 v${status.platformVersion}`})
+            }
+            items.push({type: 'divider'})
             items.push({key: 'root', icon: <FolderOpenOutlined/>, label: '切换挂载目录'})
             if (status && !status.needsRebuild) {
-                items.push({key: 'update', icon: <SyncOutlined/>, label: '更新'})
+                items.push({key: 'update', icon: <SyncOutlined/>, label: '检查更新'})
             }
             items.push({type: 'divider'})
         }
@@ -212,13 +246,13 @@ export default class extends React.Component {
         if (key === 'root') {
             this.openRootModal()
         } else if (key === 'update') {
-            this.setState({updateOpen: true})
+            this.checkUpdate()
         } else if (key === 'help') {
             this.setState({helpOpen: true})
         }
     }
 
-    /** 卡片标题里的状态块：加载中 / 运行中 / 已停止 / 未部署，后面跟着镜像版本号。 */
+    /** 卡片标题里的状态块：加载中 / 运行中 / 已停止 / 未部署；版本号收进「更多」菜单展示。 */
     renderSummary() {
         const {status, loading, error} = this.state
         if (error) {
@@ -233,18 +267,8 @@ export default class extends React.Component {
         if (!status || !status.deployed) {
             return <Badge status='default' text='未部署'/>
         }
-        return <Space size={6}>
-            <Badge status={status.running ? 'success' : 'default'}
-                   text={status.running ? '运行中' : '已停止'}/>
-            <Tooltip title={status.updateAvailable && status.platformVersion
-                ? `最新版本 ${status.platformVersion}，点右上角「更多 - 更新」可升级`
-                : 'agent 镜像内置的版本号（终端里 echo $AGENT_VERSION 也能看到）'}>
-                <Typography.Text type={status.updateAvailable ? 'warning' : 'secondary'} style={{fontSize: 12}}>
-                    {status.agentVersion || '版本未知'}
-                    {status.updateAvailable && status.platformVersion && <>{' → '}{status.platformVersion}</>}
-                </Typography.Text>
-            </Tooltip>
-        </Space>
+        return <Badge status={status.running ? 'success' : 'default'}
+                      text={status.running ? '运行中' : '已停止'}/>
     }
 
     /** 卡片正文顶部的提示：只有异常 / 需要处理时才出现，正常状态不占空间。 */
@@ -264,7 +288,8 @@ export default class extends React.Component {
         if (status && status.updateAvailable) {
             return <Alert className='mb-3' type='info' showIcon
                           title={<span>agent 镜像有新版本 {status.platformVersion}（当前
-                              {status.agentVersion || '未知'}），点右上角「更多 - 更新」按当前 tag 重新拉取并重建容器即可升级</span>}/>
+                              {status.agentVersion || '未知'}），点右上角「更多 - 检查更新」，
+                              确认有新镜像后按当前 tag 重新拉取并重建容器即可升级</span>}/>
         }
         if (!PermUtils.hasPermission('host:save') && !(status && status.deployed)) {
             return <Alert className='mb-3' type='info' showIcon title='需要 host:save 权限才能部署辅助容器'/>
@@ -372,32 +397,36 @@ export default class extends React.Component {
     }
 
     /**
-     * 更新确认弹窗：按当前 tag 重新拉取镜像并重建容器，终端会话会中断并自动重连。
-     * 展示当前版本与最新版本，方便确认这次更新会升级到哪个版本。
+     * 更新确认弹窗：仅在「检查更新」发现注册中心里有新镜像后弹出。
+     * 展示比较前后的镜像摘要与版本，确认后按当前 tag 重新拉取镜像并重建容器，
+     * 终端会话会中断并自动重连。
      */
     renderUpdateModal(updateOpen) {
-        const {status} = this.state
-        const repository = (status && status.repository) || ''
-        const tag = this.props.defaultTag || (status && status.tag) || 'latest'
-        const image = repository ? `${repository}:${tag}` : tag
+        const {check, updating} = this.state
+        const shortDigest = d => {
+            if (!d) return '-'
+            const hex = (d.split('@').pop() || '').replace(/^sha256:/, '')
+            return hex.slice(0, 12) || '-'
+        }
         return <Modal open={updateOpen} width={560}
                       title='更新辅助容器镜像'
                       okText='更新'
-                      confirmLoading={this.state.updating}
+                      confirmLoading={updating}
                       onOk={this.update}
                       onCancel={() => this.setState({updateOpen: false})}>
             <Typography.Paragraph>
-                将按当前 tag 重新拉取镜像并重建辅助容器，终端会话会中断并自动重连。
-                任务在后台执行，确认后弹窗会切换为实时日志（任务中心也可查看）。
+                注册中心里该 tag 已有新镜像。将按当前 tag 重新拉取镜像并重建辅助容器，
+                终端会话会中断并自动重连。任务在后台执行，确认后弹窗会切换为实时日志（任务中心也可查看）。
             </Typography.Paragraph>
             <div style={{fontSize: 12, lineHeight: 1.8}}>
-                <div>镜像：<code>{image}</code></div>
-                {status && status.agentVersion && status.platformVersion &&
-                    <div>版本：<code>{status.agentVersion}</code>
-                        {' → '}{<code>{status.platformVersion}</code>}</div>}
-                <div>tag 为 latest 时强制拉取远端最新镜像；固定版本 tag（如 <code>v4.8.40</code>）
-                    本地已有时直接复用，升级固定版本请先在「工具 - 主机 Agent」配置里改 tag 再点「重新部署」。
-                </div>
+                <div>镜像：<code>{(check && check.image) || '-'}</code></div>
+                {check && check.localDigest && check.remoteDigest &&
+                    <div>镜像摘要：<code>sha256:{shortDigest(check.localDigest)}</code>
+                        {' → '}<code>sha256:{shortDigest(check.remoteDigest)}</code></div>}
+                {check && check.agentVersion && check.platformVersion &&
+                    <div>版本：<code>{check.agentVersion}</code>
+                        {' → '}<code>v{check.platformVersion.replace(/^[vV]/, '')}</code></div>}
+                <div>拉取失败但本地已有镜像时会继续使用本地镜像（离线主机也能重建）。</div>
             </div>
         </Modal>
     }
@@ -433,7 +462,7 @@ export default class extends React.Component {
                         两个值可在「系统管理 - 系统参数 - 主机终端」调整。
                     </li>
                     <li>完全没有输出、仍在运行的长命令（如 <code>sleep 3600</code>）仍按上面的静默时间回收。</li>
-                    <li>点右上角「新建会话」可立即换一个干净的 shell，点「重新连接」只重建连接、保留当前 shell 与历史。</li>
+                    <li>点右上角「新建会话」可立即换一个干净的 shell（关闭会话后也用它再次开始）。</li>
                     <li>平台重启、辅助容器重建或切换挂载目录后会话会丢失（shell 运行在辅助容器内）。</li>
                     <li>同一个会话同时只允许一个窗口使用：新窗口打开会接管，旧窗口收到提示后停止自动重连。</li>
                 </ul>
@@ -466,9 +495,11 @@ export default class extends React.Component {
                     面板右上角会出现「重新部署」，点它即可按配置重建容器。
                 </Typography.Paragraph>
                 <Typography.Paragraph>
-                    agent 镜像发新版后，点右上角「更多 - 更新」即可升级：会按当前 tag 重新拉取镜像并重建容器
-                    （tag 为 latest 时强制拉取远端最新镜像；固定版本 tag 本地已有时直接复用，
-                    升级固定版本请先在配置里改 tag 再点「重新部署」）。更新会中断终端会话，会话会自动重连。
+                    agent 镜像发新版后，点右上角「更多 - 检查更新」即可升级：先读注册中心里当前 tag
+                    指向的镜像摘要与实际镜像比较，已是最新只做提示；确认有新镜像后再拉取并重建容器
+                    （无论 latest 还是固定版本 tag 都会先尝试拉取远端，拉取失败但本地已有镜像时继续用本地镜像）。
+                    若当前是固定的旧版本 tag（tag 内容没变、只是落后于平台版本），会提示先在配置里改 tag
+                    再「重新部署」。更新会中断终端会话，会话会自动重连。
                 </Typography.Paragraph>
 
                 {status && status.deployed && <>

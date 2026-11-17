@@ -120,13 +120,6 @@ export default class extends React.Component {
         })
     }
 
-    /** 重连当前 shell（保留终端内容）。 */
-    reconnect = () => {
-        if (this.terminal.current) {
-            this.terminal.current.reconnect()
-        }
-    }
-
     /** 丢弃当前 shell，换一个干净的。 */
     newSession = () => {
         if (this.terminal.current) {
@@ -138,7 +131,7 @@ export default class extends React.Component {
 
     /**
      * 关闭会话（「会话保持」的主动出口）：通知服务端立即结束 shell、释放 docker exec 资源，
-     * 并停止本终端的自动重连；之后点「重新连接」可按需新建 shell。
+     * 并停止本终端的自动重连；之后点「新建会话」可再次使用。
      * <p>
      * 走 HTTP 接口而不是 WebSocket 帧：浏览器临时断开（会话已在服务端但 WS 未挂接）时
      * 帧发不出去，HTTP 按「用户 + 主机 + 标签页令牌」定位，两种状态下都能关掉。

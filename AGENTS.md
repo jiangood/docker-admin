@@ -159,10 +159,11 @@ git tag vx.y.z && git push && git push origin vx.y.z
   下载等其余文件操作统一在终端里做（`admin/host/file` 的 `download` 接口仍保留，权限码 `host:file`）；
   容器常驻，删除容器不会删除宿主机文件。重建 `latest` 会先尝试拉取，拉取失败但本地已有镜像时继续使用本地镜像。
   Agent 面板用一块 `Card` 承载：标题只有「主机名 · Agent」，
-  右上角 `extra` 依次是状态徽标（运行中 / 已停止 / 未部署，读取中显示转圈）、重新连接（保留当前 shell）、
-  新建会话（换一个干净 shell）、关闭会话（Popconfirm 二次确认）、上传文件（`host:file` 且辅助容器运行中才出现）、
-  「更多」下拉（deployed 时是切换挂载目录、更新（配置一致时出现，按当前 tag 重新拉取镜像并重建容器，
-  latest 强制拉取，供 agent 镜像发新版后升级）、帮助；未部署时只有帮助），
+  右上角 `extra` 依次是状态徽标（运行中 / 已停止 / 未部署，读取中显示转圈）、
+  新建会话（换一个干净 shell，关闭会话后也用它再次开始）、关闭会话（Popconfirm 二次确认）、上传文件（`host:file` 且辅助容器运行中才出现）、
+  「更多」下拉（deployed 时是切换挂载目录、检查更新（配置一致时出现，先读注册中心里该 tag 当前的
+  manifest 摘要与实际镜像比较：已是最新只做提示；有新镜像才弹确认框，按当前 tag 重新拉取镜像并重建容器，
+  无论 latest 还是固定 tag 都先尝试拉取；摘要一致但版本落后于平台版本时提示先改 tag）、帮助；未部署时只有帮助），
   再往后是 primary 的主操作：未部署时「部署辅助容器」、配置与容器不一致时「重新部署」。
   常用按钮保持明面、低频操作收进「更多」以控制工具栏长度；以上按钮均为图标 + 文字，
   长说明收进各自的 Tooltip / 问号弹窗。
@@ -177,17 +178,18 @@ git tag vx.y.z && git push && git push origin vx.y.z
   **agent 镜像自我记录版本号**：CI 发版时经 build-args 把 tag 写进镜像三处
   （OCI label `org.opencontainers.image.version`、ENV `AGENT_VERSION`、
   `/etc/docker-admin-agent-release` 文件，本地构建回落为 `dev`，见 `agent/Dockerfile`）。
-  平台 `HostAgentService.status` 读实际镜像的 label 回显 `agentVersion`（标题徽标旁 + 帮助弹窗），
+  平台 `HostAgentService.status` 读实际镜像的 label 回显 `agentVersion`（「更多」菜单顶部展示、
+  不可点，落后于平台版本时附「最新版本 v…」行 + 帮助弹窗），
   并与平台自身版本（fat jar manifest 的 `Implementation-Version`，`PlatformVersion` 读取）
-  比较——agent 与平台同 tag 发版，版本不同即提示「更新」（`updateAvailable`，Info Alert + 标题里
-  `v4.8.40 → v4.8.88`，比较时去掉前导 `v`）。仅默认官方镜像参与比较：自定义
+  比较——agent 与平台同 tag 发版，版本不同即提示「更新」（`updateAvailable`，Info Alert +
+  「更多」菜单里「当前版本 / 最新版本」两行，比较时去掉前导 `v`）。仅默认官方镜像参与比较：自定义
   `docker.agent.repository`、旧镜像无 label、本地 dev 构建、未打包运行时都跳过判定，避免误报。
   正文只有终端（`styles={{body: {padding: 12}}}`）；异常 / 待处理提示（状态读取失败、
   配置与容器不一致、无 `host:save` 权限）以 Alert 形式出现在终端上方，正常状态不占空间；
   容器状态、提示与按钮由 `HostAgentAlert` 通过 render prop 交给 `HostAgentTab` 组装，
   弹窗仍由 `HostAgentAlert` 自己渲染（避免重复请求 agent 状态）。当前目录不在标题重复展示（只在「切换挂载目录」弹窗里），
   终端区没有工具条（`HostCli` 只渲染 xterm，
-  重新连接由 `HostAgentTab` 通过 ref 调 `HostCli.reconnect`，新建会话调 `HostCli.newSession`，
+  新建会话由 `HostAgentTab` 通过 ref 调 `HostCli.newSession`，
   关闭会话调 `HostCli.endSession`）；
   文件的下载与查看 / 编辑 / 删除 / 重命名 / 新建目录都在终端里完成（上传走右上角「上传文件」按钮）；
   权限、目录、文件操作等长说明收进问号弹窗（`HostAgentAlert`），页面上不再堆 Alert；
@@ -212,7 +214,7 @@ git tag vx.y.z && git push && git push origin vx.y.z
   是因为浏览器临时断开（会话还在服务端但 WS 未挂接）时帧发不出去；已挂接的 WS 按
   `4002` 关闭码断开，前端 `ContainerTerminal` 收到 4002 或用户已主动关闭时停止自动重连
   （`closeAndStop` 置位关闭标记、清掉退避重连与心跳，`reconnect` 时复位），
-  之后点「重新连接」按需新建 shell。没有活跃会话时接口也返回成功（提示语区分）。
+  之后点「新建会话」再次使用。没有活跃会话时接口也返回成功（提示语区分）。
   同一会话只允许一个窗口：后连上的接管，旧连接按
   `4001` 关闭，前端收到该关闭码后停止自动重连。
   前端 `ContainerTerminal` 在 `autoReconnect` 模式下按 0.5→1→2→4→8→10 秒退避重连（最多 10 次，

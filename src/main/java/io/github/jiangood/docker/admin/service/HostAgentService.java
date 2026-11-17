@@ -15,12 +15,15 @@ import com.github.dockerjava.api.model.MountType;
 import com.github.dockerjava.api.model.PullResponseItem;
 import com.github.dockerjava.api.model.RestartPolicy;
 import io.github.jiangood.docker.admin.config.DockerSettings;
+import io.github.jiangood.docker.admin.dto.AgentUpdateCheckVo;
 import io.github.jiangood.docker.admin.dto.HostAgentVo;
 import io.github.jiangood.docker.admin.entity.Host;
+import io.github.jiangood.docker.admin.service.registry.RegistryV2Client;
 import io.github.jiangood.openadmin.modules.task.entity.SysTaskLog;
 import io.github.jiangood.openadmin.modules.task.service.LongTaskRunner;
 import io.github.jiangood.docker.admin.util.AgentImageUtils;
 import io.github.jiangood.docker.admin.util.HostRootPolicy;
+import io.github.jiangood.docker.admin.util.ImageUrlUtils;
 import io.github.jiangood.docker.admin.util.PlatformVersion;
 import io.github.jiangood.openadmin.modules.task.registry.TaskLogRegistry;
 import io.github.jiangood.openadmin.modules.logviewer.util.TaskLog;
@@ -36,9 +39,12 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -92,6 +98,9 @@ public class HostAgentService {
 
     @Resource
     private HostService hostService;
+
+    @Resource
+    private RegistryService registryService;
 
     @Resource
     private LongTaskRunner longTaskRunner;
@@ -148,6 +157,66 @@ public class HostAgentService {
     }
 
     /**
+     * 检查更新：拿注册中心里当前 tag 指向的 manifest 摘要，与主机上实际镜像的
+     * RepoDigests / 镜像 ID 比较，判断仓库里是否已有新版本；顺带比较 agent 内置版本号
+     * 与平台版本，识别「固定旧版本 tag」的场景（tag 内容没变，但平台已发新版）。
+     * <p>
+     * 只读 manifest，不下载镜像层，也不改动容器；是否执行更新由调用方在拿到结论后决定。
+     * 检查由平台直接访问注册中心，要求平台能访问该镜像的注册中心（未登记的公共仓库匿名访问）。
+     */
+    public AgentUpdateCheckVo checkUpdate(Host host) {
+        DockerClient client = null;
+        try {
+            client = dockerClientManager.getClient(host);
+            InspectContainerResponse response = inspect(client);
+            if (response == null) {
+                throw new BusinessException("辅助容器未部署，无需检查更新");
+            }
+            Map<String, String> labels = labelsOf(response);
+            if (!isOurAgent(labels)) {
+                throw sameNameConflict();
+            }
+            String image = labels.get(LABEL_IMAGE);
+            if (StrUtil.isBlank(image)) {
+                throw new BusinessException("无法确定辅助容器使用的镜像，请先重新部署辅助容器");
+            }
+            String repo = repoOf(image);
+            String tag = tagOf(image);
+
+            AgentUpdateCheckVo vo = new AgentUpdateCheckVo();
+            vo.setImage(image);
+            vo.setTag(tag);
+            vo.setPlatformVersion(PlatformVersion.get());
+
+            // 注册中心里该 tag 当前的 manifest 摘要（与 docker pull 记入本地 RepoDigests 的值一致）
+            RegistryV2Client v2 = registryService.v2ClientFor(repo);
+            String remoteDigest = v2.fetchManifestDigest(ImageUrlUtils.repoNameOf(repo), tag);
+            if (StrUtil.isBlank(remoteDigest)) {
+                throw new BusinessException("注册中心未返回镜像摘要：" + image);
+            }
+            vo.setRemoteDigest(remoteDigest.toLowerCase(Locale.ROOT));
+
+            InspectImageResponse localImage = client.inspectImageCmd(image).exec();
+            vo.setAgentVersion(labelVersion(localImage));
+            vo.setLocalDigest(displayDigest(localImage));
+            vo.setDigestUpToDate(imageDigests(localImage).contains(vo.getRemoteDigest()));
+            vo.setVersionOutdated(AgentImageUtils.isOutdated(repo, vo.getAgentVersion(), vo.getPlatformVersion()));
+            vo.setUpToDate(vo.isDigestUpToDate() && !vo.isVersionOutdated());
+            vo.setMessage(updateCheckMessage(vo));
+            return vo;
+        } catch (BusinessException | DockerException e) {
+            throw e;
+        } catch (Exception e) {
+            log.warn("检查主机辅助容器更新失败: host={}", host.getId(), e);
+            throw new BusinessException("检查更新失败：" + rootMessage(e)
+                    + "。检查需要平台能访问该镜像的注册中心；主机离线预加载镜像的场景无法校验，"
+                    + "可直接按原 tag 重新部署");
+        } finally {
+            IOUtils.closeQuietly(client);
+        }
+    }
+
+    /**
      * 部署辅助容器，或按新目录 / 镜像重建。
      * <p>
      * 宿主机目录不再在部署时填写：没传目录时沿用主机上保存的目录（首次为默认 {@code /home}），
@@ -197,8 +266,9 @@ public class HostAgentService {
                 }
 
                 // 先把镜像准备好，再动旧容器：拉取失败时旧 agent 仍然可用
-                // latest 在「重建」时强制拉取；固定版本本地已有则直接复用
-                ensureImage(client, image, recreate && AgentImageUtils.DEFAULT_TAG.equals(tag));
+                // 「更新」（recreate）总是先拉一次远端，固定版本 tag 被重新推送时也能拿到新内容；
+                // 拉取失败但本地已有该镜像时继续用本地镜像，方便无外网/已预加载的主机
+                ensureImage(client, image, recreate);
 
                 if (existing != null) {
                     // 目录/镜像配置变了，或用户点了「重建」：旧容器直接重建
@@ -388,17 +458,66 @@ public class HostAgentService {
             return null;
         }
         try {
-            InspectImageResponse imageInfo = client.inspectImageCmd(image).exec();
-            if (imageInfo.getConfig() == null || imageInfo.getConfig().getLabels() == null) {
-                return null;
-            }
-            String version = imageInfo.getConfig().getLabels().get(OCI_LABEL_VERSION);
-            return StrUtil.isBlank(version) ? null : version.trim();
+            return labelVersion(client.inspectImageCmd(image).exec());
         } catch (Exception e) {
             // 镜像刚被清理等场景不影响状态展示，只是看不到版本号
             log.debug("读取辅助镜像版本失败: {}", image, e);
             return null;
         }
+    }
+
+    /** 镜像内置的版本号（OCI label {@code org.opencontainers.image.version}），没有该 label 时返回 null。 */
+    private static String labelVersion(InspectImageResponse imageInfo) {
+        if (imageInfo.getConfig() == null || imageInfo.getConfig().getLabels() == null) {
+            return null;
+        }
+        String version = imageInfo.getConfig().getLabels().get(OCI_LABEL_VERSION);
+        return StrUtil.isBlank(version) ? null : version.trim();
+    }
+
+    /**
+     * 本地镜像可用于比较的摘要集合（与应用定时更新检查同口径）：
+     * 经典镜像存储的镜像 ID 是 image config 摘要，与仓库的 manifest 摘要不同，必须读
+     * {@code RepoDigests}；containerd 镜像存储的镜像 ID 本身就是 manifest 摘要。两种都收进集合。
+     */
+    private static Set<String> imageDigests(InspectImageResponse local) {
+        Set<String> digests = new HashSet<>();
+        if (StrUtil.isNotBlank(local.getId())) {
+            digests.add(local.getId().toLowerCase(Locale.ROOT));
+        }
+        if (local.getRepoDigests() != null) {
+            for (String repoDigest : local.getRepoDigests()) {
+                int at = StrUtil.nullToEmpty(repoDigest).lastIndexOf('@');
+                if (at >= 0 && at < repoDigest.length() - 1) {
+                    digests.add(repoDigest.substring(at + 1).toLowerCase(Locale.ROOT));
+                }
+            }
+        }
+        return digests;
+    }
+
+    /** 页面展示用的本地镜像摘要：优先 RepoDigests（形如 repo@sha256:...），没有时用镜像 ID。 */
+    private static String displayDigest(InspectImageResponse local) {
+        if (local.getRepoDigests() != null && !local.getRepoDigests().isEmpty()) {
+            return local.getRepoDigests().get(0);
+        }
+        return local.getId();
+    }
+
+    private static String updateCheckMessage(AgentUpdateCheckVo vo) {
+        if (vo.isUpToDate()) {
+            return "已是最新版本" + (StrUtil.isNotBlank(vo.getAgentVersion())
+                    ? "（" + vo.getAgentVersion() + "）" : "");
+        }
+        if (!vo.isDigestUpToDate()) {
+            return "注册中心里 " + vo.getTag() + " 已有新镜像，可更新";
+        }
+        // 摘要一致但版本落后：固定版本 tag 内容没变，更新镜像没有意义，要先换 tag
+        return "镜像 " + vo.getTag() + " 已是注册中心里的最新内容，但版本 "
+                + StrUtil.blankToDefault(vo.getAgentVersion(), "未知") + " 落后于平台 "
+                + vo.getPlatformVersion()
+                + "；请先在「工具 - 主机 Agent」把 tag 改为 latest 或 v" + vo.getPlatformVersion()
+                + "，再点「重新部署」升级";
     }
 
     private InspectContainerResponse inspect(DockerClient client) {

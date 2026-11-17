@@ -39,6 +39,17 @@ public class HostAgentController {
     }
 
     /**
+     * 检查更新：读注册中心里该 tag 当前的 manifest 摘要，与主机上实际镜像比较。
+     * 只读 manifest 不下载镜像层，也不改动容器；返回是否已有新版本及建议，由前端决定是否执行更新。
+     * 只读查询，权限与状态一致用 {@code host:list}。
+     */
+    @HasPermission("host:list")
+    @RequestMapping("check-update")
+    public AjaxResult checkUpdate(String id) {
+        return AjaxResult.ok().data(hostAgentService.checkUpdate(requireHost(id)));
+    }
+
+    /**
      * 部署辅助容器（含「更新」）。同步校验参数并登记任务后立即返回 logId，
      * 拉镜像与重建容器走异步任务，前端据此打开实时日志。
      */
