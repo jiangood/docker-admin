@@ -1,5 +1,5 @@
 import React from 'react'
-import {Button, Dropdown, Empty, Form, Input, List, message, Modal, Popconfirm, Tooltip, Typography} from 'antd'
+import {Button, Dropdown, Empty, Form, Input, List, message, Modal, Popconfirm, Typography} from 'antd'
 import {CodeOutlined, PlusOutlined, SettingOutlined} from '@ant-design/icons'
 
 /** 下拉菜单里单条命令标签的最长展示长度，超出截断（完整命令看悬浮提示）。 */
@@ -35,9 +35,7 @@ export default class extends React.Component {
         const list = this.props.commands || []
         const items = list.map((item, index) => ({
             key: String(index),
-            label: <Tooltip title={item.command} mouseEnterDelay={0.4}>
-                <span>{this.menuLabel(item)}</span>
-            </Tooltip>,
+            label: <span>{this.menuLabel(item)}</span>,
         }))
         if (items.length === 0) {
             items.push({key: 'empty', disabled: true, label: '还没有常用命令'})
