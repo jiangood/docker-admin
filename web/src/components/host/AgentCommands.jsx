@@ -1,5 +1,5 @@
 import React from 'react'
-import {Button, Dropdown, Empty, Form, Input, List, message, Modal, Popconfirm, Typography} from 'antd'
+import {Button, Dropdown, Empty, Form, Input, List, message, Modal, Popconfirm, Tooltip, Typography} from 'antd'
 import {CodeOutlined, PlusOutlined, SettingOutlined} from '@ant-design/icons'
 
 /** 下拉菜单里单条命令标签的最长展示长度，超出截断（完整命令看悬浮提示）。 */
