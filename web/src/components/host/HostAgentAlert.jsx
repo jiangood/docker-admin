@@ -1,6 +1,6 @@
 import React from 'react'
 import {Alert, Badge, Button, Dropdown, Input, Modal, Space, Spin, Typography, message} from 'antd'
-import {CloudServerOutlined, FolderOpenOutlined, MoreOutlined, QuestionCircleOutlined, SyncOutlined} from '@ant-design/icons'
+import {CloudServerOutlined, FolderOpenOutlined, MoreOutlined, QuestionCircleOutlined, ReloadOutlined, SyncOutlined} from '@ant-design/icons'
 import {HttpClient, PermUtils} from '@jiangood/open-admin'
 import TaskLogDrawer from '../TaskLogDrawer'
 
@@ -236,6 +236,9 @@ export default class extends React.Component {
             if (status && !status.needsRebuild) {
                 items.push({key: 'update', icon: <SyncOutlined/>, label: '检查更新'})
             }
+            if (PermUtils.hasPermission('host:save')) {
+                items.push({key: 'restart', icon: <ReloadOutlined/>, label: '重启辅助容器'})
+            }
             items.push({type: 'divider'})
         }
         items.push({key: 'help', icon: <QuestionCircleOutlined/>, label: '帮助'})
@@ -247,9 +250,27 @@ export default class extends React.Component {
             this.openRootModal()
         } else if (key === 'update') {
             this.checkUpdate()
+        } else if (key === 'restart') {
+            this.restart()
         } else if (key === 'help') {
             this.setState({helpOpen: true})
         }
+    }
+
+    restart = () => {
+        Modal.confirm({
+            title: '重启辅助容器？',
+            content: '容器内 shell 会中断，终端会话会丢失并自动重连',
+            okText: '重启',
+            onOk: () => {
+                const {hostId} = this.props
+                return HttpClient.post('admin/host/agent/restart', null, {id: hostId})
+                    .then(rs => {
+                        message.success((rs && rs.message) || '辅助容器已重启')
+                        this.load()
+                    })
+            },
+        })
     }
 
     /** 卡片标题里的状态块：加载中 / 运行中 / 已停止 / 未部署；版本号收进「更多」菜单展示。 */

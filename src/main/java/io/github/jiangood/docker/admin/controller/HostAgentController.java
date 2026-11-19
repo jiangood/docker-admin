@@ -86,6 +86,14 @@ public class HostAgentController {
         return AjaxResult.ok().msg("辅助容器已删除");
     }
 
+    @Log("主机-重启辅助容器")
+    @HasPermission("host:save")
+    @PostMapping("restart")
+    public AjaxResult restart(String id) {
+        hostAgentService.restart(requireHost(id));
+        return AjaxResult.ok().msg("辅助容器已重启");
+    }
+
     private Host requireHost(String id) {
         Assert.hasText(id, "id 不能为空");
         Host host = hostService.findById(id).orElse(null);

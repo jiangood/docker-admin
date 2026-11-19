@@ -374,6 +374,38 @@ public class HostAgentService {
     }
 
     /**
+     * 重启辅助容器：已停止时直接启动，运行中则重启。
+     * 容器内 shell 会中断，终端会话会丢失并自动重连；不改变镜像与挂载配置。
+     */
+    public void restart(Host host) {
+        DockerClient client = null;
+        try {
+            client = dockerClientManager.getClient(host);
+            InspectContainerResponse response = inspect(client);
+            if (response == null) {
+                throw new BusinessException("辅助容器未部署");
+            }
+            if (!isOurAgent(labelsOf(response))) {
+                throw sameNameConflict();
+            }
+            // Agent 不需要优雅退出，停止宽限期保持默认 10 秒
+            if (isRunning(response)) {
+                client.restartContainerCmd(CONTAINER_NAME).withTimeout(10).exec();
+            } else {
+                start(client);
+            }
+            waitRunning(client);
+        } catch (BusinessException | DockerException e) {
+            throw e;
+        } catch (Exception e) {
+            log.warn("重启主机辅助容器失败: host={}", host.getId(), e);
+            throw new BusinessException("重启辅助容器失败：" + rootMessage(e));
+        } finally {
+            IOUtils.closeQuietly(client);
+        }
+    }
+
+    /**
      * 文件/CLI 接口入口：确保辅助容器存在并运行，返回实际挂载目录。
      */
     public AgentContext requireRunning(Host host) {
