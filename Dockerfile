@@ -24,8 +24,6 @@ RUN mvn clean package -DskipTests -q
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /home
 
-# 直接运行 fat jar（约 120MB），不再分层抽取：分层模式下 SNAPSHOT 依赖会被单独放进
-# snapshot-dependencies 层，若漏复制就会导致运行时缺框架 jar（application-lib.yml 找不到）。
 COPY --from=java /build/target/app.jar ./app.jar
 COPY --from=web /build/dist/ ./static/
 
