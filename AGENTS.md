@@ -69,8 +69,8 @@ git tag vx.y.z && git push && git push origin vx.y.z
   或 `application-mysql.yml`）；默认走 H2 无需配置。
 - **菜单配置**在 `src/main/resources/menu-docker.yml`，可用 `menu-override.yml` 覆盖
   （open-admin 3.2.0 起只扫描 `menu.yml` / `menu-*.yml`，旧的 `application-menu*.yml` 不再识别）。
-  「容器平台」下依次为 项目 / 应用 / 镜像 / 主机（`/host`），再往下是「设置」（注册中心、代码源）
-  与「工具」（主机 Agent、镜像同步、构建测试、镜像下载、网站监控）。**「主机」与「设置」平级**，不再挂在设置下面。
+  顶层为「项目」`/project`、「应用」`/app`、「镜像」`/image`、「主机」`/host`，以及「设置」（注册中心、代码源）
+  与「工具」（镜像同步、主机 Agent、构建测试、镜像下载、网站监控、资源统计、任务中心）两个分组。
 - **领域模型：** `Project`(项目，构建定义) → `Image`(镜像，`imageUrl` 唯一) → `ImageTag`(镜像标签，`imageUrl`+`tag`)。
   项目与镜像按 `imageUrl` 相等关联；`App` 只存 `imageUrl` + `imageTag`，与项目/镜像均无 id 外键。
   菜单为「项目」(`/project`) 与「镜像」(`/image`)，权限码为 `image:*`，表名为 `t_image`。

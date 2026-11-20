@@ -1,11 +1,6 @@
 ## docker-admin 业务菜单
 menus:
-  biz:
-    name: 容器平台
-    icon: AppstoreOutlined
-    seq: 10
   project:
-    pid: biz
     name: 项目
     path: /project
     icon: ContainerOutlined
@@ -17,7 +12,6 @@ menus:
       - {name: 自动触发, code: project:webhook}
 
   app:
-    pid: biz
     name: 应用
     path: /app
     icon: AppstoreOutlined
@@ -28,11 +22,7 @@ menus:
       - {name: 删除, code: app:delete}
       - {name: 部署, code: app:deploy}
       - {name: 迁移, code: app:migrate}
-  divider-app:
-    pid: biz
-    type: divider
   image:
-    pid: biz
     name: 镜像
     path: /image
     icon: DatabaseOutlined
@@ -42,11 +32,7 @@ menus:
       - { name: 导入, code: image:import }
       - { name: 删除, code: image:delete }
       - { name: 补录, code: image:sync }
-  divider-image:
-    pid: biz
-    type: divider
   host:
-    pid: biz
     name: 主机
     path: /host
     icon: DesktopOutlined
@@ -61,7 +47,6 @@ menus:
       - {name: 主机文件, code: host:file}
       - {name: 主机命令行, code: host:cli}
   setting:
-    pid: biz
     name: 设置
     icon: SettingOutlined
   setting-registry:
@@ -83,7 +68,6 @@ menus:
       - {name: 保存, code: code-source:save}
       - {name: 删除, code: code-source:delete}
   tool:
-    pid: biz
     name: 工具
     icon: ToolOutlined
   setting-sync:
