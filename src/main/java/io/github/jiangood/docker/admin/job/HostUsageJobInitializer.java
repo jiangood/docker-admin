@@ -36,7 +36,7 @@ public class HostUsageJobInitializer implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
-        registrar.register(HostUsageCollectJob.class.getName(), JOB_NAME, CRON, JobLogAggregation.HOURLY);
+        registrar.register(HostUsageCollectJob.class.getName(), JOB_NAME, CRON, JobLogAggregation.PER_RUN);
     }
 
 }

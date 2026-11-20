@@ -39,7 +39,7 @@ class BuiltinJobRegistrarTest {
     void createsEnabledJobWhenMissing() throws Exception {
         when(sysJobRepository.findAll()).thenReturn(List.of());
 
-        registrar(true).register(JOB_CLASS, NAME, CRON, JobLogAggregation.HOURLY);
+        registrar(true).register(JOB_CLASS, NAME, CRON, JobLogAggregation.PER_RUN);
 
         ArgumentCaptor<SysJob> captor = ArgumentCaptor.forClass(SysJob.class);
         verify(sysJobService).save(captor.capture(), isNull());
@@ -48,7 +48,7 @@ class BuiltinJobRegistrarTest {
         assertEquals(NAME, saved.getName());
         assertEquals(CRON, saved.getCron());
         assertTrue(saved.getEnabled());
-        assertEquals(JobLogAggregation.HOURLY, saved.getLogAggregation());
+        assertEquals(JobLogAggregation.PER_RUN, saved.getLogAggregation());
     }
 
     @Test
@@ -60,7 +60,7 @@ class BuiltinJobRegistrarTest {
         shell.setEnabled(false);
         when(sysJobRepository.findAll()).thenReturn(List.of(shell));
 
-        registrar(true).register(JOB_CLASS, NAME, CRON, JobLogAggregation.HOURLY);
+        registrar(true).register(JOB_CLASS, NAME, CRON, JobLogAggregation.PER_RUN);
 
         ArgumentCaptor<SysJob> captor = ArgumentCaptor.forClass(SysJob.class);
         ArgumentCaptor<List<String>> fields = ArgumentCaptor.forClass(List.class);
@@ -72,7 +72,7 @@ class BuiltinJobRegistrarTest {
         assertEquals(NAME, saved.getName());
         assertEquals(CRON, saved.getCron());
         assertTrue(saved.getEnabled());
-        assertEquals(JobLogAggregation.HOURLY, saved.getLogAggregation());
+        assertEquals(JobLogAggregation.PER_RUN, saved.getLogAggregation());
     }
 
     @Test
@@ -84,7 +84,7 @@ class BuiltinJobRegistrarTest {
         configured.setEnabled(false);
         when(sysJobRepository.findAll()).thenReturn(List.of(configured));
 
-        registrar(true).register(JOB_CLASS, NAME, CRON, JobLogAggregation.HOURLY);
+        registrar(true).register(JOB_CLASS, NAME, CRON, JobLogAggregation.PER_RUN);
 
         verify(sysJobService, never()).save(any(), anyList());
         assertFalse(configured.getEnabled());

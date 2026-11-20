@@ -31,7 +31,7 @@ public class AppScheduledUpdateJobInitializer implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
-        registrar.register(AppScheduledUpdateJob.class.getName(), JOB_NAME, CRON, JobLogAggregation.HOURLY);
+        registrar.register(AppScheduledUpdateJob.class.getName(), JOB_NAME, CRON, JobLogAggregation.PER_RUN);
     }
 
 }

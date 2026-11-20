@@ -32,7 +32,7 @@ public class SiteMonitorJobInitializer implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
-        registrar.register(SiteMonitorCheckJob.class.getName(), JOB_NAME, CRON, JobLogAggregation.HOURLY);
+        registrar.register(SiteMonitorCheckJob.class.getName(), JOB_NAME, CRON, JobLogAggregation.PER_RUN);
     }
 
 }

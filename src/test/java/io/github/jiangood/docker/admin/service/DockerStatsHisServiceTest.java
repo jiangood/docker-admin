@@ -49,8 +49,8 @@ class DockerStatsHisServiceTest {
         assertNull(series.getPoints().get(0).getNetRxBps());
         assertEquals(1000.0, series.getPoints().get(1).getNetRxBps(), 0.5);
         assertEquals(1000.0, series.getPoints().get(4).getNetRxBps(), 0.5);
-        // 瞬时值直接透传/聚合
-        assertEquals(10.0, series.getPoints().get(0).getCpuPercent(), 0.001);
+        // 瞬时值直接透传/聚合：容器 CPU% 按核计（10%），4 核主机聚合为 10/100/4*100 = 2.5%
+        assertEquals(2.5, series.getPoints().get(0).getCpuPercent(), 0.001);
         assertEquals(1, series.getPoints().get(0).getContainersRunning());
     }
 

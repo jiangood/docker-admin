@@ -301,7 +301,7 @@ git tag vx.y.z && git push && git push origin vx.y.z
   采样默认保留 30 天（`HostUsageSampleService` 里的默认值，需要时用 `docker.usage.retain-days` 覆盖，采集任务每小时顺带清理）；
   30 台主机 30 天约 13 万行、20 MB。
   定时任务记录由 `HostUsageJobInitializer` 幂等自动创建（`sys.job-enable=false` 时跳过，已存在则不覆盖用户改动），
-  日志聚合为按小时。**升级 docker-java 时需要回归这条链路。**
+  执行记录按每次运行保存（框架 3.3.4+ 统一为 `PER_RUN`）。**升级 docker-java 时需要回归这条链路。**
 - **应用定时更新：** 应用详情「部署」页的「定时更新」开关（`App.scheduledUpdate`，默认关闭）按
   `scheduledUpdateIntervalMinutes`（默认 1440 分钟）定时检查镜像，适用于不是通过项目构建的外部镜像。
   任务 `AppScheduledUpdateJob` 每分钟扫描到期应用，只处理**运行中**的容器；检查由**平台直接访问注册中心**
