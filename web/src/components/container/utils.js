@@ -134,6 +134,42 @@ export function formatClock(value) {
     return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
 }
 
+/**
+ * 容器已运行时长：从启动时间到现在的可读文本（如「2天3小时」「5小时12分钟」）。
+ * 启动时间为空或为 Docker 的零值时间（0001-01-01）时返回 null。
+ */
+export function formatRunningDuration(startedAt) {
+    if (!startedAt) {
+        return null
+    }
+    const raw = String(startedAt)
+    if (raw.startsWith('0001-01-01')) {
+        return null
+    }
+    const start = new Date(startedAt).getTime()
+    if (Number.isNaN(start)) {
+        return null
+    }
+    const diff = Date.now() - start
+    if (diff < 0) {
+        return null
+    }
+    const totalSeconds = Math.floor(diff / 1000)
+    const days = Math.floor(totalSeconds / 86400)
+    const hours = Math.floor((totalSeconds % 86400) / 3600)
+    const minutes = Math.floor((totalSeconds % 3600) / 60)
+    if (days > 0) {
+        return `${days}天${hours}小时`
+    }
+    if (hours > 0) {
+        return `${hours}小时${minutes}分钟`
+    }
+    if (minutes > 0) {
+        return `${minutes}分钟`
+    }
+    return `${totalSeconds}秒`
+}
+
 /** 百分比格式化：空值显示 -，默认保留 1 位小数。 */
 export function formatPercent(value, digits = 1) {
     if (value === null || value === undefined || value === '') {

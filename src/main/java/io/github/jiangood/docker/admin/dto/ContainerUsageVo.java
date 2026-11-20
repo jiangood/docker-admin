@@ -21,6 +21,14 @@ public class ContainerUsageVo implements Serializable {
     String name;
     String image;
 
+    /** 所属主机（落库/跨主机查询场景下使用） */
+    String hostId;
+    String hostName;
+
+    /** 关联应用（按容器 app.name 标签匹配），非应用容器为空 */
+    String appId;
+    String appName;
+
     /** CPU 使用率（%），无前一次采样（如刚启动）时为空 */
     Double cpuPercent;
     /** 内存用量（字节，已按 docker stats 口径扣除 inactive_file） */
@@ -42,4 +50,7 @@ public class ContainerUsageVo implements Serializable {
 
     /** 采集失败原因；有值时其余用量字段为空 */
     String error;
+
+    /** 本轮采集完成时间（毫秒时间戳） */
+    Long collectedAt;
 }

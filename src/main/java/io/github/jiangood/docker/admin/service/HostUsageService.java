@@ -11,8 +11,10 @@ import com.github.dockerjava.api.model.MemoryStatsConfig;
 import com.github.dockerjava.api.model.StatisticNetworksConfig;
 import com.github.dockerjava.api.model.Statistics;
 import com.github.dockerjava.api.model.StatsConfig;
+import io.github.jiangood.docker.admin.dao.AppRepository;
 import io.github.jiangood.docker.admin.dto.ContainerUsageVo;
 import io.github.jiangood.docker.admin.dto.HostUsageVo;
+import io.github.jiangood.docker.admin.entity.App;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import io.github.jiangood.openadmin.framework.data.specification.Spec;
@@ -24,6 +26,8 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -56,8 +60,8 @@ import java.util.stream.Collectors;
  * 数据来源两条链路：
  * <ul>
  *   <li><b>定时任务</b>（{@code HostUsageCollectJob}，每 {@link #COLLECT_INTERVAL} 一轮）调
- *       {@link #collectAll()} 采一轮、写缓存，并交回结果由 {@code HostUsageSampleService} 落库，
- *       供主机详情的历史曲线使用；</li>
+ *       {@link #collectAll()} 采一轮、写缓存，并交回结果由 {@code HostUsageSampleService} 落主机采样、
+ *       由 {@code ContainerUsageService} 落容器快照；</li>
  *   <li><b>页面请求</b>只读快照（{@link #snapshotAll()} / {@link #snapshot(String)}），不触发采集，
  *       所以开多少个标签页都不会增加主机侧负载；只有用户点「刷新」才走 {@link #usageAll(boolean)} 现采。</li>
  * </ul>
@@ -67,10 +71,15 @@ import java.util.stream.Collectors;
 public class HostUsageService {
 
     /**
+     * 应用容器标签键：与 {@link DockerClientManager#getAppLabelFilter(String)} 保持一致。
+     */
+    private static final String APP_LABEL = "app.name";
+
+    /**
      * 采集间隔：与 {@code HostUsageJobInitializer} 里定时任务的 cron 保持一致。
      * 采样落库、退避阶梯都以「一轮」为单位，改这里时记得同步 cron。
      */
-    public static final Duration COLLECT_INTERVAL = Duration.ofMinutes(10);
+    public static final Duration COLLECT_INTERVAL = Duration.ofMinutes(1);
 
     /** 单台主机一轮采集的总预算（含建立连接、info、容器列表与全部 stats）。 */
     private static final Duration PER_HOST_TIMEOUT = Duration.ofSeconds(8);
@@ -89,6 +98,9 @@ public class HostUsageService {
 
     @Resource
     private DockerClientManager dockerClientManager;
+
+    @Resource
+    private AppRepository appRepository;
 
     /** 主机级任务：会阻塞等待容器结果，用缓存线程池避免主机之间互相排队。 */
     private final ExecutorService hostExecutor = Executors.newCachedThreadPool(r -> {
@@ -115,7 +127,7 @@ public class HostUsageService {
     /**
      * 连续采集失败的主机退避表：只在定时任务里生效。
      * <p>
-     * 一台宕机的 SSH 主机每轮采集都要握手、等超时（最长 8 秒），不退避就是每 10 分钟踢一次铁板；
+     * 一台宕机的 SSH 主机每轮采集都要握手、等超时，不退避就是每轮都踢一次铁板；
      * 而「刷新」按钮仍然直接采集，不受这里的限制。
      * <p>
      * 状态不能放在 Quartz 任务里：任务每次触发都会新建实例（见 open-admin 的 BaseJob 说明）。
@@ -175,13 +187,19 @@ public class HostUsageService {
         pruneCache(hosts);
         long start = System.currentTimeMillis();
 
+        List<String> skippedHostIds = new ArrayList<>();
         List<Future<HostUsageVo>> futures = new ArrayList<>(hosts.size());
         for (Host host : hosts) {
-            futures.add(hostExecutor.submit(() -> inBackoff(host) ? null : collect(host)));
+            if (inBackoff(host)) {
+                skippedHostIds.add(host.getId());
+                futures.add(CompletableFuture.completedFuture(null));
+            } else {
+                futures.add(hostExecutor.submit(() -> collect(host)));
+            }
         }
 
         List<HostUsageVo> values = new ArrayList<>(hosts.size());
-        int skipped = 0;
+        int skipped = skippedHostIds.size();
         int failed = 0;
         long deadline = System.currentTimeMillis() + PER_HOST_TIMEOUT.toMillis() + 4_000;
         for (int i = 0; i < hosts.size(); i++) {
@@ -199,8 +217,7 @@ public class HostUsageService {
                 vo = failed(host, "采集超时", 0);
             }
             if (vo == null) {
-                // 退避中：本轮不采，也不写采样，曲线上就是断点
-                skipped++;
+                // 退避中：本轮不采，也不写采样，容器快照由调用方按策略清理
                 continue;
             }
             if (!vo.isReachable()) {
@@ -210,7 +227,7 @@ public class HostUsageService {
         }
 
         return new CollectResult(values, hosts.size(), values.size() - failed, failed, skipped,
-                System.currentTimeMillis() - start);
+                System.currentTimeMillis() - start, skippedHostIds);
     }
 
     /**
@@ -296,8 +313,8 @@ public class HostUsageService {
     }
 
     /**
-     * 退避阶梯：按「轮」算，一轮 = {@link #COLLECT_INTERVAL}（10 分钟）。
-     * 第一次失败下一轮照常重试，之后跳过 2 / 5 / 15 轮（约 20 / 50 / 150 分钟）。
+     * 退避阶梯：按「轮」算，一轮 = {@link #COLLECT_INTERVAL}。
+     * 第一次失败下一轮照常重试，之后跳过 2 / 5 / 15 轮。
      */
     private static long backoffDelay(int failures) {
         long interval = COLLECT_INTERVAL.toMillis();
@@ -312,14 +329,16 @@ public class HostUsageService {
     /**
      * 一轮定时采集的汇总结果。
      *
-     * @param values 实际采到的主机（含失败的主机，{@code reachable=false}），退避跳过的不在其中
+     * @param values         实际采到的主机（含失败的主机，{@code reachable=false}）
+     * @param skippedHostIds 本轮因退避跳过的主机 id（调用方据此清理其容器快照）
      */
     public record CollectResult(List<HostUsageVo> values,
                                 int hosts,
                                 int success,
                                 int failed,
                                 int skipped,
-                                long durationMillis) {
+                                long durationMillis,
+                                List<String> skippedHostIds) {
 
         public String describe() {
             return "采集 " + hosts + " 台：成功 " + success + "、失败 " + failed
@@ -397,9 +416,11 @@ public class HostUsageService {
         vo.setContainersRunning(containers.size());
         vo.setReachable(true);
 
+        Map<String, App> appsByName = loadAppsByName(host.getId());
+
         List<Future<ContainerUsageVo>> futures = new ArrayList<>(containers.size());
         for (Container container : containers) {
-            futures.add(statsExecutor.submit(() -> containerUsage(client, container, info.getNCPU())));
+            futures.add(statsExecutor.submit(() -> containerUsage(client, container, info.getNCPU(), appsByName)));
         }
 
         for (int i = 0; i < containers.size(); i++) {
@@ -423,6 +444,7 @@ public class HostUsageService {
             } catch (Exception e) {
                 usage = failedUsage(container, rootMessage(e));
             }
+            applyApp(usage, container, appsByName);
             vo.getContainers().add(usage);
         }
 
@@ -430,11 +452,32 @@ public class HostUsageService {
         return vo;
     }
 
-    private ContainerUsageVo containerUsage(DockerClient client, Container container, Integer hostCpus) {
+    private Map<String, App> loadAppsByName(String hostId) {
+        try {
+            List<App> apps = appRepository.findAllByHost_Id(hostId);
+            if (apps == null || apps.isEmpty()) {
+                return Collections.emptyMap();
+            }
+            Map<String, App> map = new HashMap<>(apps.size());
+            for (App app : apps) {
+                if (app != null && app.getName() != null) {
+                    map.put(app.getName(), app);
+                }
+            }
+            return map;
+        } catch (Exception e) {
+            log.warn("加载主机应用映射失败 hostId={}：{}", hostId, e.toString());
+            return Collections.emptyMap();
+        }
+    }
+
+    private ContainerUsageVo containerUsage(DockerClient client, Container container, Integer hostCpus,
+                                           Map<String, App> appsByName) {
         ContainerUsageVo vo = new ContainerUsageVo();
         vo.setId(container.getId());
         vo.setName(firstName(container.getNames()));
         vo.setImage(container.getImage());
+        applyApp(vo, container, appsByName);
         try {
             Statistics statistics = stats(client, container.getId());
             fill(vo, statistics, hostCpus);
@@ -442,6 +485,27 @@ public class HostUsageService {
             vo.setError(rootMessage(e));
         }
         return vo;
+    }
+
+    private static void applyApp(ContainerUsageVo vo, Container container, Map<String, App> appsByName) {
+        if (vo == null || container == null || appsByName == null || appsByName.isEmpty()) {
+            return;
+        }
+        Map<String, String> labels = container.getLabels();
+        if (labels == null) {
+            return;
+        }
+        String appName = labels.get(APP_LABEL);
+        if (appName == null) {
+            return;
+        }
+        App app = appsByName.get(appName);
+        if (app != null) {
+            vo.setAppId(app.getId());
+            vo.setAppName(app.getName());
+        } else {
+            vo.setAppName(appName);
+        }
     }
 
     /**

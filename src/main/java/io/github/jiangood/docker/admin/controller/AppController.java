@@ -12,6 +12,7 @@ import io.github.jiangood.docker.admin.entity.DeployLog;
 import io.github.jiangood.docker.admin.entity.DeployTrigger;
 import io.github.jiangood.docker.admin.service.AppService;
 import io.github.jiangood.docker.admin.service.ContainerService;
+import io.github.jiangood.docker.admin.service.ContainerUsageService;
 import io.github.jiangood.docker.admin.websocket.DockerLogService;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import io.github.jiangood.openadmin.modules.logviewer.service.FileLogService;
@@ -74,6 +75,9 @@ public class AppController {
     @Resource
     private DockerSettings dockerSettings;
 
+    @Resource
+    private ContainerUsageService containerUsageService;
+
     @HasPermission("app:view")
     @RequestMapping("list")
     public AjaxResult list(String searchText, String hostId, String orgId, @PageableDefault(sort = {"updateTime", "createTime"}, direction = Sort.Direction.DESC) Pageable pageable, HttpSession session) {
@@ -114,6 +118,16 @@ public class AppController {
         ContainerVo container = service.getContainerVo(app);
 
         return AjaxResult.ok().data(container);
+    }
+
+    /**
+     * 应用当前容器的资源用量（来自定时采集写入的最新快照）。
+     */
+    @HasPermission("app:view")
+    @RequestMapping("usage")
+    public AjaxResult usage(String id) {
+        App app = assertAppAccess(id);
+        return AjaxResult.ok().data(containerUsageService.findByAppId(app.getId()));
     }
 
     /**

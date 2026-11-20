@@ -1,13 +1,13 @@
 import React from 'react'
 import {Alert, Button, Card, Checkbox, Modal, Result, Space, Spin, Tabs, Tag, Typography} from 'antd'
 import {ReloadOutlined} from '@ant-design/icons'
-import {HttpClient, Page, PageUtils, PermActions} from '@jiangood/open-admin'
+import {HttpClient, Page, PageUtils, PermUtils} from '@jiangood/open-admin'
 import ContainerInfo from '../../components/container/ContainerInfo'
 import ContainerConfig from '../../components/container/ContainerConfig'
 import ContainerLogs from '../../components/container/ContainerLogs'
 import ContainerFiles from '../../components/container/ContainerFiles'
 import ContainerConsole from '../../components/container/ContainerConsole'
-import {formatTime, isRunningState, stateColor, stateLabel, wsContainerLogPath} from '../../components/container/utils'
+import {formatBytes, formatClock, formatPercent, formatRunningDuration, formatTime, isRunningState, stateColor, stateLabel, wsContainerLogPath} from '../../components/container/utils'
 
 export const pageMeta = {
     title: '容器详情',
@@ -39,6 +39,7 @@ export default class extends React.Component {
         loading: true,
         detail: null,
         error: null,
+        usage: null,
         activeKey: 'logs',
         paneHeight: MIN_PANE_HEIGHT,
 
@@ -46,6 +47,9 @@ export default class extends React.Component {
         removeOpen: false,
         removeForce: false,
         removing: false,
+
+        // 容器操作按钮的 loading 状态：'start' / 'stop' / 'restart' / null
+        actionLoading: null,
     }
 
     componentDidMount() {
@@ -53,10 +57,17 @@ export default class extends React.Component {
         this.setState({activeKey: tab || 'logs', paneHeight: this.measurePaneHeight()})
         window.addEventListener('resize', this.handleResize)
         this.load()
+        this.loadUsage()
+        this.usageTimer = setInterval(() => {
+            if (!document.hidden) {
+                this.loadUsage()
+            }
+        }, 30000)
     }
 
     componentWillUnmount() {
         window.removeEventListener('resize', this.handleResize)
+        clearInterval(this.usageTimer)
     }
 
     measurePaneHeight = () => Math.max(MIN_PANE_HEIGHT, (window.innerHeight || 0) - VIEWPORT_CHROME)
@@ -82,8 +93,26 @@ export default class extends React.Component {
         }
         this.setState({loading: true, error: null})
         request
-            .then(rs => this.setState({detail: rs.data, loading: false}))
+            .then(rs => this.setState({detail: rs.data, loading: false}, this.loadUsage))
             .catch(e => this.setState({detail: null, loading: false, error: e.message || '读取容器信息失败'}))
+    }
+
+    /** 读取容器资源用量快照（DB），用于头部简要展示。 */
+    loadUsage = () => {
+        const {hostId, appId} = this.state.params
+        const detail = this.state.detail
+        const targetId = detail?.id || this.state.params.containerId
+        const request = appId
+            ? HttpClient.get('admin/app/usage', {id: appId}, {toastError: false})
+            : (hostId && targetId
+                ? HttpClient.get('admin/container/usage', {hostId, containerId: targetId}, {toastError: false})
+                : null)
+        if (!request) {
+            return
+        }
+        request
+            .then(rs => this.setState({usage: rs.data || null}))
+            .catch(() => this.setState({usage: null}))
     }
 
     /**
@@ -98,6 +127,18 @@ export default class extends React.Component {
             if (name !== 'remove') {
                 setTimeout(this.load, 600)
             }
+        })
+    }
+
+    /**
+     * 启动 / 停止 / 重启按钮：操作期间展示 loading 并禁用同组按钮。
+     * 错误提示由 HttpClient 统一弹出，这里只负责吞掉 Promise 以免控制台告警。
+     */
+    handleAction = (name) => {
+        this.setState({actionLoading: name})
+        this.action(name).catch(() => {
+        }).finally(() => {
+            this.setState({actionLoading: null})
         })
     }
 
@@ -126,7 +167,7 @@ export default class extends React.Component {
 
     render() {
         const {loading, detail, error, activeKey, paneHeight,
-            removeOpen, removeForce, removing} = this.state
+            removeOpen, removeForce, removing, actionLoading} = this.state
         const {hostId, containerId, appId} = this.state.params
 
         if (!containerId && !appId) {
@@ -161,6 +202,22 @@ export default class extends React.Component {
             : `/admin/container/logs?hostId=${encodeURIComponent(hostId)}`
                 + `&containerId=${encodeURIComponent(targetId)}`
 
+        const runningDuration = running ? formatRunningDuration(detail.startedAt) : null
+        const canOperate = PermUtils.hasPermission('container:operate')
+
+        const {usage} = this.state
+        const usageText = (() => {
+            if (!usage) return null
+            if (usage.error && usage.memUsage == null && usage.cpuPercent == null) return null
+            const cpu = formatPercent(usage.cpuPercent)
+            const mem = (usage.memUsage == null && usage.memLimit == null)
+                ? '-'
+                : `${formatBytes(usage.memUsage)} / ${formatBytes(usage.memLimit)}`
+            const memPct = usage.memPercent == null ? '' : ` (${formatPercent(usage.memPercent)})`
+            const at = usage.collectedAt ? `　·　${formatClock(usage.collectedAt)}` : ''
+            return `CPU ${cpu}　·　内存 ${mem}${memPct}${at}`
+        })()
+
         const header = <Card size='small' className='mb-3' styles={{body: {padding: '12px 16px'}}}>
             <div style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -172,6 +229,7 @@ export default class extends React.Component {
                             {detail.name}
                         </Typography.Title>
                         <Tag color={stateColor(detail.state)}>{stateLabel(detail.state)}</Tag>
+                        {runningDuration && <Typography.Text type='secondary'>已运行 {runningDuration}</Typography.Text>}
                         {detail.status && <Typography.Text type='secondary'>{detail.status}</Typography.Text>}
                     </Space>
                     <div style={{marginTop: 6}}>
@@ -179,29 +237,26 @@ export default class extends React.Component {
                             镜像 {detail.image || '-'}　·　容器 ID {detail.idShort}　·　创建于 {formatTime(detail.created)}
                         </Typography.Text>
                     </div>
+                    {usageText && <div style={{marginTop: 4}}>
+                        <Typography.Text type='secondary' style={{fontSize: 12}}>
+                            {usageText}
+                        </Typography.Text>
+                    </div>}
                 </div>
                 <Space>
-                    <PermActions size='small' actions={[
-                        {
-                            label: '启动', perm: 'container:operate', disabled: running,
-                            onClick: () => this.action('start').catch(() => {
-                            })
-                        },
-                        {
-                            label: '停止', perm: 'container:operate', disabled: !running,
-                            onClick: () => this.action('stop').catch(() => {
-                            })
-                        },
-                        {
-                            label: '重启', perm: 'container:operate', disabled: !running,
-                            onClick: () => this.action('restart').catch(() => {
-                            })
-                        },
-                        {
-                            label: '删除', perm: 'container:operate', danger: true,
-                            onClick: this.openRemoveModal
-                        },
-                    ]}/>
+                    {canOperate && <>
+                        <Button size='small' disabled={running || !!actionLoading}
+                                loading={actionLoading === 'start'}
+                                onClick={() => this.handleAction('start')}>启动</Button>
+                        <Button size='small' disabled={!running || !!actionLoading}
+                                loading={actionLoading === 'stop'}
+                                onClick={() => this.handleAction('stop')}>停止</Button>
+                        <Button size='small' disabled={!running || !!actionLoading}
+                                loading={actionLoading === 'restart'}
+                                onClick={() => this.handleAction('restart')}>重启</Button>
+                        <Button size='small' danger disabled={!!actionLoading}
+                                onClick={this.openRemoveModal}>删除</Button>
+                    </>}
                     <Button size='small' icon={<ReloadOutlined/>} onClick={this.load}>刷新</Button>
                 </Space>
             </div>

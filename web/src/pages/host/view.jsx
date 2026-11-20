@@ -165,7 +165,7 @@ export default class extends React.Component {
         // 清理构建临时容器同样要逐个 inspect / 删除，按钮单独 loading
         pruneContainersLoading: false,
 
-        // 实时用量（docker stats）：由后端每 10 分钟的采集任务写入内存快照，页面只读
+        // 实时用量（docker stats）：由后端每 1 分钟的采集任务写入快照，页面只读库/快照
         usage: null,
         usageLoading: false,
         usageError: null,
@@ -266,7 +266,7 @@ export default class extends React.Component {
     }
 
     /**
-     * 读取实时用量：默认读后端每 10 分钟采集好的快照（不触发采集），refresh=true 才让后端现采一轮。
+     * 读取实时用量：默认读后端每 1 分钟采集好的快照（不触发采集），refresh=true 才让后端现采一轮。
      * 因此这里的轮询间隔只影响「多久看到新数字」，不会增加主机侧负载。
      */
     loadUsage = (id = this.state.id, refresh = false) => {
@@ -465,7 +465,7 @@ export default class extends React.Component {
     }
 
     /**
-     * 实时用量：概览卡片（主机汇总）+ 容器用量表格卡片，数据来自后端每 10 分钟的采集快照。
+     * 实时用量：概览卡片（主机汇总）+ 容器用量表格卡片，数据来自后端采集快照。
      */
     renderLiveUsage() {
         const {usage, usageLoading, usageError, usageUpdatedAt} = this.state

@@ -12,13 +12,13 @@ import {formatBytes, formatClock, formatPercent, toNumber, usageColor} from '../
  * <ul>
  *   <li>静态容量：{@code admin/home/hostSummary}（docker info），快，首屏先出；</li>
  *   <li>实时用量：{@code admin/home/hostUsage}（等价 docker stats），读的是后端定时任务
- *       （每 10 分钟一次）写下的快照，轮询本身不会再压主机；页面隐藏时暂停。</li>
+ *       （每 1 分钟一次）写下的快照，轮询本身不会再压主机；页面隐藏时暂停。</li>
  * </ul>
  * 实时用量采集失败或超时只让对应单元格显示占位，不会阻塞或破坏静态概览。
  */
 
 /**
- * 实时用量轮询间隔。数据源每 10 分钟才更新一次，这里仍按 30 秒读快照：
+ * 实时用量轮询间隔。数据源每 1 分钟更新一次，这里仍按 30 秒读快照：
  * 只是后端一次内存读，开销可以忽略，手动「刷新」现采后的结果也能尽快反映到界面上。
  */
 const USAGE_INTERVAL_MILLIS = 30_000
@@ -204,7 +204,7 @@ function HostResourceBoard() {
     const extra = <Space size={12}>
         {usageError
             ? <Typography.Text type='warning' style={{fontSize: 12}}>实时用量暂不可用</Typography.Text>
-            : usageAt && <Tooltip title='后台每 10 分钟采集一次，页面读的是最近一次快照'>
+            : usageAt && <Tooltip title='后台每 1 分钟采集一次，页面读的是最近一次快照'>
                 <Typography.Text type='secondary' style={{fontSize: 12}}>
                     数据时间 {formatClock(usageAt)}
                 </Typography.Text>
@@ -268,6 +268,66 @@ function HostResourceBoard() {
     </Card>
 }
 
+function ContainerMemTop() {
+    const [list, setList] = useState([])
+    const [loading, setLoading] = useState(true)
+    const [time, setTime] = useState(null)
+
+    const load = useCallback(() => {
+        HttpClient.get('admin/home/containerTop', {limit: 5}, {toastError: false})
+            .then(rs => {
+                const data = rs.data || []
+                setList(data)
+                const t = data.reduce((m, i) => Math.max(m, toNumber(i.collectedAt)), 0)
+                setTime(t || null)
+            })
+            .catch(() => setList([]))
+            .finally(() => setLoading(false))
+    }, [])
+
+    useEffect(() => {
+        load()
+        const timer = setInterval(() => {
+            if (!document.hidden) load()
+        }, USAGE_INTERVAL_MILLIS)
+        return () => clearInterval(timer)
+    }, [load])
+
+    const openContainer = record => {
+        if (record.appId && record.hostId) {
+            PageUtils.open(`/container/view?appId=${encodeURIComponent(record.appId)}&hostId=${encodeURIComponent(record.hostId)}&tab=logs`)
+        } else if (record.hostId && record.id) {
+            PageUtils.open(`/container/view?hostId=${encodeURIComponent(record.hostId)}&containerId=${encodeURIComponent(record.id)}&tab=logs`)
+        }
+    }
+
+    const columns = [
+        {
+            title: '容器', dataIndex: 'name',
+            render: (name, record) => <Button type='link' size='small' style={{padding: 0, height: 'auto'}}
+                                              onClick={() => openContainer(record)}>{name || record.id}</Button>
+        },
+        {
+            title: '主机 / 应用',
+            render: (_, record) => [record.hostName, record.appName].filter(Boolean).join(' / ') || '-'
+        },
+        {title: 'CPU', dataIndex: 'cpuPercent', width: 90, render: v => formatPercent(v)},
+        {
+            title: '内存', width: 240,
+            render: (_, record) => record.memUsage == null
+                ? '-'
+                : `${formatBytes(record.memUsage)} / ${formatBytes(record.memLimit)} (${formatPercent(record.memPercent)})`
+        },
+    ]
+
+    return <Card className='page-card page-card-fluid mt-4' title='内存占用 Top 5'
+                 extra={time ? <Typography.Text type='secondary' style={{fontSize: 12}}>数据时间 {formatClock(time)}</Typography.Text> : null}>
+        <Table rowKey={r => (r.hostId || '') + ':' + r.id} size='small' loading={loading}
+               dataSource={list} columns={columns} pagination={false}
+               locale={{emptyText: '暂无数据'}}/>
+    </Card>
+}
+
 export default function () {
     const canViewHost = PermUtils.hasPermission('host:list')
     // 看板页铺满内容区（与表单/详情页的 960 区分开），有无资源概览都要占满
@@ -275,6 +335,7 @@ export default function () {
 
     return <Page padding>
         {canViewHost && <HostResourceBoard/>}
+        {canViewHost && <ContainerMemTop/>}
 
         <Card className={cardClass}>
             <Typography.Title level={4} style={{marginTop: 0}}>欢迎来到 Docker Admin</Typography.Title>

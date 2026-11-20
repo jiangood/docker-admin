@@ -6,6 +6,7 @@ import cn.hutool.core.util.StrUtil;
 import io.github.jiangood.docker.admin.dto.HostImageExportTaskView;
 import io.github.jiangood.openadmin.framework.proxy.ProxySettings;
 import io.github.jiangood.docker.admin.entity.Host;
+import io.github.jiangood.docker.admin.service.ContainerUsageService;
 import io.github.jiangood.docker.admin.service.HostImageExportService;
 import io.github.jiangood.docker.admin.service.HostService;
 import io.github.jiangood.docker.admin.service.HostUsageService;
@@ -54,6 +55,9 @@ public class HostController  {
 
     @Resource
     private HostUsageSampleService hostUsageSampleService;
+
+    @Resource
+    private ContainerUsageService containerUsageService;
 
     @Resource
     private HostCliSessionRegistry cliSessionRegistry;
@@ -230,17 +234,33 @@ public class HostController  {
      * <p>
      * 权限与容器列表一致（{@code host:list} 或 {@code app:view}），因为明细里就是容器名与用量。
      * <p>
-     * 默认返回定时任务（每 10 分钟一次）写下的内存快照，<b>不触发采集</b>；{@code refresh=true}
-     * （用户点刷新）才现采一轮。
+     * 默认返回定时任务写下的快照，<b>不触发采集</b>；{@code refresh=true}（用户点刷新）才现采一轮。
+     * 容器明细统一从数据库快照读取。
      *
      * @param refresh 为 true 时忽略缓存立即采集
      */
     @RequestMapping("usage")
     public AjaxResult usage(String id, @RequestParam(defaultValue = "false") boolean refresh) {
         ContainerPermTool.assertView();
-        return AjaxResult.ok().data(refresh
+        io.github.jiangood.docker.admin.dto.HostUsageVo vo = refresh
                 ? hostUsageService.usage(id, true)
-                : hostUsageService.snapshot(id));
+                : hostUsageService.snapshot(id);
+        if (vo != null && refresh) {
+            // 手动刷新现采不走定时任务落库，这里同步写入容器快照，保持读库口径一致
+            try {
+                if (vo.isReachable()) {
+                    containerUsageService.replaceHost(vo.getHostId(), vo.getName(), vo.getCollectedAt(), vo.getContainers());
+                } else {
+                    containerUsageService.clearHost(id);
+                }
+            } catch (Exception e) {
+                log.warn("同步主机 {} 容器用量快照失败：{}", id, e.toString());
+            }
+        }
+        if (vo != null) {
+            vo.setContainers(containerUsageService.findByHostId(id));
+        }
+        return AjaxResult.ok().data(vo);
     }
 
     /**
