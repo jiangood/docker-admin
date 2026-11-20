@@ -179,24 +179,48 @@ export default class extends React.Component {
     renderLatest() {
         const {hosts, latestHostId, latest, latestLoading} = this.state
         const hostOptions = [{value: '', label: '全部主机'}, ...hosts]
-        const latestTime = latest.reduce((m, i) => Math.max(m, toNumber(i.collectedAt)), 0)
+        const latestTime = latest.reduce((m, i) => Math.max(m, toNumber(i.collectedAt) || 0), 0)
 
         const columns = [
-            {title: '主机', dataIndex: 'hostName', width: 140, render: v => v || '-'},
-            {title: '容器', dataIndex: 'name', width: 200, ellipsis: true, render: (v, r) => v || r.id},
-            {title: '应用', dataIndex: 'appName', width: 140, render: v => v || '-'},
-            {title: '镜像', dataIndex: 'image', width: 220, ellipsis: true},
-            {title: 'CPU', dataIndex: 'cpuPercent', width: 90, sorter: (a,b)=>toNumber(a.cpuPercent)-toNumber(b.cpuPercent), render: v => formatPercent(v)},
-            {title: '内存使用', dataIndex: 'memUsage', width: 120, sorter: (a,b)=>toNumber(a.memUsage)-toNumber(b.memUsage), render: v => formatBytes(v)},
-            {title: '内存上限', dataIndex: 'memLimit', width: 120, render: v => formatBytes(v)},
-            {title: '内存%', dataIndex: 'memPercent', width: 90, sorter: (a,b)=>toNumber(a.memPercent)-toNumber(b.memPercent), render: v => formatPercent(v)},
-            {title: '网络 ↓', dataIndex: 'netRx', width: 110, render: v => formatBytes(v)},
-            {title: '网络 ↑', dataIndex: 'netTx', width: 110, render: v => formatBytes(v)},
-            {title: '块读', dataIndex: 'blockRead', width: 110, render: v => formatBytes(v)},
-            {title: '块写', dataIndex: 'blockWrite', width: 110, render: v => formatBytes(v)},
-            {title: 'PID', dataIndex: 'pids', width: 80, render: v => v ?? '-'},
-            {title: '采集时间', dataIndex: 'collectedAt', width: 170, render: v => v ? formatClock(v) : '-'},
-            {title: '错误', dataIndex: 'error', width: 120, ellipsis: true, render: v => v ? <Tag color='red'>失败</Tag> : '-'},
+            {title: '主机', dataIndex: 'hostName', width: 140, ellipsis: true, render: v => v || '-'},
+            {title: '容器 ID', dataIndex: 'id', width: 140, render: v => v ? String(v).slice(0, 12) : '-'},
+            {
+                title: '名称', dataIndex: 'name', width: 220, ellipsis: true,
+                render: (v, r) => <Space size={4}>
+                    <span title={v || r.id}>{v || r.id || '-'}</span>
+                    {r.error ? <Tag color='red' title={r.error}>失败</Tag> : null}
+                </Space>
+            },
+            {
+                title: 'CPU %', dataIndex: 'cpuPercent', width: 100,
+                sorter: (a, b) => toNumber(a.cpuPercent) - toNumber(b.cpuPercent),
+                render: v => formatPercent(v)
+            },
+            {
+                title: '内存使用 / 上限', key: 'mem', width: 200,
+                sorter: (a, b) => toNumber(a.memUsage) - toNumber(b.memUsage),
+                render: (_, r) => (r.memUsage == null && r.memLimit == null)
+                    ? '-'
+                    : `${formatBytes(r.memUsage)} / ${formatBytes(r.memLimit)}`
+            },
+            {
+                title: '内存 %', dataIndex: 'memPercent', width: 100,
+                sorter: (a, b) => toNumber(a.memPercent) - toNumber(b.memPercent),
+                render: v => formatPercent(v)
+            },
+            {
+                title: '网络 I/O', key: 'net', width: 200,
+                render: (_, r) => (r.netRx == null && r.netTx == null)
+                    ? '-'
+                    : `↓ ${formatBytes(r.netRx)}  ↑ ${formatBytes(r.netTx)}`
+            },
+            {
+                title: '块 I/O', key: 'block', width: 200,
+                render: (_, r) => (r.blockRead == null && r.blockWrite == null)
+                    ? '-'
+                    : `读 ${formatBytes(r.blockRead)}  写 ${formatBytes(r.blockWrite)}`
+            },
+            {title: 'PIDS', dataIndex: 'pids', width: 90, render: v => v ?? '-'},
         ]
 
         const memBar = buildBarOption({title: '内存使用 Top 10', items: latest, valueKey: 'memUsage', formatter: v => formatBytes(v), color: '#52c41a'})
@@ -208,7 +232,7 @@ export default class extends React.Component {
                 <Select value={latestHostId} onChange={v => this.setState({latestHostId: v})}
                         options={hostOptions} style={{width: 220}}/>
                 {latestTime ? <Typography.Text type='secondary'>采集时间：{formatClock(latestTime)}</Typography.Text> : null}
-                <Typography.Text type='secondary'>共 {latest.length} 条（t_docker_stats）</Typography.Text>
+                <Typography.Text type='secondary'>共 {latest.length} 个容器</Typography.Text>
             </Space>
 
             {latestLoading && latest.length === 0
@@ -216,17 +240,17 @@ export default class extends React.Component {
                 : latest.length === 0
                     ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description='暂无快照数据'/>
                     : <>
-                        <Row gutter={16} className='mb-4'>
-                            <Col xs={24} lg={12}><Card size='small'><Chart height={320} option={memBar}/></Card></Col>
-                            <Col xs={24} lg={12}><Card size='small'><Chart height={320} option={cpuBar}/></Card></Col>
-                        </Row>
-                        <Card size='small' title='最新快照明细'>
+                        <Card size='small' title='容器用量' style={{marginBottom: 16}}>
                             <Table rowKey={r => (r.hostId || '') + ':' + r.id} size='small'
                                    dataSource={latest} columns={columns}
                                    scroll={{x: 'max-content'}}
                                    pagination={{pageSize: 20, showSizeChanger: true}}
                                    loading={latestLoading}/>
                         </Card>
+                        <Row gutter={16}>
+                            <Col xs={24} lg={12}><Card size='small'><Chart height={320} option={memBar}/></Card></Col>
+                            <Col xs={24} lg={12}><Card size='small'><Chart height={320} option={cpuBar}/></Card></Col>
+                        </Row>
                     </>}
         </>
     }
@@ -248,7 +272,7 @@ export default class extends React.Component {
         } else {
             body = <>
                 <Typography.Text type='secondary' style={{display: 'block', marginBottom: 8}}>
-                    采样点：{series.sampleCount}（t_docker_stats_his，按主机聚合）
+                    采样点：{series.sampleCount}（按主机聚合）
                 </Typography.Text>
                 <Chart height={240} option={buildTrendOption({
                     points, defs: TREND_CPU_DEFS, percent: true,
@@ -279,8 +303,8 @@ export default class extends React.Component {
     render() {
         const {activeTab} = this.state
         const items = [
-            {key: 'latest', label: '最新快照 (t_docker_stats)', children: this.renderLatest()},
-            {key: 'history', label: '历史趋势 (t_docker_stats_his)', children: this.renderHistory()},
+            {key: 'latest', label: '最新快照', children: this.renderLatest()},
+            {key: 'history', label: '历史趋势', children: this.renderHistory()},
         ]
         return <Page padding>
             <Card>
