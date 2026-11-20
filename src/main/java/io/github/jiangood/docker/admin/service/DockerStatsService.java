@@ -105,6 +105,23 @@ public class DockerStatsService {
         return result;
     }
 
+    /**
+     * 列出最新快照，可按主机过滤。
+     */
+    public List<ContainerUsageVo> list(String hostId) {
+        List<DockerStats> list = StringUtils.hasText(hostId)
+                ? repository.findByHostId(hostId)
+                : repository.findAll();
+        if (list == null || list.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<ContainerUsageVo> result = new ArrayList<>(list.size());
+        for (DockerStats e : list) {
+            result.add(toVo(e));
+        }
+        return result;
+    }
+
     public static ContainerUsageVo toVo(DockerStats e) {
         if (e == null) {
             return null;

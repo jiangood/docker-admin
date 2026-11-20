@@ -1,16 +1,16 @@
 import React, {useEffect, useRef} from 'react'
 import * as echarts from 'echarts/core'
-import {LineChart} from 'echarts/charts'
+import {BarChart, LineChart} from 'echarts/charts'
 import {GridComponent, LegendComponent, TooltipComponent} from 'echarts/components'
 import {CanvasRenderer} from 'echarts/renderers'
 
 /**
  * 极薄的 echarts 封装：不做 React wrapper，只负责「初始化 / 跟随容器尺寸 / 数据变化时重绘」。
  * <p>
- * 按需注册图表与组件（折线 + 网格 + 图例 + 提示框），比全量引入小一个数量级；
+ * 按需注册图表与组件，比全量引入小一个数量级；
  * 与 React 19 没有版本耦合，升级 antd 或 React 不受影响。
  */
-echarts.use([LineChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer])
+echarts.use([LineChart, BarChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer])
 
 export default function Chart({option, height = 220}) {
     const containerRef = useRef(null)
