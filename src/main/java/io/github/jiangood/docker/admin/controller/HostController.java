@@ -6,11 +6,11 @@ import cn.hutool.core.util.StrUtil;
 import io.github.jiangood.docker.admin.dto.HostImageExportTaskView;
 import io.github.jiangood.openadmin.framework.proxy.ProxySettings;
 import io.github.jiangood.docker.admin.entity.Host;
-import io.github.jiangood.docker.admin.service.ContainerUsageService;
+import io.github.jiangood.docker.admin.service.DockerStatsHisService;
+import io.github.jiangood.docker.admin.service.DockerStatsService;
 import io.github.jiangood.docker.admin.service.HostImageExportService;
 import io.github.jiangood.docker.admin.service.HostService;
 import io.github.jiangood.docker.admin.service.HostUsageService;
-import io.github.jiangood.docker.admin.service.HostUsageSampleService;
 import io.github.jiangood.docker.admin.util.ContainerPermTool;
 import io.github.jiangood.docker.admin.websocket.HostCliSessionRegistry;
 import io.github.jiangood.openadmin.framework.auth.LoginTool;
@@ -54,10 +54,10 @@ public class HostController  {
     private HostUsageService hostUsageService;
 
     @Resource
-    private HostUsageSampleService hostUsageSampleService;
+    private DockerStatsService dockerStatsService;
 
     @Resource
-    private ContainerUsageService containerUsageService;
+    private DockerStatsHisService dockerStatsHisService;
 
     @Resource
     private HostCliSessionRegistry cliSessionRegistry;
@@ -249,16 +249,17 @@ public class HostController  {
             // 手动刷新现采不走定时任务落库，这里同步写入容器快照，保持读库口径一致
             try {
                 if (vo.isReachable()) {
-                    containerUsageService.replaceHost(vo.getHostId(), vo.getName(), vo.getCollectedAt(), vo.getContainers());
+                    dockerStatsService.replaceHost(vo.getHostId(), vo.getName(), vo.getCpus(),
+                            vo.getMemoryTotal(), vo.getCollectedAt(), vo.getContainers());
                 } else {
-                    containerUsageService.clearHost(id);
+                    dockerStatsService.clearHost(id);
                 }
             } catch (Exception e) {
                 log.warn("同步主机 {} 容器用量快照失败：{}", id, e.toString());
             }
         }
         if (vo != null) {
-            vo.setContainers(containerUsageService.findByHostId(id));
+            vo.setContainers(dockerStatsService.findByHostId(id));
         }
         return AjaxResult.ok().data(vo);
     }
@@ -271,7 +272,7 @@ public class HostController  {
     @RequestMapping("usageHistory")
     public AjaxResult usageHistory(String id, @RequestParam(defaultValue = "24h") String range) {
         ContainerPermTool.assertView();
-        return AjaxResult.ok().data(hostUsageSampleService.series(id, range));
+        return AjaxResult.ok().data(dockerStatsHisService.series(id, range));
     }
 
     /**

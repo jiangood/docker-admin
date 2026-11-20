@@ -60,8 +60,7 @@ import java.util.stream.Collectors;
  * 数据来源两条链路：
  * <ul>
  *   <li><b>定时任务</b>（{@code HostUsageCollectJob}，每 {@link #COLLECT_INTERVAL} 一轮）调
- *       {@link #collectAll()} 采一轮、写缓存，并交回结果由 {@code HostUsageSampleService} 落主机采样、
- *       由 {@code ContainerUsageService} 落容器快照；</li>
+ *       {@link #collectAll()} 采一轮、写缓存，并交回结果由采集任务落库（容器最新快照与历史）；</li>
  *   <li><b>页面请求</b>只读快照（{@link #snapshotAll()} / {@link #snapshot(String)}），不触发采集，
  *       所以开多少个标签页都不会增加主机侧负载；只有用户点「刷新」才走 {@link #usageAll(boolean)} 现采。</li>
  * </ul>

@@ -1,8 +1,8 @@
 package io.github.jiangood.docker.admin.job;
 
 import io.github.jiangood.docker.admin.dto.HostUsageVo;
-import io.github.jiangood.docker.admin.service.ContainerUsageService;
-import io.github.jiangood.docker.admin.service.HostUsageSampleService;
+import io.github.jiangood.docker.admin.service.DockerStatsHisService;
+import io.github.jiangood.docker.admin.service.DockerStatsService;
 import io.github.jiangood.docker.admin.service.HostUsageService;
 import io.github.jiangood.openadmin.modules.job.BaseJob;
 import io.github.jiangood.openadmin.modules.job.JobDescription;
@@ -12,16 +12,11 @@ import org.slf4j.Logger;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Objects;
 
 /**
- * 主机用量采集（每 1 分钟）：等价于 {@code docker stats} 的一轮快照，既是页面的数据源，
- * 也是主机历史曲线与容器用量快照的采样点。
- * <p>
- * 与页面轮询的关系：页面只读库/快照，不再自己采集，所以无论开多少个标签页，
- * 主机侧都只有这里每轮一次的开销；用户点「刷新」时可以就地现采一轮。
- * <p>
- * 任务实例由 Quartz 每次触发重建，不能跨轮保存状态；退避计数放在 {@link HostUsageService} 里。
- * {@link BaseJob} 带 {@code @DisallowConcurrentExecution}，一轮最坏十几秒，不会和下一次重叠。
+ * 主机/容器用量采集（每 1 分钟）：采集 docker stats，更新容器最新快照；
+ * 每 10 分钟额外写入一份容器粒度历史（用于趋势图，按主机聚合展示）。
  */
 @Component
 @JobDescription(label = "主机用量采集")
@@ -31,10 +26,10 @@ public class HostUsageCollectJob extends BaseJob {
     private HostUsageService hostUsageService;
 
     @Resource
-    private HostUsageSampleService hostUsageSampleService;
+    private DockerStatsService dockerStatsService;
 
     @Resource
-    private ContainerUsageService containerUsageService;
+    private DockerStatsHisService dockerStatsHisService;
 
     @Override
     public String execute(JobDataMap data, Logger logger) {
@@ -45,41 +40,49 @@ public class HostUsageCollectJob extends BaseJob {
                 .filter(HostUsageVo::isReachable)
                 .toList();
 
-        int sampleRows = 0;
-        int containerRows = 0;
-        if (!reachable.isEmpty()) {
+        // 1) 最新快照：每轮更新（容器粒度）
+        int snapshotRows = 0;
+        for (HostUsageVo vo : reachable) {
             try {
-                sampleRows = hostUsageSampleService.saveBatch(reachable);
+                snapshotRows += dockerStatsService.replaceHost(
+                        vo.getHostId(), vo.getName(), vo.getCpus(), vo.getMemoryTotal(),
+                        vo.getCollectedAt(), vo.getContainers());
             } catch (Exception e) {
-                // 落库失败不影响采集本身：内存里已有最新值，下一轮还会再写
-                logger.warn("写入主机用量采样失败：{}", e.toString());
-            }
-            for (HostUsageVo vo : reachable) {
-                try {
-                    containerRows += containerUsageService.replaceHost(
-                            vo.getHostId(), vo.getName(), vo.getCollectedAt(), vo.getContainers());
-                } catch (Exception e) {
-                    logger.warn("写入主机 {} 容器用量快照失败：{}", vo.getName(), e.toString());
-                }
+                logger.warn("写入主机 {} 容器用量快照失败：{}", vo.getName(), e.toString());
             }
         }
 
-        // 离线 / 采集失败的主机：清空容器快照，避免展示过期数据
+        // 2) 历史：每 10 分钟写一次（容器粒度，供趋势聚合）
+        int hisRows = 0;
+        Long hisTime = reachable.stream()
+                .map(HostUsageVo::getCollectedAt)
+                .filter(Objects::nonNull)
+                .max(Long::compareTo)
+                .orElse(null);
+        if (hisTime != null && dockerStatsHisService.isHistoryRound(hisTime)) {
+            try {
+                hisRows = dockerStatsHisService.saveBatch(reachable);
+                dockerStatsHisService.markHistoryWritten(hisTime);
+            } catch (Exception e) {
+                logger.warn("写入容器用量历史失败：{}", e.toString());
+            }
+        }
+
+        // 3) 离线 / 采集失败 / 退避跳过：清空最新快照，避免展示过期数据
         for (HostUsageVo vo : result.values()) {
             if (!vo.isReachable()) {
                 logger.warn("主机 {} 用量采集失败：{}", vo.getName(), vo.getError());
                 try {
-                    containerUsageService.clearHost(vo.getHostId());
+                    dockerStatsService.clearHost(vo.getHostId());
                 } catch (Exception e) {
                     logger.warn("清理主机 {} 容器用量快照失败：{}", vo.getName(), e.toString());
                 }
             }
         }
-        // 退避跳过的主机：本轮未采集，同样清空容器快照
         if (result.skippedHostIds() != null) {
             for (String hostId : result.skippedHostIds()) {
                 try {
-                    containerUsageService.clearHost(hostId);
+                    dockerStatsService.clearHost(hostId);
                 } catch (Exception e) {
                     logger.warn("清理退避主机 {} 容器用量快照失败：{}", hostId, e.toString());
                 }
@@ -87,12 +90,19 @@ public class HostUsageCollectJob extends BaseJob {
         }
 
         try {
-            hostUsageSampleService.pruneIfDue();
+            dockerStatsHisService.pruneIfDue();
         } catch (Exception e) {
-            logger.warn("清理过期用量采样失败：{}", e.toString());
+            logger.warn("清理过期容器用量历史失败：{}", e.toString());
         }
 
         progress("采集完成");
-        return result.describe() + "，主机采样 " + sampleRows + " 条，容器快照 " + containerRows + " 条";
+        String msg = result.describe() + "，快照 " + snapshotRows + " 条";
+        if (hisRows > 0 || (hisTime != null && !dockerStatsHisService.isHistoryRound(hisTime))) {
+            // 报告本轮是否写了历史
+        }
+        if (hisRows > 0) {
+            msg += "，历史 " + hisRows + " 条";
+        }
+        return msg;
     }
 }

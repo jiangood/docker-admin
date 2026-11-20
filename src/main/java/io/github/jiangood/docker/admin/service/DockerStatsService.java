@@ -1,8 +1,8 @@
 package io.github.jiangood.docker.admin.service;
 
-import io.github.jiangood.docker.admin.dao.ContainerUsageRepository;
+import io.github.jiangood.docker.admin.dao.DockerStatsRepository;
 import io.github.jiangood.docker.admin.dto.ContainerUsageVo;
-import io.github.jiangood.docker.admin.entity.ContainerUsage;
+import io.github.jiangood.docker.admin.entity.DockerStats;
 import jakarta.annotation.Resource;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -17,32 +17,31 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * 容器用量最新快照：按主机整体替换、清空与查询。
- * <p>
- * 数据由 {@link HostUsageCollectJob} 每轮采集后写入，页面只读库。
+ * 容器用量最新快照（t_docker_stats，按容器粒度，每轮覆盖）：写入与查询。
  */
 @Service
-public class ContainerUsageService {
+public class DockerStatsService {
 
     @Resource
-    private ContainerUsageRepository repository;
+    private DockerStatsRepository repository;
 
     /**
-     * 用本轮采集结果整体替换该主机的容器快照（停止/删除/重建的容器随之消失）。
+     * 用本轮采集结果整体替换该主机的容器快照。
      */
     @Transactional
-    public int replaceHost(String hostId, String hostName, Long collectedAt, List<ContainerUsageVo> containers) {
+    public int replaceHost(String hostId, String hostName, Integer hostCpus, Long hostMemoryTotal,
+                           Long collectedAt, List<ContainerUsageVo> containers) {
         repository.deleteByHostId(hostId);
         if (containers == null || containers.isEmpty()) {
             return 0;
         }
         LocalDateTime at = toLocalDateTime(collectedAt);
-        List<ContainerUsage> rows = new ArrayList<>(containers.size());
+        List<DockerStats> rows = new ArrayList<>(containers.size());
         for (ContainerUsageVo vo : containers) {
             if (vo == null || !StringUtils.hasText(vo.getId())) {
                 continue;
             }
-            rows.add(toEntity(vo, hostId, hostName, at));
+            rows.add(toEntity(vo, hostId, hostName, hostCpus, hostMemoryTotal, at));
         }
         if (rows.isEmpty()) {
             return 0;
@@ -52,7 +51,7 @@ public class ContainerUsageService {
     }
 
     /**
-     * 清空该主机的容器快照（主机离线 / 采集失败 / 退避跳过时调用，避免展示过期数据）。
+     * 清空该主机的容器快照（主机离线 / 采集失败 / 退避跳过时调用）。
      */
     @Transactional
     public int clearHost(String hostId) {
@@ -62,63 +61,51 @@ public class ContainerUsageService {
         return repository.deleteByHostId(hostId);
     }
 
-    /**
-     * 按应用查询当前容器用量。
-     */
     public ContainerUsageVo findByAppId(String appId) {
         if (!StringUtils.hasText(appId)) {
             return null;
         }
-        ContainerUsage entity = repository.findByAppId(appId);
+        DockerStats entity = repository.findByAppId(appId);
         return entity == null ? null : toVo(entity);
     }
 
-    /**
-     * 按主机 + 容器查询当前用量。
-     */
     public ContainerUsageVo findByHostIdAndContainerId(String hostId, String containerId) {
         if (!StringUtils.hasText(hostId) || !StringUtils.hasText(containerId)) {
             return null;
         }
-        ContainerUsage entity = repository.findByHostIdAndContainerId(hostId, containerId);
+        DockerStats entity = repository.findByHostIdAndContainerId(hostId, containerId);
         return entity == null ? null : toVo(entity);
     }
 
-    /**
-     * 查询某主机的全部容器用量快照。
-     */
     public List<ContainerUsageVo> findByHostId(String hostId) {
         if (!StringUtils.hasText(hostId)) {
             return Collections.emptyList();
         }
-        List<ContainerUsage> list = repository.findByHostId(hostId);
+        List<DockerStats> list = repository.findByHostId(hostId);
         if (list == null || list.isEmpty()) {
             return Collections.emptyList();
         }
         List<ContainerUsageVo> result = new ArrayList<>(list.size());
-        for (ContainerUsage e : list) {
+        for (DockerStats e : list) {
             result.add(toVo(e));
         }
         return result;
     }
 
-    /**
-     * 全局按内存用量倒序取 TopN。
-     */
     public List<ContainerUsageVo> topByMemUsage(int limit) {
         int n = limit <= 0 ? 5 : Math.min(limit, 100);
-        List<ContainerUsage> list = repository.findTopByMemUsage(PageRequest.of(0, n));
+        List<DockerStats> list = repository.findTopByMemUsage(PageRequest.of(0, n));
         if (list == null || list.isEmpty()) {
             return Collections.emptyList();
         }
         List<ContainerUsageVo> result = new ArrayList<>(list.size());
-        for (ContainerUsage e : list) {
+        for (DockerStats e : list) {
             result.add(toVo(e));
         }
         return result;
     }
 
-    public static ContainerUsageVo toVo(ContainerUsage e) {
+    public static ContainerUsageVo toVo(DockerStats e) {
         if (e == null) {
             return null;
         }
@@ -145,15 +132,19 @@ public class ContainerUsageService {
         return vo;
     }
 
-    private static ContainerUsage toEntity(ContainerUsageVo vo, String hostId, String hostName, LocalDateTime at) {
-        ContainerUsage e = new ContainerUsage();
+    private static DockerStats toEntity(ContainerUsageVo vo, String hostId, String hostName,
+                                        Integer hostCpus, Long hostMemoryTotal, LocalDateTime at) {
+        DockerStats e = new DockerStats();
         e.setHostId(hostId);
         e.setHostName(hostName);
+        e.setHostCpus(hostCpus);
+        e.setHostMemoryTotal(hostMemoryTotal);
         e.setContainerId(vo.getId());
         e.setContainerName(vo.getName());
         e.setImage(vo.getImage());
         e.setAppId(vo.getAppId());
         e.setAppName(vo.getAppName());
+        e.setCollectedAt(at);
         e.setCpuPercent(vo.getCpuPercent());
         e.setMemUsage(vo.getMemUsage());
         e.setMemLimit(vo.getMemLimit());
@@ -164,11 +155,10 @@ public class ContainerUsageService {
         e.setBlockWrite(vo.getBlockWrite());
         e.setPids(vo.getPids());
         e.setError(vo.getError());
-        e.setCollectedAt(at);
         return e;
     }
 
-    private static LocalDateTime toLocalDateTime(Long epochMillis) {
+    public static LocalDateTime toLocalDateTime(Long epochMillis) {
         if (epochMillis == null) {
             return LocalDateTime.now();
         }

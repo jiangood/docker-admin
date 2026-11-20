@@ -12,7 +12,7 @@ import io.github.jiangood.docker.admin.entity.DeployLog;
 import io.github.jiangood.docker.admin.entity.DeployTrigger;
 import io.github.jiangood.docker.admin.service.AppService;
 import io.github.jiangood.docker.admin.service.ContainerService;
-import io.github.jiangood.docker.admin.service.ContainerUsageService;
+import io.github.jiangood.docker.admin.service.DockerStatsService;
 import io.github.jiangood.docker.admin.websocket.DockerLogService;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import io.github.jiangood.openadmin.modules.logviewer.service.FileLogService;
@@ -76,7 +76,7 @@ public class AppController {
     private DockerSettings dockerSettings;
 
     @Resource
-    private ContainerUsageService containerUsageService;
+    private DockerStatsService dockerStatsService;
 
     @HasPermission("app:view")
     @RequestMapping("list")
@@ -127,7 +127,7 @@ public class AppController {
     @RequestMapping("usage")
     public AjaxResult usage(String id) {
         App app = assertAppAccess(id);
-        return AjaxResult.ok().data(containerUsageService.findByAppId(app.getId()));
+        return AjaxResult.ok().data(dockerStatsService.findByAppId(app.getId()));
     }
 
     /**

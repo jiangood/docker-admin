@@ -7,7 +7,7 @@ import io.github.jiangood.docker.admin.dto.ContainerFileVo;
 import io.github.jiangood.docker.admin.dto.ContainerFileWriteRequest;
 import io.github.jiangood.docker.admin.dto.ContainerSummaryVo;
 import io.github.jiangood.docker.admin.service.ContainerService;
-import io.github.jiangood.docker.admin.service.ContainerUsageService;
+import io.github.jiangood.docker.admin.service.DockerStatsService;
 import io.github.jiangood.docker.admin.service.HostService;
 import io.github.jiangood.docker.admin.util.ContainerPermTool;
 import io.github.jiangood.docker.admin.websocket.DockerLogService;
@@ -46,7 +46,7 @@ public class ContainerController {
     private DockerSettings dockerSettings;
 
     @Resource
-    private ContainerUsageService containerUsageService;
+    private DockerStatsService dockerStatsService;
 
     // ------------------------------------------------------------------ 查看
 
@@ -74,7 +74,7 @@ public class ContainerController {
         ContainerPermTool.assertView();
         requireHost(hostId);
         Assert.hasText(containerId, "containerId 不能为空");
-        return AjaxResult.ok().data(containerUsageService.findByHostIdAndContainerId(hostId, containerId));
+        return AjaxResult.ok().data(dockerStatsService.findByHostIdAndContainerId(hostId, containerId));
     }
 
     /**

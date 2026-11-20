@@ -3,7 +3,7 @@ package io.github.jiangood.docker.admin.controller;
 import io.github.jiangood.docker.admin.entity.BuildLog;
 import io.github.jiangood.docker.admin.entity.Project;
 import io.github.jiangood.docker.admin.service.BuildLogService;
-import io.github.jiangood.docker.admin.service.ContainerUsageService;
+import io.github.jiangood.docker.admin.service.DockerStatsService;
 import io.github.jiangood.docker.admin.service.HostSummaryService;
 import io.github.jiangood.docker.admin.service.HostUsageService;
 import io.github.jiangood.docker.admin.service.ProjectService;
@@ -41,7 +41,7 @@ public class HomeController {
     HostUsageService hostUsageService;
 
     @Resource
-    ContainerUsageService containerUsageService;
+    DockerStatsService dockerStatsService;
 
     /**
      * 首页「主机资源汇总」看板。参考 Rancher 首页：全局概览 + 逐主机明细。
@@ -81,7 +81,7 @@ public class HomeController {
     @HasPermission("host:list")
     @RequestMapping("containerTop")
     public AjaxResult containerTop(@RequestParam(defaultValue = "5") int limit) {
-        return AjaxResult.ok().data(containerUsageService.topByMemUsage(limit));
+        return AjaxResult.ok().data(dockerStatsService.topByMemUsage(limit));
     }
 
     @HasPermission("app:view")
