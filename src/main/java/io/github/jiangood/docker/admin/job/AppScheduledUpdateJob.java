@@ -25,11 +25,7 @@ public class AppScheduledUpdateJob extends BaseJob {
 
     @Override
     public String execute(JobDataMap data, Logger logger) {
-        progress("开始检查应用定时更新");
-
         AppService.ScheduledUpdateSummary summary = appService.runDueScheduledUpdates();
-
-        progress("检查完成");
         return summary.describe();
     }
 }

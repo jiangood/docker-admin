@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "description": "open-admin 框架文件同步清单。oa-upgrade-docs 按此清单从指定 tag 的源码归档同步文件到业务项目。",
+  "sync": [
+    {
+      "path": "docs/framework-sync.json",
+      "mode": "copy",
+      "comment": "同步清单本身"
+    },
+    {
+      "path": ".opencode/skills/oa-crud",
+      "mode": "mirror",
+      "comment": "CRUD 生成 skill（框架维护，目录内全量镜像）"
+    },
+    {
+      "path": ".opencode/skills/oa-upgrade",
+      "mode": "mirror",
+      "comment": "框架升级 skill（框架维护，目录内全量镜像）"
+    },
+    {
+      "path": ".opencode/skills/oa-upgrade-docs",
+      "mode": "mirror",
+      "comment": "框架文件同步 skill（框架维护，目录内全量镜像）"
+    },
+    {
+      "path": "docs/open-admin",
+      "mode": "mirror",
+      "comment": "框架文档（框架维护，目录内全量镜像）"
+    }
+  ]
+}

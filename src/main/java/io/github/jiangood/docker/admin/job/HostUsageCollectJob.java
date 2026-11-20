@@ -33,8 +33,6 @@ public class HostUsageCollectJob extends BaseJob {
 
     @Override
     public String execute(JobDataMap data, Logger logger) {
-        progress("开始采集主机用量");
-
         HostUsageService.CollectResult result = hostUsageService.collectAll();
         List<HostUsageVo> reachable = result.values().stream()
                 .filter(HostUsageVo::isReachable)
@@ -95,7 +93,6 @@ public class HostUsageCollectJob extends BaseJob {
             logger.warn("清理过期容器用量历史失败：{}", e.toString());
         }
 
-        progress("采集完成");
         String msg = result.describe() + "，快照 " + snapshotRows + " 条";
         if (hisRows > 0 || (hisTime != null && !dockerStatsHisService.isHistoryRound(hisTime))) {
             // 报告本轮是否写了历史

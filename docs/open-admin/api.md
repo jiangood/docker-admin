@@ -96,30 +96,13 @@ public class DataSyncJob extends BaseJob {
 
 启动时框架会按 `BaseJob` 子类 / `@JobDescription` 自动补建缺失的 `sys_job` 记录（默认禁用，不覆盖已有配置），也支持 `JobRegistrar` SPI 显式注册；`key` / `defaultCron` / `defaultEnabled` / `logAggregation` / `autoRegister` 见 [development.md](development.md) 的「自动注册」。
 
-进度上报（`BaseJob` 受保护方法，供前端「定时任务」页面轮询展示）：
-
-| 方法 | 说明 |
-|------|------|
-| `progress(int percent, String message)` | 直接上报百分比（0-100） |
-| `progress(long current, long total, String message)` | 上报「已处理/总数」，百分比自动计算 |
-| `progress(String message)` | 仅更新描述，进度未知时使用 |
-
-进度只保存在内存（`JobProgressRegistry`），重启后丢失；执行结果仍由 `sys_job_log` 落库。
-
 > cron 使用 Quartz 格式，共 6 或 7 段：**秒 分 时 日 月 周 [年]**，第一位是秒。例如 `0 */5 * * * ?` 表示每 5 分钟，`*/5 * * * * ?` 表示每 5 秒。
 
-| 端点 | HTTP | 权限 | 说明 |
-|------|------|------|------|
-| `admin/job/progress` | GET | `job:read` | 全部任务运行进度快照，按开始时间倒序 |
-| `admin/job/progress/{jobId}` | GET | `job:read` | 单个任务进度，从未运行时 `data` 为 `null` |
-
-快照字段：`jobId` / `jobName` / `logId` / `state`(`RUNNING`/`SUCCESS`/`FAILED`) / `stateLabel` / `stateColor` / `percent` / `current` / `total` / `message` / `beginTime` / `updateTime` / `endTime` / `runTime` / `result`。
-
-页面顶部统计卡片（运行中 / 今日执行 / 日志占用 / 调度器）：
+页面顶部统计卡片（今日执行 / 日志占用 / 调度器）：
 
 | 端点 | HTTP | 权限 | 说明 |
 |------|------|------|------|
-| `admin/job/stat` | GET | `job:read` | `jobCount` / `enabledCount` / `runningCount` / `todayExecuteCount` / `todayFailCount` / `scheduler` |
+| `admin/job/stat` | GET | `job:read` | `jobCount` / `enabledCount` / `todayExecuteCount` / `todayFailCount` / `scheduler` |
 | `admin/job/log-size` | GET | `job:read` | 全部任务日志占用：`bytes` / `files` / `warnMb` / `warn` |
 | `admin/job/{jobId}/log-size` | GET | `job:read` | 指定任务的日志占用：`bytes` / `files` |
 
@@ -328,8 +311,8 @@ mailService.sendAsync(MailMessage.builder()
 
 | 属性 | 类型 | 说明 |
 |---|---|---|
-| `headerExtra` | `(context: HeaderExtraContext) => React.ReactNode` | 顶栏额外内容，默认渲染在 `HeaderRight` 左侧；`context` 含 `activeTopMenu`、`loginInfo` |
-| `headerExtraStretch` | `boolean` | 为 `true` 时 `headerExtra` 紧跟一级菜单并撑满顶栏剩余空间；默认 `false`（保持原位置）。需要常驻条（如预警滚动条）时使用，不要覆盖 `.top-nav` |
+| `headerExtra` | `(context: HeaderExtraContext) => React.ReactNode` | 顶栏额外内容，默认渲染在 `HeaderRight` 左侧；`context` 含 `activeTopMenu`、`loginInfo`。框架已移除顶部菜单，`activeTopMenu` 恒为 `null`，保留字段以兼容旧签名 |
+| `headerExtraStretch` | `boolean` | 为 `true` 时 `headerExtra` 撑满顶栏剩余空间；默认 `false`（保持原位置）。需要常驻条（如预警滚动条）时使用 |
 | `showOrgSwitcher` | `(context: HeaderExtraContext) => boolean` | 是否显示组织机构切换器 |
 | `colors` | `Partial<ThemeColors>` | 主题颜色基线，见 [config.md](config.md) |
 
@@ -356,11 +339,9 @@ TS 页面可 `import type {PageMeta} from '@jiangood/open-admin'` 并标注 `pag
 
 | 页面位置 | `requiresAuth` | `layout` |
 |---|---|---|
-| `pages/public/**` | `false` | `blank` |
-| `pages/standalone/**` | `true` | `blank` |
 | 其他 `pages/**` | `true` | `admin` |
 
-`/login`（`pages/login.jsx`，登录页）默认按 `requiresAuth: false` + `layout: 'blank'` 处理，业务项目覆盖登录页时无需重复声明。`requiresAuth: false` 与 `layout: 'admin'` 是非法组合，会自动修正为 `blank` 并输出 `console.warn`。路由表条目为 `{path, component, meta}`，`matchRoute(pathname)` 的返回值包含 `meta`。
+`/login`（`pages/login.jsx`，登录页）默认按 `requiresAuth: false` + `layout: 'blank'` 处理，业务项目覆盖登录页时无需重复声明。免登录页面应显式声明 `requiresAuth: false` 且 `layout: 'blank'`；需登录但不使用后台布局的页面应显式声明 `layout: 'blank'`（如 `pages/force-update-pwd.jsx`）。`requiresAuth: false` 与 `layout: 'admin'` 是非法组合，会自动修正为 `blank` 并输出 `console.warn`。路由表条目为 `{path, component, meta}`，`matchRoute(pathname)` 的返回值包含 `meta`。
 
 页面标题优先级（同时用于页签和浏览器标题）：
 
@@ -684,7 +665,7 @@ location /file/public/ {
 
 | 类 | 主要方法 |
 |----|---------|
-| `HttpClient` | `get` / `post` / `postForm` / `download` / `ajax`（axios 封装，自动 context-path；所有请求方法返回 `Promise<AjaxBody>`：成功 resolve 整个 AjaxResult 响应体（`{success, code, data, message, traceId, ...}`，业务取数据用 `rs.data`、提示文案用 `rs.message`），失败 `reject({code, message})` 且默认自动弹错；成功时后端返回了 `message` 会自动 `message.success` 弹出（传 `{toastSuccess: false}` 关闭），失败弹错传 `{toastError: false}` 可静默仅 reject。**例外**：`401`（HTTP 401 或业务 code=401）不单独弹错，而是广播 `loginExpired` 由全局登录失效弹窗提示；非 `AjaxResult` 结构的响应体一律按失败处理） |
+| `HttpClient` | `get` / `post` / `postForm` / `download` / `ajax`（axios 封装，自动 context-path；所有请求方法返回 `Promise<AjaxBody>`：成功 resolve 整个 AjaxResult 响应体（`{success, code, data, message, traceId, ...}`，业务取数据用 `rs.data`、提示文案用 `rs.message`），失败 `reject({code, message})` 且默认自动弹错；失败弹错传 `{autoShowErrorMessage: false}` 可静默仅 reject；成功提示由业务按需自行处理（如 `getMessageApi().success(rs.message)`）。**例外**：`401`（HTTP 401 或业务 code=401）不单独弹错，而是广播 `loginExpired` 由全局登录失效弹窗提示；非 `AjaxResult` 结构的响应体一律按失败处理） |
 | `UrlUtils` | `contextPath(path)` 拼接 context-path / `getParams` / `setParam` / `getPathname` |
 | `DictUtils` | `dictList` / `dictLabel` / `dictOptions` / `dictTag` |
 | `TreeUtils` | `walk` / `findByKey` / `flattenTree` / `getKeyList` / `getChildRecursive` |
@@ -699,7 +680,7 @@ location /file/public/ {
 
 `DateUtils.toDate` 统一解析后端时间字段：`Date`、epoch 秒、epoch 毫秒、ISO 串、`YYYY-MM-DD HH:mm:ss`、纯日期（按本地零点），无效或空值返回 `null`；`formatDate*` 同样接受这些入参，解析失败返回空串。后端时间字段可能是 epoch 秒、epoch 毫秒或 ISO 串，业务侧请直接用 `toDate`，不要手写 `v * 1000` 或 `new Date(v)`。`friendlyTime(value, options?)` 的选项：`showSeconds`（默认 `true`，`false` 时不足 1 分钟显示「刚刚」）、`daysOnly`（默认 `false`，`true` 时不换算成「周」）、`future`（默认 `'after'`，`'clamp'` 时未来时间显示「刚刚」）、`empty`（无效值占位，默认 `undefined`）。
 
-`EventBus.on` / `once` 返回取消订阅函数；`on` 支持传 `ctx`（this）。`PageUtils.open(path)` 用于跳转到页面，`PageUtils.currentTitle()` 返回当前页面标题（不含系统标题，未设置时返回 `undefined`）；页面标题请由目标页面通过 `pageMeta.title` 提供。`PageUtils.open(path, label)` 的 `label` 参数与 URL 中的 `_label` 已弃用且不再生效，传入时控制台会输出一次弃用提示。登录相关跳转请使用 `LOGIN_PATH`，不要硬编码 `/public/login`。
+`EventBus.on` / `once` 返回取消订阅函数；`on` 支持传 `ctx`（this）。`PageUtils.open(path)` 用于跳转到页面，`PageUtils.currentTitle()` 返回当前页面标题（不含系统标题，未设置时返回 `undefined`）；页面标题请由目标页面通过 `pageMeta.title` 提供。`PageUtils.open(path, label)` 的 `label` 参数与 URL 中的 `_label` 已弃用且不再生效，传入时控制台会输出一次弃用提示。登录相关跳转请使用 `LOGIN_PATH`（`/login`）。
 
 框架内置事件：登录失效时 `HttpClient` 广播 `loginExpired`（载荷 `{message, reason}`，`reason` 为 `CONCURRENT_LOGIN` 表示同一账号并发登录被顶下线），`Layouts` 已内置监听并弹出提示，业务无需处理；提示文案由 `sys.login-expired-message` / `sys.concurrent-login-message` 配置（见 [config.md](config.md)）。
 

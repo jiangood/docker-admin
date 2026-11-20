@@ -25,8 +25,6 @@ public class SiteMonitorCheckJob extends BaseJob {
 
     @Override
     public String execute(JobDataMap data, Logger logger) {
-        progress("开始网站可达性检查");
-
         int checked = siteMonitorService.runDueChecks();
 
         int pruned = 0;
@@ -37,7 +35,6 @@ public class SiteMonitorCheckJob extends BaseJob {
             logger.warn("清理网站监控历史记录失败：{}", e.toString());
         }
 
-        progress("检查完成");
         return "探测 " + checked + " 个站点" + (pruned > 0 ? "，清理历史记录 " + pruned + " 条" : "");
     }
 

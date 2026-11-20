@@ -120,25 +120,6 @@ public JobRegistrar reminderJobs() {
 - 若任务类存在**多个构造器**（含无参构造），Spring 不会自动选择，必须用 `@Autowired` 显式标注其中一个，否则默认走无参构造、`final` 字段不会注入（运行时 NPE）；
 - 任务实例每次触发重建，不要在字段中缓存跨触发的可变状态。
 
-### 进度上报
-
-长任务可调用 `BaseJob` 提供的 `progress(...)` 把运行进度暴露给前端「定时任务」页面（页面每 3 秒轮询 `admin/job/progress`）：
-
-```java
-List<Row> rows = load();
-for (int i = 0; i < rows.size(); i++) {
-    sync(rows.get(i));
-    progress(i + 1, rows.size(), "已同步 " + (i + 1) + "/" + rows.size());
-}
-return "同步完成 " + rows.size() + " 条";
-```
-
-- 三种重载：`progress(percent, msg)` / `progress(current, total, msg)`（百分比自动算）/ `progress(msg)`
-- 进度是**内存态**（`JobProgressRegistry`），不落库；重启后运行中进度丢失，但 `sys_job_log` 执行记录完整
-- 只对继承 `BaseJob` 的任务生效；直接实现 `org.quartz.Job` 的类没有进度
-- 进度按 `SysJob.id` 记录，同一任务受 `@DisallowConcurrentExecution` 保护不会并发覆盖
-- 建议按批次/每秒最多一次上报，避免无谓开销；任务结束后状态保留 30 分钟自动清理
-
 ### 执行记录方式
 
 高频任务（如每 5 秒执行）会在 `sys_job_log` 和日志目录产生海量记录。任务定义上的「执行记录方式」属性（`SysJob.logAggregation`，前端新建/编辑时可选）控制执行记录与日志文件的粒度：
@@ -250,10 +231,8 @@ public void deleteById(String id) {
 | 目录 | 路由前缀 | 是否需要登录 | 是否需要 AdminLayout |
 |------|---------|-------------|---------------------|
 | `pages/` | `/` | ✅ 是 | ✅ 是 |
-| `pages/public/` | `/public/` | ❌ 否 | ❌ 否 |
-| `pages/standalone/` | `/standalone/` | ✅ 是 | ❌ 否 |
 
-`public` 页免登录、无后台布局（如公开文章页）；`standalone` 页需登录但无后台布局（如强制改密页）。目录只提供默认值，页面可通过 `pageMeta` 显式覆盖：
+目录只提供默认值，页面可通过 `pageMeta` 显式覆盖。免登录无后台布局的页面（如公开文章页）应声明 `requiresAuth: false` 且 `layout: 'blank'`；需登录但不使用后台布局的页面（如强制改密页）应声明 `requiresAuth: true` 且 `layout: 'blank'`：
 
 ```jsx
 // 页面文件（可选导出）
@@ -266,4 +245,4 @@ export const pageMeta = {
 
 非菜单的详情页、公共页推荐声明 `pageMeta.title`；页面标题为静态元信息，不支持运行时动态回填。`PageUtils.open(path, label)` 的 `label` 参数与 URL 中的 `_label` 已弃用且不再生效，传入时控制台会提示。
 
-框架内置登录页为 `/login`（页面文件 `pages/login.jsx`），通过 `pageMeta` 声明为公开页；业务项目覆盖 `pages/login.jsx` 时即使不写 `pageMeta`，插件也会按 `/login` 默认公开页处理。`/public/login` 仅保留为旧地址兼容跳转，新代码请直接使用 `/login`。
+框架内置登录页为 `/login`（页面文件 `pages/login.jsx`），通过 `pageMeta` 声明为公开页；业务项目覆盖 `pages/login.jsx` 时即使不写 `pageMeta`，插件也会按 `/login` 默认公开页处理。登录相关跳转请直接使用 `/login`（或 `LOGIN_PATH`）。

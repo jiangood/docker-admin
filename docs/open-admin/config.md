@@ -34,7 +34,7 @@
 | `sys.codegen.frontend-dir` | 代码生成前端页面根目录 | web/src/pages |
 | `sys.codegen.frontend-import` | 生成页面引入框架组件的模块名；留空自动识别（框架仓库用相对路径，业务项目用 `@jiangood/open-admin`） | 空 |
 
-> 框架的 `.opencode/skills/` 与 `docs/open-admin/` 由 `oa-upgrade-docs` skill 从框架 GitHub Release 下载 `framework-files.zip` 同步到业务项目根目录（内容比对，无变更不写入）。无需配置。
+> 框架的 `.opencode/skills/` 与 `docs/open-admin/` 由 `oa-upgrade-docs` skill 按 `docs/framework-sync.json` 清单，从对应 tag 源码归档同步到业务项目根目录（无需配置）。同步范围与规则以清单为准。
 
 > **会话落盘（重启免登录）**：框架默认开启 `server.servlet.session.persistent`，正常停机时把 `HttpSession` 写入 `server.servlet.session.store-dir`，启动后恢复。仅对**单实例、优雅停机**有效：`kill -9`、JVM 崩溃、断电不会保留会话；多实例请改用 Spring Session 等共享会话方案。首次升级启动时旧的内存会话已丢失，所有用户需重新登录一次，之后正常重启不再需要。session 中的自定义属性必须可序列化；未挂载 `/data` 的项目请覆盖 `store-dir`，或设置 `persistent: false` 关闭。
 

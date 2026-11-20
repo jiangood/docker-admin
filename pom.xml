@@ -15,41 +15,19 @@
     <properties>
         <java.version>21</java.version>
 
-        <!--
-          依赖版本集中管理。
-          历史上版本号直接硬编码在 <dependencies> 中，导致：
-            1. 每个依赖各自产生一个独立的 dependabot PR，无法批量升级；
-            2. 需要保持同版本的依赖（如 docker-java 核心与传输层、hutool 各模块）
-               容易各自漂移，产生类路径混用。
-          统一改用属性后，dependabot 的 groups 配置可将同类升级合并为一个 PR。
-        -->
+        <!-- 依赖版本集中管理：同类依赖共用属性，便于 dependabot 批量升级并避免版本漂移 -->
         <open-admin.version>3.3.4-SNAPSHOT</open-admin.version>
 
-        <!--
-          hutool 各模块必须同版本：hutool-core / hutool-extra / hutool-http
-          由 open-admin 传递引入，本项目仅显式声明 hutool-system。
-          改此值前请用 `mvn dependency:tree -Dincludes=cn.hutool` 核对，
-          避免与 open-admin 传递进来的版本错配。
-        -->
+        <!-- hutool 各模块须同版本（由 open-admin 传递引入）；改动前用 mvn dependency:tree -Dincludes=cn.hutool 核对 -->
         <hutool.version>5.8.48</hutool.version>
 
         <!-- docker-java 核心与 HTTP 传输层必须同版本 -->
         <docker-java.version>3.7.1</docker-java.version>
 
-        <!--
-          SSH 传输层（docker system dial-stdio）。
-
-          注意版本错配：1.4 是当前最新发布版，构建目标是 docker-java-core 3.4.0，
-          而本项目使用 docker-java ${docker-java.version}。上游 main 分支已跟进
-          docker-java 3.7.1，但 1.5 仍为 1.5-SNAPSHOT 尚未发布，因此 dependabot
-          不会为此依赖提交 PR。升级后必须实测远程主机的 SSH 连接。
-        -->
+        <!-- SSH 传输层 1.4 构建目标为 docker-java-core 3.4.0；1.5 尚未发布，升级后必须实测远程 SSH 连接 -->
         <docker-java-jsch.version>1.4</docker-java-jsch.version>
 
-        <!--
-          JSch：docker-java-transport-jsch 的传递依赖，这里显式声明是因为「测试连接」的 SSH 预检直接使用它。
-          版本必须与传输层传递引入的一致（1.4 对应 2.27.7），否则会引入两套 JSch 类。
-        -->
+        <!-- 显式声明 JSch（SSH 预检直接使用）；版本须与传输层传递依赖一致（1.4 对应 2.27.7） -->
         <jsch.version>2.27.7</jsch.version>
 
         <jgit.version>7.8.0.202609011348-r</jgit.version>
@@ -99,6 +77,16 @@
             </dependency>
         </dependencies>
     </dependencyManagement>
+
+    <!-- SNAPSHOT 预览版依赖在 Central 快照仓库；正式版无需此仓库 -->
+    <repositories>
+        <repository>
+            <id>central-snapshots</id>
+            <url>https://central.sonatype.com/repository/maven-snapshots/</url>
+            <releases><enabled>false</enabled></releases>
+            <snapshots><enabled>true</enabled><updatePolicy>always</updatePolicy></snapshots>
+        </repository>
+    </repositories>
 
     <dependencies>
         <dependency>
