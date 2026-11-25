@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 
 /**
- * 读取「系统管理 - 系统参数」里的容器相关配置（默认资源 / 容器运行 / 主机辅助容器 / 容器日志 / 镜像 tar）。
+ * 读取「系统管理 - 系统参数」里的容器相关配置（默认资源 / 容器运行 / 主机辅助容器 / 容器日志）。
  * <p>
  * 默认注册中心与默认构建主机存在「默认资源」分组，值分别是 {@code t_registry.id}
  * 与 {@code t_host.id}；未配置时返回 null，由调用方回退到旧规则
@@ -82,17 +82,6 @@ public class DockerSettings {
     public int logRangeTail() {
         return readInt(DockerConfigKeys.LOG_RANGE_TAIL,
                 DockerConfigKeys.DEFAULT_LOG_RANGE_TAIL, 1, DockerConfigKeys.MAX_LOG_RANGE_TAIL);
-    }
-
-    /**
-     * 平台侧镜像 tar 的保留天数，超期由 {@code ImageDownloadService} 的清理线程删除。
-     * 30 秒缓存，改完最多一分钟生效。
-     */
-    public int imageTarRetainDays() {
-        return readInt(DockerConfigKeys.IMAGE_TAR_RETAIN_DAYS,
-                DockerConfigKeys.DEFAULT_IMAGE_TAR_RETAIN_DAYS,
-                DockerConfigKeys.MIN_IMAGE_TAR_RETAIN_DAYS,
-                DockerConfigKeys.MAX_IMAGE_TAR_RETAIN_DAYS);
     }
 
     /** 容器日志下载最多回溯的天数。 */

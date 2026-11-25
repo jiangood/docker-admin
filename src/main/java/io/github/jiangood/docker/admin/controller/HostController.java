@@ -274,9 +274,9 @@ public class HostController  {
     }
 
     /**
-     * 下载已导出的 tar：从平台读盘流式转发，不删除源文件。
+     * 下载已导出的 tar：从平台读盘流式转发，响应写完后删除该 tar 并结束任务登记。
      * <p>
-     * 超过保留天数的 tar 由平台清理线程自动删除；需要立刻释放空间可到镜像下载页删除。
+     * 流式复制抛异常（浏览器取消等）时不删除，保留文件供重新下载。
      */
     @HasPermission("host:image")
     @RequestMapping("exportImage/download")
@@ -287,6 +287,7 @@ public class HostController  {
             response.setContentLengthLong(task.getSize());
         }
         hostImageExportService.copyTarTo(logId, response.getOutputStream());
+        hostImageExportService.deleteAfterDownload(logId);
     }
 
     /**

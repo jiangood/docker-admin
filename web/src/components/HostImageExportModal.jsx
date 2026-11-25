@@ -9,8 +9,8 @@ import {formatBytes} from './container/utils'
  * 主机详情页的镜像导出弹窗。
  * <p>
  * 点「导出」先查该镜像最近一次任务：没有任务就展示说明与「开始导出」，
- * 已有任务则展示实时日志、进度、tar 在主机上的保存路径，以及下载入口。
- * 大镜像直接在主机上打包（SSH 走远端 docker save），下载时再按需读取，避免平台侧重复落盘。
+ * 已有任务则展示实时日志、进度、tar 在平台上的保存路径，以及下载入口。
+ * tar 统一保存在平台服务器，下载完成后删除；下一次导出 / 下载开始前也会清理遗留文件。
  */
 const POLL_INTERVAL = 2000
 
@@ -31,6 +31,7 @@ export default class HostImageExportModal extends React.Component {
         loading: false,
         starting: false,
         error: null,
+        downloaded: false,
     }
 
     pollTimer = null
@@ -41,7 +42,9 @@ export default class HostImageExportModal extends React.Component {
 
     show = record => {
         this.stopPoll()
-        this.setState({open: true, record, task: null, loading: true, starting: false, error: null}, () => {
+        this.setState({
+            open: true, record, task: null, loading: true, starting: false, error: null, downloaded: false,
+        }, () => {
             this.loadTask(false)
         })
     }
@@ -102,7 +105,7 @@ export default class HostImageExportModal extends React.Component {
         if (!record || starting) {
             return
         }
-        this.setState({starting: true, error: null})
+        this.setState({starting: true, error: null, downloaded: false})
         HttpClient.postForm('admin/host/exportImage/start', {
             id: this.props.hostId,
             image: record.id,
@@ -130,6 +133,11 @@ export default class HostImageExportModal extends React.Component {
         this.loadTask(true)
     }
 
+    /** 下载完成后后端会删除文件，置为已完成态，避免再次点击落到已删除的 tar 上。 */
+    onDownload = () => {
+        this.setState({downloaded: true})
+    }
+
     downloadUrl = () => {
         const task = this.state.task
         return UrlUtils.contextPath('/admin/host/exportImage/download')
@@ -146,13 +154,17 @@ export default class HostImageExportModal extends React.Component {
     }
 
     footer = () => {
-        const {task, loading, starting, error} = this.state
+        const {task, loading, starting, error, downloaded} = this.state
         const close = <Button key='close' onClick={this.close}>关闭</Button>
 
+        if (task && task.ready && downloaded) {
+            return [close, <Button key='downloaded' type='primary' disabled>已开始下载</Button>]
+        }
         if (task && task.ready) {
             return [
                 close,
-                <Button key='download' type='primary' icon={<DownloadOutlined/>} href={this.downloadUrl()}>
+                <Button key='download' type='primary' icon={<DownloadOutlined/>}
+                        href={this.downloadUrl()} onClick={this.onDownload}>
                     下载 tar{task.size ? `（${formatBytes(task.size)}）` : ''}
                 </Button>,
             ]
@@ -210,7 +222,7 @@ export default class HostImageExportModal extends React.Component {
     }
 
     renderTask = () => {
-        const {task} = this.state
+        const {task, downloaded} = this.state
         const running = task.status === 'RUNNING'
         const failed = task.status === 'FAILED'
         const success = task.status === 'SUCCESS' && task.ready
@@ -220,12 +232,16 @@ export default class HostImageExportModal extends React.Component {
             : failed
                 ? '导出失败，原因见下方日志，可重新导出'
                 : success
-                    ? '导出完成，可点击右下角「下载 tar」保存到本机'
+                    ? downloaded
+                        ? '下载已开始，完成后平台会删除 tar'
+                        : '导出完成，可点击右下角「下载 tar」保存到本机'
                     : '导出已完成，但 tar 已不存在，请重新导出'
 
         const pathLabel = '保存位置'
-        const pathHint = 'tar 保存在平台服务器（image-tar 目录），下载时从平台读盘，不区分主机连接方式；'
-            + '不会随下载自动删除，超过系统参数里的保留天数后由平台自动清理。'
+        const pathHint = downloaded
+            ? '下载完成后平台会删除该 tar；若取消了浏览器下载，文件会保留到下一次导出 / 下载开始时清理。'
+            : 'tar 保存在平台服务器（image-tar 目录），下载时从平台读盘，不区分主机连接方式；'
+                + '下载完成后会自动删除，下一次导出 / 下载开始前也会清理遗留文件。'
         const speedText = formatSpeed(task.speed)
 
         return <Space direction='vertical' size='middle' style={{width: '100%'}}>

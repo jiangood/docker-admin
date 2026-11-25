@@ -5,7 +5,6 @@ import cn.hutool.core.util.StrUtil;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.command.InspectImageResponse;
 import com.github.dockerjava.api.model.PullResponseItem;
-import io.github.jiangood.docker.admin.config.DockerSettings;
 import io.github.jiangood.docker.admin.dto.ImageDownloadRequest;
 import io.github.jiangood.docker.admin.dto.ImageDownloadTaskView;
 import io.github.jiangood.docker.admin.entity.Host;
@@ -15,8 +14,6 @@ import io.github.jiangood.openadmin.modules.logviewer.util.TaskLog;
 import io.github.jiangood.openadmin.modules.task.registry.TaskLogRegistry;
 import io.github.jiangood.openadmin.modules.task.service.SysTaskLogService;
 import io.github.jiangood.openadmin.util.SpringTool;
-import jakarta.annotation.PostConstruct;
-import jakarta.annotation.PreDestroy;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
@@ -30,11 +27,10 @@ import java.io.File;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Files;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
 /**
@@ -42,10 +38,12 @@ import java.util.regex.Pattern;
  * <p>
  * 不再区分连接方式（本机 / TCP / SSH）与是否部署主机辅助容器：三条链路最终都是
  * {@code saveImageCmd} 返回的字节流，由平台写入 {@code {数据目录}/image-tar/{logId}/}。
- * 这样行为可预期、代码只有一条路径，代价是需要平台磁盘容纳整个 tar（另配过期清理）。
+ * 这样行为可预期、代码只有一条路径，代价是需要平台磁盘容纳整个 tar；
+ * 因此任务开始前会清理旧文件、下载完成后立即删除当前文件。
  * <p>
- * 结果登记在内存里，网页据此显示「下载 tar」；进程重启后登记丢失，但 tar 仍留在平台上，
- * 超过保留天数（系统参数 {@code docker.image-tar.retain-days}）的目录会被定时清理。
+ * 结果登记在内存里，网页据此显示「下载 tar」；进程重启后登记丢失，但 tar 仍留在平台上。
+ * 平台不长期保留 tar：每次开始新的下载 / 导出前会先清理所有旧的 tar 目录（跳过正在运行的任务），
+ * 因此平台上最多只有本轮任务生成的文件，无需额外的保留天数参数。
  * 过程写入 {@code {日志目录}/{logId}.log}，前端通过 WebSocket 实时查看。
  */
 @Service
@@ -74,13 +72,6 @@ public class ImageDownloadService {
      */
     private static final long PROGRESS_STEP_BYTES = 10L * 1024 * 1024;
 
-    /**
-     * 过期清理的执行间隔：启动 10 分钟后第一轮，之后每小时一轮。
-     */
-    private static final long SWEEP_DELAY_MINUTES = 10;
-
-    private static final long SWEEP_INTERVAL_MINUTES = 60;
-
     @Resource
     TaskLogRegistry taskLogRegistry;
 
@@ -93,22 +84,15 @@ public class ImageDownloadService {
     @Resource
     DockerClientManager dockerClientManager;
 
-    @Resource
-    DockerSettings dockerSettings;
-
     /**
      * 已生成、可供网页下载的 tar：logId -> 结果。只存内存，平台重启后丢失（tar 仍在平台上）。
      */
     private final Map<String, SavedTar> savedTars = new ConcurrentHashMap<>();
 
     /**
-     * 过期清理线程：只做删目录，不参与任务调度，异常全部吞掉。
+     * 正在打包的任务：清理旧文件时跳过它们正在写的目录（logId 同时是目录名）。
      */
-    private final ScheduledExecutorService sweeper = Executors.newSingleThreadScheduledExecutor(r -> {
-        Thread thread = new Thread(r, "image-tar-sweeper");
-        thread.setDaemon(true);
-        return thread;
-    });
+    private final Set<String> running = ConcurrentHashMap.newKeySet();
 
     /**
      * 一次已完成保存的 tar，logId 同时是目录名。
@@ -128,17 +112,6 @@ public class ImageDownloadService {
     @FunctionalInterface
     public interface TarProgress {
         void update(long written, long bytesPerSecond);
-    }
-
-    @PostConstruct
-    void startSweeper() {
-        sweeper.scheduleWithFixedDelay(this::sweepQuietly,
-                SWEEP_DELAY_MINUTES, SWEEP_INTERVAL_MINUTES, TimeUnit.MINUTES);
-    }
-
-    @PreDestroy
-    void stopSweeper() {
-        sweeper.shutdownNow();
     }
 
     /**
@@ -216,6 +189,9 @@ public class ImageDownloadService {
      * <p>
      * 调用方需先 {@link TaskLog#bind(String)} 绑定日志文件；本方法只负责保存，
      * 不负责 {@link TaskLogRegistry} 的任务登记与结束。
+     * <p>
+     * 开始前会先清理平台上所有旧的 tar（跳过正在运行的任务），保证平台只保留本轮结果、
+     * 也不会在磁盘上越堆越多。
      *
      * @param pull     是否先从仓库拉取镜像；主机详情页导出已有镜像时为 false
      * @param progress 进度回调（已写入字节数，当前速度），可为 null
@@ -229,6 +205,8 @@ public class ImageDownloadService {
         Host host = hostService.findById(StrUtil.trim(hostId)).orElse(null);
         Assert.notNull(host, "执行主机不存在");
 
+        running.add(logId);
+        cleanPreviousTars();
         DockerClient client = null;
         try {
             fileLog.info(pull ? "开始下载镜像 {}" : "开始导出镜像 {}", ref);
@@ -249,6 +227,7 @@ public class ImageDownloadService {
             return saveOnPlatform(client, ref, logId, resolveFileName(client, ref), host, progress);
         } finally {
             IOUtils.closeQuietly(client);
+            running.remove(logId);
         }
     }
 
@@ -387,49 +366,39 @@ public class ImageDownloadService {
         }
     }
 
-    // ------------------------------------------------------------------ 过期清理
+    // ------------------------------------------------------------------ 运行前清理
 
-    private void sweepQuietly() {
+    /**
+     * 每次开始新的下载 / 导出前，清掉平台上所有旧的 tar（目录名即 logId），
+     * 并同步移除内存登记；正在运行的任务（{@link #running}）不删，避免删掉它们正在写的文件。
+     * 清理失败不影响本次任务，最坏情况只是旧文件多留一轮。
+     */
+    void cleanPreviousTars() {
         try {
-            sweep();
+            File[] dirs = tarRoot().listFiles(File::isDirectory);
+            int removed = 0;
+            if (dirs != null) {
+                for (File dir : dirs) {
+                    if (running.contains(dir.getName())) {
+                        continue;
+                    }
+                    FileUtil.del(dir);
+                    savedTars.remove(dir.getName());
+                    removed++;
+                }
+            }
+            // 目录已被手工删除时，内存里可能还留着登记
+            for (String logId : List.copyOf(savedTars.keySet())) {
+                if (!running.contains(logId)) {
+                    savedTars.remove(logId);
+                }
+            }
+            if (removed > 0) {
+                fileLog.info("已清理平台上旧的镜像 tar：{} 个", removed);
+            }
         } catch (Exception e) {
-            log.warn("清理过期镜像 tar 失败: {}", e.getMessage());
+            log.warn("清理旧的镜像 tar 失败: {}", e.getMessage());
         }
-    }
-
-    /**
-     * 删除超过保留天数的 tar 目录：目录名就是 logId，同时清掉内存登记。
-     * 正在写入的目录不会被命中——文件名每次都新建在独立的 logId 目录里。
-     */
-    void sweep() {
-        File[] dirs = tarRoot().listFiles(File::isDirectory);
-        if (dirs == null || dirs.length == 0) {
-            return;
-        }
-        int days = dockerSettings.imageTarRetainDays();
-        long cutoff = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(days);
-        for (File dir : dirs) {
-            if (latestTouched(dir) >= cutoff) {
-                continue;
-            }
-            FileUtil.del(dir);
-            savedTars.remove(dir.getName());
-            log.info("清理过期镜像 tar：{}（保留 {} 天）", dir.getName(), days);
-        }
-    }
-
-    /**
-     * 目录内最新的写入时间：写入文件内容不刷新目录 mtime，所以取目录与文件的较大值。
-     */
-    private static long latestTouched(File dir) {
-        long latest = dir.lastModified();
-        File[] files = dir.listFiles();
-        if (files != null) {
-            for (File file : files) {
-                latest = Math.max(latest, file.lastModified());
-            }
-        }
-        return latest;
     }
 
     // ------------------------------------------------------------------ 辅助

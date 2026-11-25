@@ -16,7 +16,7 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 
 /**
- * 「系统管理 - 系统参数」里的容器相关分组：默认资源、容器运行、主机辅助容器、容器日志、镜像 tar。
+ * 「系统管理 - 系统参数」里的容器相关分组：默认资源、容器运行、主机辅助容器、容器日志。
  * <p>
  * 框架的 {@code ConfigRegistry} 会注入所有 {@link ConfigProvider} Bean，
  * 所以加 {@code @Component} 就会自动出现在系统参数页，无需前端改动。
@@ -102,15 +102,6 @@ public class DockerConfigProvider implements ConfigProvider {
                                 .defaultValue(DockerConfigKeys.DEFAULT_LOG_DOWNLOAD_DAYS)
                                 .min(1)
                                 .max(DockerConfigKeys.MAX_LOG_DOWNLOAD_DAYS)
-                                .hint("日志下载最多回溯的天数；未选择时间范围时下载最近 N 天。")),
-                Configs.group("docker-image-tar", "镜像 tar", 65)
-                        .description("「工具 - 镜像下载」与主机详情导出生成的 tar 都保存在平台服务器的 image-tar 目录")
-                        .add(Configs.integer(DockerConfigKeys.IMAGE_TAR_RETAIN_DAYS, "保留天数")
-                                .defaultValue(DockerConfigKeys.DEFAULT_IMAGE_TAR_RETAIN_DAYS)
-                                .min(DockerConfigKeys.MIN_IMAGE_TAR_RETAIN_DAYS)
-                                .max(DockerConfigKeys.MAX_IMAGE_TAR_RETAIN_DAYS)
-                                .hint("超过该天数的 tar 目录会被平台自动删除，避免占满磁盘。"
-                                        + "想立刻释放空间：在镜像下载页点「删除 tar」，"
-                                        + "或勾选「下载完成后删除」。")));
+                                .hint("日志下载最多回溯的天数；未选择时间范围时下载最近 N 天。")));
     }
 }

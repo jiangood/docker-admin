@@ -235,14 +235,15 @@ git tag vx.y.z && git push && git push origin vx.y.z
 - **主机详情镜像导出：** 镜像 Tab 的「导出」打开弹窗，后台在该主机上执行 `docker save`，
   tar 统一保存到平台服务器的 `image-tar/{logId}/`（不区分 SSH / TCP / 本机）。
   弹窗展示实时日志、已写入大小与速度（每秒 / 每分钟）、保存路径与下载按钮，下载从平台读盘流式转发。
-  任务状态只存内存（`HostImageExportService`），tar 不会随下载自动删除，
-  超过保留天数后由 `ImageDownloadService` 的清理线程删除。
+  **下载完成后立即删除 tar 并结束任务登记**（取消下载时保留文件）；
+  下一次导出 / 下载开始前也会先清理平台上遗留的 tar。任务状态只存内存（`HostImageExportService`）。
 - **工具 - 镜像下载页可直接下载 tar：** `/image-download` 拉取镜像后执行 `docker save`，
   读取 save 流并统一保存到平台服务器的 `image-tar/{logId}/{镜像名}.tar`（**不再区分连接方式、也不再依赖主机辅助容器**）。
-  完成后页面右上角与日志抽屉都会出现「下载 tar」，下载直接读平台文件流式转发；
-  同一页可勾选「下载完成后删除 tar」（默认勾选，响应写完后后端删除），也可点「删除 tar」手动清理。
-  过期清理：`ImageDownloadService` 内置清理线程（启动 10 分钟后首轮，之后每小时），
-  删除超过 `docker.image-tar.retain-days`（默认 3 天）的目录，并同步清掉内存登记。
+  完成后页面右上角与日志抽屉都会出现「下载 tar」，下载直接读平台文件流式转发。
+  **清理策略（无系统参数）**：下载接口在响应写完后立即删除该 tar（浏览器取消导致写响应异常时不删）；
+  `ImageDownloadService#saveToHost` 在每次任务开始前调用 `cleanPreviousTars()`，
+  删除平台上所有旧的 tar 目录并清掉内存登记（`running` 集合里正在打包的任务跳过，避免删掉在写的文件），
+  因此平台最多只有本轮任务生成的文件。同一页还保留「删除 tar」按钮供手动清理。
   内存里按 logId 登记文件名、大小与路径（最多 50 条），平台重启后登记丢失但 tar 仍在平台上。
   **代价：平台磁盘要能容纳整个 tar**（大镜像 10~30 GB，且是一次从主机拉回、再一次发给浏览器）。
   权限复用 `image-download:download`。
@@ -262,7 +263,7 @@ git tag vx.y.z && git push && git push origin vx.y.z
   **日志驱动为 `none`**（构建器创建中间容器时固定写 `LogConfig=none`）、
   不带 `app.name` / Agent / `com.docker.compose.project` 标签。
   因此按钮始终带 Popconfirm 二次确认；单个容器删除失败只记日志，不影响整轮清理。
-- **系统参数里的容器分组：** 「系统管理 - 系统参数」有五组，全部由
+- **系统参数里的容器分组：** 「系统管理 - 系统参数」有四组，全部由
   `DockerConfigProvider` 用 `Configs.group(...)` 声明（框架 `ConfigRegistry` 自动收集所有
   `ConfigProvider` Bean）：
   - 「默认资源」`docker.default.registry-id` 与 `docker.default.build-host-id`——动态下拉，
@@ -271,13 +272,10 @@ git tag vx.y.z && git push && git push origin vx.y.z
   - 「容器运行」`docker.container.stop-timeout-seconds`（默认 60，范围 1~600）——停止容器的宽限期，
     决定 SIGTERM 到 SIGKILL 之间的等待时间，等价 compose 的 `stop_grace_period`；
   - 「主机辅助容器」`docker.agent.repository`——只填镜像地址（不含 tag），留空用 yml 默认值；
-  - 「容器日志」`docker.logs.range-tail`（默认 10000）与 `docker.logs.download-days`（默认 7）；
-  - 「镜像 tar」`docker.image-tar.retain-days`（默认 3，范围 1~365）——平台 `image-tar` 目录的保留天数，
-    镜像下载页与主机详情导出共用，超期由 `ImageDownloadService` 的清理线程删除。
+  - 「容器日志」`docker.logs.range-tail`（默认 10000）与 `docker.logs.download-days`（默认 7）。
   
   读取集中在 `DockerSettings`（宽限期用 `#graceSeconds()`，配置缺失 / 越界回落默认值；
-  平台调用预算用 `#budget()` = 宽限期 + 30 秒；默认资源用 `#defaultRegistryId()` / `#defaultBuildHostId()`；
-  tar 保留天数用 `#imageTarRetainDays()`）。
+  平台调用预算用 `#budget()` = 宽限期 + 30 秒；默认资源用 `#defaultRegistryId()` / `#defaultBuildHostId()`）。
   旧 `t_system_config` 里的三个同名 `docker.*` 键与 `default.registry.id` / `default.build.host.id`
   分别由 `LegacyDockerConfigMigrator` / `LegacySystemConfigMigrator` 在启动时一次性搬到 `sys_config`
   （新配置已有值则不覆盖，成功后删旧行；指向已删除的注册中心 / 主机时跳过并记日志）。

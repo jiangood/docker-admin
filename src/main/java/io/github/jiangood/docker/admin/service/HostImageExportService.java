@@ -1,5 +1,6 @@
 package io.github.jiangood.docker.admin.service;
 
+import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
 import io.github.jiangood.docker.admin.dto.HostImageExportTaskView;
@@ -26,8 +27,7 @@ import io.github.jiangood.openadmin.modules.task.service.SysTaskLogService;
  * <p>
  * 与镜像下载页共用同一条保存路径：读取 docker 的 save 流并写到平台服务器的
  * {@code image-tar/{logId}/}，下载时直接从平台读盘，不区分主机连接方式。
- * tar 不会在下载后自动删除，超过保留天数（系统参数 {@code docker.image-tar.retain-days}）
- * 由 {@link ImageDownloadService} 的清理线程删除。
+ * tar 在下载完成后立即删除；每次开始新的下载 / 导出前也会清理遗留的旧 tar。
  * <p>
  * 任务状态只存内存：logId 同时是日志文件名与平台目录名，进程重启后任务丢失，
  * 但已生成的 tar 仍在平台上，可按日志里的路径取用。
@@ -199,13 +199,33 @@ public class HostImageExportService {
     }
 
     /**
-     * 把 tar 流式写给浏览器；不删除平台上的源文件（由保留天数策略清理）。
+     * 把 tar 流式写给浏览器；下载完成后由 {@link #deleteAfterDownload(String)} 删除。
      */
     public void copyTarTo(String logId, OutputStream out) throws Exception {
         Task task = tasksByLogId.get(logId);
         Assert.notNull(task, "导出任务不存在或已失效");
         Assert.state(isReady(task), "导出尚未完成或归档已不存在");
         imageDownloadService.copyFile(task.path, out);
+    }
+
+    /**
+     * 下载完成后删除 tar 与任务登记：页面再查状态会回到「准备导出」，
+     * 需要再次下载只能重新导出。删除失败只记日志，响应已经写完。
+     */
+    public void deleteAfterDownload(String logId) {
+        Task task = tasksByLogId.remove(logId);
+        if (task == null) {
+            return;
+        }
+        tasks.remove(key(task.hostId, task.image), task);
+        try {
+            File parent = task.path == null ? null : new File(task.path).getParentFile();
+            if (parent != null) {
+                FileUtil.del(parent);
+            }
+        } catch (Exception e) {
+            log.warn("下载后删除导出的 tar 失败: logId={} {}", logId, e.getMessage());
+        }
     }
 
     private HostImageExportTaskView view(Task task) {

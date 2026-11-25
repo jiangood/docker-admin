@@ -20,7 +20,8 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * 镜像下载 tar：在指定主机上拉取公共镜像，并用 {@code docker save} 打成 tar 保存在平台服务器。
  * <p>
- * 下载时直接从平台读盘流式转发，不再区分主机连接方式；可勾选下载完成后删除以节省磁盘。
+ * 下载时直接从平台读盘流式转发（不区分主机连接方式），响应写完立即删除该 tar；
+ * 每次开始新的下载前也会清理平台上遗留的旧 tar。
  * 过程通过 {@code /admin/ws/task-log/{logId}} 实时输出日志。
  */
 @RestController
@@ -60,21 +61,20 @@ public class ImageDownloadController {
     }
 
     /**
-     * 下载已生成的 tar：从平台读盘流式转发，不删除源文件；{@code deleteAfter=true} 时
-     * 在响应写完后删除该 tar（用于大镜像省磁盘）。
+     * 下载已生成的 tar：从平台读盘流式转发，响应写完后删除该 tar（大镜像不长期占盘）。
+     * <p>
+     * 流式复制抛异常（浏览器取消等）时不删除，保留文件供重新下载。
      */
     @HasPermission("image-download:download")
     @RequestMapping("tar")
-    public void tar(String logId, Boolean deleteAfter, HttpServletResponse response) throws Exception {
+    public void tar(String logId, HttpServletResponse response) throws Exception {
         ImageDownloadTaskView task = service.readyTask(logId);
         DownloadTool.prepareDownload(response, task.getFileName(), "application/x-tar");
         if (task.getSize() > 0) {
             response.setContentLengthLong(task.getSize());
         }
         service.copyTarTo(logId, response.getOutputStream());
-        if (Boolean.TRUE.equals(deleteAfter)) {
-            service.deleteTarQuietly(logId);
-        }
+        service.deleteTarQuietly(logId);
     }
 
     /**
