@@ -238,7 +238,7 @@ public class ImageDownloadService {
                 fileLog.info("拉取镜像 {}:{}", repo, tag);
                 client.pullImageCmd(repo)
                         .withTag(tag)
-                        .exec(new DefaultCallback<PullResponseItem>(logId))
+                        .exec(new DefaultCallback<PullResponseItem>("task/" + logId))
                         .awaitCompletion();
                 fileLog.info("拉取完成 {}:{}", repo, tag);
             }

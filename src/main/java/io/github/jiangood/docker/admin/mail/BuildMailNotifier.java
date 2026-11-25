@@ -79,8 +79,8 @@ public class BuildMailNotifier {
                 + StrUtil.blankToDefault(buildLog.getProjectName(), "未知项目")
                 + (StrUtil.isNotBlank(version) ? " " + version : "");
 
-        // 附带本次构建的日志文件（${logging.file.path}/{logId}.log）
-        File logFile = fileLogConfig.buildLogFile(buildLog.getId());
+        // 附带本次构建的日志文件（${logging.file.path}/task/{logId}.log）
+        File logFile = fileLogConfig.buildLogFile("task/" + buildLog.getId());
         String attachmentName = null;
         MailMessage.MailMessageBuilder builder = MailMessage.builder().to(to).subject(subject);
         if (logFile.isFile()) {

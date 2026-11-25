@@ -213,10 +213,10 @@ public class AppService extends BaseService<App> {
                 } else {
                     fileLog.info("开始拉取镜像 {}", image);
                 }
-                // 回调的 logId 必须是本次部署记录 id：DefaultCallback 在 docker 流线程上
-                // 重新绑定 MDC，传 appId 会把拉取进度写进 appId.log（前端并不展示该文件）。
+                // 回调的 key 必须是本次部署的日志 key：DefaultCallback 在 docker 流线程上
+                // 重新绑定 MDC，传裸 id 会把拉取进度写到 task/ 之外的 {id}.log，部署日志里看不到。
                 client.pullImageCmd(image)
-                        .exec(new DefaultCallback<PullResponseItem>(deployLog.getId()))
+                        .exec(new DefaultCallback<PullResponseItem>("task/" + deployLog.getId()))
                         .awaitCompletion();
                 fileLog.info("拉取完成 {}", image);
             }
@@ -440,12 +440,11 @@ public class AppService extends BaseService<App> {
 
     /**
      * 某应用的部署记录，最新在前，并标记各自是否已有独立日志文件、耗时。
-     * 更早版本把同一应用的多次部署日志合并写在 {@code appId.log} 里，这些历史记录没有
-     * 独立文件，前端据此提示「无独立日志」。
+     * 独立日志写在 {@code task/{id}.log}，与框架 TaskLog 的 key 保持一致。
      */
     public List<DeployLog> listDeployLogs(String appId) {
         List<DeployLog> list = deployLogRepository.findByAppIdOrderByCreateTimeDesc(appId);
-        File logDir = new File(fileLogConfig.getLogPath());
+        File logDir = new File(fileLogConfig.getLogPath(), "task");
         for (DeployLog log : list) {
             log.setLogExists(new File(logDir, log.getId() + ".log").exists());
             if (log.getCreateTime() != null && log.getCompleteTime() != null) {

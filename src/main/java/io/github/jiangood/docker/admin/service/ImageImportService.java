@@ -233,7 +233,7 @@ public class ImageImportService {
         if (auth != null) {
             pushCmd.withAuthConfig(auth);
         }
-        pushCmd.exec(new DefaultCallback<PushResponseItem>(logId)).awaitCompletion();
+        pushCmd.exec(new DefaultCallback<PushResponseItem>("task/" + logId)).awaitCompletion();
 
         // 推送时已在本机打好注册中心前缀的 tag，直接 inspect 读取端口/卷等声明
         try {
