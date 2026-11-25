@@ -283,20 +283,24 @@ git tag vx.y.z && git push && git push origin vx.y.z
   宿主机上手工 `docker stop` 仍按容器自身配置（docker-java 3.7.1 不支持写 `HostConfig.StopTimeout`），
   Agent 辅助容器的停止保持默认 10 秒（它不需要优雅退出）。
 - **首页资源概览分两条链路：** 静态容量走 `admin/home/hostSummary`（`docker info`，30 秒缓存，首屏用），
-  实时用量走 `admin/home/hostUsage`（首页）与 `admin/host/usage`（主机详情「监控」Tab），
-  数据由 Quartz 定时任务「主机用量采集」（`HostUsageCollectJob`，每 10 分钟）写进 `HostUsageService` 的内存缓存。
-  **页面只读快照**（`snapshotAll` / `snapshot`），不触发采集；只有 `refresh=true`（用户点「刷新」）才现采一轮，
-  所以开多少个标签页、多少人在看都不会增加主机侧负载（首页 30 秒、主机页 30 秒轮询，页面隐藏时暂停）。
+  实时用量走 `admin/home/hostUsage`（首页），数据由 Quartz 定时任务「主机用量采集」
+  （`HostUsageCollectJob`，每 1 分钟）写进 `HostUsageService` 的内存缓存。首页只读快照（`snapshotAll`），
+  30 秒轮询、页面隐藏时暂停，所以开多少个标签页、多少人在看都不会增加主机侧负载。
+  **主机详情「监控」Tab 已改为实时探测：** 页面每 5 秒调 `admin/host/usage`，后端每次都现采一轮
+  docker stats（`HostUsageService#usage(id, true)`，不读快照、不走 3 秒缓存），只在该 Tab 激活且页面可见时轮询，
+  上一次请求未返回时跳过；不再有历史曲线，旧的 `admin/host/usageHistory` 接口已删除
+  （历史趋势仍在「工具 - 资源统计」页查看）。探测开销与直接在宿主机跑 `docker stats` 类似：
   逐运行中容器 `statsCmd(...).withNoStream(true)`——docker-java 只把它映射成 `?stream=0`，dockerd 内部要采两次样本（约 1 秒）
   才有 CPU%，所以容器级并发 12、单机预算 6 秒、整体 8 秒兜底，并合并同一主机的并发采集。
-  每轮采集都新建 DockerClient（`DockerClientManager` 有意不缓存客户端，SSH 主机每轮一次握手），10 分钟间隔下这点开销可以接受。
+  每轮采集都新建 DockerClient（`DockerClientManager` 有意不缓存客户端，SSH 主机每轮一次握手）。
   口径对齐 docker CLI：CPU% = `(cpuDelta/systemDelta)×onlineCpus×100`，内存扣 `inactive_file`
   （cgroup v1 `total_inactive_file` / v2 `inactive_file`），网络取各接口 rx/tx 求和，块 I/O 取
   `io_service_bytes_recursive` 读写之和（无条目按 0 计，与 docker stats 一致）；主机级只汇总运行中容器，是「容器合计」。
-  采集失败的主机按 1 → 2 → 5 → 15 轮阶梯退避（一轮 10 分钟，状态在 `HostUsageService`，**不能放任务字段**：Quartz 每次触发都重建实例），成功即复位。
-- **用量历史：** 采集结果同时写 `t_host_usage_sample`（每 10 分钟一行/主机，网络与块 I/O 存**累计计数器**原值），
-  主机详情「监控」Tab 顶部按 1h / 6h / 24h / 7d / 30d 展示 CPU/内存与网络/磁盘速率曲线
-  （`admin/host/usageHistory`，Java 侧分桶到 ≤500 点；速率由相邻采样求差，差值为负 = 容器重启 → 曲线断点）。
+  采集失败的主机按 1 → 2 → 5 → 15 轮阶梯退避（一轮 1 分钟，状态在 `HostUsageService`，**不能放任务字段**：Quartz 每次触发都重建实例），成功即复位。
+- **用量历史：** 采集任务同时把结果写 `t_host_usage_sample`（历史每 10 分钟一份/主机，网络与块 I/O 存**累计计数器**原值），
+  「工具 - 资源统计」页按 1h / 6h / 24h / 7d / 30d 展示 CPU/内存与网络/磁盘速率曲线
+  （`admin/docker-stats/series`，Java 侧分桶到 ≤500 点；速率由相邻采样求差，差值为负 = 容器重启 → 曲线断点）。
+  主机详情「监控」Tab 不读这份历史，只做实时探测（见上一条）。
   采样默认保留 30 天（`HostUsageSampleService` 里的默认值，需要时用 `docker.usage.retain-days` 覆盖，采集任务每小时顺带清理）；
   30 台主机 30 天约 13 万行、20 MB。
   定时任务记录由 `HostUsageJobInitializer` 幂等自动创建（`sys.job-enable=false` 时跳过，已存在则不覆盖用户改动）。

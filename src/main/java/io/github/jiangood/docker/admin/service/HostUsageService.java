@@ -61,8 +61,9 @@ import java.util.stream.Collectors;
  * <ul>
  *   <li><b>定时任务</b>（{@code HostUsageCollectJob}，每 {@link #COLLECT_INTERVAL} 一轮）调
  *       {@link #collectAll()} 采一轮、写缓存，并交回结果由采集任务落库（容器最新快照与历史）；</li>
- *   <li><b>页面请求</b>只读快照（{@link #snapshotAll()} / {@link #snapshot(String)}），不触发采集，
- *       所以开多少个标签页都不会增加主机侧负载；只有用户点「刷新」才走 {@link #usageAll(boolean)} 现采。</li>
+ *   <li><b>首页</b>只读快照（{@link #snapshotAll()}），不触发采集，所以开多少个标签页都不会增加
+ *       主机侧负载；<b>主机详情「监控」Tab</b>每次轮询都调 {@link #usage(String, boolean)}
+ *       （{@code refresh=true}）现采一轮，展示的是当前时刻的 docker stats。</li>
  * </ul>
  */
 @Slf4j
@@ -89,7 +90,7 @@ public class HostUsageService {
     /** 单容器采集超时：dockerd 的两次采样本身约 1 秒，留足余量。 */
     private static final long PER_CONTAINER_TIMEOUT_MILLIS = 4_000;
 
-    /** 结果缓存时长：只用来合并同一瞬间到达的请求（页面轮询读的是快照，不经过这里）。 */
+    /** 结果缓存时长：只用来合并同一瞬间到达的请求（主机详情现采走 refresh=true，不经过这里）。 */
     private static final Duration CACHE_TTL = Duration.ofSeconds(3);
 
     @Resource
@@ -249,20 +250,6 @@ public class HostUsageService {
             result.add(entry.value().toBrief());
         }
         return result;
-    }
-
-    /**
-     * 主机详情用的只读快照：缓存没有时返回 {@code null}（并异步预热一次），由前端展示「等待采集」。
-     */
-    public HostUsageVo snapshot(String hostId) {
-        Host host = hostService.findById(hostId)
-                .orElseThrow(() -> new BusinessException("主机不存在"));
-        CacheEntry entry = cache.get(hostId);
-        if (entry == null) {
-            prewarm(host);
-            return null;
-        }
-        return entry.value();
     }
 
     /**

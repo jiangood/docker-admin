@@ -1,9 +1,7 @@
-import {Alert, Button, Card, Col, Descriptions, Empty, Input, Popconfirm, Progress, Result, Row, Segmented, Space, Spin, Statistic, Table, Tabs, Tag, Tooltip, Typography, message} from 'antd'
+import {Alert, Button, Card, Col, Descriptions, Empty, Input, Popconfirm, Progress, Result, Row, Space, Spin, Statistic, Table, Tabs, Tag, Tooltip, Typography, message} from 'antd'
 import React from 'react'
-import dayjs from 'dayjs'
 import {DeleteOutlined, ExportOutlined, ImportOutlined, ReloadOutlined} from '@ant-design/icons'
 import {HttpClient, Page, PageUtils, PermUtils} from "@jiangood/open-admin"
-import Chart from "../../components/Chart"
 import HostImageExportModal from "../../components/HostImageExportModal"
 import HostImageImportModal from "../../components/HostImageImportModal"
 import LinkButton from "../../components/LinkButton"
@@ -68,71 +66,10 @@ function endpointOf(host) {
 }
 
 /**
- * 历史曲线的可选范围，与后端 {@code HostUsageSampleService.Range} 一一对应。
+ * 「监控」Tab 的轮询间隔：每次请求都会让后端现采一轮 docker stats（单容器约 1 秒），
+ * 所以不要设得太小；只在该 Tab 激活且页面可见时轮询。
  */
-const USAGE_RANGES = [
-    {label: '1 小时', value: '1h'},
-    {label: '6 小时', value: '6h'},
-    {label: '24 小时', value: '24h'},
-    {label: '7 天', value: '7d'},
-    {label: '30 天', value: '30d'},
-]
-
-/** 实时用量的轮询间隔：只是「多久看到新数字」，不会增加主机负载（读的是后端快照）。 */
-const USAGE_POLL_INTERVAL = 30 * 1000
-
-/**
- * 曲线配置：时间轴 + 折线，值格式化交给调用方（百分比 / 字节速率）。
- * 累计计数器在容器重启时会归零，后端已把那一小段置空，这里靠 connectNulls=false 断开。
- */
-function buildTrendOption({points, defs, percent, axisFormatter, timePattern}) {
-    return {
-        animation: false,
-        grid: {left: 4, right: 12, top: 32, bottom: 4, containLabel: true},
-        tooltip: {
-            trigger: 'axis',
-            confine: true,
-            valueFormatter: value => value == null || value === ''
-                ? '-'
-                : (percent ? `${Number(value).toFixed(1)}%` : formatBytes(value)),
-        },
-        legend: {top: 0, left: 0, icon: 'roundRect', itemWidth: 10, itemHeight: 10, textStyle: {fontSize: 12}},
-        xAxis: {
-            type: 'time',
-            axisLabel: {fontSize: 11, hideOverlap: true, formatter: value => dayjs(value).format(timePattern)},
-            splitLine: {show: false},
-        },
-        yAxis: {
-            type: 'value',
-            min: 0,
-            max: percent ? 100 : undefined,
-            axisLabel: {fontSize: 11, formatter: axisFormatter},
-            splitLine: {lineStyle: {type: 'dashed', color: '#f0f0f0'}},
-        },
-        series: defs.map(def => ({
-            name: def.name,
-            type: 'line',
-            smooth: true,
-            showSymbol: false,
-            connectNulls: false,
-            lineStyle: {width: 1.5},
-            itemStyle: {color: def.color},
-            data: points.map(point => [point.t, point[def.key]]),
-        })),
-    }
-}
-
-const TREND_CPU_DEFS = [
-    {name: 'CPU', key: 'cpuPercent', color: '#1677ff'},
-    {name: '内存', key: 'memPercent', color: '#52c41a'},
-]
-
-const TREND_IO_DEFS = [
-    {name: '网络 ↓', key: 'netRxBps', color: '#13c2c2'},
-    {name: '网络 ↑', key: 'netTxBps', color: '#faad14'},
-    {name: '磁盘 读', key: 'readBps', color: '#722ed1'},
-    {name: '磁盘 写', key: 'writeBps', color: '#eb2f96'},
-]
+const USAGE_POLL_INTERVAL = 5 * 1000
 
 /**
  * 主机详情：主机信息 + 垂直 Tab「容器 / 镜像 / 监控」，点击容器弹窗展示通用容器组件。
@@ -145,6 +82,9 @@ export default class extends React.Component {
 
     /** 「监控」Tab 的轮询定时器：只在 Tab 激活时存在，页面隐藏时暂停请求 */
     usageTimer = null
+
+    /** 是否有正在进行的实时采集请求：stats 本身要等约 1 秒，避免轮询把请求堆起来 */
+    usageRequesting = false
 
     state = {
         id: null,
@@ -165,17 +105,11 @@ export default class extends React.Component {
         // 清理构建临时容器同样要逐个 inspect / 删除，按钮单独 loading
         pruneContainersLoading: false,
 
-        // 实时用量（docker stats）：由后端每 1 分钟的采集任务写入快照，页面只读库/快照
+        // 实时用量（docker stats）：每次轮询都让后端现采一轮，不用定时任务的快照
         usage: null,
         usageLoading: false,
         usageError: null,
         usageUpdatedAt: null,
-
-        // 历史曲线：只含主机级数字，切换范围时才请求
-        usageRange: '24h',
-        series: null,
-        seriesLoading: false,
-        seriesError: null,
 
         activeTab: 'containers',
     }
@@ -194,14 +128,14 @@ export default class extends React.Component {
         this.loadInfo(id)
         this.loadContainers(id)
         this.loadImages(id)
-        // 默认停在「容器」Tab；「监控」在最后，切过去时才拉快照与曲线并开始轮询
+        // 默认停在「容器」Tab；「监控」在最后，切过去时立即现采一轮并开始轮询
         this.syncUsageTimer(id)
     }
 
     /**
      * 从容器详情页切回本页时刷新容器列表与主机信息：
      * 停止 / 删除 / 重启都已经在容器页里完成，列表不能还是离开时的旧状态。
-     * 监控数据由定时采集任务维护，不在这里重复拉取。
+     * 监控数据由自己的轮询维护，不在这里重复拉取。
      */
     onShow() {
         if (!this.shownOnce) {
@@ -220,9 +154,6 @@ export default class extends React.Component {
     componentDidUpdate(prevProps, prevState) {
         if (prevState.activeTab !== this.state.activeTab) {
             this.syncUsageTimer()
-        }
-        if (prevState.usageRange !== this.state.usageRange) {
-            this.loadSeries(this.state.id, this.state.usageRange)
         }
     }
 
@@ -266,37 +197,26 @@ export default class extends React.Component {
     }
 
     /**
-     * 读取实时用量：默认读后端每 1 分钟采集好的快照（不触发采集），refresh=true 才让后端现采一轮。
-     * 因此这里的轮询间隔只影响「多久看到新数字」，不会增加主机侧负载。
+     * 现采一轮实时用量：后端每次都执行 docker stats（stream=0，约 1 秒），返回当前时刻的数据。
+     * 上一次请求还没回来时直接跳过，避免慢主机上请求越堆越多。
      */
-    loadUsage = (id = this.state.id, refresh = false) => {
-        if (!id) {
+    loadUsage = (id = this.state.id) => {
+        if (!id || this.usageRequesting) {
             return
         }
+        this.usageRequesting = true
         this.setState({usageLoading: true})
-        HttpClient.get('admin/host/usage', refresh ? {id, refresh: true} : {id}, {toastError: false})
+        HttpClient.get('admin/host/usage', {id}, {toastError: false})
             .then(rs => this.setState({
                 usage: rs.data,
                 usageError: null,
-                // 用后端采集时间，而不是本地收到响应的时间：快照最多可能是一分钟前的
                 usageUpdatedAt: (rs.data && rs.data.collectedAt) || Date.now(),
             }))
             .catch(e => this.setState({usageError: e.message || '采集失败'}))
-            .finally(() => this.setState({usageLoading: false}))
-    }
-
-    /**
-     * 读取历史曲线：与实时用量分开，只在「监控」Tab 激活或切换时间范围时请求，不参与轮询。
-     */
-    loadSeries = (id = this.state.id, range = this.state.usageRange) => {
-        if (!id) {
-            return
-        }
-        this.setState({seriesLoading: true})
-        HttpClient.get('admin/host/usageHistory', {id, range}, {toastError: false})
-            .then(rs => this.setState({series: rs.data, seriesError: null}))
-            .catch(e => this.setState({series: null, seriesError: e.message || '读取历史数据失败'}))
-            .finally(() => this.setState({seriesLoading: false}))
+            .finally(() => {
+                this.usageRequesting = false
+                this.setState({usageLoading: false})
+            })
     }
 
     clearUsageTimer = () => {
@@ -306,21 +226,16 @@ export default class extends React.Component {
         }
     }
 
-    /** 切 Tab 时重建定时器；首次进入该 Tab 立即读一次快照与曲线 */
+    /** 切 Tab 时重建定时器；首次进入该 Tab 立即现采一轮 */
     syncUsageTimer = (id = this.state.id) => {
         this.clearUsageTimer()
         if (this.state.activeTab !== 'stats' || !id) {
             return
         }
-        if (!this.state.usage) {
-            this.loadUsage(id, false)
-        }
-        if (!this.state.series) {
-            this.loadSeries(id, this.state.usageRange)
-        }
+        this.loadUsage(id)
         this.usageTimer = setInterval(() => {
             if (!document.hidden) {
-                this.loadUsage(id, false)
+                this.loadUsage(id)
             }
         }, USAGE_POLL_INTERVAL)
     }
@@ -399,7 +314,7 @@ export default class extends React.Component {
      * 刷新当前 Tab：容器 / 镜像 / 监控的数据在父组件 state 里，重取一次即可。
      */
     refreshTab = () => {
-        const {id, activeTab, usageRange} = this.state
+        const {id, activeTab} = this.state
         if (!id) {
             return
         }
@@ -408,73 +323,22 @@ export default class extends React.Component {
         } else if (activeTab === 'images') {
             this.loadImages(id)
         } else if (activeTab === 'stats') {
-            // 监控：refresh=true 让后端现采一轮，同时重读历史曲线
-            this.loadUsage(id, true)
-            this.loadSeries(id, usageRange)
+            this.loadUsage(id)
         }
     }
 
     /**
-     * 「监控」Tab：历史曲线在上，docker stats 版式（主机汇总 + 逐容器明细）在下。
-     */
-    renderUsage() {
-        return <>
-            {this.renderTrend()}
-            {this.renderLiveUsage()}
-        </>
-    }
-
-    /**
-     * 历史曲线卡片：只在切换时间范围时请求，不跟着实时用量轮询。
-     * 即使当前采集失败（主机离线），历史仍然能看——这正是落库的意义。
-     */
-    renderTrend() {
-        const {series, seriesLoading, seriesError, usageRange} = this.state
-        const points = (series && series.points) || []
-        const timePattern = usageRange === '7d' || usageRange === '30d' ? 'MM-DD HH:mm' : 'HH:mm'
-
-        const extra = <Space size={8}>
-            {seriesLoading && points.length > 0 && <Spin size='small'/>}
-            <Segmented size='small' value={usageRange} options={USAGE_RANGES}
-                       onChange={v => this.setState({usageRange: v})}/>
-        </Space>
-
-        let body
-        if (seriesLoading && points.length === 0) {
-            body = <div className='text-center' style={{padding: '80px 0'}}><Spin/></div>
-        } else if (seriesError) {
-            body = <Alert type='warning' showIcon message='历史数据读取失败' description={seriesError}/>
-        } else if (points.length === 0) {
-            body = <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description='暂无历史数据'/>
-        } else {
-            body = <>
-                <Chart height={220} option={buildTrendOption({
-                    points, defs: TREND_CPU_DEFS, percent: true,
-                    axisFormatter: v => `${v}%`, timePattern,
-                })}/>
-                <Chart height={200} option={buildTrendOption({
-                    points, defs: TREND_IO_DEFS, percent: false,
-                    axisFormatter: v => formatBytes(v), timePattern,
-                })}/>
-            </>
-        }
-
-        return <Card size='small' className='mb-4' title='资源趋势' extra={extra}>
-            {body}
-        </Card>
-    }
-
-    /**
-     * 实时用量：概览卡片（主机汇总）+ 容器用量表格卡片，数据来自后端采集快照。
+     * 实时用量：概览卡片（主机汇总）+ 容器用量表格卡片。
      */
     renderLiveUsage() {
         const {usage, usageLoading, usageError, usageUpdatedAt} = this.state
 
         const extra = <Space size={8}>
             {usageLoading && <Spin size='small'/>}
-            {usageUpdatedAt && <Typography.Text type='secondary' style={{fontSize: 12}}>
-                采集于 {formatClock(usageUpdatedAt)}
-            </Typography.Text>}
+            <Typography.Text type='secondary' style={{fontSize: 12}}>
+                {usageUpdatedAt ? `更新于 ${formatClock(usageUpdatedAt)}` : '正在采集'}
+                {' · 每 5 秒自动刷新'}
+            </Typography.Text>
         </Space>
 
         const usageColumns = [
@@ -741,7 +605,7 @@ export default class extends React.Component {
             {
                 key: 'stats',
                 label: '监控',
-                children: this.renderUsage()
+                children: this.renderLiveUsage()
             },
         ]
 
