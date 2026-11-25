@@ -230,22 +230,6 @@ export default class extends React.Component {
                 )}
                 request={this.request}
                 columns={this.columns}
-                searchFormRender={() => (
-                    <>
-                        <Form.Item label='关键词' name='searchText'>
-                            <Input placeholder='镜像 / 主机 / 文件名 / 任务 ID' allowClear/>
-                        </Form.Item>
-                        <Form.Item label='状态' name='status'>
-                            <Select style={{width: 140}} allowClear placeholder='全部状态' options={[
-                                {value: 'RUNNING', label: '运行中'},
-                                {value: 'SUCCESS', label: '已完成'},
-                                {value: 'FAILED', label: '失败'},
-                                {value: 'CLEANING', label: '清理中'},
-                                {value: 'CLEANED', label: '已清理'},
-                            ]}/>
-                        </Form.Item>
-                    </>
-                )}
             />
 
             <Drawer title='下载日志' size={860} open={logVisible}
