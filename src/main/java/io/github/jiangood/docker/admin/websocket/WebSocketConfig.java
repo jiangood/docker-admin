@@ -79,7 +79,7 @@ public class WebSocketConfig implements WebSocketConfigurer {
         // 主机 Docker CLI（辅助容器内的交互式 shell）
         register(registry, hostCliHandler, "/admin/ws/host-cli/{hostId}", hostCliHandshakeInterceptor);
 
-        // 通用任务实时日志（镜像同步、构建、部署、导出等长任务统一走这里；
+        // 通用任务实时日志（构建、部署、导出等长任务统一走这里；
         // 鉴权依据任务记录 t_task_log 的 permission 字段，见 TaskLogHandshakeInterceptor）
         register(registry, syncLogHandler, "/admin/ws/task-log/{logId}", taskLogHandshakeInterceptor);
     }

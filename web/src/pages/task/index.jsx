@@ -12,7 +12,6 @@ const TYPE_LABELS = {
     deploy: {label: '应用部署', color: 'blue'},
     build: {label: '项目构建', color: 'geekblue'},
     'build-test': {label: '构建测试', color: 'cyan'},
-    'image-sync': {label: '镜像同步', color: 'green'},
     'image-export': {label: '镜像导出', color: 'orange'},
     'image-import': {label: '镜像导入', color: 'gold'},
     'image-download': {label: '镜像下载', color: 'volcano'},

@@ -7,7 +7,7 @@
          只保留 WARN 及以上（连接失败、认证失败、主机密钥问题仍能看到）。 -->
     <logger name="com.jcraft.jsch" level="WARN"/>
 
-    <!-- 文件日志（构建、部署、镜像同步/导出等）由 open-admin 框架的
+    <!-- 文件日志（构建、部署、导出等）由 open-admin 框架的
          logviewer FileLogConfig 以编程方式注册（FILE-LOGGER + SiftingAppender，
          MDC key FILE_LOG_ID），写入 ${logging.file.path}/{logId}.log。 -->
 

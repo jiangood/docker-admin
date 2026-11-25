@@ -186,7 +186,7 @@ public class AppService extends BaseService<App> {
 
             TaskLog.bind("task/" + deployLog.getId());
             // 登记为运行中的任务：前端「部署日志」用 WebSocket 实时 tail 本文件，
-            // 未登记时 WS 会立刻判定任务已结束并断开（与构建 / 镜像同步一致）。
+            // 未登记时 WS 会立刻判定任务已结束并断开（与构建一致）。
             taskLogRegistry.start(deployLog.getId());
             fileLog.info("部署阶段开始");
             Host host = app.getHost();

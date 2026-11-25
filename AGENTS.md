@@ -70,17 +70,11 @@ git tag vx.y.z && git push && git push origin vx.y.z
 - **菜单配置**在 `src/main/resources/menu-docker.yml`，可用 `menu-override.yml` 覆盖
   （open-admin 3.2.0 起只扫描 `menu.yml` / `menu-*.yml`，旧的 `application-menu*.yml` 不再识别）。
   顶层为「项目」`/project`、「应用」`/app`、「镜像」`/image`、「主机」`/host`，以及「设置」（注册中心、代码源）
-  与「工具」（镜像同步、主机 Agent、构建测试、镜像下载、网站监控、资源统计、任务中心）两个分组。
+  与「工具」（主机 Agent、构建测试、镜像下载、网站监控、资源统计、任务中心）两个分组。
 - **领域模型：** `Project`(项目，构建定义) → `Image`(镜像，`imageUrl` 唯一) → `ImageTag`(镜像标签，`imageUrl`+`tag`)。
   项目与镜像按 `imageUrl` 相等关联；`App` 只存 `imageUrl` + `imageTag`，与项目/镜像均无 id 外键。
   菜单为「项目」(`/project`) 与「镜像」(`/image`)，权限码为 `image:*`，表名为 `t_image`。
-- **镜像同步记录**存 `t_image_sync_log`（`ImageSyncLog`，表由 `ddl-auto: update` 自动创建）：
-  控制器先落库一条 `success` 为空的「同步中」记录，`@Async` 任务结束时补全结果、耗时与失败原因。
-  记录只存快照（主机名、注册中心地址），日志正文仍在 `/data/logs/{logId}.log`，按记录里的 `logId` 回看。
-  页面（`web/src/pages/image-sync/index.jsx`）是 ProTable + 工具栏三个「增加」按钮
-  （同步到注册中心 / 同步到主机 / 经执行主机中转），每个按钮打开 `ImageSyncModal` 对应模式，
-  提交后弹窗原地切换为实时日志；行内「查看日志」用抽屉回看。
-- **任务中心（通用长任务框架，9 条链路全部接入）：** 后台长任务统一登记到
+- **任务中心（通用长任务框架，8 条链路全部接入）：** 后台长任务统一登记到
   `t_task_log`（`TaskLog`，`ddl-auto: update` 自动建表）：`logId`（即日志文件名）唯一，
   `type` / `title` / `status`（RUNNING/SUCCESS/FAILED）/ `permission`（查看该任务日志所需权限码）/
   `error` / `progress`（JSON 快照，可选）/ `triggerUser` / `endTime` / `timeSpend`。
@@ -96,8 +90,6 @@ git tag vx.y.z && git push && git push origin vx.y.z
         组织数据权限校验**，部署日志的组织隔离由应用页入口承担）</li>
     <li>`build-test`：`build-test-<rand>`，permission `build-test:view`（BuildTestService，不落库，
         平台重启任务丢失但有 t_task_log 记录兜底）</li>
-    <li>`image-sync`：`sync-<rand>`，permission `image-sync:view`（ImageSyncService，业务明细仍在
-        `t_image_sync_log`，双写）</li>
     <li>`image-export` / `image-import` / `image-download` / `host-image-export` / `agent-deploy`：
         `类型-<rand>`，permission 分别为 `image:export` / `image:import` /
         `image-download:download` / `host:image` / `host:list`</li>

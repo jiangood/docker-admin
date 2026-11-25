@@ -19,7 +19,7 @@ import java.util.concurrent.Executors;
 import io.github.jiangood.openadmin.modules.task.registry.TaskLogRegistry;
 
 /**
- * 后台任务实时日志 WebSocket（镜像同步、构建、部署等）。
+ * 后台任务实时日志 WebSocket（构建、部署等）。
  * <p>
  * 连接后先把日志文件已有内容补齐（避免错过 WS 建立前的日志），再增量 tail，
  * 任务结束并写完最后内容后关闭连接。数据来源即 {@code /data/logs/{logId}.log}。

@@ -70,14 +70,6 @@ menus:
   tool:
     name: 工具
     icon: ToolOutlined
-  setting-sync:
-    pid: tool
-    name: 镜像同步
-    path: /image-sync
-    icon: CloudSyncOutlined
-    perms:
-      - {name: 查看, code: image-sync:view}
-      - {name: 同步, code: image-sync:sync}
   host-agent:
     pid: tool
     name: 主机 Agent

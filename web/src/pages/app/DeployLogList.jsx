@@ -33,7 +33,7 @@ function statusOf(log) {
  * 部署日志：按部署记录列出历史，默认展开最新一次，其余点击查看。
  * 每次部署一个独立日志文件（logId = 部署记录 id），不再把所有部署混在一起。
  * <p>
- * 进行中的部署走 WebSocket 实时 tail（与构建、镜像同步日志一致），任务结束后 WS 会补发
+ * 进行中的部署走 WebSocket 实时 tail（与构建日志一致），任务结束后 WS 会补发
  * 剩余内容并断开，随后列表切换为框架 TaskLogViewer 的 raw HTTP 读取（/admin/sys/log/raw/task/{logId}）。
  * 部署记录由 @Async 任务在部署开始时才落库，因此列表需要轮询，直到最新记录从「部署中」变成终态。
  */
