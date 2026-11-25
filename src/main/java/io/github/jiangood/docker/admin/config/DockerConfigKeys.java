@@ -35,6 +35,15 @@ public final class DockerConfigKeys {
     public static final int DEFAULT_LOG_DOWNLOAD_DAYS = 7;
     public static final int MAX_LOG_DOWNLOAD_DAYS = 3650;
 
+    /**
+     * 平台侧镜像 tar 的保留天数：「工具 - 镜像下载」与主机详情导出都写到
+     * {@code {数据目录}/image-tar}，超过该天数的目录由后台清理线程删除。
+     */
+    public static final String IMAGE_TAR_RETAIN_DAYS = "docker.image-tar.retain-days";
+    public static final int DEFAULT_IMAGE_TAR_RETAIN_DAYS = 3;
+    public static final int MIN_IMAGE_TAR_RETAIN_DAYS = 1;
+    public static final int MAX_IMAGE_TAR_RETAIN_DAYS = 365;
+
     /** 默认镜像注册中心（{@code t_registry.id}），留空表示不设置默认值。 */
     public static final String DEFAULT_REGISTRY_ID = "docker.default.registry-id";
 

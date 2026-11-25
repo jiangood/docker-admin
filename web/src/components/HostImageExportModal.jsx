@@ -203,7 +203,7 @@ export default class HostImageExportModal extends React.Component {
             <Alert type='info' showIcon message='准备导出'
                    description={<>
                        将在该主机上执行 <Typography.Text code>docker save</Typography.Text>，
-                       生成 tar 后可在本弹窗下载，也可按显示的路径直接取用。
+                       生成 tar 保存到平台服务器，可在本弹窗下载，也可在平台服务器上按显示的路径取用。
                        {record?.size ? ` 该镜像约 ${formatBytes(record.size)}。` : ''}
                    </>}/>
         </Space>
@@ -223,10 +223,9 @@ export default class HostImageExportModal extends React.Component {
                     ? '导出完成，可点击右下角「下载 tar」保存到本机'
                     : '导出已完成，但 tar 已不存在，请重新导出'
 
-        const pathLabel = task.remote ? `主机路径（${task.hostName || ''}）` : '保存位置'
-        const pathHint = task.remote
-            ? 'tar 保存在执行主机上；下载时经 SFTP 读取，不在平台侧重复落盘。tar 不会自动删除，请按需清理。'
-            : 'tar 保存在平台服务器；若该主机为 TCP 连接，docker API 无法直接写远端文件。tar 不会自动删除，请按需清理。'
+        const pathLabel = '保存位置'
+        const pathHint = 'tar 保存在平台服务器（image-tar 目录），下载时从平台读盘，不区分主机连接方式；'
+            + '不会随下载自动删除，超过系统参数里的保留天数后由平台自动清理。'
         const speedText = formatSpeed(task.speed)
 
         return <Space direction='vertical' size='middle' style={{width: '100%'}}>

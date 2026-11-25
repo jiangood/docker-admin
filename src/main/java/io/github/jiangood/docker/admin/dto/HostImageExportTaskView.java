@@ -29,14 +29,9 @@ public class HostImageExportTaskView {
     private String fileName;
 
     /**
-     * tar 的保存位置：SSH 主机为远端路径，本机 / TCP 主机为平台服务器路径。
+     * tar 在平台服务器上的保存位置。
      */
     private String path;
-
-    /**
-     * 是否保存在 SSH 主机上；下载时需经 SFTP 读取。
-     */
-    private boolean remote;
 
     /**
      * RUNNING / SUCCESS / FAILED。

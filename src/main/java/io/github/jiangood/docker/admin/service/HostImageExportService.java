@@ -22,14 +22,15 @@ import java.util.regex.Pattern;
 import io.github.jiangood.openadmin.modules.task.service.SysTaskLogService;
 
 /**
- * 主机详情页的镜像导出：把主机上已有的镜像用 {@code docker save} 打成 tar，留在主机上供下载。
+ * 主机详情页的镜像导出：把主机上已有的镜像用 {@code docker save} 打成 tar。
  * <p>
- * 大镜像不在平台侧中转落盘（SSH 主机直接在主机上打包），下载时才按需读取：
- * SSH 主机走 SFTP 流式转发，本机 / TCP 主机直接读平台文件。tar 不自动删除，
- * 用户可在弹窗里看到保存路径并自行清理。
+ * 与镜像下载页共用同一条保存路径：读取 docker 的 save 流并写到平台服务器的
+ * {@code image-tar/{logId}/}，下载时直接从平台读盘，不区分主机连接方式。
+ * tar 不会在下载后自动删除，超过保留天数（系统参数 {@code docker.image-tar.retain-days}）
+ * 由 {@link ImageDownloadService} 的清理线程删除。
  * <p>
- * 任务状态只存内存：logId 同时是日志文件名与主机侧目录名，进程重启后任务丢失，
- * 但已生成的 tar 仍在主机上，可按日志里的路径取用。
+ * 任务状态只存内存：logId 同时是日志文件名与平台目录名，进程重启后任务丢失，
+ * 但已生成的 tar 仍在平台上，可按日志里的路径取用。
  */
 @Service
 @Slf4j
@@ -63,7 +64,6 @@ public class HostImageExportService {
         private volatile Status status = Status.RUNNING;
         private volatile String fileName;
         private volatile String path;
-        private volatile boolean remote;
         private volatile long size;
         /**
          * 当前写入速度（字节/秒）；成功后改为整次导出的平均速度。
@@ -84,12 +84,11 @@ public class HostImageExportService {
         }
 
         void complete(ImageDownloadService.TarResult result) {
-            this.fileName = result.getFileName();
-            this.path = result.getPath();
-            this.size = result.getSize();
-            this.remote = result.isRemote();
+            this.fileName = result.fileName();
+            this.path = result.path();
+            this.size = result.size();
             long elapsed = Math.max(1L, System.currentTimeMillis() - startTime);
-            this.speed = result.getSize() * 1000L / elapsed;
+            this.speed = result.size() * 1000L / elapsed;
             this.status = Status.SUCCESS;
         }
 
@@ -153,7 +152,7 @@ public class HostImageExportService {
         String error = null;
         try {
             ImageDownloadService.TarResult result = imageDownloadService.saveToHost(
-                    logId, hostId, image, false, false, task == null ? null : task::progress);
+                    logId, hostId, image, false, task == null ? null : task::progress);
             if (task != null) {
                 task.complete(result);
             }
@@ -200,13 +199,13 @@ public class HostImageExportService {
     }
 
     /**
-     * 把 tar 流式写给浏览器；不删除主机上的源文件。
+     * 把 tar 流式写给浏览器；不删除平台上的源文件（由保留天数策略清理）。
      */
     public void copyTarTo(String logId, OutputStream out) throws Exception {
         Task task = tasksByLogId.get(logId);
         Assert.notNull(task, "导出任务不存在或已失效");
         Assert.state(isReady(task), "导出尚未完成或归档已不存在");
-        imageDownloadService.copyTarTo(task.hostId, task.path, task.remote, out);
+        imageDownloadService.copyFile(task.path, out);
     }
 
     private HostImageExportTaskView view(Task task) {
@@ -219,7 +218,6 @@ public class HostImageExportService {
         view.setHostName(task.hostName);
         view.setFileName(task.fileName);
         view.setPath(task.path);
-        view.setRemote(task.remote);
         view.setStatus(task.status.name());
         view.setReady(isReady(task));
         view.setSize(task.size);
@@ -229,14 +227,13 @@ public class HostImageExportService {
     }
 
     private static boolean isReady(Task task) {
-        if (task.status != Status.SUCCESS) {
-            return false;
-        }
-        return task.remote || (task.path != null && new File(task.path).isFile());
+        return task.status == Status.SUCCESS
+                && task.path != null
+                && new File(task.path).isFile();
     }
 
     /**
-     * logId 同时是日志文件名与主机侧目录名，必须按白名单校验，防止目录穿越。
+     * logId 同时是日志文件名与平台目录名，必须按白名单校验，防止目录穿越。
      */
     private static boolean isValidLogId(String logId) {
         return logId != null && logId.matches("^[A-Za-z0-9_-]{1,64}$");

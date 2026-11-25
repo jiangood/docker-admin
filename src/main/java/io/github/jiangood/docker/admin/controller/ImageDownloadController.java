@@ -18,8 +18,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 镜像下载 tar：在指定主机上拉取公共镜像，并打成 {@code docker save} 归档留在该主机。
+ * 镜像下载 tar：在指定主机上拉取公共镜像，并用 {@code docker save} 打成 tar 保存在平台服务器。
  * <p>
+ * 下载时直接从平台读盘流式转发，不再区分主机连接方式；可勾选下载完成后删除以节省磁盘。
  * 过程通过 {@code /admin/ws/task-log/{logId}} 实时输出日志。
  */
 @RestController
@@ -50,7 +51,7 @@ public class ImageDownloadController {
     }
 
     /**
-     * 任务结果：tar 已生成时返回文件名、大小、保存位置与下载方式；执行中或失败时 data 为 null。
+     * 任务结果：tar 已生成时返回文件名、大小与保存位置；执行中或失败时 data 为 null。
      */
     @HasPermission("image-download:download")
     @RequestMapping("task")
@@ -59,18 +60,21 @@ public class ImageDownloadController {
     }
 
     /**
-     * 下载已生成的 tar：辅助容器方式经 Docker archive 接口，SSH 主机经 SFTP，
-     * 平台侧文件直接读盘；均为流式转发，不删除源文件。
+     * 下载已生成的 tar：从平台读盘流式转发，不删除源文件；{@code deleteAfter=true} 时
+     * 在响应写完后删除该 tar（用于大镜像省磁盘）。
      */
     @HasPermission("image-download:download")
     @RequestMapping("tar")
-    public void tar(String logId, HttpServletResponse response) throws Exception {
+    public void tar(String logId, Boolean deleteAfter, HttpServletResponse response) throws Exception {
         ImageDownloadTaskView task = service.readyTask(logId);
         DownloadTool.prepareDownload(response, task.getFileName(), "application/x-tar");
         if (task.getSize() > 0) {
             response.setContentLengthLong(task.getSize());
         }
         service.copyTarTo(logId, response.getOutputStream());
+        if (Boolean.TRUE.equals(deleteAfter)) {
+            service.deleteTarQuietly(logId);
+        }
     }
 
     /**

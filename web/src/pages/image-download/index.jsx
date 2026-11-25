@@ -1,4 +1,4 @@
-import {Alert, Button, Card, Drawer, Form, Input, Popconfirm, Select, Space, Typography} from 'antd'
+import {Alert, Button, Card, Checkbox, Drawer, Form, Input, Popconfirm, Select, Space, Typography} from 'antd'
 import {DeleteOutlined, DownloadOutlined, FileTextOutlined} from '@ant-design/icons'
 import React from 'react'
 import {HttpClient, Page, Perm, UrlUtils} from '@jiangood/open-admin'
@@ -8,8 +8,8 @@ import {formatBytes} from '../../components/container/utils'
 /**
  * 镜像下载 tar：在指定主机上拉取镜像（支持公共镜像），再用 docker save 打成 tar 包。
  * <p>
- * 优先由主机辅助容器打包（tar 落在挂载目录下，网页可直接下载）；
- * 未部署辅助容器时回落到 SSH 远端 / 平台服务器保存，同样支持网页下载。
+ * 无论主机是本机、TCP 还是 SSH，tar 统一保存在平台服务器的 image-tar 目录，
+ * 下载时从平台读盘；可选「下载完成后删除」以节省磁盘，超过保留天数的也会自动清理。
  */
 const POLL_INTERVAL = 2000
 /** 日志结束后最多再确认几次状态（任务收尾 / WS 提前断开时兜底）。 */
@@ -24,6 +24,9 @@ export default class extends React.Component {
         submitting: false,
         finished: false,
         task: null,
+        deleteAfter: true,
+        downloaded: false,
+        removed: false,
     }
 
     pollTimer = null
@@ -42,7 +45,7 @@ export default class extends React.Component {
 
     submit = values => {
         this.stopPoll()
-        this.setState({submitting: true, finished: false, task: null})
+        this.setState({submitting: true, finished: false, task: null, downloaded: false, removed: false})
         HttpClient.post('admin/image-download/download', values).then(rs => {
             this.setState({logId: rs.data, logVisible: true})
         }).catch(() => {
@@ -100,41 +103,46 @@ export default class extends React.Component {
 
     /** 同源普通链接，浏览器直接流式写盘（不走 axios blob，避免大镜像撑爆内存）。 */
     downloadUrl = () => {
+        const suffix = this.state.deleteAfter ? '&deleteAfter=1' : ''
         return UrlUtils.contextPath('/admin/image-download/tar')
-            + '?logId=' + encodeURIComponent(this.state.logId)
+            + '?logId=' + encodeURIComponent(this.state.logId) + suffix
+    }
+
+    /** 勾了「下载完成后删除」就置为已完成态，避免再次点击落到已删除的文件上。 */
+    onDownload = () => {
+        if (this.state.deleteAfter) {
+            this.setState({downloaded: true})
+        }
     }
 
     deleteTar = () => {
         const {logId} = this.state
         HttpClient.postForm('admin/image-download/delete', {logId}).then(() => {
-            this.setState({task: null})
+            this.setState({task: null, downloaded: true, removed: true})
         })
     }
 
-    modeHint = mode => {
-        if (mode === 'AGENT') {
-            return 'tar 由主机辅助容器打包，保存在其挂载目录下；下载直接经 Docker API 读取，不会自动删除，可在终端里访问上面的路径或删除。'
-        }
-        if (mode === 'SSH') {
-            return 'tar 保存在执行主机上，下载时经 SFTP 读取；不会自动删除，请按需清理。'
-        }
-        return '该主机为 TCP 连接，docker API 无法写远端文件，tar 保存在平台服务器；不会自动删除，请按需清理。'
-    }
-
     renderTask = () => {
-        const {logId, task, finished} = this.state
-        if (!logId) {
+        const {task, finished, deleteAfter, downloaded, removed} = this.state
+        if (!this.state.logId) {
             return null
+        }
+        if (removed) {
+            return <Alert style={{marginTop: 16}} type='success' showIcon
+                          message='tar 已删除'
+                          description='需要再次下载请重新提交任务。'/>
         }
         if (!task) {
             return <Alert style={{marginTop: 16}} type={finished ? 'warning' : 'info'} showIcon
                           message={finished ? '任务已结束，暂未看到可下载的 tar' : '正在拉取并打包'}
                           description={finished
                               ? '如果日志里提示失败，请按原因处理后重新提交；若只是收尾较慢，可稍后再打开日志确认。'
-                              : '拉取与打包在后台执行，完成后这里会出现「下载 tar」按钮，过程中可打开日志查看进度。'}/>
+                              : `拉取与打包在后台执行（docker save 流由平台接收），完成后这里会出现「下载 tar」按钮${deleteAfter ? '；勾选状态下下载完成会自动删除 tar' : ''}。`}/>
         }
         return <Alert style={{marginTop: 16}} type='success' showIcon
-                      message={`tar 已生成${task.size ? `（${formatBytes(task.size)}）` : ''}，可直接下载`}
+                      message={downloaded
+                          ? '下载已开始，完成后平台会删除 tar'
+                          : `tar 已生成${task.size ? `（${formatBytes(task.size)}）` : ''}，可直接下载`}
                       description={<Space direction='vertical' size={6} style={{width: '100%'}}>
                           <Typography.Text>
                               保存位置：
@@ -142,22 +150,35 @@ export default class extends React.Component {
                                   {task.path}
                               </Typography.Text>
                           </Typography.Text>
-                          <Typography.Text type='secondary'>{this.modeHint(task.mode)}</Typography.Text>
+                          <Typography.Text type='secondary'>
+                              tar 保存在平台服务器，下载时从平台读取；不会长期保留，超过系统参数里的保留天数后自动清理。
+                          </Typography.Text>
+                          <Checkbox checked={deleteAfter} disabled={downloaded}
+                                    onChange={e => this.setState({deleteAfter: e.target.checked})}>
+                              下载完成后删除 tar（不占平台磁盘）
+                          </Checkbox>
                           <Space>
                               <Button type='primary' size='small' icon={<DownloadOutlined/>}
-                                      href={this.downloadUrl()}>
-                                  下载 tar
+                                      disabled={downloaded}
+                                      href={downloaded ? undefined : this.downloadUrl()}
+                                      onClick={this.onDownload}>
+                                  {downloaded ? '已开始下载' : '下载 tar'}
                               </Button>
-                              <Popconfirm title='删除这个 tar？' description='删除后需要重新下载镜像才能再次生成。'
-                                          onConfirm={this.deleteTar}>
-                                  <Button size='small' danger icon={<DeleteOutlined/>}>删除 tar</Button>
-                              </Popconfirm>
+                              {downloaded ? null
+                                  : <Popconfirm title='删除这个 tar？' description='删除后需要重新下载镜像才能再次生成。'
+                                                onConfirm={this.deleteTar}>
+                                      <Button size='small' danger icon={<DeleteOutlined/>}>删除 tar</Button>
+                                  </Popconfirm>}
                           </Space>
+                          {downloaded ? <Typography.Text type='secondary'>
+                              下载完成后平台会自动删除 tar；若取消了浏览器下载，文件会保留，超过保留天数后由平台清理。
+                              需要再次下载请重新提交任务。
+                          </Typography.Text> : null}
                       </Space>}/>
     }
 
     render() {
-        const {hostOptions, logId, logVisible, submitting, task} = this.state
+        const {hostOptions, logId, logVisible, submitting, task, downloaded} = this.state
         const extra = []
         if (logId) {
             extra.push(<Button key='log' type='link' size='small' icon={<FileTextOutlined/>}
@@ -165,9 +186,9 @@ export default class extends React.Component {
                 查看日志
             </Button>)
         }
-        if (task?.ready) {
+        if (task?.ready && !downloaded) {
             extra.push(<Button key='download' type='primary' size='small' icon={<DownloadOutlined/>}
-                               href={this.downloadUrl()}>
+                               href={this.downloadUrl()} onClick={this.onDownload}>
                 下载 tar{task.size ? `（${formatBytes(task.size)}）` : ''}
             </Button>)
         }
@@ -184,7 +205,7 @@ export default class extends React.Component {
 
                     <Form.Item label='执行主机' name='hostId'
                                rules={[{required: true, message: '请选择执行主机'}]}
-                               extra='优先由该主机的辅助容器打包，tar 可直接在网页下载；未部署辅助容器时按 SSH 远端 / 平台服务器保存。'>
+                               extra='拉取与打包在所选主机上执行，tar 统一保存在平台服务器，可在本页直接下载。'>
                         <Select options={hostOptions} showSearch optionFilterProp='label'
                                 placeholder='请选择执行主机'/>
                     </Form.Item>
@@ -203,9 +224,9 @@ export default class extends React.Component {
 
             <Drawer title='下载日志' size={860} open={logVisible}
                     mask={{closable: false}}
-                    extra={task?.ready ? (
+                    extra={task?.ready && !downloaded ? (
                         <Button type='primary' size='small' icon={<DownloadOutlined/>}
-                                href={this.downloadUrl()}>
+                                href={this.downloadUrl()} onClick={this.onDownload}>
                             下载 tar
                         </Button>
                     ) : null}

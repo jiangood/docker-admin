@@ -274,9 +274,9 @@ public class HostController  {
     }
 
     /**
-     * 下载已导出的 tar：SSH 主机经 SFTP 流式读取，本机 / TCP 主机直接读平台文件。
+     * 下载已导出的 tar：从平台读盘流式转发，不删除源文件。
      * <p>
-     * 不删除主机上的源文件，用户可继续用弹窗里显示的主机路径取用或自行清理。
+     * 超过保留天数的 tar 由平台清理线程自动删除；需要立刻释放空间可到镜像下载页删除。
      */
     @HasPermission("host:image")
     @RequestMapping("exportImage/download")

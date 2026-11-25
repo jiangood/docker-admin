@@ -235,20 +235,6 @@ public class DockerClientManager {
     }
 
     /**
-     * 供其他需要走主机 SSH 连接配置的模块使用（如镜像导出 / 下载的 SFTP）：
-     * 统一按主机字段解析 SSH 地址，并应用连接代理。
-     *
-     * @param connectTimeout 连接超时（毫秒）
-     * @param soTimeout      认证后 socket 读超时（毫秒，0 表示不设置）
-     */
-    public Session createSshSession(Host host, int connectTimeout, int soTimeout) throws Exception {
-        String user = StrUtil.blankToDefault(host.getSshUser(), DEFAULT_SSH_USER);
-        String sshHost = StrUtil.blankToDefault(host.getSshHost(), host.getDockerHost());
-        int port = host.getSshPort() != null ? host.getSshPort() : DEFAULT_SSH_PORT;
-        return connectSshSession(host, user, sshHost, port, connectTimeout, soTimeout);
-    }
-
-    /**
      * 建立 SSH 会话：内网不校验 host key，只走密码认证；配置了代理时经代理连接目标 SSH。
      *
      * @param connectTimeout 连接超时（毫秒）

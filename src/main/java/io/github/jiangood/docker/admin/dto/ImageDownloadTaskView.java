@@ -21,14 +21,9 @@ public class ImageDownloadTaskView {
     private String fileName;
 
     /**
-     * tar 的保存位置：辅助容器方式为宿主机路径，SSH 主机为远端路径，其余为平台服务器路径。
+     * tar 在平台服务器上的保存位置（{@code {数据目录}/image-tar/{logId}/}）。
      */
     private String path;
-
-    /**
-     * AGENT / SSH / PLATFORM，决定前端展示的说明文字。
-     */
-    private String mode;
 
     /**
      * 文件大小（字节）。
