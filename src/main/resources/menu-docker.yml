@@ -67,6 +67,16 @@ menus:
       - {name: 查看, code: code-source:view}
       - {name: 保存, code: code-source:save}
       - {name: 删除, code: code-source:delete}
+  setting-proxy:
+    pid: setting
+    name: 代理管理
+    path: /proxy
+    icon: GlobalOutlined
+    perms:
+      - {name: 查看, code: proxy:view}
+      - {name: 保存, code: proxy:save}
+      - {name: 删除, code: proxy:delete}
+      - {name: 测试, code: proxy:test}
   tool:
     name: 工具
     icon: ToolOutlined

@@ -1,7 +1,6 @@
 package io.github.jiangood.docker.admin.job;
 
 import io.github.jiangood.openadmin.framework.config.SystemProperties;
-import io.github.jiangood.openadmin.modules.job.entity.JobLogAggregation;
 import io.github.jiangood.openadmin.modules.job.entity.SysJob;
 import io.github.jiangood.openadmin.modules.job.repository.SysJobRepository;
 import io.github.jiangood.openadmin.modules.job.service.SysJobService;
@@ -39,7 +38,7 @@ class BuiltinJobRegistrarTest {
     void createsEnabledJobWhenMissing() throws Exception {
         when(sysJobRepository.findAll()).thenReturn(List.of());
 
-        registrar(true).register(JOB_CLASS, NAME, CRON, JobLogAggregation.PER_RUN);
+        registrar(true).register(JOB_CLASS, NAME, CRON);
 
         ArgumentCaptor<SysJob> captor = ArgumentCaptor.forClass(SysJob.class);
         verify(sysJobService).save(captor.capture(), isNull());
@@ -48,7 +47,6 @@ class BuiltinJobRegistrarTest {
         assertEquals(NAME, saved.getName());
         assertEquals(CRON, saved.getCron());
         assertTrue(saved.getEnabled());
-        assertEquals(JobLogAggregation.PER_RUN, saved.getLogAggregation());
     }
 
     @Test
@@ -60,19 +58,18 @@ class BuiltinJobRegistrarTest {
         shell.setEnabled(false);
         when(sysJobRepository.findAll()).thenReturn(List.of(shell));
 
-        registrar(true).register(JOB_CLASS, NAME, CRON, JobLogAggregation.PER_RUN);
+        registrar(true).register(JOB_CLASS, NAME, CRON);
 
         ArgumentCaptor<SysJob> captor = ArgumentCaptor.forClass(SysJob.class);
         ArgumentCaptor<List<String>> fields = ArgumentCaptor.forClass(List.class);
         verify(sysJobService).save(captor.capture(), fields.capture());
         // 更新已有行必须带字段列表，框架的 updateField 不接受空列表
         assertTrue(fields.getValue().containsAll(List.of(
-                SysJob.Fields.name, SysJob.Fields.cron, SysJob.Fields.enabled, SysJob.Fields.logAggregation)));
+                SysJob.Fields.name, SysJob.Fields.cron, SysJob.Fields.enabled)));
         SysJob saved = captor.getValue();
         assertEquals(NAME, saved.getName());
         assertEquals(CRON, saved.getCron());
         assertTrue(saved.getEnabled());
-        assertEquals(JobLogAggregation.PER_RUN, saved.getLogAggregation());
     }
 
     @Test
@@ -84,7 +81,7 @@ class BuiltinJobRegistrarTest {
         configured.setEnabled(false);
         when(sysJobRepository.findAll()).thenReturn(List.of(configured));
 
-        registrar(true).register(JOB_CLASS, NAME, CRON, JobLogAggregation.PER_RUN);
+        registrar(true).register(JOB_CLASS, NAME, CRON);
 
         verify(sysJobService, never()).save(any(), anyList());
         assertFalse(configured.getEnabled());
@@ -93,7 +90,7 @@ class BuiltinJobRegistrarTest {
 
     @Test
     void doesNothingWhenJobModuleDisabled() {
-        registrar(false).register(JOB_CLASS, NAME, CRON, JobLogAggregation.HOURLY);
+        registrar(false).register(JOB_CLASS, NAME, CRON);
 
         verify(sysJobRepository, never()).findAll();
     }

@@ -7,6 +7,7 @@ import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.service.HostService;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
 import io.github.jiangood.openadmin.modules.job.BaseJob;
+import io.github.jiangood.openadmin.modules.job.JobResult;
 import jakarta.annotation.Resource;
 import org.quartz.JobDataMap;
 import org.slf4j.Logger;
@@ -25,7 +26,7 @@ public class CleanImageJob extends BaseJob {
     DockerClientManager sdkManager;
 
     @Override
-    public String execute(JobDataMap data, Logger log) throws Exception {
+    public JobResult execute(JobDataMap data, Logger log) throws Exception {
         log.info("开始清理资源");
 
         List<Host> list = hostService.findAll();
@@ -52,7 +53,7 @@ public class CleanImageJob extends BaseJob {
             }
 
         }
-        return "OK";
+        return JobResult.ok("OK");
     }
 
 

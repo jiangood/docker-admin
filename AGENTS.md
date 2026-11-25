@@ -69,7 +69,7 @@ git tag vx.y.z && git push && git push origin vx.y.z
   或 `application-mysql.yml`）；默认走 H2 无需配置。
 - **菜单配置**在 `src/main/resources/menu-docker.yml`，可用 `menu-override.yml` 覆盖
   （open-admin 3.2.0 起只扫描 `menu.yml` / `menu-*.yml`，旧的 `application-menu*.yml` 不再识别）。
-  顶层为「项目」`/project`、「应用」`/app`、「镜像」`/image`、「主机」`/host`，以及「设置」（注册中心、代码源）
+  顶层为「项目」`/project`、「应用」`/app`、「镜像」`/image`、「主机」`/host`，以及「设置」（注册中心、代码源、代理管理）
   与「工具」（主机 Agent、构建测试、镜像下载、网站监控、资源统计、任务中心）两个分组。
 - **领域模型：** `Project`(项目，构建定义) → `Image`(镜像，`imageUrl` 唯一) → `ImageTag`(镜像标签，`imageUrl`+`tag`)。
   项目与镜像按 `imageUrl` 相等关联；`App` 只存 `imageUrl` + `imageTag`，与项目/镜像均无 id 外键。
@@ -292,8 +292,10 @@ git tag vx.y.z && git push && git push origin vx.y.z
   （`admin/host/usageHistory`，Java 侧分桶到 ≤500 点；速率由相邻采样求差，差值为负 = 容器重启 → 曲线断点）。
   采样默认保留 30 天（`HostUsageSampleService` 里的默认值，需要时用 `docker.usage.retain-days` 覆盖，采集任务每小时顺带清理）；
   30 台主机 30 天约 13 万行、20 MB。
-  定时任务记录由 `HostUsageJobInitializer` 幂等自动创建（`sys.job-enable=false` 时跳过，已存在则不覆盖用户改动），
-  执行记录按每次运行保存（框架 3.3.4+ 统一为 `PER_RUN`）。**升级 docker-java 时需要回归这条链路。**
+  定时任务记录由 `HostUsageJobInitializer` 幂等自动创建（`sys.job-enable=false` 时跳过，已存在则不覆盖用户改动）。
+  `BaseJob.execute(JobDataMap, Logger)` 返回 `JobResult`（`ok` / `partial` / `skip` / `fail`）；
+  框架 3.3.4 起不再有 `JobLogAggregation`，执行记录固定每次运行一条。
+  **升级 docker-java 时需要回归这条链路。**
 - **应用定时更新：** 应用详情「部署」页的「定时更新」开关（`App.scheduledUpdate`，默认关闭）按
   `scheduledUpdateIntervalMinutes`（默认 1440 分钟）定时检查镜像，适用于不是通过项目构建的外部镜像。
   任务 `AppScheduledUpdateJob` 每分钟扫描到期应用，只处理**运行中**的容器；检查由**平台直接访问注册中心**
@@ -312,18 +314,19 @@ git tag vx.y.z && git push && git push origin vx.y.z
   框架 `JobAutoRegistrar` 会先把带 `@JobDescription` 的类补建成「无 cron、默认禁用」的空壳行，
   且顺序早于 `ApplicationRunner`，所以只判断「jobClass 是否存在」会让任务永远不触发；
   有 cron 的行（用户配置过）一律不碰，没有 cron 的空壳行补上默认 cron 并启用。
-- **主机接入代理：** 远程 TCP 可选 HTTP / SOCKS5 连接代理，界面与邮件代理一样只填一行地址
-  （`http://192.168.1.10:8080`、`http://user:pass@192.168.1.10:8080`、`socks5://user:pass@192.168.1.10:1080`，
-  不写 scheme 按 http，端口必填，留空表示不使用；密码回显为 `***`，保存时保持 `***` 或省略密码表示沿用已存密码）。
-  落库仍是 `Host.proxyType/host/port/username/password` 五列，`Host.proxyUrl` 是 `@Transient` 的出入参字段，
-  由框架的 `io.github.jiangood.openadmin.framework.proxy.ProxySettings` 的 `parse` / `displayUrl` /
-  `resolvePassword` 双向转换（主机与邮件共用，**业务侧不再保留同名副本**），旧数据无需迁移；界面只提交 `proxyUrl`，
-  `HostService.saveHost` 会把解析出的五列补进 `X-Body-Fields` 更新列表。
-  用于平台与目标 docker 网络不通、但另有一台主机两边都能访问的场景：HTTP 走 CONNECT（支持 Basic 认证），
-  SOCKS5 支持用户名密码（RFC 1929），目标主机名交给代理解析，`https://` 的 TLS 仍是平台到目标端到端。
+- **主机接入代理：** 远程连接（TCP 与 SSH）都支持 HTTP / SOCKS5 连接代理，代理在「设置 - 代理管理」统一维护
+  （`t_proxy`：名称 / 协议 / 地址 / 端口 / 用户名 / 密码 / 备注 / `sortNo`，权限
+  `proxy:view` / `proxy:save` / `proxy:delete` / `proxy:test`；列表可上下移动排序，支持填写目标做
+  CONNECT 隧道测试）。主机表单的「代理」只选择一个 `proxyId`，保存时 `HostService` 把代理的地址与
+  账号密码复制到 `Host.proxyType/host/port/username/password` 五列快照（连接逻辑只读五列），并记下
+  `Host.proxyId`；代理修改后 `ProxyService` 同步到引用它的主机，仍被主机引用时不允许删除。
+  前端不再提交单行 `proxyUrl`（`@Transient`，仅保留列表展示），不兼容旧版代理输入与旧数据自动迁移。
+  用于平台与目标 docker 网络不通、但另有一台主机两边都能访问的场景：TCP 的 HTTP 代理走 CONNECT（Basic 认证），
+  SSH 的 HTTP / SOCKS5 代理分别由 JSch 的 `ProxyHTTP` / `ProxySOCKS5` 建连（外部会话 + `SshSessionDockerHttpClient`
+  负责断开），SOCKS5 支持用户名密码（RFC 1929）。目标主机名交给代理解析，`https://` 的 TLS 仍是平台到目标端到端。
   docker-java 3.7.1 的 Apache 传输层没有代理入口，`ProxyAwareApacheDockerHttpClient` 同步了其
   `ApacheDockerHttpClientImpl` 并改用 `ProxyTunnelSocket` 建连；**升级 docker-java 时需对照上游同步这两个类**。
-  只有启用代理的 TCP 主机走它，直连主机仍用官方 `ApacheDockerHttpClient`。
+  只有启用代理的远程主机走它，直连主机仍用官方传输层。
 - **内网穿透说明页已移除：** 原来的 `/tunnel` 页面（`web/src/pages/tunnel/index.jsx`）与菜单项已删除，
   前端不再有 `tunnel:view` 权限码。http-tunnel 自身的部署与使用以项目文档为准；
   主机「请求头」配置保留（示例用 http-tunnel 的 `X-Auth`，值为 `ht.toml` 的 `token`）。

@@ -150,7 +150,9 @@ public class HostController  {
             String user = StrUtil.blankToDefault(host.getSshUser(), "root");
             String sshHost = StrUtil.blankToDefault(host.getSshHost(), host.getDockerHost());
             int port = host.getSshPort() == null ? 22 : host.getSshPort();
-            return "ssh://" + user + "@" + sshHost + ":" + port;
+            String target = "ssh://" + user + "@" + sshHost + ":" + port;
+            ProxySettings proxy = proxySettingsOf(host);
+            return proxy.enabled() ? target + "（经代理 " + proxy.displayUrl() + "）" : target;
         }
         if (Host.TYPE_TCP.equalsIgnoreCase(type)) {
             String target = StrUtil.blankToDefault(host.getDockerHost(), "远程 TCP（未填写地址）");
@@ -164,7 +166,8 @@ public class HostController  {
      * 代理密码是否会在回填时从库里沿用（界面只回显 {@code ***}）。
      */
     private static boolean proxyPasswordReused(Host host) {
-        return Host.TYPE_TCP.equalsIgnoreCase(host.getConnectionType())
+        return (Host.TYPE_TCP.equalsIgnoreCase(host.getConnectionType())
+                || Host.TYPE_SSH.equalsIgnoreCase(host.getConnectionType()))
                 && StrUtil.isNotBlank(host.getId())
                 && ProxySettings.PASSWORD_MASK.equals(proxySettingsOf(host).password());
     }

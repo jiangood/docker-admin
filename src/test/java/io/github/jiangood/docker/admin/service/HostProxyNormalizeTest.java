@@ -1,6 +1,9 @@
 package io.github.jiangood.docker.admin.service;
 
+import io.github.jiangood.docker.admin.dao.ProxyRepository;
 import io.github.jiangood.docker.admin.entity.Host;
+import io.github.jiangood.docker.admin.entity.Proxy;
+import io.github.jiangood.openadmin.util.BusinessException;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
@@ -10,17 +13,24 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
- * 主机连接配置归一化（不需要 Spring 上下文）：代理只在远程 TCP 下生效，
- * 界面一行地址会被拆成落库字段，密码回显为 *** 并在保存时沿用旧值。
+ * 主机连接配置归一化（不需要 Spring 上下文）：
+ * 代理只认「代理管理」里选中的 {@code proxyId}，远程 TCP 与 SSH 都生效；
+ * 五个落库字段（地址 / 端口 / 账号 / 密码）由代理配置复制，密码回显为 ***。
  */
 class HostProxyNormalizeTest {
 
+    private final ProxyRepository proxyRepository = mock(ProxyRepository.class);
+
     @Test
-    void parsesSingleLineProxyUrlForTcp() {
+    void appliesManagedProxyForTcp() {
+        when(proxyRepository.findById("p1")).thenReturn(Optional.of(proxy()));
+
         Host host = tcpHost();
-        host.setProxyUrl(" http://user:p%40ss@10.0.0.1:8080/ignored ");
+        host.setProxyId("p1");
 
         service().normalize(host);
 
@@ -30,15 +40,33 @@ class HostProxyNormalizeTest {
         assertEquals("10.0.0.1", host.getProxyHost());
         assertEquals(8080, host.getProxyPort());
         assertEquals("user", host.getProxyUsername());
-        assertEquals("p@ss", host.getProxyPassword());
+        assertEquals("secret", host.getProxyPassword());
         // 回显值里的密码只留占位符
         assertEquals("http://user:***@10.0.0.1:8080", host.getProxyUrl());
     }
 
     @Test
-    void blankProxyUrlClearsSavedFields() {
+    void appliesManagedProxyForSsh() {
+        when(proxyRepository.findById("p1")).thenReturn(Optional.of(proxy()));
+
+        Host host = new Host();
+        host.setConnectionType("ssh");
+        host.setSshHost("192.168.1.2");
+        host.setProxyId("p1");
+
+        service().normalize(host);
+
+        assertEquals("http", host.getProxyType());
+        assertEquals("10.0.0.1", host.getProxyHost());
+        assertEquals(8080, host.getProxyPort());
+        assertEquals(22, host.getSshPort());
+        assertEquals("root", host.getSshUser());
+        assertEquals("http://user:***@10.0.0.1:8080", host.getProxyUrl());
+    }
+
+    @Test
+    void blankProxyIdClearsSavedFields() {
         Host host = tcpHost();
-        host.setProxyUrl("");
         host.setProxyType("http");
         host.setProxyHost("10.0.0.1");
         host.setProxyPort(8080);
@@ -52,15 +80,15 @@ class HostProxyNormalizeTest {
         assertNull(host.getProxyPort());
         assertNull(host.getProxyUsername());
         assertNull(host.getProxyPassword());
+        assertNull(host.getProxyId());
         assertEquals("", host.getProxyUrl());
     }
 
     @Test
-    void clearsProxyForNonTcpConnection() {
+    void localConnectionClearsProxy() {
         Host host = new Host();
-        host.setConnectionType("ssh");
-        host.setSshHost("192.168.1.2");
-        host.setProxyUrl("socks5://10.0.0.1:1080");
+        host.setConnectionType("local");
+        host.setProxyId("p1");
         host.setProxyType("socks5");
         host.setProxyHost("10.0.0.1");
         host.setProxyPort(1080);
@@ -70,97 +98,60 @@ class HostProxyNormalizeTest {
         assertEquals("none", host.getProxyType());
         assertNull(host.getProxyHost());
         assertNull(host.getProxyPort());
+        assertNull(host.getProxyId());
         assertEquals("", host.getProxyUrl());
     }
 
     @Test
-    void legacySplitFieldsStillWorkWhenProxyUrlIsAbsent() {
+    void unknownProxyIsRejected() {
+        when(proxyRepository.findById("gone")).thenReturn(Optional.empty());
+
         Host host = tcpHost();
-        host.setProxyType("SOCKS5");
-        host.setProxyHost(" 10.0.0.1 ");
-        host.setProxyPort(1080);
-        host.setProxyUsername("user");
+        host.setProxyId("gone");
 
-        service().normalize(host);
-
-        assertEquals("socks5", host.getProxyType());
-        assertEquals("10.0.0.1", host.getProxyHost());
-        assertEquals("socks5://user@10.0.0.1:1080", host.getProxyUrl());
+        assertThrows(BusinessException.class, () -> service().normalize(host));
     }
 
+    /**
+     * 托管代理的密码是权威值：即使主机旧快照里有密码，也不能在保存时沿用。
+     */
     @Test
-    void rejectsProxyWithoutPort() {
-        Host host = tcpHost();
-        host.setProxyUrl("http://10.0.0.1");
+    void managedProxyPasswordIsNotOverriddenByOldHostSnapshot() {
+        Proxy noPasswordProxy = proxy();
+        noPasswordProxy.setPassword(null);
+        when(proxyRepository.findById("p1")).thenReturn(Optional.of(noPasswordProxy));
 
-        assertThrows(IllegalArgumentException.class, () -> service().normalize(host));
-    }
-
-    @Test
-    void rejectsProxyWithoutHost() {
-        Host host = tcpHost();
-        host.setProxyUrl("socks5://:1080");
-
-        assertThrows(IllegalArgumentException.class, () -> service().normalize(host));
-    }
-
-    @Test
-    void maskPasswordKeepsSavedOne() {
         Host old = tcpHost();
-        old.setProxyType("http");
-        old.setProxyHost("10.0.0.1");
-        old.setProxyPort(8080);
-        old.setProxyUsername("user");
-        old.setProxyPassword("secret");
+        old.setId("h1");
+        old.setProxyPassword("old-secret");
 
         HostService service = Mockito.spy(service());
         doReturn(Optional.of(old)).when(service).findById("h1");
 
         Host input = tcpHost();
         input.setId("h1");
-        input.setProxyUrl("http://user:***@10.0.0.1:8080");
+        input.setProxyId("p1");
 
         service.normalize(input);
         service.fillProxyPassword(input);
-
-        assertEquals("secret", input.getProxyPassword());
-        assertEquals("http://user:***@10.0.0.1:8080", input.getProxyUrl());
-    }
-
-    @Test
-    void maskPasswordOnNewHostMeansEmptyPassword() {
-        Host input = tcpHost();
-        input.setProxyUrl("http://user:***@10.0.0.1:8080");
-
-        service().normalize(input);
-        service().fillProxyPassword(input);
 
         assertNull(input.getProxyPassword());
         assertEquals("http://user@10.0.0.1:8080", input.getProxyUrl());
     }
 
-    @Test
-    void noUsernameDropsSavedPassword() {
-        Host old = tcpHost();
-        old.setProxyPassword("secret");
-
-        HostService service = Mockito.spy(service());
-        doReturn(Optional.of(old)).when(service).findById("h1");
-
-        Host input = tcpHost();
-        input.setId("h1");
-        input.setProxyUrl("http://10.0.0.1:8080");
-
-        service.normalize(input);
-        service.fillProxyPassword(input);
-
-        assertNull(input.getProxyUsername());
-        assertNull(input.getProxyPassword());
-        assertEquals("http://10.0.0.1:8080", input.getProxyUrl());
+    private HostService service() {
+        return new HostService(null, null, proxyRepository, null);
     }
 
-    private static HostService service() {
-        return new HostService(null, null, null);
+    private static Proxy proxy() {
+        Proxy proxy = new Proxy();
+        proxy.setId("p1");
+        proxy.setType("http");
+        proxy.setHost("10.0.0.1");
+        proxy.setPort(8080);
+        proxy.setUsername("user");
+        proxy.setPassword("secret");
+        return proxy;
     }
 
     private static Host tcpHost() {

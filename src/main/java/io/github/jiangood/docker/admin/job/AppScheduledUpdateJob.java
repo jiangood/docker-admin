@@ -3,6 +3,7 @@ package io.github.jiangood.docker.admin.job;
 import io.github.jiangood.docker.admin.service.AppService;
 import io.github.jiangood.openadmin.modules.job.BaseJob;
 import io.github.jiangood.openadmin.modules.job.JobDescription;
+import io.github.jiangood.openadmin.modules.job.JobResult;
 import jakarta.annotation.Resource;
 import org.quartz.JobDataMap;
 import org.slf4j.Logger;
@@ -14,7 +15,6 @@ import org.springframework.stereotype.Component;
  * 间隔粒度是应用级别的（10 分钟 / 1 小时 / 每天等），所以统一用一条每分钟触发的任务
  * 按到期时间过滤，而不是每个应用注册一条 Quartz 任务。单次检查会访问注册中心并可能触发部署，
  * 可能较慢，{@link BaseJob} 自带 {@code @DisallowConcurrentExecution}，上一轮没跑完不会重叠。
- * 日志聚合建议在任务定义上选「按小时」：一天 1440 次执行，按次留记录太多。
  */
 @Component
 @JobDescription(label = "应用定时更新检查")
@@ -24,8 +24,8 @@ public class AppScheduledUpdateJob extends BaseJob {
     private AppService appService;
 
     @Override
-    public String execute(JobDataMap data, Logger logger) {
+    public JobResult execute(JobDataMap data, Logger logger) {
         AppService.ScheduledUpdateSummary summary = appService.runDueScheduledUpdates();
-        return summary.describe();
+        return JobResult.ok(summary.describe());
     }
 }

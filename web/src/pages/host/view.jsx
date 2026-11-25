@@ -764,7 +764,7 @@ export default class extends React.Component {
                 key: 'endpoint', label: '连接地址', span: 3,
                 children: <span className='mono'>{endpointOf(host)}</span>
             },
-            ...(isTcp && host?.proxyUrl
+            ...(host?.proxyUrl
                 ? [{key: 'proxy', label: '连接代理', children: proxyLabel(host), span: 3}]
                 : []),
             ...(isTcp && host?.headerConfigured

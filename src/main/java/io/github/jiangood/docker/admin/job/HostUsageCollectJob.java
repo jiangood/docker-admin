@@ -6,6 +6,7 @@ import io.github.jiangood.docker.admin.service.DockerStatsService;
 import io.github.jiangood.docker.admin.service.HostUsageService;
 import io.github.jiangood.openadmin.modules.job.BaseJob;
 import io.github.jiangood.openadmin.modules.job.JobDescription;
+import io.github.jiangood.openadmin.modules.job.JobResult;
 import jakarta.annotation.Resource;
 import org.quartz.JobDataMap;
 import org.slf4j.Logger;
@@ -32,7 +33,7 @@ public class HostUsageCollectJob extends BaseJob {
     private DockerStatsHisService dockerStatsHisService;
 
     @Override
-    public String execute(JobDataMap data, Logger logger) {
+    public JobResult execute(JobDataMap data, Logger logger) {
         HostUsageService.CollectResult result = hostUsageService.collectAll();
         List<HostUsageVo> reachable = result.values().stream()
                 .filter(HostUsageVo::isReachable)
@@ -100,6 +101,6 @@ public class HostUsageCollectJob extends BaseJob {
         if (hisRows > 0) {
             msg += "，历史 " + hisRows + " 条";
         }
-        return msg;
+        return JobResult.ok(msg);
     }
 }

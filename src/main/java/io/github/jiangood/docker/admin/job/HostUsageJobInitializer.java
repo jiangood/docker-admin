@@ -1,6 +1,5 @@
 package io.github.jiangood.docker.admin.job;
 
-import io.github.jiangood.openadmin.modules.job.entity.JobLogAggregation;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
@@ -36,7 +35,7 @@ public class HostUsageJobInitializer implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
-        registrar.register(HostUsageCollectJob.class.getName(), JOB_NAME, CRON, JobLogAggregation.PER_RUN);
+        registrar.register(HostUsageCollectJob.class.getName(), JOB_NAME, CRON);
     }
 
 }

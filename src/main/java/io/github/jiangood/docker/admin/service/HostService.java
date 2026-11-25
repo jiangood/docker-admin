@@ -4,10 +4,13 @@ import cn.hutool.core.util.StrUtil;
 import io.github.jiangood.docker.admin.config.DockerSettings;
 import io.github.jiangood.docker.admin.dao.HostAgentConfigRepository;
 import io.github.jiangood.docker.admin.dao.HostRepository;
+import io.github.jiangood.docker.admin.dao.ProxyRepository;
 import io.github.jiangood.docker.admin.entity.Host;
+import io.github.jiangood.docker.admin.entity.Proxy;
 import io.github.jiangood.openadmin.framework.proxy.ProxySettings;
 import io.github.jiangood.openadmin.framework.data.specification.Spec;
 import io.github.jiangood.openadmin.framework.data.BaseService;
+import io.github.jiangood.openadmin.util.BusinessException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -28,10 +31,11 @@ public class HostService extends BaseService<Host> {
 
     private final HostRepository hostRepository;
     private final HostAgentConfigRepository hostAgentConfigRepository;
+    private final ProxyRepository proxyRepository;
     private final DockerSettings dockerSettings;
 
     /**
-     * 代理的五列：界面只提交 {@code proxyUrl}，由 {@link #normalize} 拆开。
+     * 代理的五个落库字段：界面只提交 {@code proxyId}，由 {@link #normalizeProxy} 从代理配置复制。
      */
     private static final List<String> PROXY_FIELDS = List.of(
             Host.Fields.proxyType, Host.Fields.proxyHost, Host.Fields.proxyPort,
@@ -80,18 +84,25 @@ public class HostService extends BaseService<Host> {
         normalize(input);
         Assert.hasText(input.getIp(), "请填写主机 IP 地址");
         fillSshPassword(input);
-        fillProxyPassword(input);
 
-        // 界面把代理收敛成一行 proxyUrl（不落库），解析出的五个字段不在请求体里；
-        // 编辑时要把它们补进更新列表，否则拆出来的值（包括「清空代理」）写不进库。
+        // 界面只提交一个 proxyId，真正连接用的五个字段不在请求体里，
+        // 编辑时要把它们补进更新列表，否则同步过来的值（包括「清空代理」）写不进库。
         List<String> fields = updateFields == null ? new ArrayList<>() : new ArrayList<>(updateFields);
-        if (fields.remove(Host.Fields.proxyUrl)) {
+        if (fields.contains(Host.Fields.proxyId)) {
             for (String field : PROXY_FIELDS) {
                 if (!fields.contains(field)) {
                     fields.add(field);
                 }
             }
         }
+        // 连接方式切到本机时 normalize 已清空代理；即使前端没提交 proxyId，
+        // 也要把库里可能残留的引用写掉，避免以后再切回远程时代理莫名其妙冒出来。
+        if (Host.TYPE_LOCAL.equalsIgnoreCase(input.getConnectionType())
+                && !fields.contains(Host.Fields.proxyId)) {
+            fields.add(Host.Fields.proxyId);
+        }
+
+        fillProxyPassword(input);
 
         // 先落库（create/update 只更新前端提交的字段），再看最终结果决定是否取消其他主机的标记
         Host saved = StrUtil.isBlank(input.getId()) ? create(input) : update(input, fields);
@@ -149,11 +160,17 @@ public class HostService extends BaseService<Host> {
      * 代理密码同样不回传前端：界面里显示为 {@link ProxySettings#PASSWORD_MASK}，
      * 保存时保持 {@code ***}（或省略密码）表示沿用已保存的密码。
      * <p>
-     * 只有「远程 TCP + 启用代理」时才去找旧值；切换连接方式或清空代理地址时
+     * 只有远程 TCP / SSH 且启用代理时才去找旧值；切换连接方式或清空代理时
      * {@link #normalize} 已经把密码清空，这里不能把它又捞回来。
      */
     public void fillProxyPassword(Host input) {
-        if (input == null || !Host.TYPE_TCP.equalsIgnoreCase(input.getConnectionType())) {
+        if (input == null || !(Host.TYPE_TCP.equalsIgnoreCase(input.getConnectionType())
+                || Host.TYPE_SSH.equalsIgnoreCase(input.getConnectionType()))) {
+            return;
+        }
+        // 托管代理的密码在 normalize 时已从代理配置复制过来，是权威值，
+        // 不能再从主机旧快照里「沿用」，否则换成无密码代理时会把旧密码带过去。
+        if (StrUtil.isNotBlank(input.getProxyId())) {
             return;
         }
         ProxySettings settings = proxySettingsOf(input);
@@ -183,7 +200,7 @@ public class HostService extends BaseService<Host> {
      *     <li>连接方式为空：按 dockerHost 前缀推断（unix 视为本机，否则远程 TCP）</li>
      *     <li>SSH：端口默认 22、用户默认 root</li>
      *     <li>非 SSH：dockerHost 允许为空（本机使用平台默认端点），缺少协议头时自动补全</li>
-     *     <li>代理只在远程 TCP 下有意义，其它连接方式保存时清空代理配置</li>
+     *     <li>代理在使用远程连接（TCP / SSH）时有意义，本机保存时清空代理配置</li>
      * </ul>
      */
     public void normalize(Host host) {
@@ -203,7 +220,7 @@ public class HostService extends BaseService<Host> {
         host.setConnectionType(type);
 
         if (Host.TYPE_SSH.equalsIgnoreCase(type)) {
-            clearProxy(host);
+            normalizeProxy(host);
             if (host.getSshPort() == null) {
                 host.setSshPort(22);
             }
@@ -235,56 +252,41 @@ public class HostService extends BaseService<Host> {
     }
 
     /**
-     * 归一化并校验远程 TCP 的连接代理。
+     * 归一化并校验远程连接（TCP / SSH）的代理。
      * <p>
-     * 界面只提交一个 {@code proxyUrl}（如 {@code http://user:pass@10.0.0.1:8080}），
-     * 这里解析成五个落库字段；没有这个字段时兼容旧的「拆分字段」调用方式。
-     * 解析完再把 {@code proxyUrl} 换成回显值（密码只保留 {@code ***}），
+     * 界面只提交 {@code proxyId}：把设置菜单「代理管理」里该代理的地址与账号密码复制到五个落库字段；
+     * 没有选择代理即清空。解析完再把 {@code proxyUrl} 换成回显值（密码只保留 {@code ***}），
      * 避免明文密码留在实体里被再次序列化。
      */
     private void normalizeProxy(Host host) {
-        String rawUrl = host.getProxyUrl();
-        if (rawUrl != null) {
-            if (StrUtil.isBlank(rawUrl)) {
-                clearProxy(host);
-            } else {
-                ProxySettings parsed = ProxySettings.parse(rawUrl);
-                host.setProxyType(parsed.type().code());
-                host.setProxyHost(parsed.host());
-                host.setProxyPort(parsed.port());
-                host.setProxyUsername(parsed.username());
-                host.setProxyPassword(parsed.password());
-            }
-        } else {
-            normalizeSplitProxyFields(host);
+        if (StrUtil.isBlank(host.getProxyId())) {
+            clearProxy(host);
+            return;
         }
+        Proxy proxy = proxyRepository.findById(host.getProxyId())
+                .orElseThrow(() -> new BusinessException(
+                        "所选代理不存在（可能已被删除）：" + host.getProxyId() + "，请重新选择"));
+        applyProxy(host, proxy);
+    }
+
+    /**
+     * 用托管代理覆盖五个落库字段，并把引用记到 {@code proxyId}。
+     */
+    private void applyProxy(Host host, Proxy proxy) {
+        host.setProxyId(proxy.getId());
+        host.setProxyType(StrUtil.blankToDefault(proxy.getType(), Proxy.TYPE_HTTP));
+        host.setProxyHost(proxy.getHost());
+        host.setProxyPort(proxy.getPort());
+        host.setProxyUsername(proxy.getUsername());
+        host.setProxyPassword(proxy.getPassword());
         host.setProxyUrl(proxySettingsOf(host).displayUrl());
     }
 
     /**
-     * 兼容直接提交 proxyType/proxyHost/... 的调用（旧前端或外部接口）。
+     * 清空代理：连接方式改成本机或用户选择「不使用代理」时调用。
      */
-    private void normalizeSplitProxyFields(Host host) {
-        ProxySettings.Type type = ProxySettings.Type.parse(host.getProxyType());
-        if (type == ProxySettings.Type.NONE) {
-            clearProxy(host);
-            return;
-        }
-        host.setProxyType(type.code());
-        host.setProxyHost(StrUtil.trimToNull(host.getProxyHost()));
-        host.setProxyUsername(StrUtil.trimToNull(host.getProxyUsername()));
-        host.setProxyPassword(StrUtil.trimToNull(host.getProxyPassword()));
-        if (host.getProxyPort() != null && host.getProxyPort() <= 0) {
-            host.setProxyPort(null);
-        }
-
-        ProxySettings settings = proxySettingsOf(host);
-        Assert.hasText(settings.host(), "请填写代理地址");
-        Assert.notNull(settings.port(), "请填写代理端口");
-        Assert.isTrue(settings.port() >= 1 && settings.port() <= 65535, "代理端口需在 1-65535 之间");
-    }
-
     private void clearProxy(Host host) {
+        host.setProxyId(null);
         host.setProxyType(ProxySettings.Type.NONE.code());
         host.setProxyHost(null);
         host.setProxyPort(null);

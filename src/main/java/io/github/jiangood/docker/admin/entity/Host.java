@@ -118,10 +118,10 @@ public class Host extends BaseEntity {
     String headerValue;
 
     /**
-     * 远程 TCP 的连接代理类型：{@code none} / {@code http} / {@code socks5}。
+     * 远程连接（TCP / SSH）的连接代理类型：{@code none} / {@code http} / {@code socks5}。
      * <p>
      * 用于平台与目标主机网络不通、但另有一台代理主机两边都能访问的场景；
-     * 只在 {@link #TYPE_TCP} 下生效，其它连接方式保存时会被清空（见 {@code HostService#normalize}）。
+     * 本机连接保存时会被清空。值来自「设置 - 代理管理」里选中的代理（见 {@link #proxyId}）。
      */
     @Remark("代理类型")
     String proxyType;
@@ -151,10 +151,19 @@ public class Host extends BaseEntity {
      * <p>
      * <b>不落库</b>：保存时由 {@code HostService#normalize} 解析成上面五个字段；
      * 读取时由 {@link #fillProxyUrlForDisplay()} 填入回显值（密码只给 {@code ***}）。
-     * 这样前端只需要一个输入框，旧数据也不用迁移。
+     * 新版主机表单改为选择 {@link #proxyId}，这里仍保留单行输入兼容旧接口与列表展示。
      */
     @Transient
     String proxyUrl;
+
+    /**
+     * 设置菜单「代理管理」里的代理 id：主机保存时把该代理的地址与账号密码复制到上面五列，
+     * 之后由 {@code ProxyService} 在代理修改后同步，连接逻辑仍只读五列快照。
+     * <p>
+     * 为空表示不使用代理；TCP 与 SSH 连接都支持。
+     */
+    @Remark("代理")
+    String proxyId;
 
     @PrePersist
     public void prePersist() {

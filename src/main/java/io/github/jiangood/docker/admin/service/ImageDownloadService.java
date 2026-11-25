@@ -7,7 +7,6 @@ import com.github.dockerjava.api.command.InspectImageResponse;
 import com.github.dockerjava.api.model.PullResponseItem;
 import com.jcraft.jsch.ChannelExec;
 import com.jcraft.jsch.ChannelSftp;
-import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.Session;
 import com.jcraft.jsch.SftpATTRS;
 import io.github.jiangood.docker.admin.dto.ImageDownloadRequest;
@@ -81,8 +80,6 @@ public class ImageDownloadService {
     private static final long PROGRESS_STEP_BYTES = 10L * 1024 * 1024;
 
     private static final int SSH_TIMEOUT_MILLIS = 10_000;
-
-    private static final int DEFAULT_SSH_PORT = 22;
 
     private static final String DEFAULT_SSH_USER = "root";
 
@@ -445,21 +442,9 @@ public class ImageDownloadService {
         return host == null || host.isLocalDocker();
     }
 
-    private static Session openSshSession(Host host) throws Exception {
-        String user = StrUtil.blankToDefault(host.getSshUser(), DEFAULT_SSH_USER);
-        String sshHost = StrUtil.blankToDefault(host.getSshHost(), host.getDockerHost());
-        int port = host.getSshPort() != null ? host.getSshPort() : DEFAULT_SSH_PORT;
-
-        JSch jsch = new JSch();
-        Session session = jsch.getSession(user, sshHost, port);
-        // 与 DockerClientManager 的 SSH 传输保持一致：内网不校验 host key，只走密码认证
-        session.setConfig("StrictHostKeyChecking", "no");
-        session.setConfig("PreferredAuthentications", "password,keyboard-interactive");
-        session.setPassword(StrUtil.nullToEmpty(host.getSshPassword()));
-        // 远端打包期间一直有 SFTP 轮询，60 秒无响应即视为连接异常，避免任务永久挂住
-        session.setTimeout(60_000);
-        session.connect(SSH_TIMEOUT_MILLIS);
-        return session;
+    private Session openSshSession(Host host) throws Exception {
+        // 与 Docker 传输共用主机 SSH 连接配置：地址、账号密码与连接代理都在这里生效
+        return dockerClientManager.createSshSession(host, SSH_TIMEOUT_MILLIS, 60_000);
     }
 
     /**

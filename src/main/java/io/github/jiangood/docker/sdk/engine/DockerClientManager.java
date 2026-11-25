@@ -11,6 +11,9 @@ import com.github.dockerjava.transport.DockerHttpClient;
 import com.github.mwiede.dockerjava.jsch.JschDockerHttpClient;
 import com.jcraft.jsch.ChannelExec;
 import com.jcraft.jsch.JSch;
+import com.jcraft.jsch.Proxy;
+import com.jcraft.jsch.ProxyHTTP;
+import com.jcraft.jsch.ProxySOCKS5;
 import com.jcraft.jsch.Session;
 import com.jcraft.jsch.UserInfo;
 import io.github.jiangood.docker.admin.entity.Host;
@@ -227,16 +230,78 @@ public class DockerClientManager {
     }
 
     private Session openSshSession(Host host, String user, String sshHost, int port) throws Exception {
+        return connectSshSession(host, user, sshHost, port,
+                SSH_PROBE_TIMEOUT_MILLIS, SSH_PROBE_TIMEOUT_MILLIS);
+    }
+
+    /**
+     * 供其他需要走主机 SSH 连接配置的模块使用（如镜像导出 / 下载的 SFTP）：
+     * 统一按主机字段解析 SSH 地址，并应用连接代理。
+     *
+     * @param connectTimeout 连接超时（毫秒）
+     * @param soTimeout      认证后 socket 读超时（毫秒，0 表示不设置）
+     */
+    public Session createSshSession(Host host, int connectTimeout, int soTimeout) throws Exception {
+        String user = StrUtil.blankToDefault(host.getSshUser(), DEFAULT_SSH_USER);
+        String sshHost = StrUtil.blankToDefault(host.getSshHost(), host.getDockerHost());
+        int port = host.getSshPort() != null ? host.getSshPort() : DEFAULT_SSH_PORT;
+        return connectSshSession(host, user, sshHost, port, connectTimeout, soTimeout);
+    }
+
+    /**
+     * 建立 SSH 会话：内网不校验 host key，只走密码认证；配置了代理时经代理连接目标 SSH。
+     *
+     * @param connectTimeout 连接超时（毫秒）
+     * @param soTimeout      认证后 socket 读超时（毫秒，0 表示不设置）
+     */
+    private Session connectSshSession(Host host, String user, String sshHost, int port,
+            int connectTimeout, int soTimeout) throws Exception {
         JSch jsch = new JSch();
         Session session = jsch.getSession(user, sshHost, port);
         // 与 buildSshClient 保持一致：内网不校验 host key，只走密码认证
         session.setConfig("StrictHostKeyChecking", "no");
         session.setConfig("PreferredAuthentications", "password,keyboard-interactive");
         session.setPassword(StrUtil.nullToEmpty(host.getSshPassword()));
-        // 限制认证后读写的阻塞时间，否则命令挂住时预检也会卡死
-        session.setTimeout(SSH_PROBE_TIMEOUT_MILLIS);
-        session.connect(SSH_PROBE_TIMEOUT_MILLIS);
+        session.setUserInfo(new PasswordUserInfo(host.getSshPassword()));
+        applySshProxy(session, host);
+        if (soTimeout > 0) {
+            session.setTimeout(soTimeout);
+        }
+        session.connect(connectTimeout);
         return session;
+    }
+
+    /**
+     * 给 JSch 会话挂上连接代理：SSH 本身也走 TCP，因此与 Docker API 的代理配置共用。
+     * <p>
+     * HTTP 代理用 JSch 的 {@code ProxyHTTP}（CONNECT + Basic），SOCKS5 用 {@code ProxySOCKS5}
+     * （用户名密码认证）；目标地址交给代理 / JSch 处理，平台不需要能直连目标 SSH。
+     */
+    private static void applySshProxy(Session session, Host host) {
+        ProxySettings proxy = proxySettingsOf(host);
+        if (!proxy.enabled()) {
+            return;
+        }
+        if (!proxy.configured()) {
+            throw new IllegalStateException("主机「" + host.getName()
+                    + "」的代理配置不完整，请重新选择代理");
+        }
+
+        Proxy jschProxy;
+        if (proxy.type() == ProxySettings.Type.SOCKS5) {
+            ProxySOCKS5 socks = new ProxySOCKS5(proxy.host(), proxy.port());
+            if (StrUtil.isNotBlank(proxy.username())) {
+                socks.setUserPasswd(proxy.username(), StrUtil.nullToEmpty(proxy.password()));
+            }
+            jschProxy = socks;
+        } else {
+            ProxyHTTP http = new ProxyHTTP(proxy.host(), proxy.port());
+            if (StrUtil.isNotBlank(proxy.username())) {
+                http.setUserPasswd(proxy.username(), StrUtil.nullToEmpty(proxy.password()));
+            }
+            jschProxy = http;
+        }
+        session.setProxy(jschProxy);
     }
 
     /**
@@ -304,10 +369,7 @@ public class DockerClientManager {
         // 远程 TCP 可以经 HTTP / SOCKS5 代理接入：平台与目标主机网络不通时，
         // 由一台两边都能访问的主机转发（docker-java 官方 Builder 不支持代理，见 ProxyAwareApacheDockerHttpClient）。
         // 本机（unix / npipe / 本机默认端点）即使残留了代理配置也不走代理。
-        ProxySettings proxy = host == null
-                ? ProxySettings.DISABLED
-                : ProxySettings.of(host.getProxyType(), host.getProxyHost(), host.getProxyPort(),
-                        host.getProxyUsername(), host.getProxyPassword());
+        ProxySettings proxy = proxySettingsOf(host);
         boolean useProxy = proxy.enabled() && !host.isLocalDocker();
         DockerHttpClient httpClient;
         if (useProxy) {
@@ -364,22 +426,47 @@ public class DockerClientManager {
         jschConfig.put("StrictHostKeyChecking", "no");
         jschConfig.put("PreferredAuthentications", "password,keyboard-interactive");
 
+        ProxySettings proxy = proxySettingsOf(host);
+        Session externalSession = null;
         try {
             JschDockerHttpClient.Builder httpBuilder =
                     new JschDockerHttpClient.Builder()
                             .dockerHost(config.getDockerHost())
                             .sslConfig(config.getSSLConfig())
                             .connectTimeout(CONNECTION_TIMEOUT)
-                            .readTimeout(RESPONSE_TIMEOUT)
-                            .userInfo(new PasswordUserInfo(host.getSshPassword()))
-                            .jschConfig(jschConfig);
+                            .readTimeout(RESPONSE_TIMEOUT);
+
+            if (proxy.enabled()) {
+                if (!proxy.configured()) {
+                    throw new IllegalStateException("主机「" + host.getName()
+                            + "」的代理配置不完整，请重新选择代理");
+                }
+                // 传输层的 Builder 没有代理入口，只能自己建会话后交给 sshSession()；
+                // 该会话是外部的，客户端 close() 不会断开它，需要下面的包装类负责回收。
+                externalSession = connectSshSession(host, user, sshHost, port,
+                        (int) CONNECTION_TIMEOUT.toMillis(), (int) RESPONSE_TIMEOUT.toMillis());
+                httpBuilder.sshSession(externalSession);
+            } else {
+                httpBuilder.userInfo(new PasswordUserInfo(host.getSshPassword()))
+                        .jschConfig(jschConfig);
+            }
 
             disableRetry(httpBuilder);
 
             DockerHttpClient httpClient = httpBuilder.build();
+            if (externalSession != null) {
+                httpClient = new SshSessionDockerHttpClient(httpClient, externalSession);
+            }
 
             return DockerClientImpl.getInstance(config, httpClient);
         } catch (Exception e) {
+            if (externalSession != null) {
+                try {
+                    externalSession.disconnect();
+                } catch (Exception ignored) {
+                    // 连接建立失败时的清理，忽略二次异常
+                }
+            }
             fileLog.error("SSH 连接 docker 主机失败: {}@{}:{}", user, sshHost, port, e);
             throw new RuntimeException("SSH 连接 docker 主机失败: " + e.getMessage(), e);
         }
@@ -418,6 +505,13 @@ public class DockerClientManager {
                     .withRegistryUsername(registry.getUsername())
                     .withRegistryPassword(registry.getPassword());
         }
+    }
+
+    private static ProxySettings proxySettingsOf(Host host) {
+        return host == null
+                ? ProxySettings.DISABLED
+                : ProxySettings.of(host.getProxyType(), host.getProxyHost(), host.getProxyPort(),
+                        host.getProxyUsername(), host.getProxyPassword());
     }
 
     public DockerClient getClient(String dockerHost) {

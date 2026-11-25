@@ -2,7 +2,6 @@ package io.github.jiangood.docker.admin.job;
 
 import cn.hutool.core.util.StrUtil;
 import io.github.jiangood.openadmin.framework.config.SystemProperties;
-import io.github.jiangood.openadmin.modules.job.entity.JobLogAggregation;
 import io.github.jiangood.openadmin.modules.job.entity.SysJob;
 import io.github.jiangood.openadmin.modules.job.repository.SysJobRepository;
 import io.github.jiangood.openadmin.modules.job.service.SysJobService;
@@ -34,7 +33,7 @@ public class BuiltinJobRegistrar {
      * 更新已有行时要写回的字段。框架的 update 只复制列出的字段，传空列表会直接断言失败。
      */
     private static final List<String> UPDATE_FIELDS = List.of(
-            SysJob.Fields.name, SysJob.Fields.cron, SysJob.Fields.enabled, SysJob.Fields.logAggregation);
+            SysJob.Fields.name, SysJob.Fields.cron, SysJob.Fields.enabled);
 
     private final SysJobService sysJobService;
     private final SysJobRepository sysJobRepository;
@@ -46,9 +45,8 @@ public class BuiltinJobRegistrar {
      * @param jobClass       任务类全名，用于按 {@code job_class} 定位已有记录
      * @param name           任务名，仅用于新建 / 补全空壳行
      * @param cron           默认 cron 表达式
-     * @param logAggregation 执行记录的聚合方式（高频任务建议按小时）
      */
-    public void register(String jobClass, String name, String cron, JobLogAggregation logAggregation) {
+    public void register(String jobClass, String name, String cron) {
         if (!systemProperties.isJobEnable()) {
             return;
         }
@@ -64,7 +62,6 @@ public class BuiltinJobRegistrar {
             job.setCron(cron);
             job.setEnabled(true);
             job.setJobClass(jobClass);
-            job.setLogAggregation(logAggregation);
             save(job, name);
             return;
         }
@@ -77,7 +74,6 @@ public class BuiltinJobRegistrar {
         existing.setName(name);
         existing.setCron(cron);
         existing.setEnabled(true);
-        existing.setLogAggregation(logAggregation);
         save(existing, name);
     }
 

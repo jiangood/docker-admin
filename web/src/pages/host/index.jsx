@@ -1,10 +1,9 @@
 import {PlusOutlined, SearchOutlined} from '@ant-design/icons'
-import {Button, Checkbox, Form, Input, InputNumber, Modal, Radio, Space} from 'antd'
+import {Button, Checkbox, Form, Input, InputNumber, Modal, Radio, Select, Space} from 'antd'
 import React from 'react'
 
 import {PermActions, FieldBoolean, HttpClient, Page, PageUtils, ProTable} from "@jiangood/open-admin"
 
-import {validateProxyUrl} from '../../utils/proxyUrl'
 import LinkButton from '../../components/LinkButton'
 
 
@@ -79,6 +78,11 @@ function buildPayload(values) {
     delete payload.tcpHost
     delete payload.tcpPort
     delete payload.tcpTls
+    // 代理下拉选中的 id 必须显式提交（清空时提交空串），
+    // 否则后端无法区分「没改代理」与「改成不使用代理」。
+    // 旧的单行 proxyUrl 已由下拉取代，提交时去掉以免覆盖 proxyId 的选择结果。
+    payload.proxyId = values.proxyId || ''
+    delete payload.proxyUrl
     return payload
 }
 
@@ -89,11 +93,24 @@ export default class extends React.Component {
         formValues: {},
         formOpen: false,
         testing: false,
-        testingId: null
+        testingId: null,
+        proxyOptions: [],
     }
 
     formRef = React.createRef()
     tableRef = React.createRef()
+
+    componentDidMount() {
+        this.loadProxyOptions()
+    }
+
+    /** 主机表单的「代理」下拉：来自「设置 - 代理管理」 */
+    loadProxyOptions = () => {
+        HttpClient.get('admin/proxy/options', null, {toastError: false})
+            .then(rs => this.setState({proxyOptions: rs.data || []}))
+            .catch(() => {
+            })
+    }
 
     columns = [
 
@@ -132,7 +149,10 @@ export default class extends React.Component {
             title: '连接代理',
             dataIndex: 'proxyUrl',
             ellipsis: true,
-            render: v => v || '-'
+            render: (v, record) => {
+                const option = this.state.proxyOptions.find(o => String(o.value) === String(record.proxyId))
+                return option ? option.label : (v || '-')
+            }
         },
 
 
@@ -164,6 +184,7 @@ export default class extends React.Component {
     ]
 
     handleAdd = () => {
+        this.loadProxyOptions()
         this.setState({
             formOpen: true,
             formValues: {
@@ -198,6 +219,7 @@ export default class extends React.Component {
     }
 
     handleEdit = record => {
+        this.loadProxyOptions()
         const type = record.connectionType || 'local'
         const formValues = {
             ...record,
@@ -249,6 +271,24 @@ export default class extends React.Component {
             this.tableRef.current.reload()
         })
     }
+
+    /**
+     * 代理选择框：TCP 与 SSH 共用，选项来自「设置 - 代理管理」。
+     */
+    renderProxySelect = () => (
+        <Form.Item label='代理' name='proxyId'
+                   tooltip='平台与目标主机网络不通时，经「设置 - 代理管理」里维护的代理中转；TCP 与 SSH 都支持，留空表示不使用代理。平台跑在容器里时代理地址不能填 127.0.0.1，要填宿主机网桥网关或局域网 IP'
+                   extra={<div style={{marginTop: 4}}>
+                       代理地址、账号密码在「设置 - 代理管理」统一维护，可测试与排序；
+                       这里只选择要使用的代理。
+                   </div>}>
+            <Select allowClear showSearch optionFilterProp='label'
+                    placeholder='不使用代理'
+                    notFoundContent='暂无代理，请先到「设置 - 代理管理」新增'
+                    options={this.state.proxyOptions}
+                    style={{maxWidth: 420}}/>
+        </Form.Item>
+    )
 
     render() {
         return <Page padding>
@@ -338,6 +378,7 @@ export default class extends React.Component {
                                             </Form.Item>
                                         </Space.Compact>
                                     </Form.Item>
+                                    {this.renderProxySelect()}
                                 </>
                             }
                             if (type === 'tcp') {
@@ -402,18 +443,7 @@ export default class extends React.Component {
                                         </Space.Compact>
                                     </Form.Item>
 
-                                    <Form.Item label='代理地址' name='proxyUrl'
-                                               tooltip='平台与目标主机网络不通时，经一台两边都能访问的主机中转 Docker 请求；留空表示不使用代理。平台跑在容器里时不能填 127.0.0.1，要填宿主机网桥网关或局域网 IP'
-                                               rules={[{validator: validateProxyUrl}]}
-                                               extra={<div style={{marginTop: 4}}>
-                                                   一行填完，如 <code>http://192.168.1.10:8080</code>、
-                                                   <code>http://user:pass@192.168.1.10:8080</code>、
-                                                   <code>socks5://192.168.1.10:1080</code>；
-                                                   端口必填，密码显示为 <code>***</code> 表示沿用已保存的密码。
-                                               </div>}>
-                                        <Input placeholder='留空表示不使用代理，如 http://192.168.1.10:8080'
-                                               autoComplete='off' style={{maxWidth: 420}}/>
-                                    </Form.Item>
+                                    {this.renderProxySelect()}
                                 </>
                             }
                             return <Form.Item label='Socket 路径' name='dockerHost'
