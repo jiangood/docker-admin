@@ -131,7 +131,7 @@ export default class extends React.Component {
                 title: '备注',
                 dataIndex: 'remark',
                 render: v => v
-                    ? <Typography.Text ellipsis={{tooltip: v}} style={{maxWidth: 220}}>{v}</Typography.Text>
+                    ? <Typography.Text ellipsis={{tooltip: v}}>{v}</Typography.Text>
                     : '-',
             },
             {title: '更新时间', dataIndex: 'updateTime', width: 165},
@@ -153,7 +153,7 @@ export default class extends React.Component {
         ]
 
         return <Page padding>
-            <Card title='代理管理' className='page-card'
+            <Card title='代理管理' className='page-card page-card-fluid'
                   extra={<PermActions actions={[
                       {label: '新增代理', perm: 'proxy:save', type: 'primary', onClick: this.create},
                   ]}/>}>
