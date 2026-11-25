@@ -236,6 +236,13 @@ git tag vx.y.z && git push && git push origin vx.y.z
   （SSH 主机落到远端 `/tmp/docker-admin-image-tar/{logId}/`，本机 / TCP 主机落到平台 `image-tar/{logId}/`）。
   弹窗展示实时日志、已写入大小与速度（每秒 / 每分钟）、保存路径与下载按钮；SSH 下载经 SFTP 流式转发，不在平台侧重复落盘。
   任务状态只存内存（`HostImageExportService`），tar 不自动删除，由用户按路径自行清理。
+- **工具 - 镜像下载页可直接下载 tar：** `/image-download` 拉取镜像后优先交给**主机辅助容器**打包
+  （在 `docker-admin-agent` 里执行 `docker save`，tar 写入挂载目录的 `image-tar/{logId}/{镜像名}.tar`），
+  完成后页面右上角与日志抽屉都会出现「下载 tar」，下载走 Docker archive 接口流式转发；
+  同一页还提供「删除 tar」清理挂载目录。辅助容器未部署 / 不可用时自动回落到原方式
+  （SSH 主机远端 `/tmp/docker-admin-image-tar/{logId}/` 走 SFTP，本机 / TCP 主机落平台 `image-tar/{logId}/`），
+  三种方式都由 `ImageDownloadService` 在内存里按 logId 登记文件名、大小与方式，平台重启后登记丢失但 tar 仍在原处。
+  权限复用 `image-download:download`。
 - **容器启停删的兜底超时与超时后回查：** 主机详情 / 应用详情的容器操作都走
   `DockerClientManager#callWithTimeout`（启动 / 删除 120 秒，停止 / 重启 = 宽限期 + 30 秒响应预算），
   不让请求挂满 docker-java 的 1 小时 `responseTimeout`。

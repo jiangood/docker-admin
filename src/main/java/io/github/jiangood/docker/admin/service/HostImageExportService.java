@@ -153,7 +153,7 @@ public class HostImageExportService {
         String error = null;
         try {
             ImageDownloadService.TarResult result = imageDownloadService.saveToHost(
-                    logId, hostId, image, false, task == null ? null : task::progress);
+                    logId, hostId, image, false, false, task == null ? null : task::progress);
             if (task != null) {
                 task.complete(result);
             }

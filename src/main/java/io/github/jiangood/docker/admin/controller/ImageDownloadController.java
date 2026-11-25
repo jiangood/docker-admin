@@ -3,12 +3,14 @@ package io.github.jiangood.docker.admin.controller;
 import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
 import io.github.jiangood.docker.admin.dto.ImageDownloadRequest;
+import io.github.jiangood.docker.admin.dto.ImageDownloadTaskView;
 import io.github.jiangood.openadmin.modules.task.entity.SysTaskLog;
 import io.github.jiangood.docker.admin.service.ImageDownloadService;
 import io.github.jiangood.openadmin.modules.task.service.SysTaskLogService;
 import io.github.jiangood.openadmin.framework.perm.HasPermission;
 import io.github.jiangood.openadmin.util.dto.AjaxResult;
 import jakarta.annotation.Resource;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -45,6 +47,40 @@ public class ImageDownloadController {
                 "image-download:download", taskLogService.currentTriggerUser());
         service.download(logId, request);
         return AjaxResult.ok().data(logId).msg("下载已开始");
+    }
+
+    /**
+     * 任务结果：tar 已生成时返回文件名、大小、保存位置与下载方式；执行中或失败时 data 为 null。
+     */
+    @HasPermission("image-download:download")
+    @RequestMapping("task")
+    public AjaxResult task(String logId) {
+        return AjaxResult.ok().data(service.taskView(logId));
+    }
+
+    /**
+     * 下载已生成的 tar：辅助容器方式经 Docker archive 接口，SSH 主机经 SFTP，
+     * 平台侧文件直接读盘；均为流式转发，不删除源文件。
+     */
+    @HasPermission("image-download:download")
+    @RequestMapping("tar")
+    public void tar(String logId, HttpServletResponse response) throws Exception {
+        ImageDownloadTaskView task = service.readyTask(logId);
+        DownloadTool.prepareDownload(response, task.getFileName(), "application/x-tar");
+        if (task.getSize() > 0) {
+            response.setContentLengthLong(task.getSize());
+        }
+        service.copyTarTo(logId, response.getOutputStream());
+    }
+
+    /**
+     * 删除已生成的 tar 与登记条目，给用户腾磁盘用。
+     */
+    @HasPermission("image-download:download")
+    @PostMapping("delete")
+    public AjaxResult delete(String logId) {
+        service.deleteTar(logId);
+        return AjaxResult.ok().msg("已删除 tar");
     }
 
 }
