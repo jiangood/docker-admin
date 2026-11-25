@@ -1,6 +1,5 @@
 package io.github.jiangood.docker.admin.service;
 
-import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
 import io.github.jiangood.docker.admin.dto.HostImageExportTaskView;
@@ -17,8 +16,11 @@ import org.springframework.util.Assert;
 
 import java.io.File;
 import java.io.OutputStream;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 import io.github.jiangood.openadmin.modules.task.service.SysTaskLogService;
 
@@ -27,7 +29,8 @@ import io.github.jiangood.openadmin.modules.task.service.SysTaskLogService;
  * <p>
  * 与镜像下载页共用同一条保存路径：读取 docker 的 save 流并写到平台服务器的
  * {@code image-tar/{logId}/}，下载时直接从平台读盘，不区分主机连接方式。
- * tar 在下载完成后立即删除；每次开始新的下载 / 导出前也会清理遗留的旧 tar。
+ * tar 在下载完成后立即删除；每次开始新的导出前只清理 host-export 前缀的旧文件，
+ * 不会影响镜像下载页已持久化的归档。
  * <p>
  * 任务状态只存内存：logId 同时是日志文件名与平台目录名，进程重启后任务丢失，
  * 但已生成的 tar 仍在平台上，可按日志里的路径取用。
@@ -114,6 +117,13 @@ public class HostImageExportService {
      */
     private final Map<String, Task> tasksByLogId = new ConcurrentHashMap<>();
 
+    /** 登记与旧文件清理共用，避免新任务目录刚好落在清理扫描之后又被删除。 */
+    private final Object exportLock = new Object();
+
+    /** 导出归档的下载租约：多个浏览器可同时下载，最后一个结束后才允许删除。 */
+    private final Object downloadGate = new Object();
+    private final Map<String, AtomicInteger> activeDownloads = new ConcurrentHashMap<>();
+
     /**
      * 登记一次导出任务并返回 logId。容量、路径等校验留在真正的保存阶段，失败原因写进日志。
      */
@@ -125,18 +135,25 @@ public class HostImageExportService {
         String logId = "host-export-" + RandomUtil.randomString(16);
 
         Task task = new Task(logId, host.getId(), host.getName(), ref);
-        Task old = tasks.put(key(host.getId(), ref), task);
-        if (old != null) {
-            tasksByLogId.remove(old.logId);
+        synchronized (exportLock) {
+            Task old = tasks.put(key(host.getId(), ref), task);
+            if (old != null && old.status != Status.RUNNING) {
+                synchronized (downloadGate) {
+                    // 已有浏览器在下载旧归档时保留旧任务，避免复制中断或下载结束后无法清理。
+                    if (!activeDownloads.containsKey(old.logId)) {
+                        tasksByLogId.remove(old.logId);
+                    }
+                }
+            }
+            tasksByLogId.put(logId, task);
+            // 登记通用任务记录，任务中心可查看与回放（在标记运行中之前，保证 WS 鉴权能查到记录）
+            taskLogService.start(logId, SysTaskLog.TYPE_HOST_IMAGE_EXPORT,
+                    "导出主机镜像 " + host.getName() + " · " + ref,
+                    "host:image", taskLogService.currentTriggerUser());
+            // 在请求线程先标记运行中：前端拿到 logId 后可能立刻连日志 WebSocket，
+            // 若等 @Async 线程起来再登记，日志流会误判任务已结束而提前关闭
+            taskLogRegistry.start(logId);
         }
-        tasksByLogId.put(logId, task);
-        // 登记通用任务记录，任务中心可查看与回放（在标记运行中之前，保证 WS 鉴权能查到记录）
-        taskLogService.start(logId, SysTaskLog.TYPE_HOST_IMAGE_EXPORT,
-                "导出主机镜像 " + host.getName() + " · " + ref,
-                "host:image", taskLogService.currentTriggerUser());
-        // 在请求线程先标记运行中：前端拿到 logId 后可能立刻连日志 WebSocket，
-        // 若等 @Async 线程起来再登记，日志流会误判任务已结束而提前关闭
-        taskLogRegistry.start(logId);
         return logId;
     }
 
@@ -151,6 +168,17 @@ public class HostImageExportService {
         boolean success = false;
         String error = null;
         try {
+            synchronized (exportLock) {
+                synchronized (downloadGate) {
+                    Set<String> protectedLogIds = new HashSet<>(activeDownloads.keySet());
+                    tasksByLogId.entrySet().stream()
+                            .filter(entry -> entry.getValue().status == Status.RUNNING)
+                            .map(Map.Entry::getKey)
+                            .forEach(protectedLogIds::add);
+                    // 门闩一直持有到扫描结束，避免已完成归档在快照后又被新下载占位。
+                    imageDownloadService.cleanPreviousTars("host-export-", protectedLogIds);
+                }
+            }
             ImageDownloadService.TarResult result = imageDownloadService.saveToHost(
                     logId, hostId, image, false, task == null ? null : task::progress);
             if (task != null) {
@@ -199,7 +227,35 @@ public class HostImageExportService {
     }
 
     /**
-     * 把 tar 流式写给浏览器；下载完成后由 {@link #deleteAfterDownload(String)} 删除。
+     * 在写响应头前占用下载租约，避免清理或另一次下载完成时抢先删除归档。
+     * 调用方无论成功失败都必须在 finally 中调用 {@link #releaseDownload(String)}。
+     */
+    public HostImageExportTaskView reserveDownload(String logId) {
+        Assert.state(isValidLogId(logId), "非法的导出任务标识");
+        synchronized (downloadGate) {
+            activeDownloads.computeIfAbsent(logId, key -> new AtomicInteger()).incrementAndGet();
+        }
+        try {
+            return readyTask(logId);
+        } catch (RuntimeException e) {
+            releaseDownload(logId);
+            throw e;
+        }
+    }
+
+    /** 释放一个下载租约；同一归档的最后一个下载结束后才允许删除。 */
+    public void releaseDownload(String logId) {
+        synchronized (downloadGate) {
+            AtomicInteger downloading = activeDownloads.get(logId);
+            if (downloading != null && downloading.decrementAndGet() == 0) {
+                activeDownloads.remove(logId, downloading);
+            }
+        }
+    }
+
+    /**
+     * 把 tar 流式写给浏览器；调用方需先通过 {@link #reserveDownload(String)} 占用租约，
+     * 下载完成后由 {@link #deleteAfterDownload(String)} 删除。
      */
     public void copyTarTo(String logId, OutputStream out) throws Exception {
         Task task = tasksByLogId.get(logId);
@@ -209,22 +265,26 @@ public class HostImageExportService {
     }
 
     /**
-     * 下载完成后删除 tar 与任务登记：页面再查状态会回到「准备导出」，
-     * 需要再次下载只能重新导出。删除失败只记日志，响应已经写完。
+     * 下载完成后删除 tar 与任务登记：最后一个下载者结束才删除，
+     * 其他浏览器仍可继续下载。删除失败时保留登记，响应已经写完。
      */
     public void deleteAfterDownload(String logId) {
-        Task task = tasksByLogId.remove(logId);
-        if (task == null) {
-            return;
-        }
-        tasks.remove(key(task.hostId, task.image), task);
-        try {
-            File parent = task.path == null ? null : new File(task.path).getParentFile();
-            if (parent != null) {
-                FileUtil.del(parent);
+        synchronized (downloadGate) {
+            if (activeDownloads.containsKey(logId)) {
+                return;
             }
-        } catch (Exception e) {
-            log.warn("下载后删除导出的 tar 失败: logId={} {}", logId, e.getMessage());
+            Task task = tasksByLogId.get(logId);
+            if (task == null) {
+                return;
+            }
+            try {
+                imageDownloadService.deleteArchiveDir(logId);
+            } catch (Exception e) {
+                log.warn("下载后删除导出的 tar 失败: logId={} {}", logId, e.getMessage());
+                return;
+            }
+            tasksByLogId.remove(logId, task);
+            tasks.remove(key(task.hostId, task.image), task);
         }
     }
 

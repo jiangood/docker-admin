@@ -281,12 +281,17 @@ public class HostController  {
     @HasPermission("host:image")
     @RequestMapping("exportImage/download")
     public void exportImageDownload(String logId, HttpServletResponse response) throws Exception {
-        HostImageExportTaskView task = hostImageExportService.readyTask(logId);
-        DownloadTool.prepareDownload(response, task.getFileName(), "application/x-tar");
-        if (task.getSize() > 0) {
-            response.setContentLengthLong(task.getSize());
+        HostImageExportTaskView task = hostImageExportService.reserveDownload(logId);
+        try {
+            DownloadTool.prepareDownload(response, task.getFileName(), "application/x-tar");
+            if (task.getSize() > 0) {
+                response.setContentLengthLong(task.getSize());
+            }
+            hostImageExportService.copyTarTo(logId, response.getOutputStream());
+        } finally {
+            hostImageExportService.releaseDownload(logId);
         }
-        hostImageExportService.copyTarTo(logId, response.getOutputStream());
+        // 仅最后一个并发下载者会真正删除归档。
         hostImageExportService.deleteAfterDownload(logId);
     }
 

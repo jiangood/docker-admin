@@ -236,17 +236,22 @@ git tag vx.y.z && git push && git push origin vx.y.z
   tar 统一保存到平台服务器的 `image-tar/{logId}/`（不区分 SSH / TCP / 本机）。
   弹窗展示实时日志、已写入大小与速度（每秒 / 每分钟）、保存路径与下载按钮，下载从平台读盘流式转发。
   **下载完成后立即删除 tar 并结束任务登记**（取消下载时保留文件）；
-  下一次导出 / 下载开始前也会先清理平台上遗留的 tar。任务状态只存内存（`HostImageExportService`）。
+  多个浏览器并发下载使用租约，最后一个下载者结束才删除；下一次导出开始前只清理 `host-export-` 前缀的旧目录，
+  并跳过运行中或正在下载的任务，删除不跟随符号链接，也不影响镜像下载页的持久化归档。任务状态只存内存（`HostImageExportService`）。
 - **工具 - 镜像下载页可直接下载 tar：** `/image-download` 拉取镜像后执行 `docker save`，
   读取 save 流并统一保存到平台服务器的 `image-tar/{logId}/{镜像名}.tar`（**不再区分连接方式、也不再依赖主机辅助容器**）。
-  完成后页面右上角与日志抽屉都会出现「下载 tar」，下载直接读平台文件流式转发。
-  **清理策略（无系统参数）**：下载接口在响应写完后立即删除该 tar（浏览器取消导致写响应异常时不删）；
-  `ImageDownloadService#saveToHost` 在每次任务开始前调用 `cleanPreviousTars()`，
-  删除平台上所有旧的 tar 目录并清掉内存登记（`running` 集合里正在打包的任务跳过，避免删掉在写的文件），
-  因此平台最多只有本轮任务生成的文件。同一页还保留「删除 tar」按钮供手动清理。
-  内存里按 logId 登记文件名、大小与路径（最多 50 条），平台重启后登记丢失但 tar 仍在平台上。
-  **代价：平台磁盘要能容纳整个 tar**（大镜像 10~30 GB，且是一次从主机拉回、再一次发给浏览器）。
-  权限复用 `image-download:download`。
+  完成后页面表格与日志抽屉都会出现「下载 tar」，下载直接读平台文件流式转发。
+  **记录与归档持久化**：每条任务在 `t_image_download_record` 落一条记录（`logId` 唯一），
+  状态为 `RUNNING` / `SUCCESS` / `FAILED` / `CLEANING` / `CLEANED`；新任务不会清理其他用户的文件，下载完成后也不自动删除。
+  页面使用 ProTable 展示历史记录（`rowKey='logId'`），用户勾选后调用 `admin/image-download/clean` 批量清理；
+  运行中、正在下载、已清理或删除失败的记录会跳过，记录保留并标记为 `CLEANED`（含清理人和时间）。
+  每条记录独立按短事务经历 `CLEANING → 删文件 → CLEANED`，锁顺序固定；文件删除与本机下载占位互斥，
+  删除统一不跟随符号链接，避免多人并发或脏路径误删目录外文件。
+  平台重启由 `ImageDownloadRecordStartupSweeper` 将遗留 `RUNNING` 标记失败、继续收尾 `CLEANING`、清理失败任务残留，
+  并把升级前没有数据库记录的 `image-download-*` 目录导入为历史记录；只有任务中心确认成功的旧归档才提供下载，
+  未确认成功的保留为 `FAILED` 供用户清理。
+  **代价：平台磁盘要能容纳整个 tar**（大镜像 10~30 GB，且是一次从主机拉回、再一次发给浏览器），
+  需要用户在页面定期批量清理。页面查询/下载权限为 `image-download:view`，触发任务/下载/清理复用 `image-download:download`。
 - **容器启停删的兜底超时与超时后回查：** 主机详情 / 应用详情的容器操作都走
   `DockerClientManager#callWithTimeout`（启动 / 删除 120 秒，停止 / 重启 = 宽限期 + 30 秒响应预算），
   不让请求挂满 docker-java 的 1 小时 `responseTimeout`。
