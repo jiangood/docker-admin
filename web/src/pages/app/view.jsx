@@ -197,7 +197,7 @@ export default class extends React.Component {
                 if (deploying) {
                     watch.seenDeploying = true
                 } else if (watch.seenDeploying) {
-                    // 部署已结束：刷新部署日志与容器标签，展示最终状态
+                    // 部署已结束：刷新变更日志与容器标签，展示最终状态
                     this.deployWatch = null
                     this.bumpTokens(['deployLog', 'containerLog'])
                     keepPolling = false
@@ -504,7 +504,7 @@ export default class extends React.Component {
         const items = [
             {
                 key: 'containerLog',
-                label: '日志',
+                label: '容器日志',
                 children: container && container.id
                     ? <ContainerLogs key={'containerLog-' + tabTokens.containerLog}
                                      url={`/admin/ws/log/${app.id}`}
@@ -515,7 +515,7 @@ export default class extends React.Component {
             },
             {
                 key: 'containerConfig',
-                label: '参数',
+                label: '参数配置',
                 children: <ConfigForm key={'containerConfig-' + tabTokens.containerConfig} app={app}
                                       onChange={this.handleChanged}/>
             },
@@ -529,7 +529,7 @@ export default class extends React.Component {
             },
             {
                 key: 'deployLog',
-                label: '部署日志',
+                label: '变更日志',
                 children: <DeployLogList key={'deployLog-' + tabTokens.deployLog} appId={app.id}
                                          deploying={container?.state === 'deploying'}/>
             },
