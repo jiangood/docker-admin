@@ -197,7 +197,7 @@ export default class extends React.Component {
                 if (deploying) {
                     watch.seenDeploying = true
                 } else if (watch.seenDeploying) {
-                    // 部署已结束：刷新变更日志与容器标签，展示最终状态
+                    // 部署已结束：刷新部署日志与容器标签，展示最终状态
                     this.deployWatch = null
                     this.bumpTokens(['deployLog', 'containerLog'])
                     keepPolling = false
@@ -529,7 +529,7 @@ export default class extends React.Component {
             },
             {
                 key: 'deployLog',
-                label: '变更日志',
+                label: '部署日志',
                 children: <DeployLogList key={'deployLog-' + tabTokens.deployLog} appId={app.id}
                                          deploying={container?.state === 'deploying'}/>
             },
