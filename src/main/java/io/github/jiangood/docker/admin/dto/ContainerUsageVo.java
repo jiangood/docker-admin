@@ -21,7 +21,7 @@ public class ContainerUsageVo implements Serializable {
     String name;
     String image;
 
-    /** 所属主机（落库/跨主机查询场景下使用） */
+    /** 所属主机（主机详情聚合展示时使用） */
     String hostId;
     String hostName;
 

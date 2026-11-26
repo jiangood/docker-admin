@@ -6,7 +6,7 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
 
 /**
- * 首次启动时自动登记「网站可达性检查」这条定时任务（模式同 {@link HostUsageJobInitializer}）。
+ * 首次启动时自动登记「网站可达性检查」这条定时任务（模式同 {@link BuiltinJobRegistrar}）。
  * <ul>
  *   <li>已存在且配置过 cron（包括用户停用过、改过 cron）就完全不碰，尊重页面上的配置；</li>
  *   <li>只被框架 {@code JobAutoRegistrar} 登记成空壳（无 cron、默认禁用）时补上默认 cron 并启用；</li>

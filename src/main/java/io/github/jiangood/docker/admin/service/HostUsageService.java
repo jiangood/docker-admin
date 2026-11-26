@@ -17,11 +17,9 @@ import io.github.jiangood.docker.admin.dto.HostUsageVo;
 import io.github.jiangood.docker.admin.entity.App;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
-import io.github.jiangood.openadmin.framework.data.specification.Spec;
 import io.github.jiangood.openadmin.util.BusinessException;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -30,7 +28,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -39,32 +36,22 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Collectors;
 
 /**
- * 主机实时用量：等价于 {@code docker stats} 的采集与汇总。
+ * 主机实时用量：等价于 {@code docker stats} 的按需采集与汇总。
  * <p>
  * 为什么单独一个服务（而不是塞进 {@link HostSummaryService}）：
  * <ul>
  *   <li>静态容量（{@code docker info}）很快，实时用量（每台主机、每个运行中容器各一次
  *       {@code /stats}）要慢一个数量级，两者的超时、缓存与降级策略完全不同；</li>
  *   <li>{@code /stats?stream=0} 在 docker 守护进程内部要采两个样本（间隔约 1 秒）才有 CPU 百分比，
- *       所以「一轮采集 ≈ 1 秒起」是硬开销，只能靠并发 + 缓存分摊。</li>
+ *       所以「一轮采集 ≈ 1 秒起」是硬开销，只能靠并发分摊。</li>
  * </ul>
- * 采集策略：每台主机复用同一个 {@link DockerClient}（SSH 是一条 Session 多 Channel），
+ * 采集策略：一次采集内的 info / 容器列表 / 全部 stats 共用一个 {@link DockerClient}（SSH 是一条 Session 多 Channel），
  * 容器级任务放进固定线程池，超时只影响单个容器；主机级用
  * {@link DockerClientManager#callWithTimeout} 兜住传输层卡死。
  * <p>
- * 缓存：每主机 3 秒，命中即返回；过期则采集（同一主机的并发请求共享同一个在途任务）。
- * <p>
- * 数据来源两条链路：
- * <ul>
- *   <li><b>定时任务</b>（{@code HostUsageCollectJob}，每 {@link #COLLECT_INTERVAL} 一轮）调
- *       {@link #collectAll()} 采一轮、写缓存，并交回结果由采集任务落库（容器最新快照与历史）；</li>
- *   <li><b>首页</b>只读快照（{@link #snapshotAll()}），不触发采集，所以开多少个标签页都不会增加
- *       主机侧负载；<b>主机详情「监控」Tab</b>每次轮询都调 {@link #usage(String, boolean)}
- *       （{@code refresh=true}）现采一轮，展示的是当前时刻的 docker stats。</li>
- * </ul>
+ * 只有主机详情「监控」Tab 会调用 {@link #usage(String)} 现采一轮：不做后台定时采集，也不落库。
  */
 @Slf4j
 @Service
@@ -75,12 +62,6 @@ public class HostUsageService {
      */
     private static final String APP_LABEL = "app.name";
 
-    /**
-     * 采集间隔：与 {@code HostUsageJobInitializer} 里定时任务的 cron 保持一致。
-     * 采样落库、退避阶梯都以「一轮」为单位，改这里时记得同步 cron。
-     */
-    public static final Duration COLLECT_INTERVAL = Duration.ofMinutes(1);
-
     /** 单台主机一轮采集的总预算（含建立连接、info、容器列表与全部 stats）。 */
     private static final Duration PER_HOST_TIMEOUT = Duration.ofSeconds(8);
 
@@ -89,9 +70,6 @@ public class HostUsageService {
 
     /** 单容器采集超时：dockerd 的两次采样本身约 1 秒，留足余量。 */
     private static final long PER_CONTAINER_TIMEOUT_MILLIS = 4_000;
-
-    /** 结果缓存时长：只用来合并同一瞬间到达的请求（主机详情现采走 refresh=true，不经过这里）。 */
-    private static final Duration CACHE_TTL = Duration.ofSeconds(3);
 
     @Resource
     private HostService hostService;
@@ -102,15 +80,7 @@ public class HostUsageService {
     @Resource
     private AppRepository appRepository;
 
-    /** 主机级任务：会阻塞等待容器结果，用缓存线程池避免主机之间互相排队。 */
-    private final ExecutorService hostExecutor = Executors.newCachedThreadPool(r -> {
-        Thread thread = new Thread(r, "host-usage");
-        thread.setDaemon(true);
-        return thread;
-    });
-
-    /**
-     * 容器 stats 线程池。固定大小：每个请求在 dockerd 内部都要等一次采样周期，
+    /** 容器 stats 线程池。固定大小：每个请求在 dockerd 内部都要等一次采样周期，
      * 并发再高只会把主机压垮，不会更快。
      */
     private final ExecutorService statsExecutor = Executors.newFixedThreadPool(12, r -> {
@@ -119,234 +89,20 @@ public class HostUsageService {
         return thread;
     });
 
-    private final Map<String, CacheEntry> cache = new ConcurrentHashMap<>();
-
-    /** 同一主机的在途采集：并发的首页/详情请求只真正采一次。 */
+    /** 同一主机的在途采集：并发的监控请求只真正采一次。 */
     private final Map<String, CompletableFuture<HostUsageVo>> inflight = new ConcurrentHashMap<>();
 
     /**
-     * 连续采集失败的主机退避表：只在定时任务里生效。
-     * <p>
-     * 一台宕机的 SSH 主机每轮采集都要握手、等超时，不退避就是每轮都踢一次铁板；
-     * 而「刷新」按钮仍然直接采集，不受这里的限制。
-     * <p>
-     * 状态不能放在 Quartz 任务里：任务每次触发都会新建实例（见 open-admin 的 BaseJob 说明）。
+     * 单台主机的实时用量（主机详情「监控」Tab 用，含逐容器明细）。
      */
-    private final Map<String, Backoff> backoff = new ConcurrentHashMap<>();
-
-    /**
-     * 所有主机的实时用量（首页表格用，不含容器明细）。
-     *
-     * @param refresh 为 true 时忽略缓存强制重新采集
-     */
-    public List<HostUsageVo> usageAll(boolean refresh) {
-        List<Host> hosts = hostService.findAll(Spec.of(), Sort.by(Host.Fields.name));
-
-        List<Future<HostUsageVo>> futures = new ArrayList<>(hosts.size());
-        for (Host host : hosts) {
-            futures.add(hostExecutor.submit(() -> usage(host, refresh)));
-        }
-
-        List<HostUsageVo> result = new ArrayList<>(hosts.size());
-        long deadline = System.currentTimeMillis() + PER_HOST_TIMEOUT.toMillis() + 4_000;
-        for (int i = 0; i < hosts.size(); i++) {
-            Host host = hosts.get(i);
-            try {
-                long remain = Math.max(500, deadline - System.currentTimeMillis());
-                result.add(futures.get(i).get(remain, TimeUnit.MILLISECONDS).toBrief());
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                futures.get(i).cancel(true);
-                result.add(failed(host, "采集被中断", 0).toBrief());
-            } catch (Exception e) {
-                futures.get(i).cancel(true);
-                result.add(failed(host, "采集超时", 0).toBrief());
-            }
-        }
-        return result;
-    }
-
-    /**
-     * 单台主机的实时用量（主机详情用，含逐容器明细）。
-     *
-     * @param refresh 为 true 时忽略缓存强制重新采集
-     */
-    public HostUsageVo usage(String hostId, boolean refresh) {
+    public HostUsageVo usage(String hostId) {
         Host host = hostService.findById(hostId)
                 .orElseThrow(() -> new BusinessException("主机不存在"));
-        return usage(host, refresh);
-    }
-
-    /**
-     * 定时任务的采集入口：无视缓存与 TTL 采一轮，写缓存并把成功的结果交回调用方落库。
-     * <p>
-     * 与页面请求共用 {@link #collect(Host)}，所以和手动「刷新」撞上时只会真正采一次。
-     */
-    public CollectResult collectAll() {
-        List<Host> hosts = hostService.findAll(Spec.of(), Sort.by(Host.Fields.name));
-        pruneCache(hosts);
-        long start = System.currentTimeMillis();
-
-        List<String> skippedHostIds = new ArrayList<>();
-        List<Future<HostUsageVo>> futures = new ArrayList<>(hosts.size());
-        for (Host host : hosts) {
-            if (inBackoff(host)) {
-                skippedHostIds.add(host.getId());
-                futures.add(CompletableFuture.completedFuture(null));
-            } else {
-                futures.add(hostExecutor.submit(() -> collect(host)));
-            }
-        }
-
-        List<HostUsageVo> values = new ArrayList<>(hosts.size());
-        int skipped = skippedHostIds.size();
-        int failed = 0;
-        long deadline = System.currentTimeMillis() + PER_HOST_TIMEOUT.toMillis() + 4_000;
-        for (int i = 0; i < hosts.size(); i++) {
-            Host host = hosts.get(i);
-            HostUsageVo vo;
-            try {
-                long remain = Math.max(500, deadline - System.currentTimeMillis());
-                vo = futures.get(i).get(remain, TimeUnit.MILLISECONDS);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                futures.get(i).cancel(true);
-                vo = failed(host, "采集被中断", 0);
-            } catch (Exception e) {
-                futures.get(i).cancel(true);
-                vo = failed(host, "采集超时", 0);
-            }
-            if (vo == null) {
-                // 退避中：本轮不采，也不写采样，容器快照由调用方按策略清理
-                continue;
-            }
-            if (!vo.isReachable()) {
-                failed++;
-            }
-            values.add(vo);
-        }
-
-        return new CollectResult(values, hosts.size(), values.size() - failed, failed, skipped,
-                System.currentTimeMillis() - start, skippedHostIds);
-    }
-
-    /**
-     * 首页用的只读快照：返回所有已有缓存的主机（brief 形态），不发起采集。
-     * <p>
-     * 还没有缓存的主机（刚启动、刚从退避里恢复）异步预热一次，页面下一次轮询就能拿到，
-     * 但不让本次请求等它。
-     */
-    public List<HostUsageVo> snapshotAll() {
-        List<Host> hosts = hostService.findAll(Spec.of(), Sort.by(Host.Fields.name));
-        pruneCache(hosts);
-
-        List<HostUsageVo> result = new ArrayList<>(hosts.size());
-        for (Host host : hosts) {
-            CacheEntry entry = cache.get(host.getId());
-            if (entry == null) {
-                prewarm(host);
-                continue;
-            }
-            result.add(entry.value().toBrief());
-        }
-        return result;
-    }
-
-    /**
-     * 异步预热一台主机的缓存：只用于「页面第一次打开时缓存还是空的」这一种情况。
-     */
-    private void prewarm(Host host) {
-        if (inBackoff(host) || inflight.containsKey(host.getId())) {
-            return;
-        }
-        hostExecutor.submit(() -> {
-            try {
-                collect(host);
-            } catch (Exception e) {
-                log.debug("实时用量预热失败：主机 {}：{}", host.getName(), e.toString());
-            }
-        });
-    }
-
-    /**
-     * 移除已删除主机的缓存与退避状态，避免长期运行后残留。
-     */
-    private void pruneCache(List<Host> hosts) {
-        if (cache.isEmpty() && backoff.isEmpty()) {
-            return;
-        }
-        Set<String> alive = hosts.stream().map(Host::getId).collect(Collectors.toSet());
-        cache.keySet().removeIf(id -> !alive.contains(id));
-        backoff.keySet().removeIf(id -> !alive.contains(id));
-    }
-
-    /**
-     * 记录一次采集结果：成功清零退避，失败按阶梯拉长重试间隔。
-     */
-    private void recordOutcome(Host host, HostUsageVo vo) {
-        if (vo.isReachable()) {
-            backoff.remove(host.getId());
-            return;
-        }
-        Backoff old = backoff.getOrDefault(host.getId(), new Backoff(0, 0));
-        int failures = old.failures() + 1;
-        backoff.put(host.getId(), new Backoff(failures, System.currentTimeMillis() + backoffDelay(failures)));
-    }
-
-    private boolean inBackoff(Host host) {
-        Backoff state = backoff.get(host.getId());
-        return state != null && System.currentTimeMillis() < state.nextAttemptAt();
-    }
-
-    /**
-     * 退避阶梯：按「轮」算，一轮 = {@link #COLLECT_INTERVAL}。
-     * 第一次失败下一轮照常重试，之后跳过 2 / 5 / 15 轮。
-     */
-    private static long backoffDelay(int failures) {
-        long interval = COLLECT_INTERVAL.toMillis();
-        return switch (failures) {
-            case 0, 1 -> 0L;
-            case 2 -> 2 * interval;
-            case 3 -> 5 * interval;
-            default -> 15 * interval;
-        };
-    }
-
-    /**
-     * 一轮定时采集的汇总结果。
-     *
-     * @param values         实际采到的主机（含失败的主机，{@code reachable=false}）
-     * @param skippedHostIds 本轮因退避跳过的主机 id（调用方据此清理其容器快照）
-     */
-    public record CollectResult(List<HostUsageVo> values,
-                                int hosts,
-                                int success,
-                                int failed,
-                                int skipped,
-                                long durationMillis,
-                                List<String> skippedHostIds) {
-
-        public String describe() {
-            return "采集 " + hosts + " 台：成功 " + success + "、失败 " + failed
-                    + (skipped > 0 ? "、退避跳过 " + skipped : "")
-                    + "，耗时 " + String.format("%.1f", durationMillis / 1000.0) + " 秒";
-        }
-    }
-
-    private record Backoff(int failures, long nextAttemptAt) {
-    }
-
-    private HostUsageVo usage(Host host, boolean refresh) {
-        CacheEntry entry = cache.get(host.getId());
-        if (!refresh && entry != null
-                && System.currentTimeMillis() - entry.time < CACHE_TTL.toMillis()) {
-            return entry.value;
-        }
         return collect(host);
     }
 
     /**
-     * 采集并写缓存，同一主机只允许一个在途任务，其余等待它的结果。
+     * 采集并合并同一主机的在途请求，只真正采一次。
      */
     private HostUsageVo collect(Host host) {
         CompletableFuture<HostUsageVo> mine = new CompletableFuture<>();
@@ -368,15 +124,11 @@ public class HostUsageService {
                     client -> collectWithClient(host, client));
             vo.setDurationMillis(System.currentTimeMillis() - start);
             vo.setCollectedAt(System.currentTimeMillis());
-            cache.put(host.getId(), new CacheEntry(vo, System.currentTimeMillis()));
-            recordOutcome(host, vo);
             mine.complete(vo);
             return vo;
         } catch (Exception e) {
             log.warn("实时用量：主机 {} 采集失败：{}", host.getName(), e.toString());
             HostUsageVo vo = failed(host, rootMessage(e), System.currentTimeMillis() - start);
-            cache.put(host.getId(), new CacheEntry(vo, System.currentTimeMillis()));
-            recordOutcome(host, vo);
             mine.complete(vo);
             return vo;
         } finally {
@@ -705,8 +457,5 @@ public class HostUsageService {
         }
         String message = t.getMessage();
         return message == null || message.isBlank() ? t.getClass().getSimpleName() : message;
-    }
-
-    private record CacheEntry(HostUsageVo value, long time) {
     }
 }

@@ -70,7 +70,7 @@ git tag vx.y.z && git push && git push origin vx.y.z
 - **菜单配置**在 `src/main/resources/menu-docker.yml`，可用 `menu-override.yml` 覆盖
   （open-admin 3.2.0 起只扫描 `menu.yml` / `menu-*.yml`，旧的 `application-menu*.yml` 不再识别）。
   顶层为「项目」`/project`、「应用」`/app`、「镜像」`/image`、「主机」`/host`，以及「设置」（注册中心、代码源、代理管理）
-  与「工具」（主机 Agent、构建测试、镜像下载、网站监控、资源统计、任务中心）两个分组。
+  与「工具」（主机 Agent、构建测试、镜像下载、网站监控、任务中心）两个分组。
 - **领域模型：** `Project`(项目，构建定义) → `Image`(镜像，`imageUrl` 唯一) → `ImageTag`(镜像标签，`imageUrl`+`tag`)。
   项目与镜像按 `imageUrl` 相等关联；`App` 只存 `imageUrl` + `imageTag`，与项目/镜像均无 id 外键。
   菜单为「项目」(`/project`) 与「镜像」(`/image`)，权限码为 `image:*`，表名为 `t_image`。
@@ -291,31 +291,23 @@ git tag vx.y.z && git push && git push origin vx.y.z
   应用停止 / 删除、主机维度的停止与重启都必须显式 `.withTimeout(graceSeconds)`；
   宿主机上手工 `docker stop` 仍按容器自身配置（docker-java 3.7.1 不支持写 `HostConfig.StopTimeout`），
   Agent 辅助容器的停止保持默认 10 秒（它不需要优雅退出）。
-- **首页资源概览分两条链路：** 静态容量走 `admin/home/hostSummary`（`docker info`，30 秒缓存，首屏用），
-  实时用量走 `admin/home/hostUsage`（首页），数据由 Quartz 定时任务「主机用量采集」
-  （`HostUsageCollectJob`，每 1 分钟）写进 `HostUsageService` 的内存缓存。首页只读快照（`snapshotAll`），
-  30 秒轮询、页面隐藏时暂停，所以开多少个标签页、多少人在看都不会增加主机侧负载。
-  **主机详情「监控」Tab 已改为实时探测：** 页面每 5 秒调 `admin/host/usage`，后端每次都现采一轮
-  docker stats（`HostUsageService#usage(id, true)`，不读快照、不走 3 秒缓存），只在该 Tab 激活且页面可见时轮询，
-  上一次请求未返回时跳过；不再有历史曲线，旧的 `admin/host/usageHistory` 接口已删除
-  （历史趋势仍在「工具 - 资源统计」页查看）。探测开销与直接在宿主机跑 `docker stats` 类似：
+- **首页资源概览只读静态容量：** `admin/home/hostSummary`（`docker info`，30 秒缓存）下发主机数、
+  CPU 核数、内存容量、容器与镜像数，首屏即出；首页不再做任何 `docker stats` 采集，也没有内存 Top5。
+  **主机详情「监控」Tab 是唯一的实时用量入口：** 页面每 5 秒调 `admin/host/usage`，后端每次都现采一轮
+  docker stats（`HostUsageService#usage(id)`），只在该 Tab 激活且页面可见时轮询，上一次请求未返回时跳过。
+  探测开销与直接在宿主机跑 `docker stats` 类似：
   逐运行中容器 `statsCmd(...).withNoStream(true)`——docker-java 只把它映射成 `?stream=0`，dockerd 内部要采两次样本（约 1 秒）
   才有 CPU%，所以容器级并发 12、单机预算 6 秒、整体 8 秒兜底，并合并同一主机的并发采集。
   每轮采集都新建 DockerClient（`DockerClientManager` 有意不缓存客户端，SSH 主机每轮一次握手）。
   口径对齐 docker CLI：CPU% = `(cpuDelta/systemDelta)×onlineCpus×100`，内存扣 `inactive_file`
   （cgroup v1 `total_inactive_file` / v2 `inactive_file`），网络取各接口 rx/tx 求和，块 I/O 取
   `io_service_bytes_recursive` 读写之和（无条目按 0 计，与 docker stats 一致）；主机级只汇总运行中容器，是「容器合计」。
-  采集失败的主机按 1 → 2 → 5 → 15 轮阶梯退避（一轮 1 分钟，状态在 `HostUsageService`，**不能放任务字段**：Quartz 每次触发都重建实例），成功即复位。
-- **用量历史：** 采集任务同时把结果写 `t_host_usage_sample`（历史每 10 分钟一份/主机，网络与块 I/O 存**累计计数器**原值），
-  「工具 - 资源统计」页按 1h / 6h / 24h / 7d / 30d 展示 CPU/内存与网络/磁盘速率曲线
-  （`admin/docker-stats/series`，Java 侧分桶到 ≤500 点；速率由相邻采样求差，差值为负 = 容器重启 → 曲线断点）。
-  主机详情「监控」Tab 不读这份历史，只做实时探测（见上一条）。
-  采样默认保留 30 天（`HostUsageSampleService` 里的默认值，需要时用 `docker.usage.retain-days` 覆盖，采集任务每小时顺带清理）；
-  30 台主机 30 天约 13 万行、20 MB。
-  定时任务记录由 `HostUsageJobInitializer` 幂等自动创建（`sys.job-enable=false` 时跳过，已存在则不覆盖用户改动）。
-  `BaseJob.execute(JobDataMap, Logger)` 返回 `JobResult`（`ok` / `partial` / `skip` / `fail`）；
-  框架 3.3.4 起不再有 `JobLogAggregation`，执行记录固定每次运行一条。
   **升级 docker-java 时需要回归这条链路。**
+- **用量采集 / 历史已整体删除：** 原「主机用量采集」定时任务（`HostUsageCollectJob`）、
+  `t_docker_stats` 最新快照与 `t_docker_stats_his` 历史、`admin/docker-stats/*` 接口、「工具 - 资源统计」页面，
+  以及首页内存 Top5、应用详情 / 容器详情的「资源占用」展示全部移除；
+  `RemovedUsageJobCleanup` 会在启动时删掉旧库 `sys_job` 里的残留任务记录
+  （旧表不会被自动删除，需要时手工 `DROP TABLE t_docker_stats` / `t_docker_stats_his`）。
 - **应用定时更新：** 应用详情「部署」页的「定时更新」开关（`App.scheduledUpdate`，默认关闭）按
   `scheduledUpdateIntervalMinutes`（默认 1440 分钟）定时检查镜像，适用于不是通过项目构建的外部镜像。
   任务 `AppScheduledUpdateJob` 每分钟扫描到期应用，只处理**运行中**的容器；检查由**平台直接访问注册中心**
@@ -330,7 +322,7 @@ git tag vx.y.z && git push && git push origin vx.y.z
   容器查询带 30 秒兜底超时（`SCHEDULED_UPDATE_QUERY_TIMEOUT`），一个失联主机不会拖住整轮；
   注册中心请求由 `RegistryV2Client` 自带 10 秒连接 / 30 秒读取超时。
   复制应用默认不会继承定时更新开关（间隔偏好保留）。
-  **三个内建任务（本任务、主机用量采集、网站可达性检查）统一由 `BuiltinJobRegistrar` 幂等登记**：
+  **两个内建任务（本任务、网站可达性检查）统一由 `BuiltinJobRegistrar` 幂等登记**：
   框架 `JobAutoRegistrar` 会先把带 `@JobDescription` 的类补建成「无 cron、默认禁用」的空壳行，
   且顺序早于 `ApplicationRunner`，所以只判断「jobClass 是否存在」会让任务永远不触发；
   有 cron 的行（用户配置过）一律不碰，没有 cron 的空壳行补上默认 cron 并启用。
@@ -415,8 +407,8 @@ git tag vx.y.z && git push && git push origin vx.y.z
   防 JS 丢精度；`long` / `Integer` / `Double` 仍是数字）。前端做加减乘除前必须 `Number()`
   （统一走 `web/src/components/container/utils.js` 的 `toNumber`），
   否则 `sum + item.memUsed` 会变成字符串拼接——首页内存合计曾因此显示成 `9e+33 TB`。
-- **首页资源卡的 CPU 核数**在表格 CPU 列与卡片底部都直接展示（表格第二行 `已用 / 主机 核`），
-  不再只放在悬浮提示里；核数优先取静态概览的 `cpus`，缺失时退回实时用量里的 `cpus`。
+- **首页资源卡的 CPU 核数与内存容量**直接取自静态概览（`cpus` / `memory`），表格与卡片都展示，
+  不再有「已用 / 主机」的实时用量列。
 - **静态文件**从 JAR 提供；开发时前端通过 Vite 代理访问后端。
 - **CodeMirror 5** 被锁定在 5.x（`codemirror@^5.0.0`）。CM6 是破坏性重写，
   `web/src/components/CodeMirrorEditor.jsx` 依赖 CM5 专有路径与 API，

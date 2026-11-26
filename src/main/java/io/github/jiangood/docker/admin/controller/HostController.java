@@ -236,7 +236,7 @@ public class HostController  {
     @RequestMapping("usage")
     public AjaxResult usage(String id) {
         ContainerPermTool.assertView();
-        return AjaxResult.ok().data(hostUsageService.usage(id, true));
+        return AjaxResult.ok().data(hostUsageService.usage(id));
     }
 
     /**

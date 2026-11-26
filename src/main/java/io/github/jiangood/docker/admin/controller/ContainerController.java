@@ -7,7 +7,6 @@ import io.github.jiangood.docker.admin.dto.ContainerFileVo;
 import io.github.jiangood.docker.admin.dto.ContainerFileWriteRequest;
 import io.github.jiangood.docker.admin.dto.ContainerSummaryVo;
 import io.github.jiangood.docker.admin.service.ContainerService;
-import io.github.jiangood.docker.admin.service.DockerStatsService;
 import io.github.jiangood.docker.admin.service.HostService;
 import io.github.jiangood.docker.admin.util.ContainerPermTool;
 import io.github.jiangood.docker.admin.websocket.DockerLogService;
@@ -45,9 +44,6 @@ public class ContainerController {
     @Resource
     private DockerSettings dockerSettings;
 
-    @Resource
-    private DockerStatsService dockerStatsService;
-
     // ------------------------------------------------------------------ 查看
 
     /** 主机上的容器列表。 */
@@ -66,15 +62,6 @@ public class ContainerController {
         Host host = requireHost(hostId);
         Assert.hasText(containerId, "containerId 不能为空");
         return AjaxResult.ok().data(containerService.inspect(host, containerId));
-    }
-
-    /** 容器当前资源用量（来自定时采集写入的最新快照）。 */
-    @RequestMapping("usage")
-    public AjaxResult usage(String hostId, String containerId) {
-        ContainerPermTool.assertView();
-        requireHost(hostId);
-        Assert.hasText(containerId, "containerId 不能为空");
-        return AjaxResult.ok().data(dockerStatsService.findByHostIdAndContainerId(hostId, containerId));
     }
 
     /**

@@ -7,7 +7,7 @@ import ContainerConfig from '../../components/container/ContainerConfig'
 import ContainerLogs from '../../components/container/ContainerLogs'
 import ContainerFiles from '../../components/container/ContainerFiles'
 import ContainerConsole from '../../components/container/ContainerConsole'
-import {formatBytes, formatClock, formatPercent, formatRunningDuration, formatTime, isRunningState, stateColor, stateLabel, wsContainerLogPath} from '../../components/container/utils'
+import {formatRunningDuration, formatTime, isRunningState, stateColor, stateLabel, wsContainerLogPath} from '../../components/container/utils'
 
 export const pageMeta = {
     title: '容器详情',
@@ -39,7 +39,6 @@ export default class extends React.Component {
         loading: true,
         detail: null,
         error: null,
-        usage: null,
         activeKey: 'logs',
         paneHeight: MIN_PANE_HEIGHT,
 
@@ -57,17 +56,10 @@ export default class extends React.Component {
         this.setState({activeKey: tab || 'logs', paneHeight: this.measurePaneHeight()})
         window.addEventListener('resize', this.handleResize)
         this.load()
-        this.loadUsage()
-        this.usageTimer = setInterval(() => {
-            if (!document.hidden) {
-                this.loadUsage()
-            }
-        }, 30000)
     }
 
     componentWillUnmount() {
         window.removeEventListener('resize', this.handleResize)
-        clearInterval(this.usageTimer)
     }
 
     measurePaneHeight = () => Math.max(MIN_PANE_HEIGHT, (window.innerHeight || 0) - VIEWPORT_CHROME)
@@ -93,26 +85,8 @@ export default class extends React.Component {
         }
         this.setState({loading: true, error: null})
         request
-            .then(rs => this.setState({detail: rs.data, loading: false}, this.loadUsage))
+            .then(rs => this.setState({detail: rs.data, loading: false}))
             .catch(e => this.setState({detail: null, loading: false, error: e.message || '读取容器信息失败'}))
-    }
-
-    /** 读取容器资源用量快照（DB），用于头部简要展示。 */
-    loadUsage = () => {
-        const {hostId, appId} = this.state.params
-        const detail = this.state.detail
-        const targetId = detail?.id || this.state.params.containerId
-        const request = appId
-            ? HttpClient.get('admin/app/usage', {id: appId}, {toastError: false})
-            : (hostId && targetId
-                ? HttpClient.get('admin/container/usage', {hostId, containerId: targetId}, {toastError: false})
-                : null)
-        if (!request) {
-            return
-        }
-        request
-            .then(rs => this.setState({usage: rs.data || null}))
-            .catch(() => this.setState({usage: null}))
     }
 
     /**
@@ -205,19 +179,6 @@ export default class extends React.Component {
         const runningDuration = running ? formatRunningDuration(detail.startedAt) : null
         const canOperate = PermUtils.hasPermission('container:operate')
 
-        const {usage} = this.state
-        const usageText = (() => {
-            if (!usage) return null
-            if (usage.error && usage.memUsage == null && usage.cpuPercent == null) return null
-            const cpu = formatPercent(usage.cpuPercent)
-            const mem = (usage.memUsage == null && usage.memLimit == null)
-                ? '-'
-                : `${formatBytes(usage.memUsage)} / ${formatBytes(usage.memLimit)}`
-            const memPct = usage.memPercent == null ? '' : ` (${formatPercent(usage.memPercent)})`
-            const at = usage.collectedAt ? `　·　${formatClock(usage.collectedAt)}` : ''
-            return `CPU ${cpu}　·　内存 ${mem}${memPct}${at}`
-        })()
-
         const header = <Card size='small' className='mb-3' styles={{body: {padding: '12px 16px'}}}>
             <div style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -237,11 +198,6 @@ export default class extends React.Component {
                             镜像 {detail.image || '-'}　·　容器 ID {detail.idShort}　·　创建于 {formatTime(detail.created)}
                         </Typography.Text>
                     </div>
-                    {usageText && <div style={{marginTop: 4}}>
-                        <Typography.Text type='secondary' style={{fontSize: 12}}>
-                            {usageText}
-                        </Typography.Text>
-                    </div>}
                 </div>
                 <Space>
                     {canOperate && <>

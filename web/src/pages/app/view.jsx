@@ -29,7 +29,7 @@ import PublishForm from "./PublishForm";
 import ContainerLogs from "../../components/container/ContainerLogs";
 import DeployLogList from "./DeployLogList";
 import LinkButton from "../../components/LinkButton";
-import {formatBytes, formatClock, formatPercent, stateColor, stateLabel, toNumber} from "../../components/container/utils";
+import {stateColor, stateLabel} from "../../components/container/utils";
 import {updateIntervalLabel} from "./updateSchedule";
 
 const Item = Descriptions.Item
@@ -55,9 +55,6 @@ export default class extends React.Component {
 
         containerLoading: true,
         container: {},
-
-        usage: null,
-        usageLoading: false,
 
 
         tagOptions: [],
@@ -94,18 +91,11 @@ export default class extends React.Component {
         this._mounted = true;
         this.loadApp();
         this.loadContainer();
-        this.loadUsage();
-        this.usageTimer = setInterval(() => {
-            if (!document.hidden) {
-                this.loadUsage(true)
-            }
-        }, 30000)
     }
 
     componentWillUnmount() {
         this._mounted = false;
         clearTimeout(this.pollTimer)
-        clearInterval(this.usageTimer)
     }
 
     /** 从容器详情页切回来时刷新容器状态：停止 / 删除 / 重启都在那边完成 */
@@ -115,7 +105,6 @@ export default class extends React.Component {
             return
         }
         this.loadContainer()
-        this.loadUsage(true)
     }
 
 
@@ -123,30 +112,6 @@ export default class extends React.Component {
         return HttpClient.get('admin/app/get', {id: this.id}).then(rs => {
             this.setState({app: rs.data, loading: false});
         })
-    }
-
-    loadUsage = (silent = false) => {
-        if (!this._mounted || !this.id) {
-            return
-        }
-        if (!silent) {
-            this.setState({usageLoading: true})
-        }
-        return HttpClient.get('admin/app/usage', {id: this.id}, {toastError: false})
-            .then(rs => {
-                if (!this._mounted) return
-                this.setState({usage: rs.data || null})
-            })
-            .catch(() => {
-                if (!this._mounted) return
-                this.setState({usage: null})
-            })
-            .finally(() => {
-                if (!this._mounted) return
-                if (!silent) {
-                    this.setState({usageLoading: false})
-                }
-            })
     }
 
     /** 跳转镜像详情：应用只存 imageUrl，需先按地址查到镜像 id */
@@ -262,8 +227,6 @@ export default class extends React.Component {
     /** 手动刷新：重拉顶部信息并让所有标签重新拉取（不遮挡内容） */
     manualRefresh = () => {
         this.reload().catch(() => {
-        })
-        this.loadUsage().catch(() => {
         })
         this.bumpTokens(TAB_KEYS)
     }
@@ -383,7 +346,7 @@ export default class extends React.Component {
     }
 
     render() {
-        const {container, app, loading, containerLoading, stopping, starting, deployLoading, deploySubmitting, usage} = this.state;
+        const {container, app, loading, containerLoading, stopping, starting, deployLoading, deploySubmitting} = this.state;
 
         if (loading) {
             return <Page padding><Spin/></Page>
@@ -418,10 +381,6 @@ export default class extends React.Component {
                             <Tag color={stateColor(state)}>
                                 {container.status || stateLabel(state)}</Tag>}
 
-                    </Item>
-
-                    <Item label='资源占用' span={2}>
-                        {this.renderUsage(usage)}
                     </Item>
 
                     <Item label='主机'>
@@ -473,28 +432,6 @@ export default class extends React.Component {
             </Modal>
 
         </Page>)
-    }
-
-    renderUsage = (usage) => {
-        if (!usage) {
-            return <Typography.Text type='secondary'>暂无数据</Typography.Text>
-        }
-        if (usage.error && usage.memUsage == null && usage.cpuPercent == null) {
-            return <Tooltip title={usage.error}>
-                <Typography.Text type='secondary'>采集失败</Typography.Text>
-            </Tooltip>
-        }
-        const cpu = formatPercent(usage.cpuPercent)
-        const mem = (usage.memUsage == null && usage.memLimit == null)
-            ? '-'
-            : `${formatBytes(usage.memUsage)} / ${formatBytes(usage.memLimit)}`
-        const memPct = formatPercent(usage.memPercent)
-        const at = usage.collectedAt ? formatClock(usage.collectedAt) : null
-        return <Space size={12} wrap>
-            <span>CPU {cpu}</span>
-            <span>内存 {mem}{usage.memPercent != null ? ` (${memPct})` : ''}</span>
-            {at && <Typography.Text type='secondary' style={{fontSize: 12}}>{at}</Typography.Text>}
-        </Space>
     }
 
     renderTabs = () => {

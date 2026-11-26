@@ -15,8 +15,8 @@ import java.util.List;
  * 让看板失去意义；离线主机数通过 {@link #hostTotal} 与 {@link #hostReachable} 的差值体现。
  * <p>
  * 这里只放静态容量（CPU 核数、内存容量、容器与镜像数），来自一次 {@code docker info}，首屏快；
- * 实时使用率在 {@link HostUsageVo} 里单独采集（等价 docker stats，慢一个数量级），
- * 由前端异步加载，两者互不阻塞。
+ * 实时使用率在 {@link HostUsageVo} 里由主机详情「监控」Tab 按需采集（等价 docker stats，慢一个数量级），
+ * 不在这里下发。
  */
 @Data
 public class HostSummaryVo implements Serializable {
