@@ -17,7 +17,7 @@ repository.findAll(spec, pageable);
 
 ### CrudOps CRUD 辅助
 
-`io.github.jiangood.openadmin.framework.web.CrudOps` 收敛 Controller 固定逻辑（代码生成器默认使用）：
+`io.github.jiangood.openadmin.framework.web.CrudOps` 收敛 Controller 固定逻辑：
 
 | 方法 | 说明 |
 |------|------|
@@ -47,7 +47,7 @@ public AjaxResult update(@RequestBody Customer input,
 | `@HasPermission("resource:action")` | 权限控制 |
 | `@Log("业务-操作")` | 操作日志（可加 `detail` 详情模板） |
 | `@RateLimit(count=10, duration=60)` | IP 限流 |
-| `@JobDescription` | 定时任务定义（`key` / `label` / `defaultCron` / `defaultEnabled` / `logAggregation` / `autoRegister`） |
+| `@JobDescription` | 定时任务定义（`key` / `label` / `defaultCron` / `defaultEnabled` / `autoRegister`） |
 | `@ValidateMobile` / `@ValidateIdNum` / ... | 字段格式校验 |
 
 ### 操作日志
@@ -90,11 +90,32 @@ public AjaxResult update(@RequestBody Customer input,
     @FieldDescription(name = "syncType", label = "同步类型", required = true)
 })
 public class DataSyncJob extends BaseJob {
-    public String execute(JobDataMap data, Logger logger) { ... }
+    @Override
+    public JobResult execute(JobDataMap data, Logger logger) {
+        if (nothingToDo()) {
+            return JobResult.skip("今日已同步");
+        }
+        int failed = syncAll(logger);
+        if (failed == 0) {
+            return JobResult.ok("同步完成");
+        }
+        return JobResult.partial("同步完成，" + failed + " 条失败");
+    }
 }
 ```
 
-启动时框架会按 `BaseJob` 子类 / `@JobDescription` 自动补建缺失的 `sys_job` 记录（默认禁用，不覆盖已有配置），也支持 `JobRegistrar` SPI 显式注册；`key` / `defaultCron` / `defaultEnabled` / `logAggregation` / `autoRegister` 见 [development.md](development.md) 的「自动注册」。
+`execute` 返回 `JobResult`（状态 + 一句话说明），任务实现只使用四个入口：
+
+| 入口 | 状态 | 含义 |
+|---|---|---|
+| `JobResult.ok("...")` | `SUCCESS` | 正常完成 |
+| `JobResult.partial("...")` | `PARTIAL` | 主体完成，存在子项失败 |
+| `JobResult.skip("...")` | `SKIPPED` | 条件不满足主动跳过（不算成功也不算失败） |
+| `JobResult.fail("...")` | `FAILED` | 跑通了，但业务结论为失败 |
+
+抛出 `Exception` / `Error` 记为 `EXCEPTION`（异常），`InterruptedException` 记为 `CANCELLED`；返回 `null`、缺少状态或返回 `RUNNING` 一律按 `EXCEPTION` 处理。`message` 落库前截断到 240 字符，完整信息请写入任务日志。**状态是成功/失败判定的唯一依据**，返回 `fail("...")` 或抛异常才算失败。
+
+启动时框架会按 `BaseJob` 子类 / `@JobDescription` 自动补建缺失的 `sys_job` 记录（默认禁用，不覆盖已有配置），也支持 `JobRegistrar` SPI 显式注册；`key` / `defaultCron` / `defaultEnabled` / `autoRegister` 见 [development.md](development.md) 的「自动注册」。
 
 > cron 使用 Quartz 格式，共 6 或 7 段：**秒 分 时 日 月 周 [年]**，第一位是秒。例如 `0 */5 * * * ?` 表示每 5 分钟，`*/5 * * * * ?` 表示每 5 秒。
 
@@ -105,22 +126,21 @@ public class DataSyncJob extends BaseJob {
 | `admin/job/stat` | GET | `job:read` | `jobCount` / `enabledCount` / `todayExecuteCount` / `todayFailCount` / `scheduler` |
 | `admin/job/log-size` | GET | `job:read` | 全部任务日志占用：`bytes` / `files` / `warnMb` / `warn` |
 | `admin/job/{jobId}/log-size` | GET | `job:read` | 指定任务的日志占用：`bytes` / `files` |
+| `admin/job/execute-record` | GET | `job:read` | 任务执行记录分页；`jobId` 必填，`status`（`JobStatus`）可选 |
 
 `admin/job/stat` 的 `scheduler` 字段：`version` / `schedulerName` / `instanceId` / `started` / `standby` / `runningSince` / `jobsExecuted` / `threadPoolSize` / `jobStoreClass` / `persistent` / `clustered`，读取失败时带 `error`。
 
 日志占用只读统计 `${logging.file.path}/job/*.log`，不会创建目录；结果在服务端缓存 30 秒，删除任务或执行记录清理后会主动失效。超过 `sys.job-log-size-warn-mb`（默认 1024 MB，`<=0` 关闭）时 `warn` 为 `true`，管理页以红色提示，不自动清理；清理仍由 `sys.job-log-retain-days` 控制（任务执行后惰性触发，见下文）。
 
-### 执行记录方式
+### 执行记录与僵死处理
 
-`SysJob.logAggregation`（前端字段名「执行记录方式」，新建/编辑任务时选择，字典 `jobLogAggregation`）控制执行记录与日志文件粒度：
+每次执行一行 `sys_job_log`：开始时写入 `RUNNING`，结束时更新为终态（`SUCCESS` / `PARTIAL` / `SKIPPED` / `FAILED` / `EXCEPTION` / `CANCELLED`），状态由 `status` 字段表达。`result` 保存一句话说明，`jobRunTime` 为本次耗时。
 
-| 取值 | 执行记录 | 日志文件 |
-|---|---|---|
-| `PER_RUN` 每次一份记录（默认） | 每次一行 | 每次一个文件 |
-| `HOURLY` 每小时一份记录 | 每任务每小时一行 | 每任务每小时一个文件 |
-| `DAILY` 每天一份记录 | 每任务每天一行 | 每任务每天一个文件 |
-
-聚合记录的 `SysJobLog` 额外字段：`logBucket`（聚合桶）、`executeCount`（执行次数）、`failCount`（失败次数）、`totalRunTime`（累计耗时）/`totalRunTimeLabel`；`jobRunTime`/`result` 为最近一次，`success` 表示周期内是否全部成功。执行记录与日志文件按 `sys.job-log-retain-days`（默认 30 天）惰性清理：任意定时任务执行结束后触发一次检查（同一自然日最多清理一次，清理在独立线程异步执行），没有任务执行就不会触发；删除任务时也会一并删除其执行记录与日志文件。
+- 失败口径：`PARTIAL` + `FAILED` + `EXCEPTION` + `CANCELLED`；`SKIPPED` 既不算成功也不算失败；`RUNNING` 不计入统计。
+- `admin/job/stat` 的 `todayExecuteCount` 为今日执行记录数，`todayFailCount` 为上述失败口径之和。
+- 单任务统计（`admin/job/{jobId}/stat`）按状态分组返回 `successCount` / `partialCount` / `skipCount` / `failCount` / `exceptionCount` / `cancelledCount` / `runningCount`，以及 `lastStatus` / `lastResult` / `lastRunTime`。
+- 执行记录与日志文件按 `sys.job-log-retain-days`（默认 30 天）惰性清理：任意定时任务执行结束后触发一次检查（同一自然日最多清理一次，清理在独立线程异步执行），没有任务执行就不会触发；删除任务时也会一并删除其执行记录与日志文件。
+- **僵死处理**：执行记录为 `RUNNING`、但 Quartz 调度器中已不存在这次执行（按触发实例 ID 比对；进程崩溃残留、结束写库失败等）时，应用启动完成与每次任务结束后都会把这类记录标记为 `EXCEPTION`。任务线程卡住但仍在调度器中的情况不会自动处理，可在管理页手动取消。升级到本版本后首次启动还会自动回填历史 `status`，确认无遗漏后删除历史冗余列（`success` / `fail_count` / `execute_count` / `total_run_time` / `log_bucket` / `execute_date` / `log_aggregation`）。
 
 ### 运行日志
 
@@ -253,33 +273,6 @@ mailService.sendAsync(MailMessage.builder()
 - 服务端会校验会话归属，只能下线自己的会话，也允许用户自助下线自己的其他设备。
 - 在线记录保存在内存，**仅单实例部署准确**（同「在线用户」）；应用重启后随用户请求自动恢复登记。
 
-### 代码生成
-
-系统管理 →「代码生成」页面：动态扫描已注册实体（继承 `BaseEntity` 且标注 `@Entity`），按选中实体生成常见 CRUD 代码并写入项目源码目录（先预览确认，再在预览抽屉里勾选要写入的文件）。
-
-| 端点 | HTTP | 权限 | 说明 |
-|------|------|------|------|
-| `admin/codegen/entity-options` | GET | `sys-codegen:read` | 扫描实体列表（`value` 全限定类名，`label` 中文名，`data` 含 `module`/`packageName`/`frameworkEntity`） |
-| `admin/codegen/entity-info` | GET | `sys-codegen:read` | 单实体字段元数据（`className`） |
-| `admin/codegen/preview` | POST | `sys-codegen:generate` | 只生成不写盘，返回各文件路径/内容/是否已存在 |
-| `admin/codegen/generate` | POST | `sys-codegen:generate` | 仅写入 `paths` 指定的文件，返回 `written`/`skipped` |
-
-请求体（`CodegenReq`）：`className`（必填）、`module`（缺省取类名 kebab-case）、`label`（缺省取实体 `@Remark`）、`parentMenu`（默认 `sys`）、`paths`（要写入的文件相对路径，来自预览结果；不能为空，未包含的文件跳过）。
-
-生成物：
-
-| 类型 | 路径 | 说明 |
-|------|------|------|
-| Repository | `{实体包去掉 .entity}/repository/{Entity}Repository.java` | 继承 `BaseRepository<Entity, String>` |
-| Service | `{模块包}/service/{Entity}Service.java` | 继承 `BaseService`，含 `@FileField` 时自动生成 confirmTempFiles/discardTempFiles 事务方法 |
-| Controller | `{模块包}/controller/{Entity}Controller.java` | `admin/{module}` 下 `page/info/create/update/delete`，`@HasPermission` + `@Log`，默认使用 `CrudOps` 统一响应与校验 |
-| 前端页面 | `web/src/pages/{module}/index.jsx` | `ProTable` + `FormModal`，按字段类型选用 `Field*`/`View*` 组件 |
-| 菜单 | `src/main/resources/menu-{module}.yml` | 挂在指定父菜单（默认 `sys`），含读/建/改/删权限 |
-
-字段映射：String→`Input`、`@Lob`/TEXT→`Input.TextArea`、数字→`InputNumber`、布尔→`FieldBoolean`、日期→`FieldDate`、枚举（`@DictType`）→`FieldDictSelect`、`@FileField(html=true)`→`FieldEditor`、图片类文件→`FieldUploadImage`、其他文件→`FieldUploadFile`；查询条件为可搜索 String 字段的 `searchText` 模糊匹配 + 枚举/布尔等值过滤。
-
-写盘根目录由 `sys.codegen.*` 配置（见 [config.md](config.md)），路径越界会被拒绝；未出现在 `paths` 中的文件跳过，出现在其中的已存在文件会被覆盖。前端预览抽屉默认只勾选新增文件，已存在文件需手动勾选。
-
 ## 前端
 
 ### 组件
@@ -311,7 +304,7 @@ mailService.sendAsync(MailMessage.builder()
 
 | 属性 | 类型 | 说明 |
 |---|---|---|
-| `headerExtra` | `(context: HeaderExtraContext) => React.ReactNode` | 顶栏额外内容，默认渲染在 `HeaderRight` 左侧；`context` 含 `activeTopMenu`、`loginInfo`。框架已移除顶部菜单，`activeTopMenu` 恒为 `null`，保留字段以兼容旧签名 |
+| `headerExtra` | `(context: HeaderExtraContext) => React.ReactNode` | 顶栏额外内容，默认渲染在 `HeaderRight` 左侧；`context` 含 `activeTopMenu`、`loginInfo`。`activeTopMenu` 在顶部菜单模式下为当前一级菜单，侧边菜单模式或移动端为 `null`（默认顶部菜单模式下通常非 null，使用前请判空） |
 | `headerExtraStretch` | `boolean` | 为 `true` 时 `headerExtra` 撑满顶栏剩余空间；默认 `false`（保持原位置）。需要常驻条（如预警滚动条）时使用 |
 | `showOrgSwitcher` | `(context: HeaderExtraContext) => boolean` | 是否显示组织机构切换器 |
 | `colors` | `Partial<ThemeColors>` | 主题颜色基线，见 [config.md](config.md) |

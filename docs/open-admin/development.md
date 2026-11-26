@@ -26,7 +26,7 @@
 
 ### CRUD 辅助（CrudOps）
 
-代码生成器生成的 Controller 默认使用 `io.github.jiangood.openadmin.framework.web.CrudOps`，统一详情、分页、成功响应以及更新/删除校验，避免每个模块重复写同样的判断：
+业务 Controller 可使用 `io.github.jiangood.openadmin.framework.web.CrudOps`，统一详情、分页、成功响应以及更新/删除校验，避免每个模块重复写同样的判断：
 
 | 方法 | 作用 |
 |------|------|
@@ -88,7 +88,6 @@ public AjaxResult update(@RequestBody Customer input,
 | `label` | 必填 | 任务名称；重名时自动追加类名 |
 | `defaultCron` | 空 | 自动注册时的默认 cron；为空则只补建不启用调度 |
 | `defaultEnabled` | false | 自动注册时是否启用（需同时配置 `defaultCron`） |
-| `logAggregation` | `PER_RUN` | 执行记录方式 |
 | `autoRegister` | true | 是否参与启动自动注册；依赖库中的任务可设为 false |
 | `params` / `paramsProvider` | 空 | 任务参数定义 |
 
@@ -96,7 +95,7 @@ public AjaxResult update(@RequestBody Customer input,
 
 换包且未显式声明 `key` 时，会再做一次保守推断：若数据库中恰好有一条「执行类已不存在、简单类名相同、仍使用默认 key」的记录，则提示「疑似换包」并跳过补建，避免重复；显式改过 key 的记录不参与推断。该逻辑只提示，不自动修改执行类。
 
-**JobRegistrar SPI**：业务可实现 `JobRegistrar` 并注册为 Spring Bean，显式注册任务或覆盖注解默认值（`name` / `cron` / `enabled` / `logAggregation` / `jobData`）。SPI 优先级高于注解，只影响新建记录，不修改已有配置：
+**JobRegistrar SPI**：业务可实现 `JobRegistrar` 并注册为 Spring Bean，显式注册任务或覆盖注解默认值（`name` / `cron` / `enabled` / `jobData`）。SPI 优先级高于注解，只影响新建记录，不修改已有配置：
 
 ```java
 @Bean
@@ -107,7 +106,6 @@ public JobRegistrar reminderJobs() {
             .name("提醒-发送")
             .cron("0 0/5 * * * ?")
             .enabled(true)
-            .logAggregation(JobLogAggregation.DAILY)
             .build());
 }
 ```
@@ -120,23 +118,29 @@ public JobRegistrar reminderJobs() {
 - 若任务类存在**多个构造器**（含无参构造），Spring 不会自动选择，必须用 `@Autowired` 显式标注其中一个，否则默认走无参构造、`final` 字段不会注入（运行时 NPE）；
 - 任务实例每次触发重建，不要在字段中缓存跨触发的可变状态。
 
-### 执行记录方式
+### 执行结果与状态
 
-高频任务（如每 5 秒执行）会在 `sys_job_log` 和日志目录产生海量记录。任务定义上的「执行记录方式」属性（`SysJob.logAggregation`，前端新建/编辑时可选）控制执行记录与日志文件的粒度：
+`BaseJob.execute` 返回 `JobResult`（状态 + 一句话说明），每次执行在 `sys_job_log` 中生成一行：开始时写 `RUNNING`，结束时更新为终态。
 
-| 取值 | 执行记录 | 日志文件 |
+| 状态 | 产生方式 | 说明 |
 |---|---|---|
-| `PER_RUN` 每次一份记录（默认） | 每次一行 | 每次一个文件 |
-| `HOURLY` 每小时一份记录 | 每任务每小时一行 | 每任务每小时一个文件 |
-| `DAILY` 每天一份记录 | 每任务每天一行 | 每任务每天一个文件 |
+| `RUNNING` | 框架 | 已开始、未结束；服务重启后由启动对账收尾 |
+| `SUCCESS` | `JobResult.ok(...)` | 正常完成 |
+| `PARTIAL` | `JobResult.partial(...)` | 主体完成，存在子项失败；`message` 需带失败数量 |
+| `SKIPPED` | `JobResult.skip(...)` | 条件不满足主动跳过，不算成功也不算失败 |
+| `FAILED` | `JobResult.fail(...)` | 跑通了，但业务结论为失败 |
+| `EXCEPTION` | 框架 | 抛出 `Exception` / `Error`；返回 `null`、缺状态或返回 `RUNNING` 也按此处理 |
+| `CANCELLED` | 框架 | 管理端中断执行线程（`InterruptedException`） |
 
-- 聚合模式下复用同一条 `SysJobLog`（id 不变），日志按 `job/{logId}` 追加到同一文件；「执行情况 → 日志」按钮打开的就是该周期的完整文件日志。
-- 聚合记录字段：`beginTime` 为周期内第一次执行时间，`jobRunTime` 为最近一次耗时，`totalRunTime` 为累计耗时，`executeCount`/`failCount` 为执行/失败次数，`success` 表示周期内是否全部成功，`result` 为最近一次返回值。
+- 失败口径：`PARTIAL` + `FAILED` + `EXCEPTION` + `CANCELLED`；`SKIPPED` 与 `RUNNING` 不计入失败。
+- `message` 落库前截断到 240 字符（`result` 列 `varchar(255)`），完整内容写任务日志。
+- 业务异常不抛回 Quartz（不触发重试）；`Error` 记录后原样向上抛出。
+- 僵死兜底：记录为 `RUNNING` 但调度器中已无对应执行（按 Quartz 触发实例 ID `fireInstanceId` 精确比对，与任务名无关）时，启动完成与每次任务结束后会标记为 `EXCEPTION`；任务线程卡住但仍在调度器中的不会自动处理。
 - 过期执行记录与日志文件按 `sys.job-log-retain-days`（默认 30 天，`<=0` 不清理）惰性清理：任意定时任务执行结束后触发一次检查（同一自然日最多清理一次，清理在独立线程异步执行）；没有任务执行就不会触发清理。删除任务时也会一并删除其执行记录与日志文件。
 
 ### 日志写入与在线查看
 
-任务的 `logger` 参数由 `BaseJob` 通过 `FileLog` 绑定到 `job/{logId}`，任务内所有日志都会写入该文件；日志文件为**追加**模式，聚合模式下同一周期的内容会持续追加到同一文件。
+任务的 `logger` 参数由 `BaseJob` 通过 `FileLog` 绑定到 `job/{logId}`，任务内所有日志都会写入该文件；日志文件为**追加**模式。
 
 前端「执行情况 → 日志」弹窗使用框架 `LogViewer` 组件：任务运行中按 1.5s 增量拉取新增内容（只读文件新增字节，不会整文件重读），任务结束后停止轮询并补拉最后一段；「在新窗口打开」走 `admin/sys/log/raw/job/{logId}` 返回纯文本。
 

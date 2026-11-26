@@ -27,13 +27,25 @@ description: 在业务项目中创建 CRUD 业务模块，遵循 open-admin 框�
 
 ### Spring Boot 配置
 
-`application.yml` 已导入框架默认配置（必选）：
+`application.yml` 必须分两个文档：第一个只导入框架默认配置，业务配置写在 `---` 之后（import 的内容会插在声明它的文档之后，写在同一文档里的业务配置会被 `application-lib.yml` 覆盖而失效）：
 
 ```yaml
+# 第一个文档：只放 import
 spring:
   config:
     import: classpath:application-lib.yml
+
+# 第二个文档：业务项目自己的配置，优先级高于 application-lib.yml
+---
+server:
+  port: 8080
+  servlet:
+    context-path: /
+sys:
+  title: 业务系统名称
 ```
+
+列表型配置（如 `spring.autoconfigure.exclude`）是整体替换而非合并，覆盖时要把 lib 里的值一起写上。
 
 同时检查 `@SpringBootApplication` 或 `@ComponentScan` 是否覆盖了业务项目自身的包扫描范围。业务项目需要确保自己的包（如 `com.mycompany.myproject`）被扫描到，框架的 `OpenAdminConfiguration` 只扫描 `io.github.jiangood.openadmin` 包。
 

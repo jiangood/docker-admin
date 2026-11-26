@@ -9,19 +9,20 @@
 | `sys.title` | 系统标题（必填），可在系统参数页覆盖 | 管理系统 |
 | `sys.short-title` | 系统简称，用于左侧菜单顶部与浏览器标题等空间受限处；留空则使用 `sys.title`，可在系统参数页覆盖 | 空 |
 | `sys.file.store-type` | 文件存储 (`LOCAL`/`S3`) | LOCAL |
-| `sys.file.upload-path` | 本地上传路径 | /home/files |
+| `sys.file.upload-path` | 本地上传路径，默认由 `sys.data-dir` 派生 | ${sys.data-dir}/upload |
 | `sys.file.clean-temp-minutes` | 临时文件自动清理时间（分钟） | 120 |
 | `sys.file.s3.*` | S3 对象存储配置 | — |
-| `sys.data-file-dir` | 缓存 / 数据目录 | /data/ |
+| `sys.data-dir` | 数据根目录（**不带结尾斜杠**）：会话落盘、日志、上传文件均在其下派生；换挂载点只改这一项 | /data |
 | `sys.session-idle-time` | Session 超时（分钟），通过 `server.servlet.session.timeout` 生效 | 180 |
 | `sys.login-lock-minutes` | 登录锁定时长（分钟） | 5 |
 | `sys.login-lock-max-attempts` | 登录异常最大次数，超过则锁定 | 10 |
 | `sys.maximum-sessions` | 最大并发会话数（同一账号同时在线数），超出时按 `sys.max-sessions-prevents-login` 处理 | 1 |
 | `sys.max-sessions-prevents-login` | 并发会话数超限时是否阻止新登录：`true` 阻止新登录（旧会话继续有效），`false` 踢出旧会话 | true |
 | `server.servlet.session.persistent` | 优雅停机时把登录会话落盘，重启后恢复（重启免登录） | true |
-| `server.servlet.session.store-dir` | 会话落盘目录，需可写并位于持久卷 | /data/session |
+| `server.servlet.session.store-dir` | 会话落盘目录，由 `sys.data-dir` 派生，需可写并位于持久卷 | ${sys.data-dir}/session |
 | `server.servlet.session.timeout` | 会话空闲超时，默认引用 `sys.session-idle-time` | 180m |
 | `server.servlet.session.cookie.name` | 会话 cookie 名；同一域名/IP 下部署多套应用时必须各不相同 | JSESSIONID |
+| `logging.file.path` | 文件日志目录，由 `sys.data-dir` 派生 | ${sys.data-dir}/logs |
 | `sys.concurrent-login-message` | 被并发登录顶下线或管理员强制下线时的提示文案 | 您的账号已在别处登录，请重新登录 |
 | `sys.concurrent-login-blocked-message` | 并发会话超限、新登录被阻止时的提示文案 | 该账号已在别处登录，请先退出后再登录 |
 | `sys.login-expired-message` | 会话空闲超时/未登录时的提示文案（经 `/admin/public/site-info` 下发给前端） | 登录已过期，请重新登录 |
@@ -29,14 +30,12 @@
 | `sys.job-auto-register` | 启动时扫描 `BaseJob` 子类 / `@JobDescription` 并补建缺失的定时任务记录（只补建，不覆盖已有配置） | true |
 | `sys.job-log-retain-days` | 定时任务执行记录保留天数；任务执行后惰性清理（同一天最多一次，异步执行），`<=0` 表示不清理 | 30 |
 | `sys.job-log-size-warn-mb` | 定时任务日志文件总占用告警阈值（MB），仅用于管理页红色提示，不自动清理；`<=0` 关闭告警 | 1024 |
-| `sys.codegen.backend-dir` | 代码生成后端源码根目录（相对项目根） | src/main/java |
-| `sys.codegen.resource-dir` | 代码生成资源目录（菜单 YAML 输出位置） | src/main/resources |
-| `sys.codegen.frontend-dir` | 代码生成前端页面根目录 | web/src/pages |
-| `sys.codegen.frontend-import` | 生成页面引入框架组件的模块名；留空自动识别（框架仓库用相对路径，业务项目用 `@jiangood/open-admin`） | 空 |
 
 > 框架的 `.opencode/skills/` 与 `docs/open-admin/` 由 `oa-upgrade-docs` skill 按 `docs/framework-sync.json` 清单，从对应 tag 源码归档同步到业务项目根目录（无需配置）。同步范围与规则以清单为准。
 
-> **会话落盘（重启免登录）**：框架默认开启 `server.servlet.session.persistent`，正常停机时把 `HttpSession` 写入 `server.servlet.session.store-dir`，启动后恢复。仅对**单实例、优雅停机**有效：`kill -9`、JVM 崩溃、断电不会保留会话；多实例请改用 Spring Session 等共享会话方案。首次升级启动时旧的内存会话已丢失，所有用户需重新登录一次，之后正常重启不再需要。session 中的自定义属性必须可序列化；未挂载 `/data` 的项目请覆盖 `store-dir`，或设置 `persistent: false` 关闭。
+> **数据目录只配一个开关**：会话落盘（`${sys.data-dir}/session`）、日志（`${sys.data-dir}/logs`）、上传文件（`${sys.data-dir}/upload`）都从 `sys.data-dir` 派生，它是**不带结尾斜杠**的根目录。换挂载点/数据卷时只改 `sys.data-dir` 即可，不要在结尾加 `/`（否则会拼出 `/data//session` 之类的路径）。需要单独指定某项时，在业务项目里覆盖对应的派生项（如 `server.servlet.session.store-dir`）。
+
+> **会话落盘（重启免登录）**：框架默认开启 `server.servlet.session.persistent`，正常停机时把 `HttpSession` 写入 `server.servlet.session.store-dir`，启动后恢复。仅对**单实例、优雅停机**有效：`kill -9`、JVM 崩溃、断电不会保留会话；多实例请改用 Spring Session 等共享会话方案。首次升级启动时旧的内存会话已丢失，所有用户需重新登录一次，之后正常重启不再需要。session 中的自定义属性必须可序列化；未挂载 `/data` 的项目请覆盖 `sys.data-dir`，或设置 `persistent: false` 关闭。
 
 > **容器部署需调大停机宽限**：会话是在停机**最后一步**（Web 容器停止时）才写入 `store-dir`，而 `docker stop` / `docker compose up -d` 默认只等 10 秒（部分环境更短），超时即 SIGKILL，会话一个字节都写不出去。应用停机还要等 Lifecycle bean（线程池 `awaitTermination` 等）和 graceful 停机（默认最多 30 秒），所以请在 compose 里显式设置 `stop_grace_period: 60s`（或 `docker stop -t 60`）。判断方法：`docker inspect <容器> --format '{{.State.ExitCode}}'`，**137 表示被 SIGKILL**，143 才是正常退出。
 
@@ -62,6 +61,40 @@
 
 > 本地想验证个人中心「登录设备」的多处登录提示，可用 `local` profile 启动（`-Dspring-boot.run.profiles=local` 或环境变量 `SPRING_PROFILES_ACTIVE=local`），该 profile 将 `sys.maximum-sessions` 设为 `3`。
 
+### 覆盖框架默认值
+
+`spring.config.import` 的优先级比较反直觉：被导入的文件会被当作**插在「声明 import 的那个文档」之后**的额外文档，优先级更高（见 [Spring Boot 文档](https://docs.spring.io/spring-boot/reference/features/external-config.html#features.external-config.files.importing)）。所以与 import 写在同一个 YAML 文档里的同 key 配置**不会生效**，会被 `application-lib.yml` 覆盖：
+
+```yaml
+# ❌ 错误：与 import 同一文档，show-sql 实际仍是 lib 的 false
+spring:
+  config:
+    import: classpath:application-lib.yml
+  jpa:
+    show-sql: true
+```
+
+业务配置必须写在 `---` 之后的新文档里：
+
+```yaml
+# ✅ 正确：第一个文档只放 import
+spring:
+  config:
+    import: classpath:application-lib.yml
+
+# 第二个文档：业务项目自己的配置，优先级高于 application-lib.yml
+---
+spring:
+  jpa:
+    show-sql: true
+sys:
+  title: 客户管理系统
+```
+
+- 把覆盖项放进 `application-{profile}.yml` 效果相同（profile 文件天然排在主文件之后）；但在同一个文件里覆盖时必须用 `---` 分隔。
+- 列表型配置（如 `spring.autoconfigure.exclude`、`spring.config.import`）是**整体替换**而不是合并，覆盖时要把 lib 里的值一起写上，否则会重新打开框架已排除的自动配置。
+- 覆盖 `spring.config.import` 时不要丢掉 `classpath:application-lib.yml`，否则启动会因缺少框架配置而报错。
+
 ## 系统参数（运行时可改）
 
 「系统管理 → 系统参数」页面的数据来自 `sys_config` 表，但**默认值不落库**：
@@ -73,11 +106,13 @@
 
 ### 只读系统参数
 
-页面右侧用两张只读卡片分别展示「运行时状态」和「启动期配置」：第一张是运行时长（以标签突出）与数据库连接池用量，底部另起一行展示系统版本与框架版本（含构建时间）；第二张是 `application.yml` / 代码默认值的当前生效值。这些值不能在页面修改，改完 `application.yml` 后需重启；保留版本信息便于确认部署状态，结合连接池水位可定位连接不足等问题。「运行时状态」卡片每 15 秒自动刷新（浏览器标签页隐藏时暂停），方便观察运行时长与连接池水位。
+页面右侧用两张只读卡片分别展示「运行时状态」和「启动期配置」：第一张是运行时长（以标签突出）、内网 IP、外网 IP 与数据库连接池用量，底部另起一行展示系统版本与框架版本（含构建时间）；第二张是 `application.yml` / 代码默认值的当前生效值。这些值不能在页面修改，改完 `application.yml` 后需重启；保留版本信息便于确认部署状态，结合连接池水位可定位连接不足等问题。「运行时状态」卡片每 15 秒自动刷新（浏览器标签页隐藏时暂停），方便观察运行时长、IP 与连接池水位。外网 IP 通过公网服务查询，结果缓存 1 小时，获取失败时显示 `-`。
 
 | 展示名 | 配置键 | 说明 |
 |--------|--------|------|
 | 运行时长 | - | JVM 启动至今的时长；重启后归零即说明服务已重新部署 |
+| 内网IP | - | 本机 IPv4 地址，优先取默认出站网卡地址 |
+| 外网IP | - | 公网 IPv4 地址，通过公网服务查询，结果缓存 1 小时；获取失败显示 `-` |
 | 数据库连接 | `spring.datasource.url` | 当前生效的 JDBC URL（取连接池实际值）；`//用户:密码@` 与 `password=` 形式的密码已脱敏 |
 | 连接池 | `spring.datasource.hikari` | Hikari 实时用量：活动 / 空闲 / 上限 / 等待线程；非 Hikari 数据源不展示 |
 | 系统版本 | `sys.app-version` | 业务项目（本系统）版本号；打包运行附带构建时间（如 2026/8/1 11:30） |
@@ -90,7 +125,7 @@
 | 文件存储方式 | `sys.file.store-type` | 本地存储 / S3 对象存储 |
 | 上传目录 | `sys.file.upload-path` | 本地上传路径 |
 | 临时文件清理 | `sys.file.clean-temp-minutes` | 单位分钟 |
-| 数据目录 | `sys.data-file-dir` | 缓存 / 数据目录 |
+| 数据目录 | `sys.data-dir` | 数据根目录；会话、日志、上传文件在其下派生 |
 | 日志目录 | `logging.file.path` | 文件日志目录 |
 
 > 只读卡片不返回 S3 密钥、邮箱授权码、代理密码等敏感值，JDBC URL 中的密码同样脱敏；除运行时长、连接池用量、版本信息外，其余项都是启动期配置，改完需重启。
@@ -105,6 +140,7 @@
 | 站点信息 | `sys.login-box-bottom-tip` | STRING | 空 | 登录框底部提示文案 |
 | 默认界面 | `sys.ui.theme-preset` | SELECT | `antd` | 未自定义用户的默认主题色预设 |
 | 默认界面 | `sys.ui.tabs-enabled` | BOOL | true | 页签模式，关闭为单页模式 |
+| 默认界面 | `sys.ui.menu-mode` | SELECT | `top` | 菜单模式：`side` 侧边菜单 / `top` 顶部菜单 |
 | 邮件发送 | `email.provider` | SELECT | 空 | 邮箱类型，决定 SMTP 服务器/端口/加密方式 |
 | 邮件发送 | `email.username` | STRING | 空 | 发件邮箱 |
 | 邮件发送 | `email.password` | STRING（敏感） | 空 | 授权码/应用专用密码，留空表示不修改 |
@@ -112,7 +148,7 @@
 | 邮件发送 | `email.default-to` | LIST | 空 | 默认收件人，多个用逗号分隔；发送时未填收件人则使用 |
 | 邮件发送 | `email.proxy` | PROXY | 空 | 代理 URL，留空表示不使用 |
 
-其余 `sys.*` 仍在 `application.yml` 中维护，**修改后需要重启**；原因是它们属于启动期装配（最大会话数、Quartz 开关、代码生成目录、对象存储等）或安全结构性配置。
+其余 `sys.*` 仍在 `application.yml` 中维护，**修改后需要重启**；原因是它们属于启动期装配（最大会话数、Quartz 开关、对象存储等）或安全结构性配置。
 
 ### 邮件发送
 
@@ -363,7 +399,7 @@ docker run -d --name rustfs -p 9000:9000 -p 9001:9001 \
 
 ## 主题定制
 
-框架默认回归 **antd 原生主题**（主色 `#1677ff`、侧栏 `#001529`、圆角 `6`），零配置即用。顶栏右侧的太阳/月亮图标可一键切换深色/浅色模式；调色板按钮可打开「界面设置」面板，内置多套预设主题，并可按需调整界面密度与圆角，选择后即时生效并持久化到 `localStorage`。页签模式（开启 / 关闭）由顶栏独立的切换按钮控制，关闭即单页模式。
+框架默认回归 **antd 原生主题**（主色 `#1677ff`、侧栏 `#001529`、圆角 `6`），零配置即用。顶栏右侧的太阳/月亮图标可一键切换深色/浅色模式；调色板按钮可打开「界面设置」面板，可调整页签模式、菜单模式、预设主题、界面密度与圆角，选择后即时生效并持久化到 `localStorage`。
 
 ### 预设主题
 
@@ -464,7 +500,7 @@ applyRadiusPreset('round');
 
 页签模式默认开启（`tabs`），可切换为单页模式（`single`）。单页模式不显示页签栏，仅渲染当前路由页面。持久化在 `localStorage` 的 `oa-layout-tabs`。
 
-顶栏右侧的切换图标显示切换后的目标模式：页签模式下显示单页图标，单页模式下显示页签图标。
+切换入口在顶栏「界面设置」面板的「布局模式」中。
 
 ```js
 import { getLayoutMode, setLayoutMode, toggleLayoutMode } from '@jiangood/open-admin';
@@ -477,7 +513,28 @@ toggleLayoutMode();
 - 页签模式切换通过 `EventBus` 的 `layoutChange` 事件广播，管理布局已内置监听并重渲染。
 - 单页模式下业务调用 `PageUtils.closeCurrent()` 不再关闭页面（无页签可关），由业务自行跳转。
 
-### 全局默认主题色与页签模式
+### 菜单模式
+
+菜单模式默认 `top`（顶部菜单），可切换为 `side`（侧边菜单）。持久化在 `localStorage` 的 `oa-menu-mode`。
+
+| 模式 | 桌面端 | 手机端（≤768px） |
+|------|--------|------------------|
+| `top` | 顶栏显示一级目录，左侧显示当前一级菜单的子菜单 | 固定汉堡抽屉 + 完整菜单树 |
+| `side` | 左侧直接渲染完整菜单树 | 固定汉堡抽屉 + 完整菜单树 |
+
+- **默认目录**：顶部模式下，根级叶子菜单（未设置 `pid`）会自动归入虚拟一级菜单「业务模块」，避免顶栏一级菜单过多；该虚拟节点仅前端展示，不落库。根级分隔线在顶部模式下忽略。
+- **移动端**：固定使用抽屉导航，菜单模式只影响桌面端；在手机端修改后，回到桌面端生效。
+- 菜单模式切换通过 `EventBus` 的 `menuModeChange` 事件广播，管理布局已内置监听并重渲染。
+- 切换一级菜单时，若当前页面不属于新菜单，左侧不再高亮；打开页面、快捷菜单跳转、浏览器前进/后退会自动定位所属一级菜单。
+
+```js
+import { getMenuMode, setMenuMode } from '@jiangood/open-admin';
+
+getMenuMode();                // 'side' | 'top'
+setMenuMode('side');
+```
+
+### 全局默认主题色、页签模式与菜单模式
 
 管理员可在「系统管理 → 系统参数 → 默认界面」中维护未自定义用户的默认值，保存后立即生效：
 
@@ -485,21 +542,23 @@ toggleLayoutMode();
 |-----|------|------|------|
 | `sys.ui.theme-preset` | select | `antd` | 默认主题色预设，可选值与上方「预设主题」一致 |
 | `sys.ui.tabs-enabled` | bool | `true` | `true` 开启页签模式，`false` 为单页模式 |
+| `sys.ui.menu-mode` | select | `top` | `top` 顶部菜单 / `side` 侧边菜单 |
 
-- **优先级**：用户在本地自定义的 `oa-theme-preset` / `oa-layout-tabs` 高于系统参数；已自定义用户不受默认值变更影响。
-- 两项均声明为 `publicVisible`，随 `/admin/public/site-info` 的 `config` 字段下发，前端在后台布局渲染前应用，避免闪一下默认样式。
-- 业务侧可通过 `applyServerUiDefaults(siteInfo.config)` 手动应用，或用 `getDefaultPresetKey()` / `getDefaultLayoutMode()` 读取当前全局默认。
+- **优先级**：用户在本地自定义的 `oa-theme-preset` / `oa-layout-tabs` / `oa-menu-mode` 高于系统参数；已自定义用户不受默认值变更影响。
+- 三项均声明为 `publicVisible`，随 `/admin/public/site-info` 的 `config` 字段下发，前端在后台布局渲染前应用，避免闪一下默认样式。
+- 业务侧可通过 `applyServerUiDefaults(siteInfo.config)` 手动应用，或用 `getDefaultPresetKey()` / `getDefaultLayoutMode()` / `getDefaultMenuMode()` 读取当前全局默认。
 
 ### 恢复默认
 
-「界面设置」面板底部的「恢复默认」会一次性复位全部界面设置（颜色 / 明暗 / 密度 / 圆角 / 页签模式），其中主题色与页签模式回到系统参数的全局默认。
+「界面设置」面板底部的「恢复默认」会一次性复位全部界面设置（颜色 / 明暗 / 密度 / 圆角 / 页签模式 / 菜单模式），其中主题色、页签模式与菜单模式回到系统参数的全局默认。
 
 ```js
-import { resetAllSettings, resetUserTheme, resetLayoutMode } from '@jiangood/open-admin';
+import { resetAllSettings, resetUserTheme, resetLayoutMode, resetMenuMode } from '@jiangood/open-admin';
 
-resetAllSettings();   // 主题 + 页签模式 全复位
+resetAllSettings();   // 主题 + 页签模式 + 菜单模式 全复位
 resetUserTheme();     // 仅主题（颜色/明暗/密度/圆角）
 resetLayoutMode();    // 仅页签模式
+resetMenuMode();      // 仅菜单模式
 ```
 
 尺寸与圆角相关的 CSS 变量：`--oa-border-radius`、`--oa-control-height`、`--oa-font-size`，自定义样式可复用它们以跟随密度/圆角预设。
