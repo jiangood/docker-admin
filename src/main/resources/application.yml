@@ -1,48 +1,22 @@
-# H2 数据库文件根路径（不含扩展名）。
-# 默认写入容器内 /data 目录（docker-compose 已把 ./data 挂载到 /data，数据持久化）。
-# 本地开发可通过 -Ddb_path=./data/db/docker-admin 覆盖。
-db_path: /data/db/docker-admin
-
-server:
-  port: 8601
-  servlet:
-    context-path: /docker-admin  # 本地开发上下文；容器部署由镜像内置的 SERVER_SERVLET_CONTEXT_PATH=/ 覆盖为根路径
-    session:
-      cookie:
-        # 浏览器识别 cookie 只看 name + domain + path，**不看端口**。这台机器（192.168.100.101）上
-        # 还部署着 workbench(:8906)、cvs(:8900) 等其他 open-admin 应用，若都用默认的 JSESSIONID，
-        # 它们会覆盖同一个 cookie：切换应用就把对方顶下线，被顶掉的会话还会继续占
-        # sys.maximum-sessions 名额，最后表现为「用着用着要重新登录」+「该账号已在别处登录」。
-        # 代价：改名后浏览器里旧的 JSESSIONID 失效，升级后所有人（含自己）重新登录一次。
-        name: DOCKER_ADMIN_SESSION
-        # WebSocket 端点不做 Origin 校验（代理/隧道下 Spring 的同源判定必然失败），
-        # 跨站防护依赖这里：跨站页面发起的 WebSocket 握手不带 Cookie，因而过不了握手拦截器的鉴权。
-        # 不要改成 none。
-        same-site: lax
 spring:
   config:
     import: classpath:application-lib.yml
-  profiles:
-    active: default
+---
+server:
+  port: 8601
+  servlet:
+    session:
+      cookie:
+        name: DOCKER_ADMIN_SESSION
+        same-site: lax
+spring:
   application:
     name: docker-admin
   servlet:
     multipart:
-      # 镜像 tar 常见数 GB，默认 1MB 会在上传阶段直接失败
       max-file-size: 20GB
       max-request-size: 20GB
-  datasource:
-    # 内置 H2，MySQL 兼容模式，首次启动自动建表并写入种子数据，无需外部数据库。
-    driver-class-name: org.h2.Driver
-    url: "jdbc:h2:file:${db_path};MODE=MySQL;DB_CLOSE_DELAY=-1"
-    username: sa
-    password:
-  jpa:
-    hibernate:
-      ddl-auto: update
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.H2Dialect
+
 docker:
   agent:
     # 主机详情「文件 / Docker CLI」用的辅助容器镜像地址（不含 tag）
@@ -54,10 +28,5 @@ docker:
     tz:
 sys:
   title: 容器管理平台
-  # 同一账号最大并发会话数。默认 1（单点登录）；2 表示允许两台设备同时在线。
-  # 超过上限时新登录会被拒绝（3.2.0 起的默认行为，提示文案见 sys.concurrent-login-blocked-message），
-  # 想恢复「新登录顶掉旧会话」的旧行为，设 sys.max-sessions-prevents-login: false。
-  maximum-sessions: 2
-  # 定时任务执行记录 / 日志文件保留天数。主机用量采集一分钟一次，默认 30 天会攒下上万条记录。
-  job-log-retain-days: 7
+  maximum-sessions: 3
 
