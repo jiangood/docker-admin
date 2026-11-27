@@ -1,5 +1,5 @@
 import React from 'react'
-import {Alert, Button, Card, Checkbox, Modal, Result, Space, Spin, Tabs, Tag, Typography} from 'antd'
+import {Alert, Button, Card, Checkbox, message, Modal, Result, Space, Spin, Tabs, Tag, Typography} from 'antd'
 import {ReloadOutlined} from '@ant-design/icons'
 import {HttpClient, Page, PageUtils, PermUtils} from '@jiangood/open-admin'
 import ContainerInfo from '../../components/container/ContainerInfo'
@@ -101,7 +101,8 @@ export default class extends React.Component {
         const {hostId, containerId} = this.state.params
         const targetId = (this.state.detail && this.state.detail.id) || containerId
         return HttpClient.post(`admin/container/${name}`, null,
-            {...extra, hostId, containerId: targetId}).then(() => {
+            {...extra, hostId, containerId: targetId}).then(rs => {
+            message.success(rs.message || '操作成功')
             if (name !== 'remove') {
                 setTimeout(this.load, 600)
             }

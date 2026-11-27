@@ -1,5 +1,5 @@
 import {PlusOutlined} from '@ant-design/icons'
-import {Form, Input, Modal, Select} from 'antd'
+import {Form, Input, message, Modal, Select} from 'antd'
 import React from 'react'
 
 import {
@@ -161,6 +161,7 @@ export default class extends React.Component {
             context: normalizeRelativePath(values.context),
         }
         HttpClient.post('admin/project/save', data).then(rs => {
+            message.success(rs.message || '保存成功')
             this.setState({formOpen: false})
             this.tableRef.current.reload()
         })
@@ -195,6 +196,7 @@ export default class extends React.Component {
 
     handleDelete = record => {
         HttpClient.postForm('admin/project/delete', {id: record.id}).then(rs => {
+            message.success(rs.message || '删除成功')
             this.tableRef.current.reload()
         })
     }

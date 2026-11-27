@@ -92,6 +92,7 @@ export default class extends React.Component {
             ...values,
             context: normalizeRelativePath(values.context),
         }).then(rs => {
+            message.success(rs.message || '构建已开始')
             this.setState({logId: rs.data, runningLogId: rs.data, logVisible: true})
             this.startPolling()
         }).catch(() => {
@@ -114,7 +115,10 @@ export default class extends React.Component {
             onOk: () => {
                 this.setState({cancelling: true})
                 return HttpClient.post('admin/build-test/cancel', null, {logId: runningLogId})
-                    .then(() => this.refreshRunning())
+                    .then(rs => {
+                        message.success(rs.message || '已请求取消构建')
+                        this.refreshRunning()
+                    })
                     .finally(() => this.setState({cancelling: false}))
             },
         })
@@ -170,7 +174,8 @@ export default class extends React.Component {
             commitMessage: writeValues?.commitMessage,
             branch: writeValues?.branch,
             context: normalizeRelativePath(values.context),
-        }).then(() => {
+        }).then(rs => {
+            message.success(rs.message || 'Dockerfile 已推送到仓库')
             this.setState({writeOpen: false})
         }).finally(() => this.setState({writing: false}))
     }

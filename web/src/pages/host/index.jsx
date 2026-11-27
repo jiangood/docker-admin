@@ -1,5 +1,5 @@
 import {PlusOutlined, SearchOutlined} from '@ant-design/icons'
-import {Button, Checkbox, Form, Input, InputNumber, Modal, Radio, Select, Space} from 'antd'
+import {Button, Checkbox, Form, Input, InputNumber, message, Modal, Radio, Select, Space} from 'antd'
 import React from 'react'
 
 import {PermActions, FieldBoolean, HttpClient, Page, PageUtils, ProTable} from "@jiangood/open-admin"
@@ -238,6 +238,7 @@ export default class extends React.Component {
 
     onFinish = values => {
         HttpClient.post('admin/host/save', buildPayload(values)).then(rs => {
+            message.success(rs.message || '保存成功')
             this.setState({formOpen: false})
             this.tableRef.current.reload()
         })
@@ -248,6 +249,7 @@ export default class extends React.Component {
         this.formRef.current.validateFields().then(values => {
             this.setState({testing: true})
             HttpClient.post('admin/host/test', buildPayload(values))
+                .then(rs => message.success(rs.message || '连接成功'))
                 .catch(() => {
                 })
                 .finally(() => this.setState({testing: false}))
@@ -260,6 +262,7 @@ export default class extends React.Component {
     handleTestRow = record => {
         this.setState({testingId: record.id})
         HttpClient.post('admin/host/test', record)
+            .then(rs => message.success(rs.message || '连接成功'))
             .catch(() => {
             })
             .finally(() => this.setState({testingId: null}))
@@ -268,6 +271,7 @@ export default class extends React.Component {
 
     handleDelete = record => {
         HttpClient.postForm('admin/host/delete', {id: record.id}).then(rs => {
+            message.success(rs.message || '删除成功')
             this.tableRef.current.reload()
         })
     }

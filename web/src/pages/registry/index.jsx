@@ -30,8 +30,8 @@ export default class extends React.Component {
     save = values => {
         const hide = message.loading('保存中…', 0)
         HttpClient.post('admin/registry/save', values)
-            .then(() => {
-                message.success('保存成功')
+            .then(rs => {
+                message.success(rs.message || '保存成功')
                 this.setState({modalOpen: false})
                 this.load()
             }).finally(hide)
@@ -39,7 +39,7 @@ export default class extends React.Component {
 
     remove = id => {
         HttpClient.post('admin/registry/delete?id=' + encodeURIComponent(id))
-            .then(() => { message.success('删除成功'); this.load() })
+            .then(rs => { message.success(rs.message || '删除成功'); this.load() })
     }
 
     // 列表只返回打码密码，明文按需单独请求（后端另有 registry:password 权限）

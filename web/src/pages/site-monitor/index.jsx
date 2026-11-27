@@ -159,14 +159,16 @@ export default class extends React.Component {
             message.error('HEAD 请求没有响应体，无法做关键词判定，请改用 GET 或清空关键词')
             return
         }
-        HttpClient.post('admin/site-monitor/save', values).then(() => {
+        HttpClient.post('admin/site-monitor/save', values).then(rs => {
+            message.success(rs.message || '保存成功')
             this.setState({formOpen: false})
             this.tableRef.current.reload()
         })
     }
 
     handleDelete = record => {
-        HttpClient.postForm('admin/site-monitor/delete', {id: record.id}).then(() => {
+        HttpClient.postForm('admin/site-monitor/delete', {id: record.id}).then(rs => {
+            message.success(rs.message || '删除成功')
             this.tableRef.current.reload()
         })
     }

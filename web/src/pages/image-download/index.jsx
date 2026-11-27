@@ -71,6 +71,7 @@ export default class extends React.Component {
     submit = values => {
         this.setState({submitting: true})
         HttpClient.post('admin/image-download/download', values).then(rs => {
+            message.success(rs.message || '下载任务已开始')
             const logId = rs.data
             this.setState({submitting: false, logId, logVisible: true, activeTask: null})
             this.reload()

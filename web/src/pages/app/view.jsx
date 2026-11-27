@@ -279,7 +279,8 @@ export default class extends React.Component {
                 id: this.state.app.id,
                 version: values.version,
                 forcePull: values.forcePull
-            }).then(() => {
+            }).then(rs => {
+                message.success(rs.message || '部署已开始')
                 this.setState({deployVisible: false, activeTab: 'deployLog'})
                 this.handleChanged({redeploy: true})
             }).finally(() => {
@@ -290,7 +291,8 @@ export default class extends React.Component {
     }
     start = () => {
         this.setState({starting: true})
-        HttpClient.post('admin/app/start/' + this.state.app.id).then(() => {
+        HttpClient.post('admin/app/start/' + this.state.app.id).then(rs => {
+            message.success(rs.message || '启动成功')
             this.reload().catch(() => {
             })
             this.bumpTokens(['containerLog'])
@@ -300,7 +302,8 @@ export default class extends React.Component {
     }
     stop = () => {
         this.setState({stopping: true})
-        HttpClient.post('admin/app/stop/' + this.state.app.id).then(() => {
+        HttpClient.post('admin/app/stop/' + this.state.app.id).then(rs => {
+            message.success(rs.message || '已停止')
             this.reload().catch(() => {
             })
             this.bumpTokens(['containerLog'])
@@ -313,8 +316,8 @@ export default class extends React.Component {
         const id = this.state.app.id
         this.setState({deleting: true})
         HttpClient.get("admin/app/delete", {id}).then(rs => {
+            message.success(rs.message || '删除成功')
             history.push('/app')
-
         }).catch(() => {
             this.setState({deleting: false})
             Modal.confirm({
@@ -325,6 +328,7 @@ export default class extends React.Component {
                 onOk: () => {
                     this.setState({deleting: true})
                     return HttpClient.get("admin/app/delete", {id, force: true}).then(rs => {
+                        message.success(rs.message || '删除成功')
                         history.push('/app')
                     }).catch(() => {
                         this.setState({deleting: false})
@@ -340,7 +344,7 @@ export default class extends React.Component {
         let {newName} = this.state;
         const hide = message.loading('指令发送中…')
         HttpClient.post("admin/app/rename", {appId, newName}).then(rs => {
-
+            message.success(rs.message || '名称已修改')
             this.setState({app: rs.data, showEditName: false})
         }).finally(hide)
     }

@@ -1,4 +1,4 @@
-import {Form, Input, Tag} from 'antd'
+import {Form, Input, message, Tag} from 'antd'
 import {ImportOutlined, PlusOutlined, SearchOutlined} from '@ant-design/icons'
 import React from 'react'
 
@@ -83,7 +83,8 @@ export default class extends React.Component {
     ]
 
     handleDelete = record => {
-        HttpClient.postForm('admin/image/delete', {id: record.id}).then(() => {
+        HttpClient.postForm('admin/image/delete', {id: record.id}).then(rs => {
+            message.success(rs.message || '删除成功')
             this.tableRef.current.reload()
         })
     }

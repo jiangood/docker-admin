@@ -1,5 +1,5 @@
 import {PlusOutlined, SearchOutlined} from '@ant-design/icons'
-import {Form, Input, Modal} from 'antd'
+import {Form, Input, message, Modal} from 'antd'
 import React from 'react'
 
 import {DictUtils, FieldDictSelect, HttpClient, Page, PermActions, ProTable} from '@jiangood/open-admin'
@@ -103,13 +103,15 @@ export default class extends React.Component {
 
     onFinish = values => {
         HttpClient.post('admin/code-source/save', values).then(rs => {
+            message.success(rs.message || '保存成功')
             this.setState({formOpen: false})
             this.tableRef.current.reload()
         })
     }
 
     handleDelete = record => {
-        HttpClient.postForm('admin/code-source/delete', {id: record.id}).then(() => {
+        HttpClient.postForm('admin/code-source/delete', {id: record.id}).then(rs => {
+            message.success(rs.message || '删除成功')
             this.tableRef.current.reload()
         })
     }

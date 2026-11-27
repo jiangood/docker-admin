@@ -111,6 +111,7 @@ export default class extends React.Component {
 
     updateVersion = (values) => {
         HttpClient.get("admin/app/updateVersion", {id: this.id, version: values.version}).then(rs => {
+            message.success(rs.message || '部署已开始')
             // 版本变化会影响容器配置元数据（镜像声明的端口 / 卷），一并刷新
             this.props.onChange({redeploy: true, tabs: ['containerConfig']})
         })
@@ -123,6 +124,7 @@ export default class extends React.Component {
             name: values.name
         }).then(rs => {
             const newAppId = rs.data.id;
+            message.success(rs.message || '复制完成')
             Modal.confirm({
                 icon: null,
                 title: '复制完成',
@@ -139,7 +141,8 @@ export default class extends React.Component {
         HttpClient.post('admin/app/migrateApp', {
             appId: this.id,
             hostId: values.hostId
-        }).then(() => {
+        }).then(rs => {
+            message.success(rs.message || '迁移已开始')
             // 应用记录仍在，仅主机变化：重新部署后，容器配置（绑定路径）要跟着刷新
             this.props.onChange({redeploy: true, tabs: ['containerConfig']})
         }).finally(hide)

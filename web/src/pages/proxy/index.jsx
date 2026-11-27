@@ -58,7 +58,8 @@ export default class extends React.Component {
     save = values => {
         const hide = message.loading('保存中…', 0)
         HttpClient.post('admin/proxy/save', values)
-            .then(() => {
+            .then(rs => {
+                message.success(rs.message || '保存成功')
                 this.setState({modalOpen: false})
                 this.load()
             }).finally(hide)
@@ -66,12 +67,18 @@ export default class extends React.Component {
 
     remove = id => {
         HttpClient.postForm('admin/proxy/delete', {id})
-            .then(() => this.load())
+            .then(rs => {
+                message.success(rs.message || '删除成功')
+                this.load()
+            })
     }
 
     move = (record, direction) => {
         HttpClient.postForm('admin/proxy/move', {id: record.id, direction})
-            .then(() => this.load())
+            .then(rs => {
+                message.success(rs.message || '排序已更新')
+                this.load()
+            })
     }
 
     openTest = record => {

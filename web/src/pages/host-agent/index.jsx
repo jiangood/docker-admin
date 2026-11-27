@@ -1,5 +1,5 @@
 import {PlusOutlined, SearchOutlined} from '@ant-design/icons'
-import {Form, Input, Modal, Select, Typography} from 'antd'
+import {Form, Input, message, Modal, Select, Typography} from 'antd'
 import React from 'react'
 import {HttpClient, Page, PageUtils, PermActions, ProTable} from '@jiangood/open-admin'
 
@@ -112,14 +112,16 @@ export default class extends React.Component {
     }
 
     onFinish = values => {
-        HttpClient.post('admin/host-agent-config/save', values).then(() => {
+        HttpClient.post('admin/host-agent-config/save', values).then(rs => {
+            message.success(rs.message || '保存成功')
             this.setState({formOpen: false})
             this.tableRef.current.reload()
         })
     }
 
     handleDelete = record => {
-        HttpClient.postForm('admin/host-agent-config/delete', {id: record.id}).then(() => {
+        HttpClient.postForm('admin/host-agent-config/delete', {id: record.id}).then(rs => {
+            message.success(rs.message || '删除成功')
             this.tableRef.current.reload()
         })
     }

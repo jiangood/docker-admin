@@ -1,4 +1,4 @@
-import {Alert, AutoComplete, Button, Col, Divider, Form, Input, Modal, Row, Tooltip, Typography} from 'antd';
+import {Alert, AutoComplete, Button, Col, Divider, Form, Input, message, Modal, Row, Tooltip, Typography} from 'antd';
 import {ClockCircleOutlined} from '@ant-design/icons';
 import React from 'react';
 import ContainerStatus from "../../components/ContainerStatus";
@@ -131,7 +131,8 @@ export default class extends React.Component {
      * 新增应用：保存后立即部署。
      */
     handleSave = value => {
-        HttpClient.post('admin/app/saveAndDeploy', value).then(() => {
+        HttpClient.post('admin/app/saveAndDeploy', value).then(rs => {
+            message.success(rs.message || '应用已保存，正在部署')
             this.reload()
             this.setState({deployVisible: false})
         })
@@ -156,7 +157,8 @@ export default class extends React.Component {
     }
 
     handleEditFinish = values => {
-        HttpClient.post('admin/app/updateBaseInfo', values).then(() => {
+        HttpClient.post('admin/app/updateBaseInfo', values).then(rs => {
+            message.success(rs.message || '保存成功')
             this.setState({editVisible: false})
             this.reload()
         })

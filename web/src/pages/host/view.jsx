@@ -250,7 +250,10 @@ export default class extends React.Component {
     removeImage = image => {
         const id = this.state.id
         HttpClient.post('admin/host/removeImage', null, {id, image})
-            .then(() => this.loadImages(id))
+            .then(rs => {
+                message.success(rs.message || '镜像已删除')
+                this.loadImages(id)
+            })
     }
 
     /**
@@ -265,7 +268,8 @@ export default class extends React.Component {
         this.setState({pruneLoading: true})
         const hide = message.loading('正在清理悬空镜像，请稍候…', 0)
         try {
-            await HttpClient.post('admin/host/pruneImages', null, {id})
+            const rs = await HttpClient.post('admin/host/pruneImages', null, {id})
+            message.success(rs.message || '悬空镜像已清理')
             this.loadImages(id)
             this.loadInfo(id)
         } catch (e) {
@@ -288,7 +292,8 @@ export default class extends React.Component {
         this.setState({pruneContainersLoading: true})
         const hide = message.loading('正在清理构建临时容器，请稍候…', 0)
         try {
-            await HttpClient.post('admin/container/pruneBuildLeftovers', null, {hostId: id})
+            const rs = await HttpClient.post('admin/container/pruneBuildLeftovers', null, {hostId: id})
+            message.success(rs.message || '构建临时容器已清理')
             this.loadContainers(id)
             this.loadInfo(id)
         } catch (e) {

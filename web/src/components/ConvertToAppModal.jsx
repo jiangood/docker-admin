@@ -85,7 +85,7 @@ export default function ConvertToAppModal({open, hostId, containerId, onCancel, 
                 recreate,
                 app: values,
             }).then(rs => {
-                message.success(rs.msg || '已转为应用')
+                message.success(rs.message || '已转为应用')
                 if (onSuccess) {
                     onSuccess(rs.data)
                 }

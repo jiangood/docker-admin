@@ -40,8 +40,7 @@ export default class HostImageImportModal extends React.Component {
         form.append('file', file)
         this.setState({loading: true, error: null, imported: null})
         HttpClient.post('admin/host/loadImage', form, {id: this.props.hostId}, {
-            toastSuccess: false,
-            toastError: false,
+            autoShowErrorMessage: false,
         }).then(rs => {
             this.setState({loading: false, imported: rs.data || []})
             // 载入的镜像会立刻出现在主机镜像列表里，刷新让用户看到结果

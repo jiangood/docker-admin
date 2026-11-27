@@ -1,6 +1,6 @@
 import {
   Alert, Button, Card, Checkbox, Col, Descriptions, Form, Input,
-  Modal, Popconfirm, Row, Segmented, Select, Space, Spin, Switch, Table, Tabs, Tag, Tooltip, Typography
+  message, Modal, Popconfirm, Row, Segmented, Select, Space, Spin, Switch, Table, Tabs, Tag, Tooltip, Typography
 } from 'antd';
 import React from 'react';
 import {
@@ -198,12 +198,14 @@ export default class extends React.Component {
       params.tag = row.tag
     }
     HttpClient.get("admin/project/build", params).then(rs => {
+      message.success(rs.message || '构建已开始')
       this.reload()
     })
   }
 
   stop = row => {
     HttpClient.get("admin/project/stopBuild", row).then(rs => {
+      message.success(rs.message || '已请求停止构建')
       this.reload()
     })
   }
@@ -262,6 +264,7 @@ export default class extends React.Component {
   submitTrigger = (values) => {
     const params = {...values, refType: this.state.refType}
     HttpClient.get("admin/project/build", params).then(rs => {
+      message.success(rs.message || '构建已开始')
       this.setState({showTrigger: false})
       this.reload()
       // 后端在触发时已同步落库并返回构建记录 id，这里直接打开日志弹窗，边构建边看输出
@@ -277,12 +280,14 @@ export default class extends React.Component {
 
   cleanError = () => {
     HttpClient.get("admin/project/cleanErrorLog", {id: this.state.project.id}).then(rs => {
+      message.success(rs.message || '已清理失败记录')
       this.actionRef.current.reload()
     })
   }
 
   resetWebhook = () => {
-    HttpClient.get("admin/project/resetWebhook", {id: this.state.project.id}).then(() => {
+    HttpClient.get("admin/project/resetWebhook", {id: this.state.project.id}).then(rs => {
+      message.success(rs.message || 'Webhook 地址已重置')
       this.loadProject()
     })
   }
@@ -296,14 +301,18 @@ export default class extends React.Component {
     const request = checked
       ? HttpClient.get('admin/project/enableWebhook', {id, hookUrl: this.webhookUrl()})
       : HttpClient.get('admin/project/disableWebhook', {id})
-    request.then(() => this.loadProject())
+    request.then(rs => {
+      message.success(rs.message || (checked ? 'Webhook 已开启' : 'Webhook 已关闭'))
+      this.loadProject()
+    })
       .finally(() => this.setState({webhookAutoLoading: false}))
   }
 
   toggleBranchBuild = (checked) => {
     this.setState({webhookBranchLoading: true})
     HttpClient.get('admin/project/setWebhookBranch', {id: this.state.project.id, enabled: checked})
-      .then(() => {
+      .then(rs => {
+        message.success(rs.message || (checked ? '已开启分支构建' : '已关闭分支构建'))
         // 开关状态变了，丢弃未保存的输入，避免显示的配置与实际生效的不一致
         this.setState({webhookBranchesText: null})
         this.loadProject()
@@ -314,7 +323,10 @@ export default class extends React.Component {
   toggleNotifyEmail = (checked) => {
     this.setState({notifyEmailLoading: true})
     HttpClient.get('admin/project/setNotifyEmail', {id: this.state.project.id, enabled: checked})
-      .then(() => this.loadProject())
+      .then(rs => {
+        message.success(rs.message || (checked ? '已开启构建邮件通知' : '已关闭构建邮件通知'))
+        this.loadProject()
+      })
       .finally(() => this.setState({notifyEmailLoading: false}))
   }
 
@@ -337,7 +349,10 @@ export default class extends React.Component {
   saveLatestOnly = (checked) => {
     this.setState({latestOnlyLoading: true})
     HttpClient.get('admin/project/setLatestOnly', {id: this.state.project.id, enabled: checked})
-      .then(() => this.loadProject())
+      .then(rs => {
+        message.success(rs.message || (checked ? '已开启仅构建 latest' : '已关闭仅构建 latest'))
+        this.loadProject()
+      })
       .finally(() => this.setState({latestOnlyLoading: false}))
   }
 
@@ -353,7 +368,8 @@ export default class extends React.Component {
     const branches = (this.branchText() || '').trim()
     this.setState({webhookBranchLoading: true})
     HttpClient.get('admin/project/setWebhookBranches', {id, branches})
-      .then(() => {
+      .then(rs => {
+        message.success(rs.message || '构建分支已保存')
         this.setState({webhookBranchesText: null})
         this.loadProject()
       })

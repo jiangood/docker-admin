@@ -1,4 +1,4 @@
-import {Alert, Button, Card, Descriptions, Drawer, Popconfirm, Space, Spin, Table, Tabs, Typography} from 'antd'
+import {Alert, Button, Card, Descriptions, Drawer, message, Popconfirm, Space, Spin, Table, Tabs, Typography} from 'antd'
 import {CloudSyncOutlined, DownloadOutlined} from '@ant-design/icons'
 import React from 'react'
 import {HttpClient, Page, PageUtils, Perm, PermActions, UrlUtils} from "@jiangood/open-admin"
@@ -134,7 +134,8 @@ export default class extends React.Component {
         HttpClient.postForm('admin/image/export/start', {
             imageUrl: drawer.imageUrl,
             tag: drawer.tag,
-        }).then(() => {
+        }).then(rs => {
+            message.success(rs.message || '导出任务已开始')
             // 后端已在同步线程登记任务，立刻拉一次，日志随即出现
             this.pollTasks()
         }).catch(() => this.setState({starting: false}))
@@ -176,7 +177,8 @@ export default class extends React.Component {
         if (!task) {
             return
         }
-        HttpClient.postForm('admin/image/export/delete', {logId: task.logId}).then(() => {
+        HttpClient.postForm('admin/image/export/delete', {logId: task.logId}).then(rs => {
+            message.success(rs.message || '已删除导出归档')
             this.setState({drawer: null})
             this.pollTasks()
         })

@@ -160,7 +160,10 @@ export default class extends React.Component {
             this.uploadingCount += 1
             this.setState({uploading: true})
             HttpClient.post('admin/container/upload', form, {hostId, containerId, path})
-                .then(() => this.refresh())
+                .then(rs => {
+                    message.success(rs.message || `已上传 ${file.name}`)
+                    this.refresh()
+                })
                 .catch(() => {})
                 .finally(() => {
                     this.uploadingCount -= 1
