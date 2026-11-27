@@ -1,4 +1,4 @@
-import {Button, Card, Drawer, Form, Input, Select, Space, Tag, Tooltip, Typography, message} from 'antd'
+import {Button, Card, Col, Drawer, Form, Input, Row, Select, Space, Tag, Tooltip, Typography, message} from 'antd'
 import {DeleteOutlined, DownloadOutlined} from '@ant-design/icons'
 import React from 'react'
 import {HttpClient, Page, Perm, PermActions, ProTable, UrlUtils} from '@jiangood/open-admin'
@@ -132,32 +132,51 @@ export default class extends React.Component {
     }
 
     columns = [
-        {title: '开始时间', dataIndex: 'createTime', width: 170, render: formatTime},
         {
-            title: '镜像', dataIndex: 'image', width: 260, ellipsis: true,
+            title: '开始时间', dataIndex: 'createTime', width: 180,
+            render: (value, record) => (
+                <div style={{minWidth: 0}}>
+                    <div>{formatTime(value)}</div>
+                    <Typography.Text type='secondary'
+                                     style={{fontSize: 12, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>
+                        {record.triggerUser ? `触发人 ${record.triggerUser}` : '-'}
+                    </Typography.Text>
+                </div>
+            ),
+        },
+        {
+            title: '镜像', dataIndex: 'image', width: 240, ellipsis: true,
             render: value => value ? <Tooltip title={value}>{value}</Tooltip> : '-',
         },
-        {title: '执行主机', dataIndex: 'hostName', width: 140, render: value => value || '-'},
-        {title: '触发人', dataIndex: 'triggerUser', width: 110, render: value => value || '-'},
-        {title: '状态', dataIndex: 'status', width: 110, render: this.renderStatus},
+        {title: '执行主机', dataIndex: 'hostName', width: 130, ellipsis: true, render: value => value || '-'},
         {
-            title: '归档', dataIndex: 'fileName', width: 280,
+            title: '状态', dataIndex: 'status', width: 150,
+            render: (_, record) => (
+                <div style={{minWidth: 0}}>
+                    {this.renderStatus(_, record)}
+                    <Typography.Text type='secondary' style={{fontSize: 12, display: 'block'}}>
+                        {record.endTime ? formatTime(record.endTime) : '未结束'}
+                    </Typography.Text>
+                </div>
+            ),
+        },
+        {
+            title: '归档', dataIndex: 'fileName', width: 240,
             render: (_, record) => record.fileName ? (
                 <div style={{minWidth: 0}}>
-                    <div style={{overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}
-                         title={record.fileName}>
-                        {record.fileName}
-                    </div>
-                    <Typography.Text type='secondary'
-                                      style={{fontSize: 12, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>
-                        {formatBytes(record.size)}{record.path ? ` · ${record.path}` : ''}
+                    <Tooltip title={record.path ? `${record.fileName}\n${record.path}` : record.fileName}>
+                        <div style={{overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>
+                            {record.fileName}
+                        </div>
+                    </Tooltip>
+                    <Typography.Text type='secondary' style={{fontSize: 12}}>
+                        {formatBytes(record.size)}
                     </Typography.Text>
                 </div>
             ) : '-',
         },
-        {title: '结束时间', dataIndex: 'endTime', width: 170, render: value => value ? formatTime(value) : '-'},
         {
-            title: '操作', dataIndex: 'option', valueType: 'option', width: 150, fixed: 'right',
+            title: '操作', dataIndex: 'option', valueType: 'option', width: 140, fixed: 'right',
             render: (_, record) => (
                 <Space size={4}>
                     <PermActions size='small' actions={[
@@ -180,58 +199,63 @@ export default class extends React.Component {
     render() {
         const {hostOptions, logId, logVisible, activeTask, submitting, cleaning} = this.state
         return <Page padding>
-            <Card title='新建下载' className='page-card' style={{marginBottom: 16}}>
-                <Form style={{maxWidth: 560}} labelCol={{flex: '80px'}}
-                      preserve={false} onFinish={this.submit}>
-                    <Form.Item label='镜像地址' name='image'
-                               rules={[{required: true, message: '请输入镜像地址'}]}
-                               extra='支持公共镜像与已配置凭据的私有仓库，例如 mysql:8、nginx:1.27-alpine'>
-                        <Input placeholder='mysql:8'/>
-                    </Form.Item>
+            <Row gutter={[16, 16]}>
+                <Col xs={24} lg={7} xl={6}>
+                    <Card title='新建下载' style={{position: 'sticky', top: 0}}>
+                        <Form layout='vertical' preserve={false} onFinish={this.submit}>
+                            <Form.Item label='镜像地址' name='image'
+                                       rules={[{required: true, message: '请输入镜像地址'}]}
+                                       extra='公共镜像与已配置凭据的私有仓库均可，如 mysql:8、nginx:1.27-alpine'>
+                                <Input placeholder='mysql:8'/>
+                            </Form.Item>
 
-                    <Form.Item label='执行主机' name='hostId'
-                               rules={[{required: true, message: '请选择执行主机'}]}
-                               extra='拉取与打包在所选主机上执行，tar 统一保存在平台服务器，可在本页直接下载。'>
-                        <Select options={hostOptions} showSearch optionFilterProp='label'
-                                placeholder='请选择执行主机'/>
-                    </Form.Item>
+                            <Form.Item label='执行主机' name='hostId'
+                                       rules={[{required: true, message: '请选择执行主机'}]}
+                                       extra='拉取与打包在该主机执行，tar 保存到平台服务器，可在此直接下载'>
+                                <Select options={hostOptions} showSearch optionFilterProp='label'
+                                        placeholder='请选择执行主机'/>
+                            </Form.Item>
 
-                    <Form.Item>
-                        <Perm code='image-download:download'>
-                            <Button type='primary' htmlType='submit' loading={submitting}>
-                                开始下载
-                            </Button>
-                        </Perm>
-                        <Typography.Text type='secondary' style={{marginLeft: 12}}>
-                            任务与归档独立保存，下载完成后不会自动删除；请在下方勾选记录批量清理。
-                        </Typography.Text>
-                    </Form.Item>
-                </Form>
-            </Card>
+                            <Form.Item style={{marginBottom: 0}}>
+                                <Perm code='image-download:download'>
+                                    <Button type='primary' block htmlType='submit' loading={submitting}>
+                                        开始下载
+                                    </Button>
+                                </Perm>
+                                <Typography.Text type='secondary' style={{fontSize: 12, display: 'block', marginTop: 8}}>
+                                    任务与归档独立保存，下载完成后不会自动删除；请在右侧勾选记录批量清理。
+                                </Typography.Text>
+                            </Form.Item>
+                        </Form>
+                    </Card>
+                </Col>
 
-            <ProTable
-                actionRef={this.tableRef}
-                rowKey='logId'
-                rowSelection={{}}
-                defaultPageSize={20}
-                toolBarRightRender={(params, {selectedRowKeys}) => (
-                    <PermActions
-                        actions={[{
-                            label: '批量清理' + (selectedRowKeys.length ? `(${selectedRowKeys.length})` : ''),
-                            perm: 'image-download:download',
-                            danger: true,
-                            icon: <DeleteOutlined/>,
-                            disabled: cleaning || !selectedRowKeys.length,
-                            confirm: selectedRowKeys.length
-                                ? `确定清理选中的 ${selectedRowKeys.length} 个归档？运行中的任务会自动跳过，记录会保留并标记为已清理。`
-                                : '',
-                            onClick: () => this.clean(selectedRowKeys),
-                        }]}
+                <Col xs={24} lg={17} xl={18}>
+                    <ProTable
+                        actionRef={this.tableRef}
+                        rowKey='logId'
+                        rowSelection={{}}
+                        defaultPageSize={20}
+                        toolBarRightRender={(params, {selectedRowKeys}) => (
+                            <PermActions
+                                actions={[{
+                                    label: '批量清理' + (selectedRowKeys.length ? `(${selectedRowKeys.length})` : ''),
+                                    perm: 'image-download:download',
+                                    danger: true,
+                                    icon: <DeleteOutlined/>,
+                                    disabled: cleaning || !selectedRowKeys.length,
+                                    confirm: selectedRowKeys.length
+                                        ? `确定清理选中的 ${selectedRowKeys.length} 个归档？运行中的任务会自动跳过，记录会保留并标记为已清理。`
+                                        : '',
+                                    onClick: () => this.clean(selectedRowKeys),
+                                }]}
+                            />
+                        )}
+                        request={this.request}
+                        columns={this.columns}
                     />
-                )}
-                request={this.request}
-                columns={this.columns}
-            />
+                </Col>
+            </Row>
 
             <Drawer title='下载日志' size={860} open={logVisible}
                     mask={{closable: false}}
