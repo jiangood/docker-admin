@@ -260,7 +260,7 @@ public class ImageController {
     /**
      * 导出镜像：后台从注册中心拉取并打包到临时目录，立即返回 logId。
      * <p>
-     * 进度通过 {@code /admin/ws/image-export-log/{logId}} 实时查看；完成后用 {@code export/download} 下载。
+     * 进度通过 {@code /admin/ws/task-log/{logId}} 实时查看；完成后用 {@code export/download} 下载。
      * <p>
      * 任务先在当前线程登记 {@link ImageExportRegistry}，前端列表页轮询立即可见「导出中」。
      * <p>
@@ -359,7 +359,7 @@ public class ImageController {
      * 最后登记镜像与版本（来源 IMPORT）。
      * <p>
      * 上传完成后立即返回 logId，载入与推送在后台执行；前端通过
-     * {@code /admin/ws/image-import-log/{logId}} 看实时日志，用 {@code import/status} 取最终结果。
+     * {@code /admin/ws/task-log/{logId}} 看实时日志，用 {@code import/status} 取最终结果。
      * <p>
      * 镜像名与版本可留空，此时沿用 tar 内的 RepoTags；指定镜像名时归档里只能有一个镜像。
      */

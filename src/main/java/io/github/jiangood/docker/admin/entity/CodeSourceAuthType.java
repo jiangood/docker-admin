@@ -20,11 +20,4 @@ public enum CodeSourceAuthType {
 
     @DictItem(label = "SSH 私钥")
     SSH_KEY;
-
-    /**
-     * 是否为走 HTTP(S) 的凭据方式（SSH 私钥除外）。
-     */
-    public boolean isHttp() {
-        return this != SSH_KEY;
-    }
 }

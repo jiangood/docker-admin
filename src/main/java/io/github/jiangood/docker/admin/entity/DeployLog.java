@@ -32,11 +32,10 @@ public class DeployLog extends BaseEntity {
     String imageTag;
 
     /**
-     * 触发方式：手动部署、配置变更、构建成功自动部署等。更早的记录没有该字段，为空。
+     * 触发方式：手动部署、配置变更、构建成功自动部署等。
      * <p>
      * 显式声明为 VARCHAR：Hibernate 6.2+ 默认把 {@code @Enumerated(STRING)} 映射成数据库原生 ENUM，
-     * 而 {@code ddl-auto=update} 不会给已有 ENUM 列补充新取值，新增枚举值（如 SCHEDULE）后
-     * 老库插入部署记录会被数据库直接拒绝。老库的列由 {@code DeployLogTriggerTypeMigration} 改成 VARCHAR。
+     * 而原生 ENUM 在新增枚举值（如 SCHEDULE）时需要改表才能写入。
      */
     @Enumerated(EnumType.STRING)
     @JdbcTypeCode(SqlTypes.VARCHAR)

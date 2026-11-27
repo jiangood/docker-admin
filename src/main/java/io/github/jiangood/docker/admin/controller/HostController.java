@@ -252,7 +252,7 @@ public class HostController  {
     /**
      * 导出主机上的镜像为 tar：后台在该主机上执行 {@code docker save}，立即返回 logId。
      * <p>
-     * 进度通过 {@code /admin/ws/host-image-export-log/{logId}} 实时查看；
+     * 进度通过 {@code /admin/ws/task-log/{logId}} 实时查看；
      * 完成后用 {@code exportImage/download} 下载，tar 仍保留在主机上。
      */
     @HasPermission("host:image")

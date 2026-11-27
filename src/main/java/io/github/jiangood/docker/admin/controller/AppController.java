@@ -4,17 +4,13 @@ import cn.hutool.core.util.StrUtil;
 import com.github.dockerjava.api.model.Container;
 import io.github.jiangood.docker.base.OrgAccessTool;
 import io.github.jiangood.openadmin.framework.perm.HasPermission;
-import io.github.jiangood.docker.admin.dao.DeployLogRepository;
 import io.github.jiangood.docker.admin.dto.ContainerVo;
 import io.github.jiangood.docker.admin.config.DockerSettings;
 import io.github.jiangood.docker.admin.entity.App;
-import io.github.jiangood.docker.admin.entity.DeployLog;
 import io.github.jiangood.docker.admin.entity.DeployTrigger;
 import io.github.jiangood.docker.admin.service.AppService;
 import io.github.jiangood.docker.admin.service.ContainerService;
 import io.github.jiangood.docker.admin.websocket.DockerLogService;
-import io.github.jiangood.docker.sdk.engine.DockerClientManager;
-import io.github.jiangood.openadmin.modules.logviewer.service.FileLogService;
 import io.github.jiangood.openadmin.util.dto.AjaxResult;
 import io.github.jiangood.openadmin.util.dto.Option;
 import io.github.jiangood.openadmin.framework.data.specification.Spec;
@@ -36,14 +32,11 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.io.IOException;
 import java.io.OutputStream;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Pattern;
 
 
 @RestController
@@ -51,19 +44,8 @@ import java.util.regex.Pattern;
 @RequestMapping("admin/app")
 public class AppController {
 
-    /**
-     * 部署日志标识（部署记录 id）白名单，同时阻止目录穿越。
-     */
-    private static final Pattern LOG_ID_PATTERN = Pattern.compile("^[A-Za-z0-9_-]{1,64}$");
-
     @Resource
     private AppService service;
-
-    @Resource
-    private DeployLogRepository deployLogRepository;
-
-    @Resource
-    private FileLogService fileLogService;
 
     @Resource
     private ContainerService containerService;
@@ -124,32 +106,6 @@ public class AppController {
     public AjaxResult deployLogs(String id) {
         assertAppAccess(id);
         return AjaxResult.ok().data(service.listDeployLogs(id));
-    }
-
-    /**
-     * 单次部署的日志正文（已结束的部署记录），运行中的日志由 WebSocket 实时 tail。
-     *
-     * @deprecated 前端已改用框架 raw 全文接口 {@code /admin/sys/log/raw/task/{logId}}
-     *             （TaskLogViewer，权限仍由 t_task_log 的 {@code app:view} 承担），
-     *             本 offset 增量接口仅为兼容保留，后续版本可能移除。
-     * <p>
-     * 以前直接复用 open-admin 的 {@code admin/sys/log/{key}}，但该接口是「通用文件日志」：
-     * 权限按日志 key 前缀注册、返回体也已改为增量 JSON，与本模块的部署日志语义对不上。
-     * 部署日志属于业务资源，改由本模块提供读取接口，权限沿用 {@code app:view}。
-     */
-    @Deprecated(since = "3.3.2", forRemoval = false)
-    @HasPermission("app:view")
-    @RequestMapping("deployLog/{id}")
-    public AjaxResult deployLog(@PathVariable String id,
-                                @RequestParam(defaultValue = "0") long offset,
-                                @RequestParam(defaultValue = "0") int length) throws IOException {
-        Assert.isTrue(LOG_ID_PATTERN.matcher(id).matches(), "非法的部署日志标识");
-        if (!deployLogRepository.existsById(id)) {
-            return AjaxResult.err(404, "部署记录不存在");
-        }
-
-        // 返回 {content, nextOffset, eof}，与框架 LogViewer 的增量读取契约一致
-        return AjaxResult.ok().data(fileLogService.readChunk(id, offset, length));
     }
 
     /**

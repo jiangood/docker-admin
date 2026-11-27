@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * 构建测试：以 Git 仓库（或指定子目录）为上下文，用粘贴的 Dockerfile 覆盖后在默认构建节点本地构建。
  * <p>
- * 构建过程通过 {@code /admin/ws/build-test-log/{logId}} 实时输出日志。
+ * 构建过程通过 {@code /admin/ws/task-log/{logId}} 实时输出日志。
  */
 @RestController
 @Slf4j

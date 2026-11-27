@@ -26,11 +26,4 @@ public enum CodeSourceType {
 
     @DictItem(label = "自定义")
     CUSTOM;
-
-    /**
-     * 是否为可对接 API 的托管平台（自定义除外）。
-     */
-    public boolean isHosted() {
-        return this != CUSTOM;
-    }
 }

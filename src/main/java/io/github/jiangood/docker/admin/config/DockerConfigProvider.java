@@ -27,7 +27,6 @@ import java.util.List;
  * 默认注册中心 / 默认构建主机原来是项目自己的「设置 - 全局设置」页面，现在用
  * {@link Configs#select(String, String, java.util.function.Supplier)} 动态列出业务表里的选项：
  * 声明阶段不查库，每次打开参数页 / 保存时才求值，所以注入 Repository 是安全的。
- * 旧 {@code t_system_config} 里的值由 {@link LegacySystemConfigMigrator} 一次性搬迁。
  */
 @Component
 @RequiredArgsConstructor

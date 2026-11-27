@@ -3,9 +3,7 @@ package io.github.jiangood.docker.admin.config;
 /**
  * 注册到框架「系统管理 - 系统参数」的配置键。
  * <p>
- * 这里的键由 {@link DockerConfigProvider} 声明，值存在框架的 {@code sys_config} 表；
- * 旧的 {@code t_system_config} 只由一次性迁移器读取，不再有新写入。
- * 容器相关的键名沿用旧 {@code t_system_config} 的名字，方便一次性迁移。
+ * 这里的键由 {@link DockerConfigProvider} 声明，值存在框架的 {@code sys_config} 表。
  */
 public final class DockerConfigKeys {
 

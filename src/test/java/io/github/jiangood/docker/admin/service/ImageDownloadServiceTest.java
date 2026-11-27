@@ -8,7 +8,6 @@ import io.github.jiangood.docker.admin.dto.ImageDownloadRequest;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.entity.ImageDownloadRecord;
 import io.github.jiangood.docker.sdk.engine.DockerClientManager;
-import io.github.jiangood.openadmin.modules.task.entity.SysTaskLog;
 import io.github.jiangood.openadmin.modules.task.registry.TaskLogRegistry;
 import io.github.jiangood.openadmin.modules.task.service.SysTaskLogService;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,7 +24,6 @@ import org.springframework.transaction.PlatformTransactionManager;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
@@ -243,7 +241,6 @@ class ImageDownloadServiceTest {
         when(recordRepository.findByStatus(ImageDownloadRecord.CLEANING)).thenReturn(List.of());
         when(recordRepository.findByStatus(ImageDownloadRecord.FAILED)).thenReturn(List.of());
         when(recordRepository.findByStatus(ImageDownloadRecord.SUCCESS)).thenReturn(List.of(missing, present));
-        when(recordRepository.findByLogId(present.getLogId())).thenReturn(Optional.of(present));
 
         int interrupted = service.recoverAfterRestart();
 
@@ -271,59 +268,6 @@ class ImageDownloadServiceTest {
         assertEquals(ImageDownloadRecord.CLEANED, record.getStatus());
         assertEquals("SYSTEM", record.getCleanedBy());
         assertFalse(Files.exists(service.localTarDir(record.getLogId()).toPath()));
-    }
-
-    @Test
-    void restartImportsLegacyArchivesWithoutDatabaseRecords() throws Exception {
-        Path dir = service.localTarDir("image-download-legacy").toPath();
-        Files.createDirectories(dir);
-        Path archive = dir.resolve("nginx-1.27.tar");
-        Files.writeString(archive, "legacy");
-        when(recordRepository.findByStatus(ImageDownloadRecord.RUNNING)).thenReturn(List.of());
-        when(recordRepository.findByStatus(ImageDownloadRecord.CLEANING)).thenReturn(List.of());
-        when(recordRepository.findByStatus(ImageDownloadRecord.FAILED)).thenReturn(List.of());
-        when(recordRepository.findByStatus(ImageDownloadRecord.SUCCESS)).thenReturn(List.of());
-        when(recordRepository.findByLogId("image-download-legacy")).thenReturn(Optional.empty());
-        SysTaskLog task = new SysTaskLog();
-        task.setLogId("image-download-legacy");
-        task.setType(SysTaskLog.TYPE_IMAGE_DOWNLOAD);
-        task.setTitle("下载镜像 nginx:1.27");
-        task.setStatus(SysTaskLog.STATUS_SUCCESS);
-        task.setTriggerUser("alice");
-        when(taskLogService.findByLogId("image-download-legacy")).thenReturn(task);
-
-        service.recoverAfterRestart();
-
-        ArgumentCaptor<ImageDownloadRecord> captor = ArgumentCaptor.forClass(ImageDownloadRecord.class);
-        verify(recordRepository).saveAndFlush(captor.capture());
-        ImageDownloadRecord imported = captor.getValue();
-        assertEquals("image-download-legacy", imported.getLogId());
-        assertEquals("nginx:1.27", imported.getImage());
-        assertEquals("alice", imported.getTriggerUser());
-        assertEquals(archive.toFile().getAbsolutePath(), imported.getPath());
-        assertEquals(ImageDownloadRecord.SUCCESS, imported.getStatus());
-        assertTrue(imported.getReady());
-    }
-
-    @Test
-    void restartDoesNotPublishUnconfirmedLegacyArchive() throws Exception {
-        Path dir = service.localTarDir("image-download-unconfirmed").toPath();
-        Files.createDirectories(dir);
-        Files.writeString(dir.resolve("nginx-1.27.tar"), "partial");
-        when(recordRepository.findByStatus(ImageDownloadRecord.RUNNING)).thenReturn(List.of());
-        when(recordRepository.findByStatus(ImageDownloadRecord.CLEANING)).thenReturn(List.of());
-        when(recordRepository.findByStatus(ImageDownloadRecord.FAILED)).thenReturn(List.of());
-        when(recordRepository.findByStatus(ImageDownloadRecord.SUCCESS)).thenReturn(List.of());
-        when(recordRepository.findByLogId("image-download-unconfirmed")).thenReturn(Optional.empty());
-
-        service.recoverAfterRestart();
-
-        ArgumentCaptor<ImageDownloadRecord> captor = ArgumentCaptor.forClass(ImageDownloadRecord.class);
-        verify(recordRepository).saveAndFlush(captor.capture());
-        ImageDownloadRecord imported = captor.getValue();
-        assertEquals(ImageDownloadRecord.FAILED, imported.getStatus());
-        assertFalse(imported.getReady());
-        assertTrue(imported.getError().contains("未确认成功"));
     }
 
     @Test

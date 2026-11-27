@@ -41,7 +41,7 @@ import io.github.jiangood.openadmin.modules.task.service.SysTaskLogService;
  * 「上传 tar → 本机 docker load → 打标 → push 注册中心」。
  * <p>
  * 载入与推送都在后台线程执行，进度写入 {@code /data/logs/{logId}.log}，
- * 前端通过 {@code /admin/ws/image-import-log/{logId}} 实时查看。
+ * 前端通过 {@code /admin/ws/task-log/{logId}} 实时查看。
  * <p>
  * 载入统一使用平台所在主机的 docker（compose 部署已挂载 docker.sock），不支持指定远程主机。
  * <p>

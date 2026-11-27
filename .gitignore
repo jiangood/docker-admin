@@ -44,3 +44,5 @@ build/
 application-dev.yml
 /docs/superpowers/
 /.playwright-mcp/
+/docs/open-admin/
+/.opencode/

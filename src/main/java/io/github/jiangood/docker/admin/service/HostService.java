@@ -13,8 +13,6 @@ import io.github.jiangood.openadmin.framework.data.BaseService;
 import io.github.jiangood.openadmin.util.BusinessException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
-import org.springframework.context.event.EventListener;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -110,19 +108,6 @@ public class HostService extends BaseService<Host> {
             clearRunnerFlagOfOthers(saved.getId());
         }
         return saved;
-    }
-
-    /**
-     * 启动时归一化历史数据：构建节点只保留一台（updateTime 最新的一台）。
-     * 此前允许标记多台，构建会落到哪台不确定；这里收敛为唯一的一台，幂等。
-     */
-    @EventListener(ApplicationReadyEvent.class)
-    @Transactional
-    public void normalizeRunnerUniqueness() {
-        Host runner = getDefaultDockerRunner();
-        if (runner != null) {
-            clearRunnerFlagOfOthers(runner.getId());
-        }
     }
 
     /**

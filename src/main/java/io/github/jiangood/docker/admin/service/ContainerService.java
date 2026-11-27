@@ -1092,10 +1092,6 @@ public class ContainerService {
             this.callback = callback;
         }
 
-        public String getExecId() {
-            return execId;
-        }
-
         public void write(byte[] data) {
             try {
                 synchronized (stdin) {

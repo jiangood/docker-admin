@@ -133,7 +133,7 @@ public class RegistryService extends BaseService<Registry> {
         return repoUrl.equalsIgnoreCase(base) || StrUtil.startWithIgnoreCase(repoUrl, base + "/");
     }
 
-    /** 默认注册中心；兼容旧版单记录数据，多条记录时要求配置默认值。 */
+    /** 默认注册中心；未配置默认值时，只有一条记录就直接用它，多条记录时要求显式配置。 */
     public Registry getEffective() {
         String id = dockerSettings.defaultRegistryId();
         if (StrUtil.isNotBlank(id)) {
@@ -168,7 +168,7 @@ public class RegistryService extends BaseService<Registry> {
                 .orElseThrow(() -> new BusinessException("指定的注册中心不存在：" + registryId));
     }
 
-    /** 无 ID 新增，有 ID 更新；保留旧接口兼容。 */
+    /** 无 ID 新增，有 ID 更新。 */
     @Transactional
     public Registry saveRegistry(Registry input, List<String> updateFields) {
         if (StrUtil.isBlank(input.getId())) {

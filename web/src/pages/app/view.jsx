@@ -24,7 +24,7 @@ import {ReloadOutlined} from "@ant-design/icons";
 import ConfigForm from "./ConfigForm";
 import {history} from "@jiangood/open-admin";
 
-import {FieldRemoteSelect, HttpClient, Page, PageUtils} from "@jiangood/open-admin";
+import {HttpClient, Page, PageUtils} from "@jiangood/open-admin";
 import PublishForm from "./PublishForm";
 import ContainerLogs from "../../components/container/ContainerLogs";
 import DeployLogList from "./DeployLogList";

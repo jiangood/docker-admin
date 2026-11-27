@@ -49,12 +49,12 @@ git tag vx.y.z && git push && git push origin vx.y.z
 
 - **端口：** 后端 `8601`（`application.yml`；`Dockerfile` 内置 `ENV SERVER_PORT=8601`，本地开发与容器同一端口），
   前端 dev `8600`（`web/.env`）。`docker run` 无需再传 `-e SERVER_PORT`。
-- **Context path:** 默认 `/docker-admin`（`application.yml`，仅本地开发用）；
+- **Context path:** 默认 `/dev-background`（`application.yml`，与框架示例一致，仅本地开发用）；
   容器部署由 `Dockerfile` 内置的 `ENV SERVER_SERVLET_CONTEXT_PATH=/` 覆盖为根路径。
   环境变量优先级高于 `application.yml`，因此 `docker run` 与 `docker compose` 行为一致，
-  且可用 `-e SERVER_SERVLET_CONTEXT_PATH=/docker-admin` 覆盖回带前缀的路径。
+  且可用 `-e SERVER_SERVLET_CONTEXT_PATH=/dev-background` 覆盖回带前缀的路径。
   **已无 `prod` profile，也没有 `application-<profile>.yml` 覆盖文件。**
-  - 本地开发必须用 `VITE_SERVER_SERVLET_CONTEXT_PATH=/docker-admin`（见 `web/.env.development`），
+  - 本地开发必须用 `VITE_SERVER_SERVLET_CONTEXT_PATH=/dev-background`（见 `web/.env.development`），
     否则 Vite 代理键为 `/` 会把前端静态资源请求也转发到后端。
 - **Profiles:** 只用默认 `default`。
   compose 编排见仓库根目录 `docker-compose.yml`。
@@ -136,8 +136,7 @@ git tag vx.y.z && git push && git push origin vx.y.z
   切换会用新目录**重建容器**（`admin/host/agent/root`，需 `host:save`；终端会断开并自动重连）；
   目录只在容器成功起来后才落库，失败时保留旧值，方便重新部署恢复。
   **`Host` 实体不再有 `fileRoot` / `agentImageTag` 字段**：配置以 Agent 表为准，
-  无配置时按 `/home` + `latest` 兜底；旧库升级时 `HostAgentConfigMigration` 会把
-  `t_host.file_root` / `agent_image_tag` 搬到 `t_host_agent_config` 并清空旧列。
+  无配置时按 `/home` + `latest` 兜底。
   CLI 是辅助容器内的交互式 shell，权限等同于宿主机 root。
   目录只接受 Docker daemon 可见的 Linux 绝对路径，禁止 `/`、`/host`、`/tmp` 与系统目录；Windows 主机需填
   Docker Desktop（WSL 2 后端）的 `/run/desktop/mnt/host/d/...`、Docker VMM 后端的 `/host_mnt/d/...`，
@@ -281,9 +280,6 @@ git tag vx.y.z && git push && git push origin vx.y.z
   
   读取集中在 `DockerSettings`（宽限期用 `#graceSeconds()`，配置缺失 / 越界回落默认值；
   平台调用预算用 `#budget()` = 宽限期 + 30 秒；默认资源用 `#defaultRegistryId()` / `#defaultBuildHostId()`）。
-  旧 `t_system_config` 里的三个同名 `docker.*` 键与 `default.registry.id` / `default.build.host.id`
-  分别由 `LegacyDockerConfigMigrator` / `LegacySystemConfigMigrator` 在启动时一次性搬到 `sys_config`
-  （新配置已有值则不覆盖，成功后删旧行；指向已删除的注册中心 / 主机时跳过并记日志）。
   **「设置 - 全局设置」页面与 `admin/system-config/*` 接口已删除**，权限码从
   `system-config:view/save` 换成框架的 `sys-config:read/update`——只授过旧权限码的角色需要补授。
   `SysConfigService` 有 30 秒覆盖值缓存，改完默认资源后部署 / 构建最多 30 秒才生效。
@@ -305,9 +301,7 @@ git tag vx.y.z && git push && git push origin vx.y.z
   **升级 docker-java 时需要回归这条链路。**
 - **用量采集 / 历史已整体删除：** 原「主机用量采集」定时任务（`HostUsageCollectJob`）、
   `t_docker_stats` 最新快照与 `t_docker_stats_his` 历史、`admin/docker-stats/*` 接口、「工具 - 资源统计」页面，
-  以及首页内存 Top5、应用详情 / 容器详情的「资源占用」展示全部移除；
-  `RemovedUsageJobCleanup` 会在启动时删掉旧库 `sys_job` 里的残留任务记录
-  （旧表不会被自动删除，需要时手工 `DROP TABLE t_docker_stats` / `t_docker_stats_his`）。
+  以及首页内存 Top5、应用详情 / 容器详情的「资源占用」展示全部移除。
 - **应用定时更新：** 应用详情「部署」页的「定时更新」开关（`App.scheduledUpdate`，默认关闭）按
   `scheduledUpdateIntervalMinutes`（默认 1440 分钟）定时检查镜像，适用于不是通过项目构建的外部镜像。
   任务 `AppScheduledUpdateJob` 每分钟扫描到期应用，只处理**运行中**的容器；检查由**平台直接访问注册中心**
@@ -322,7 +316,7 @@ git tag vx.y.z && git push && git push origin vx.y.z
   容器查询带 30 秒兜底超时（`SCHEDULED_UPDATE_QUERY_TIMEOUT`），一个失联主机不会拖住整轮；
   注册中心请求由 `RegistryV2Client` 自带 10 秒连接 / 30 秒读取超时。
   复制应用默认不会继承定时更新开关（间隔偏好保留）。
-  **两个内建任务（本任务、网站可达性检查）统一由 `BuiltinJobRegistrar` 幂等登记**：
+  **三个内建任务（本任务、网站可达性检查、数据库备份）统一由 `BuiltinJobRegistrar` 幂等登记**：
   框架 `JobAutoRegistrar` 会先把带 `@JobDescription` 的类补建成「无 cron、默认禁用」的空壳行，
   且顺序早于 `ApplicationRunner`，所以只判断「jobClass 是否存在」会让任务永远不触发；
   有 cron 的行（用户配置过）一律不碰，没有 cron 的空壳行补上默认 cron 并启用。
@@ -387,9 +381,7 @@ git tag vx.y.z && git push && git push origin vx.y.z
 - **邮件通知：** 发件账号由**框架**「系统管理 - 系统参数 - 邮件发送」维护（`sys_config` 的
   `email.provider/username/password/from.name/proxy`，由框架 `MailConfigProvider` 声明），
   本项目「设置」下只剩注册中心与代码源；默认注册中心 / 默认构建主机与 `docker.*` 同在
-  「系统管理 - 系统参数」；旧版 `t_system_config` 里的 `email.*`
-  由 `LegacyEmailConfigMigrator` 在启动时一次性搬到 `sys_config`（按旧 SMTP 主机反推邮箱服务商，
-  成功后删掉旧行；新配置已填发件邮箱时不动）。
+  「系统管理 - 系统参数」。
   SMTP 服务器/端口/加密方式由框架的 `MailProvider` 模板决定（QQ、腾讯企业邮、163/126、Outlook/M365、
   Gmail、阿里企业邮），界面只选服务商 + 填发件邮箱与授权码；**代理**同样只填一行地址
   （`http://192.168.1.10:8080`、`http://user:pass@192.168.1.10:8080`、`socks5://192.168.1.10:1080`，
@@ -402,6 +394,29 @@ git tag vx.y.z && git push && git push origin vx.y.z
   `MailService.sendAsync`；未配置发件账号时只跳过并记日志，邮件失败不影响构建结果。
   **不要再自己建 `MailService`**：框架的 `modules/mail/service/MailService` 是 `@Service`，
   同名 Bean 会与业务侧冲突。
+- **数据库定时备份：** `DatabaseBackupJob`（`@JobDescription("数据库备份")`）
+  由 `DatabaseBackupJobInitializer` 经 `BuiltinJobRegistrar` 自动登记，默认 **每周一 03:00**
+  （Quartz `0 0 3 ? * MON`），可在「系统 - 定时任务」改 cron / 停用。
+  `DatabaseBackupService` 每次现备现发，收件人取系统参数「邮件发送 - 默认收件邮箱」
+  （`email.default-to`，必须配置，否则任务失败并提示）。
+  **任务参数「发送邮件代理」**由 `DatabaseBackupJobParamProvider` 提供（`proxyId`，
+  下拉复用 `admin/proxy/options`）；不选代理时走框架 `MailService`（沿用全局 `email.proxy`），
+  选了代理时用框架的邮件账号配置 + `MailProxyProperties.apply` 单独发信，
+  **不要改全局 `email.proxy`**（会影响其他并发邮件）。
+  **只备份关键表，不备份整库**：默认清单见 `DatabaseBackupService.DEFAULT_TABLES`
+  （业务配置 `t_project/t_app/t_image/t_image_tag/t_host/t_host_agent_config/t_registry/`
+  `t_code_source/t_proxy/t_site_monitor`，账号权限 `sys_user/sys_org/sys_role/sys_user_role/`
+  `sys_user_data_perm`，基础配置 `sys_dict_type/sys_dict_item/sys_job/sys_config`），
+  不含日志、任务历史等大表；不存在的表会自动跳过。
+  **两种数据库统一输出 SQL**：H2 用 `SCRIPT DROP ... TABLE ...`，过滤脚本里的 `CREATE USER` /
+  `ALTER USER` 后 gzip；MySQL / MariaDB 用 `SHOW CREATE TABLE` + 逐行 `INSERT` 后 gzip
+  （容器镜像没有 `mysqldump`，不要改成依赖外部命令；MySQL 流式读取用
+  `setFetchSize(Integer.MIN_VALUE)`）。附件统一为 `.sql.gz`，恢复时先解压：
+  H2 在控制台执行 `RUNSCRIPT FROM '备份.sql'`，MySQL 用 `mysql < 备份.sql`（脚本均含
+  `DROP TABLE`，会覆盖同名表）。备份文件写到数据目录的 `db-backup/`（容器里即 `/data/db-backup`）
+  **并长期保留**，邮件发送失败也不会删除，任务日志与异常消息里会带上本地路径；
+  附件超过 20 MB 仍会尝试发送，但正文与日志会提示可能被邮件服务商拒收。
+  本地目录目前不做自动清理，需要时人工删除旧文件。
 - **前端**是 `@jiangood/open-admin` 之上的薄层，页面在 `web/src/pages/`，构建配置 `web/vite.config.js`。
 - **JSON 里的包装类型 `Long` 是字符串**（open-admin 的 `@JacksonComponent LongToStringSerializer`，
   防 JS 丢精度；`long` / `Integer` / `Double` 仍是数字）。前端做加减乘除前必须 `Number()`

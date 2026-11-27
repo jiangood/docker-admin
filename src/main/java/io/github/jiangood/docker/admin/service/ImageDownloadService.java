@@ -45,11 +45,7 @@ import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.util.Arrays;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -613,66 +609,7 @@ public class ImageDownloadService {
                 recordRepository.saveAndFlush(record);
             }
         }
-        importLegacyArchives();
         return running.size();
-    }
-
-    /**
-     * 升级前只有内存登记，平台重启后磁盘上可能留下无法从页面访问的归档。
-     * 把这类 image-download 目录补成历史记录：确认成功的可继续下载，其余保留为失败记录供用户清理。
-     */
-    private int importLegacyArchives() {
-        File[] dirs = tarRoot().listFiles(file -> !Files.isSymbolicLink(file.toPath())
-                && Files.isDirectory(file.toPath(), LinkOption.NOFOLLOW_LINKS)
-                && file.getName().startsWith("image-download-")
-                && isValidLogId(file.getName()));
-        if (dirs == null) {
-            return 0;
-        }
-        int imported = 0;
-        for (File dir : dirs) {
-            String logId = dir.getName();
-            if (recordRepository.findByLogId(logId).isPresent()) {
-                continue;
-            }
-            File[] archives = dir.listFiles(file -> !Files.isSymbolicLink(file.toPath())
-                    && Files.isRegularFile(file.toPath(), LinkOption.NOFOLLOW_LINKS)
-                    && file.getName().toLowerCase(java.util.Locale.ROOT).endsWith(".tar"));
-            if (archives == null || archives.length == 0) {
-                deletePathQuietly(dir.toPath());
-                continue;
-            }
-            Arrays.sort(archives, Comparator.comparing(File::getName));
-            File archive = archives[0];
-            SysTaskLog task = taskLogService.findByLogId(logId);
-            boolean confirmed = task != null && SysTaskLog.STATUS_SUCCESS.equals(task.getStatus());
-            String image = StrUtil.removeSuffix(archive.getName(), ".tar");
-            if (task != null && StrUtil.startWith(task.getTitle(), "下载镜像 ")) {
-                image = StrUtil.subAfter(task.getTitle(), "下载镜像 ", false);
-            }
-
-            ImageDownloadRecord record = new ImageDownloadRecord();
-            record.setLogId(logId);
-            record.setImage(image);
-            record.setHostName("历史任务");
-            record.setTriggerUser(task == null ? "历史记录" : task.getTriggerUser());
-            // 只有任务中心确认成功的旧归档才提供下载；其余保留为失败记录，供用户清理。
-            record.setStatus(confirmed ? ImageDownloadRecord.SUCCESS : ImageDownloadRecord.FAILED);
-            record.setFileName(archive.getName());
-            record.setPath(archive.getAbsolutePath());
-            record.setSize(archive.length());
-            record.setEndTime(task != null && task.getEndTime() != null
-                    ? task.getEndTime()
-                    : LocalDateTime.ofInstant(Instant.ofEpochMilli(archive.lastModified()), ZoneId.systemDefault()));
-            record.setError(confirmed ? null : "历史任务未确认成功，已停止提供下载");
-            record.setReady(confirmed);
-            recordRepository.saveAndFlush(record);
-            imported++;
-        }
-        if (imported > 0) {
-            log.info("导入升级前遗留的镜像下载归档 {} 个", imported);
-        }
-        return imported;
     }
 
     /**

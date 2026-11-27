@@ -3,7 +3,6 @@ package io.github.jiangood.docker.admin.service;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.StrUtil;
 import com.github.dockerjava.api.DockerClient;
-import com.github.dockerjava.api.command.InspectImageResponse;
 import com.github.dockerjava.api.model.PullResponseItem;
 import io.github.jiangood.docker.admin.dto.ImageExportTaskView;
 import io.github.jiangood.docker.admin.entity.ImageTag;
@@ -35,7 +34,7 @@ import io.github.jiangood.openadmin.modules.task.service.SysTaskLogService;
  * 落到临时目录，供前端下载后 {@code docker load} 导入。
  * <p>
  * 整个过程是后台任务：慢的阶段（拉取、打包）不占用 HTTP 请求，进度写入
- * {@code /data/logs/{logId}.log}，前端通过 {@code /admin/ws/image-export-log/{logId}} 实时查看。
+ * {@code /data/logs/{logId}.log}，前端通过 {@code /admin/ws/task-log/{logId}} 实时查看。
  * 临时 tar 在下载完成后删除，超时未下载的在后续导出时被清扫。
  * <p>
  * 导出拉进来的本机镜像<b>保留不删</b>：同一个 tag 再导出可直接复用，也给应用部署留了现成的镜像。
@@ -336,15 +335,6 @@ public class ImageExportService {
      */
     private String knownDigest(String imageUrl, String tag) {
         return imageTagService.find(imageUrl, tag).map(ImageTag::getDigest).orElse(null);
-    }
-
-    private long inspectSize(DockerClient client, String fullUrl) {
-        try {
-            InspectImageResponse r = client.inspectImageCmd(fullUrl).exec();
-            return r.getSize() == null ? 0L : r.getSize();
-        } catch (Exception e) {
-            return 0L;
-        }
     }
 
     /**

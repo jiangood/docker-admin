@@ -16,7 +16,7 @@
         <java.version>21</java.version>
 
         <!-- 依赖版本集中管理：同类依赖共用属性，便于 dependabot 批量升级并避免版本漂移 -->
-        <open-admin.version>3.3.4-SNAPSHOT</open-admin.version>
+        <open-admin.version>3.4.1-SNAPSHOT</open-admin.version>
 
         <!-- hutool 各模块须同版本（由 open-admin 传递引入）；改动前用 mvn dependency:tree -Dincludes=cn.hutool 核对 -->
         <hutool.version>5.8.48</hutool.version>

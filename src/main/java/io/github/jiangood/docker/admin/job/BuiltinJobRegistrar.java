@@ -17,7 +17,7 @@ import java.util.List;
  * <p>
  * 框架的 {@code JobAutoRegistrar} 会先按 {@code @JobDescription} 把可调度类补建成 {@code sys_job} 行，
  * 但补建出来的行是「空壳」：{@code cron} 为空、{@code enabled=false}，需要在「定时任务」页面里手工配置才会跑。
- * 而本模块的两个内建任务（网站可达性检查 / 应用定时更新检查）设计上应当开箱即用，
+ * 而本模块的内建任务（网站可达性检查 / 应用定时更新检查 / 数据库备份）设计上应当开箱即用，
  * 由 {@link org.springframework.boot.ApplicationRunner} 补上默认 cron 并启用。
  * <p>
  * 两者的执行顺序并不固定：{@code JobAutoRegistrar} 也是 runner 且优先级通常更高，因此这里不能只看
