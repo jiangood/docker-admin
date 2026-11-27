@@ -314,7 +314,12 @@ git tag vx.y.z && git push && git push origin vx.y.z
   以及首页内存 Top5、应用详情 / 容器详情的「资源占用」展示全部移除。
 - **应用定时更新已整体删除：** 原应用详情「部署」页的「定时更新」开关、`admin/app/scheduledUpdate` 接口、
   `AppScheduledUpdateJob` 定时任务与 `App` 上的 `scheduledUpdate*` 字段全部移除；
-  升级时由 `ScheduledUpdateJobCleanup` 删掉 `sys_job` 里遗留的任务记录（否则每次启动都会报「执行类不存在」）。
+  升级后 `sys_job` 里可能留着 `job_class=io.github.jiangood.docker.admin.job.AppScheduledUpdateJob`
+  的遗留记录，表现为每次启动都报「定时任务记录的执行类不存在」/ `ClassNotFoundException`。
+  **不再有自动清理代码，需手工删**，且必须先删子表日志再删任务（`sys_job_log` 有指向 `sys_job` 的外键）：
+  `DELETE FROM sys_job_log WHERE sys_job_id = (SELECT id FROM sys_job WHERE job_class = '...AppScheduledUpdateJob');`
+  再 `DELETE FROM sys_job WHERE job_class = '...AppScheduledUpdateJob';`。
+  不要直接删 `sys_job`，否则 H2 会抛外键 `23503`。
   `DeployTrigger.SCHEDULE` 只作为历史枚举值保留，保证旧部署记录仍能反序列化，不再产生新数据。
   **两个内建任务（网站可达性检查、数据库备份）统一由 `BuiltinJobRegistrar` 幂等登记**：
   框架 `JobAutoRegistrar` 会先把带 `@JobDescription` 的类补建成「无 cron、默认禁用」的空壳行，
