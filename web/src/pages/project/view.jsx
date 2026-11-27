@@ -1,5 +1,5 @@
 import {
-  Alert, Button, Card, Checkbox, Col, Descriptions, Form, Input,
+  Button, Card, Checkbox, Col, Descriptions, Form, Input,
   message, Modal, Popconfirm, Row, Segmented, Select, Space, Spin, Switch, Table, Tabs, Tag, Tooltip, Typography
 } from 'antd';
 import React from 'react';
@@ -507,11 +507,15 @@ export default class extends React.Component {
       return <Page padding><Spin/></Page>
     }
 
-    const {project, showTrigger, logRow, tagOptions, branchOptions, buildHostOptions, refType, notifyEmailLoading, latestOnlyLoading} = this.state;
+    const {project, showTrigger, logRow, tagOptions, branchOptions, buildHostOptions, refType} = this.state;
 
     return (<Page padding>
 
-      <Card className='mb-4' title={project.name}>
+      <Card
+        className='mb-4'
+        title={project.name}
+        extra={<Button onClick={this.triggerPipeline} type="primary">立即构建</Button>}
+      >
         <Descriptions>
           <Descriptions.Item label='id'>{project.id}</Descriptions.Item>
           <Descriptions.Item label='镜像地址'>{project.imageUrl}</Descriptions.Item>
@@ -520,42 +524,7 @@ export default class extends React.Component {
           <Descriptions.Item label='dockerfile'>{project.dockerfile}</Descriptions.Item>
           <Descriptions.Item label='构建上下文'>{project.context}</Descriptions.Item>
           <Descriptions.Item label='创建时间'>{project.createTime}</Descriptions.Item>
-          <Descriptions.Item label='邮件通知'>
-            <Space wrap>
-              <Switch
-                checked={!!project.notifyEmail}
-                checkedChildren='开启'
-                unCheckedChildren='关闭'
-                loading={notifyEmailLoading}
-                disabled={!PermUtils.hasPermission('project:save') || (!project.notifyEmail && !project.createUserEmail)}
-                onChange={this.toggleNotifyEmail}
-              />
-              {project.notifyEmail && project.createUserEmail && (
-                <Typography.Text type='secondary'>发送至 {project.createUserEmail}</Typography.Text>
-              )}
-              {!project.createUserEmail && (
-                <Typography.Text type='warning'>
-                  项目创建人未配置邮箱，请到「系统管理 - 用户管理」补充
-                  {project.notifyEmail ? '（当前不会发送）' : '后才能开启'}
-                </Typography.Text>
-              )}
-            </Space>
-          </Descriptions.Item>
-          <Descriptions.Item label='仅构建 latest'>
-            <Switch
-              checked={!!project.latestOnly}
-              checkedChildren='开启'
-              unCheckedChildren='关闭'
-              loading={latestOnlyLoading}
-              disabled={!PermUtils.hasPermission('project:save')}
-              onChange={this.toggleLatestOnly}
-            />
-          </Descriptions.Item>
         </Descriptions>
-
-        <div className='row-end'>
-          <Button onClick={this.triggerPipeline} type="primary">立即构建</Button>
-        </div>
 
       </Card>
 
@@ -629,7 +598,7 @@ export default class extends React.Component {
   }
 
   renderTabs = () => {
-    const {project, versions, apps} = this.state;
+    const {project, versions, apps, notifyEmailLoading, latestOnlyLoading} = this.state;
 
     const items = [
       {
@@ -639,7 +608,24 @@ export default class extends React.Component {
           <ProTable
             actionRef={this.actionRef}
             toolBarRightRender={() => (
-              <Button onClick={this.cleanError}>清理失败记录</Button>
+              <Space>
+                <Space size={4}>
+                  <span>邮件通知</span>
+                  <Switch
+                    size='small'
+                    checked={!!project.notifyEmail}
+                    loading={notifyEmailLoading}
+                    disabled={!PermUtils.hasPermission('project:save') || (!project.notifyEmail && !project.createUserEmail)}
+                    onChange={this.toggleNotifyEmail}
+                  />
+                  {project.notifyEmail && project.createUserEmail && (
+                    <Typography.Text type='secondary' style={{fontSize: 12}}>
+                      发送至 {project.createUserEmail}
+                    </Typography.Text>
+                  )}
+                </Space>
+                <Button onClick={this.cleanError}>清理失败记录</Button>
+              </Space>
             )}
             request={(params) => {
               params.projectId = project.id
@@ -662,14 +648,23 @@ export default class extends React.Component {
         key: 'version',
         label: '构建版本',
         children: <div>
-          {project.latestOnly && (
-            <Alert
-              type='info'
-              showIcon
-              style={{marginBottom: 12}}
-              message='本项目仅构建 latest，历史版本号不会保留为镜像标签'
-            />
-          )}
+          <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, marginBottom: 12}}>
+            <Typography.Text type='secondary' style={{fontSize: 12}}>
+              {project.latestOnly
+                ? '仅构建 latest：每次构建只更新 latest 标签，版本号不会保留为镜像标签'
+                : '构建时同时产出 latest 与版本号标签（版本号 = 分支名-年月日-时分-提交 id）'}
+            </Typography.Text>
+            <Space size={4}>
+              <span>仅构建 latest</span>
+              <Switch
+                size='small'
+                checked={!!project.latestOnly}
+                loading={latestOnlyLoading}
+                disabled={!PermUtils.hasPermission('project:save')}
+                onChange={this.toggleLatestOnly}
+              />
+            </Space>
+          </div>
           <Table
             size='small'
             rowKey='id'

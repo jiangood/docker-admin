@@ -397,8 +397,8 @@ git tag vx.y.z && git push && git push origin vx.y.z
   （`http://192.168.1.10:8080`、`http://user:pass@192.168.1.10:8080`、`socks5://192.168.1.10:1080`，
   不写 scheme 按 http，端口必填，留空即不使用；密码回显 `***`）。平台跑在容器里时**不能填 127.0.0.1**，
   要填宿主机网桥网关（如 `172.17.0.1`）或局域网 IP。
-  是否发送在**项目详情页**的「邮件通知」开关控制（`Project.notifyEmail`），收件人为项目创建人的
-  `sys_user.email`；创建人未配置邮箱时开关不可开启（后端也会校验），并提示到用户管理补充。
+  是否发送在**项目详情页「构建历史」页签**工具栏的「邮件通知」开关控制（`Project.notifyEmail`），收件人为项目创建人的
+  `sys_user.email`；创建人未配置邮箱时开关不可开启（后端也会校验），页面上不再额外提示。
   `ProjectService` 在构建成功与失败时都发布 `BuildResultEvent`，`admin/mail/BuildMailNotifier` 组装
   `MailMessage`（正文为构建摘要，附件为日志文件 `${logging.file.path}/{logId}.log`）后交给框架
   `MailService.sendAsync`；未配置发件账号时只跳过并记日志，邮件失败不影响构建结果。
