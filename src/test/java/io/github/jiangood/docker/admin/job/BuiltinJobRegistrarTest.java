@@ -26,9 +26,9 @@ import static org.mockito.Mockito.when;
  */
 class BuiltinJobRegistrarTest {
 
-    private static final String JOB_CLASS = "io.github.jiangood.docker.admin.job.AppScheduledUpdateJob";
-    private static final String NAME = "应用定时更新检查";
-    private static final String CRON = "0 * * * * ?";
+    private static final String JOB_CLASS = "io.github.jiangood.docker.admin.job.DatabaseBackupJob";
+    private static final String NAME = "数据库备份";
+    private static final String CRON = "0 0 3 ? * MON";
 
     private final SysJobService sysJobService = mock(SysJobService.class);
     private final SysJobRepository sysJobRepository = mock(SysJobRepository.class);
@@ -53,7 +53,7 @@ class BuiltinJobRegistrarTest {
     void fillsShellRowCreatedByFrameworkAutoRegistrar() throws Exception {
         SysJob shell = new SysJob();
         shell.setId("job-1");
-        shell.setName("AppScheduledUpdateJob");
+        shell.setName("DatabaseBackupJob");
         shell.setJobClass(JOB_CLASS);
         shell.setEnabled(false);
         when(sysJobRepository.findAll()).thenReturn(List.of(shell));

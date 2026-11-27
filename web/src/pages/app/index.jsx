@@ -1,11 +1,9 @@
-import {Alert, AutoComplete, Button, Col, Divider, Form, Input, message, Modal, Row, Tooltip, Typography} from 'antd';
-import {ClockCircleOutlined} from '@ant-design/icons';
+import {Alert, AutoComplete, Button, Col, Divider, Form, Input, message, Modal, Row, Typography} from 'antd';
 import React from 'react';
 import ContainerStatus from "../../components/ContainerStatus";
 import FieldImageUrl from "../../components/FieldImageUrl";
 import ContainerConfigForm from "./ContainerConfigForm";
 import {parseDockerRun} from "./dockerRunParser";
-import {updateIntervalLabel} from "./updateSchedule";
 import {
     PermActions,
     FieldOrgTreeSelect,
@@ -53,12 +51,6 @@ export default class extends React.Component {
         {
             title: '版本',
             dataIndex: 'imageTag',
-            render: (tag, row) => <span>
-                {tag}
-                {row.scheduledUpdate && <Tooltip title={'定时更新：' + updateIntervalLabel(row.scheduledUpdateIntervalMinutes)}>
-                    <ClockCircleOutlined style={{marginLeft: 6, color: '#1677ff'}}/>
-                </Tooltip>}
-            </span>,
         },
         {
             title: '运行主机',

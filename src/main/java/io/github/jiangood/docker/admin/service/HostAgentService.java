@@ -508,7 +508,7 @@ public class HostAgentService {
     }
 
     /**
-     * 本地镜像可用于比较的摘要集合（与应用定时更新检查同口径）：
+     * 本地镜像可用于比较的摘要集合：
      * 经典镜像存储的镜像 ID 是 image config 摘要，与仓库的 manifest 摘要不同，必须读
      * {@code RepoDigests}；containerd 镜像存储的镜像 ID 本身就是 manifest 摘要。两种都收进集合。
      */

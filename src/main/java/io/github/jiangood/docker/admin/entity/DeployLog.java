@@ -35,7 +35,7 @@ public class DeployLog extends BaseEntity {
      * 触发方式：手动部署、配置变更、构建成功自动部署等。
      * <p>
      * 显式声明为 VARCHAR：Hibernate 6.2+ 默认把 {@code @Enumerated(STRING)} 映射成数据库原生 ENUM，
-     * 而原生 ENUM 在新增枚举值（如 SCHEDULE）时需要改表才能写入。
+     * 而原生 ENUM 在新增枚举值（如 MIGRATE）时需要改表才能写入。
      */
     @Enumerated(EnumType.STRING)
     @JdbcTypeCode(SqlTypes.VARCHAR)

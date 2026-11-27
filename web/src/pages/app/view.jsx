@@ -30,7 +30,6 @@ import ContainerLogs from "../../components/container/ContainerLogs";
 import DeployLogList from "./DeployLogList";
 import LinkButton from "../../components/LinkButton";
 import {stateColor, stateLabel} from "../../components/container/utils";
-import {updateIntervalLabel} from "./updateSchedule";
 
 const Item = Descriptions.Item
 
@@ -374,12 +373,6 @@ export default class extends React.Component {
                         <Typography.Link onClick={this.openImage}>{app.imageUrl}:{app.imageTag}</Typography.Link>
                     </Item>
 
-                    <Item label='定时更新'>
-                        {app.scheduledUpdate
-                            ? <Tag color='blue'>{updateIntervalLabel(app.scheduledUpdateIntervalMinutes)}</Tag>
-                            : <Typography.Text type='secondary'>未开启</Typography.Text>}
-                    </Item>
-
                     <Item label='状态'>
                         {containerLoading ? '检测中…' :
                             <Tag color={stateColor(state)}>
@@ -471,7 +464,6 @@ export default class extends React.Component {
                 key: 'deploy',
                 label: '部署',
                 children: <PublishForm key={'deploy-' + tabTokens.deploy} appId={app.id}
-                                       containerState={container?.state}
                                        onChange={this.handleChanged}/>
             },
             {

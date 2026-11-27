@@ -30,6 +30,9 @@ public enum DeployTrigger {
     @DictItem(label = "构建自动部署")
     BUILD,
 
+    /**
+     * 历史值：应用定时更新功能已移除，枚举保留是为了让升级前的部署记录仍能正常反序列化。
+     */
     @DictItem(label = "定时更新")
     SCHEDULE,
 

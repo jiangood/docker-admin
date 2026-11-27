@@ -1,7 +1,6 @@
 import React from "react";
-import {Alert, AutoComplete, Button, Divider, Form, Input, message, Modal, Select, Skeleton, Space, Switch, Tag, Tooltip, Typography} from "antd";
+import {AutoComplete, Button, Divider, Form, Input, message, Modal, Skeleton, Switch, Typography} from "antd";
 import {FieldRemoteSelect, HttpClient, PageUtils, Perm, PermUtils} from "@jiangood/open-admin";
-import {DEFAULT_UPDATE_INTERVAL, UPDATE_INTERVAL_OPTIONS} from "./updateSchedule";
 
 /**
  * 部署标签页
@@ -14,9 +13,6 @@ export default class extends React.Component {
 
         tagOptions: [],
         versionOptions: [],
-
-        // 定时更新设置保存中
-        savingScheduledUpdate: false,
     }
 
     componentDidMount() {
@@ -45,69 +41,6 @@ export default class extends React.Component {
             this.setState(s => ({app: {...s.app, autoDeploy}}))
         })
     }
-
-    /**
-     * 保存定时更新设置。开关和间隔共用一个接口，后端会返回保存后的应用，
-     * 以避免开关状态与「上次检查」快照不同步。
-     */
-    saveScheduledUpdate = values => {
-        const {app, savingScheduledUpdate} = this.state
-        if (savingScheduledUpdate) {
-            return
-        }
-        const payload = {
-            id: this.id,
-            scheduledUpdate: values.scheduledUpdate !== undefined
-                ? values.scheduledUpdate
-                : !!app.scheduledUpdate,
-            intervalMinutes: values.intervalMinutes !== undefined
-                ? values.intervalMinutes
-                : (Number(app.scheduledUpdateIntervalMinutes) || DEFAULT_UPDATE_INTERVAL),
-        }
-
-        this.setState({savingScheduledUpdate: true})
-        HttpClient.get('admin/app/scheduledUpdate', payload).then(rs => {
-            this.setState({app: rs.data || {}})
-            // 顶部信息卡也展示「定时更新」，同步刷新父级
-            this.props.onChange && this.props.onChange({refreshApp: true})
-        }).finally(() => {
-            this.setState({savingScheduledUpdate: false})
-        })
-    }
-
-    /** 上次检查结果的短标签，完整内容放在 Tooltip 里 */
-    renderScheduledResult = app => {
-        if (app.scheduledUpdateLastSuccess === false) {
-            return <Tag color='red'>检查失败</Tag>
-        }
-        const result = app.scheduledUpdateLastResult || ''
-        if (result.indexOf('发现新版本') >= 0) {
-            return <Tag color='blue'>发现新版本</Tag>
-        }
-        if (result.indexOf('已是最新') >= 0) {
-            return <Tag color='green'>已是最新</Tag>
-        }
-        if (result.indexOf('跳过') >= 0) {
-            return <Tag>跳过</Tag>
-        }
-        return result ? <Tag>{result}</Tag> : null
-    }
-
-    renderScheduledStatus = () => {
-        const {app} = this.state
-        if (!app.scheduledUpdate) {
-            return <Typography.Text type='secondary'>未启用</Typography.Text>
-        }
-        return <Space size={6} wrap>
-            <Typography.Text type='secondary'>
-                {app.scheduledUpdateLastCheckTime ? `上次检查：${app.scheduledUpdateLastCheckTime}` : '等待首次检查'}
-            </Typography.Text>
-            {app.scheduledUpdateLastResult && <Tooltip title={app.scheduledUpdateLastResult}>
-                {this.renderScheduledResult(app)}
-            </Tooltip>}
-        </Space>
-    }
-
 
     updateVersion = (values) => {
         HttpClient.get("admin/app/updateVersion", {id: this.id, version: values.version}).then(rs => {
@@ -168,18 +101,13 @@ export default class extends React.Component {
 
 
     render() {
-        const {app, appLoading, savingScheduledUpdate} = this.state;
+        const {app, appLoading} = this.state;
 
         if (appLoading) {
             return <Skeleton active={true}/>
         }
 
         const canDeploy = PermUtils.hasPermission('app:deploy')
-        const scheduledUpdate = !!app.scheduledUpdate
-        const intervalMinutes = Number(app.scheduledUpdateIntervalMinutes) || DEFAULT_UPDATE_INTERVAL
-        const containerState = this.props.containerState
-        // 容器确实处于停止 / 暂停状态时才提示；部署中（deploying）不提示
-        const containerStopped = ['exited', 'created', 'paused', 'dead'].includes(containerState)
         const rowStyle = {
             display: 'flex',
             justifyContent: 'space-between',
@@ -205,44 +133,6 @@ export default class extends React.Component {
                     </Form.Item>
                 </Form>
             </div>
-
-            <Divider className='mt-3 mb-3'/>
-
-            <div style={rowStyle}>
-                <div style={{flex: '1 1 260px'}}>
-                    <div>定时更新</div>
-                    <Typography.Text type='secondary'>
-                        由平台定时查询注册中心（只读清单，不下载镜像），镜像有变化时才重新部署（适用于外部镜像）
-                    </Typography.Text>
-                    <div style={{marginTop: 4}}>
-                        {this.renderScheduledStatus()}
-                    </div>
-                    {!canDeploy && <div>
-                        <Typography.Text type='secondary'>无「应用部署」权限，仅可查看</Typography.Text>
-                    </div>}
-                </div>
-                <Space wrap>
-                    <Select style={{width: 130}}
-                            value={intervalMinutes}
-                            options={UPDATE_INTERVAL_OPTIONS}
-                            disabled={!scheduledUpdate || !canDeploy || savingScheduledUpdate}
-                            onChange={value => this.saveScheduledUpdate({intervalMinutes: value})}/>
-                    <Switch checked={scheduledUpdate}
-                            loading={savingScheduledUpdate}
-                            disabled={!canDeploy}
-                            onChange={checked => this.saveScheduledUpdate({scheduledUpdate: checked})}/>
-                </Space>
-            </div>
-
-            {scheduledUpdate && app.imageTag && app.imageTag !== 'latest' && (
-                <Alert className='mt-3' type='warning' showIcon
-                       title={`当前版本固定为 ${app.imageTag}，只有该标签在仓库中被重新推送时才会触发更新`}/>
-            )}
-
-            {scheduledUpdate && containerStopped && (
-                <Alert className='mt-3' type='info' showIcon
-                       title='容器当前未运行，定时更新不会执行'/>
-            )}
 
             <Divider className='mt-3 mb-3'/>
 
