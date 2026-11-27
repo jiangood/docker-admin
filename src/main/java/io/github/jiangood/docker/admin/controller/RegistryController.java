@@ -2,6 +2,7 @@ package io.github.jiangood.docker.admin.controller;
 
 import io.github.jiangood.docker.admin.entity.Registry;
 import io.github.jiangood.docker.admin.service.RegistryService;
+import io.github.jiangood.openadmin.framework.data.specification.Spec;
 import io.github.jiangood.openadmin.framework.log.Log;
 import io.github.jiangood.openadmin.framework.perm.HasPermission;
 import io.github.jiangood.openadmin.util.BusinessException;
@@ -9,7 +10,10 @@ import io.github.jiangood.openadmin.util.dto.AjaxResult;
 import io.github.jiangood.openadmin.util.dto.Option;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -37,9 +41,23 @@ public class RegistryController {
     }
 
     @HasPermission("registry:view")
-    @RequestMapping("list")
-    public AjaxResult list() {
-        return AjaxResult.ok().data(service.findAll(Sort.by(Sort.Direction.DESC, "updateTime")));
+    @RequestMapping("page")
+    public AjaxResult page(String searchText,
+            @PageableDefault(direction = Sort.Direction.DESC, sort = "updateTime") Pageable pageable) {
+        Spec<Registry> q = Spec.of();
+        q.orLike(searchText, Registry.Fields.url, Registry.Fields.namespace, Registry.Fields.username);
+        Page<Registry> page = service.findAll(q, pageable);
+        return AjaxResult.ok().data(page);
+    }
+
+    /**
+     * 测试连通性与账号密码：失败也返回 HTTP 200，由页面在弹窗里展示具体原因。
+     */
+    @Log("镜像注册中心-测试")
+    @HasPermission("registry:test")
+    @RequestMapping("test")
+    public AjaxResult test(String id) {
+        return AjaxResult.ok().data(service.test(id));
     }
 
     /**

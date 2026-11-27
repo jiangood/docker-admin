@@ -89,6 +89,27 @@ public class RegistryV2Client {
                 (username + ":" + StrUtil.nullToEmpty(password)).getBytes(StandardCharsets.UTF_8));
     }
 
+    // ------------------------------------------------------------------ 探测
+
+    /**
+     * 测试连通性与账号密码，成功返回一句给用户看的说明，失败抛 {@link BusinessException}。
+     * <p>
+     * 走的就是平台拉取镜像时的路径：先探测 {@code /v2/}，需要令牌时申请一个令牌
+     * （账号密码错误会在这里失败），匿名或 Basic 可读时同样视为连通。
+     * 不依赖各注册中心支持程度不一的 {@code /v2/_catalog}，也不校验具体仓库的权限。
+     */
+    public String probe() {
+        discover();
+        if (Boolean.TRUE.equals(anonymous)) {
+            return basicAuth == null ? "匿名可读，无需账号密码" : "Basic 认证通过，/v2/ 可访问";
+        }
+        if (StrUtil.isBlank(realm)) {
+            throw new BusinessException("注册中心要求认证，账号密码不正确或未配置（" + base + "）");
+        }
+        String token = tokenOf(SCOPE_CATALOG);
+        return StrUtil.isNotBlank(token) ? "认证通过，已成功获取访问令牌" : "Basic 认证通过，/v2/ 可访问";
+    }
+
     // ------------------------------------------------------------------ 仓库
 
     /**

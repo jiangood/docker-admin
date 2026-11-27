@@ -182,6 +182,33 @@ public class RegistryService extends BaseService<Registry> {
         return update(input, updateFields);
     }
 
+    /**
+     * 测试注册中心连通性与账号密码，供设置页的「测试」按钮使用。
+     * <p>
+     * 失败不抛异常，原因放进结果里返回，页面用弹窗展示完整原因，而不是只弹一个 toast。
+     */
+    public TestResult test(String id) {
+        Assert.hasText(id, "注册中心 ID 不能为空");
+        Registry registry = findById(id).orElseThrow(() -> new BusinessException("注册中心不存在"));
+        long start = System.currentTimeMillis();
+        try {
+            RegistryV2Client client = new RegistryV2Client(registry.getUrl(),
+                    registry.getUsername(), registry.getPassword());
+            String hint = client.probe();
+            return new TestResult(true, registry.getFullUrl() + " " + hint, System.currentTimeMillis() - start);
+        } catch (Exception e) {
+            log.info("测试注册中心 {} 失败：{}", registry.getFullUrl(), e.getMessage());
+            String message = StrUtil.blankToDefault(e.getMessage(), e.getClass().getSimpleName());
+            return new TestResult(false, message, System.currentTimeMillis() - start);
+        }
+    }
+
+    /**
+     * 测试结果。{@code ok=false} 时 {@code message} 就是给用户看的原因。
+     */
+    public record TestResult(boolean ok, String message, long elapsedMs) {
+    }
+
     @Transactional
     public void deleteRegistry(String id) {
         Assert.hasText(id, "注册中心 ID 不能为空");

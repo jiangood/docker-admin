@@ -1,20 +1,26 @@
-import {Button, Card, Form, Input, Modal, Popconfirm, Space, Spin, Table, Typography, message} from 'antd'
+import {Alert, Button, Form, Input, Modal, Spin, Typography, message} from 'antd'
+import {PlusOutlined, SearchOutlined} from '@ant-design/icons'
 import React from 'react'
-import {HttpClient, Page, PermActions, PermUtils} from '@jiangood/open-admin'
+import {HttpClient, Page, PermActions, PermUtils, ProTable} from '@jiangood/open-admin'
 
 /** 镜像注册中心实例管理。 */
 export default class extends React.Component {
-    state = {loading: true, rows: [], modalOpen: false, editing: false, formValues: {}, pwdOpen: false, pwdLoading: false, pwdRow: null, pwdValue: ''}
+
+    tableRef = React.createRef()
     formRef = React.createRef()
 
-    // 首次加载由 onShow 触发（PageFrame 挂载时会调一次），这里不再重复请求
-    onShow() { this.load() }
-
-    load = () => {
-        this.setState({loading: true})
-        HttpClient.get('admin/registry/list')
-            .then(rs => this.setState({rows: rs.data || [], loading: false}))
-            .catch(() => this.setState({loading: false}))
+    state = {
+        modalOpen: false,
+        editing: false,
+        formValues: {},
+        pwdOpen: false,
+        pwdLoading: false,
+        pwdRow: null,
+        pwdValue: '',
+        testOpen: false,
+        testRow: null,
+        testing: false,
+        testResult: null,
     }
 
     // 回填走 initialValues：Modal 的 children 首次 open 才挂载，
@@ -33,13 +39,16 @@ export default class extends React.Component {
             .then(rs => {
                 message.success(rs.message || '保存成功')
                 this.setState({modalOpen: false})
-                this.load()
+                this.tableRef.current?.reload()
             }).finally(hide)
     }
 
     remove = id => {
         HttpClient.post('admin/registry/delete?id=' + encodeURIComponent(id))
-            .then(rs => { message.success(rs.message || '删除成功'); this.load() })
+            .then(rs => {
+                message.success(rs.message || '删除成功')
+                this.tableRef.current?.reload()
+            })
     }
 
     // 列表只返回打码密码，明文按需单独请求（后端另有 registry:password 权限）
@@ -50,31 +59,85 @@ export default class extends React.Component {
             .catch(() => this.setState({pwdLoading: false}))
     }
 
-    render() {
-        const {loading, rows, modalOpen, editing, formValues, pwdOpen, pwdLoading, pwdRow, pwdValue} = this.state
+    // 打开弹窗即测一次；失败原因由后端放在结果里返回，弹窗里完整展示
+    openTest = row => {
+        this.setState({testOpen: true, testRow: row, testing: false, testResult: null})
+        this.runTest(row)
+    }
+
+    runTest = (row = this.state.testRow) => {
+        if (!row) return
+        this.setState({testing: true, testResult: null})
+        HttpClient.get('admin/registry/test?id=' + encodeURIComponent(row.id))
+            .then(rs => this.setState({testResult: rs.data || null}))
+            .catch(() => {
+            })
+            .finally(() => this.setState({testing: false}))
+    }
+
+    getColumns = () => {
         const canViewPassword = PermUtils.hasPermission('registry:password')
-        const columns = [
-            {title: '地址', dataIndex: 'url'},
-            {title: '命名空间', dataIndex: 'namespace'},
-            {title: '用户名', dataIndex: 'username'},
-            {title: '凭据', dataIndex: 'passwordMasked', render: v => v ? '已配置' : '未配置'},
-            {title: '操作', key: 'action', render: (_, row) => <Space>
-                {canViewPassword && row.passwordMasked &&
-                    <Button type='link' onClick={() => this.viewPassword(row)}>查看密码</Button>}
-                <Button type='link' onClick={() => this.edit(row)}>编辑</Button>
-                <Popconfirm title='确定删除该注册中心？' description='默认注册中心需先到「系统管理 - 系统参数」中更换；已被项目使用的注册中心需先解除绑定。'
-                            onConfirm={() => this.remove(row.id)}>
-                    <Button type='link' danger>删除</Button>
-                </Popconfirm>
-            </Space>}
+
+        return [
+            {title: '地址', dataIndex: 'url', width: 280},
+            {title: '命名空间', dataIndex: 'namespace', width: 180},
+            {title: '用户名', dataIndex: 'username', width: 180, render: v => v || '-'},
+            {
+                title: '凭据',
+                dataIndex: 'passwordMasked',
+                width: 100,
+                render: v => v ? '已配置' : '未配置',
+            },
+            {title: '更新时间', dataIndex: 'updateTime', width: 165},
+            {
+                title: '操作',
+                width: 260,
+                render: (_, row) => {
+                    const actions = [
+                        {label: '测试', perm: 'registry:test', onClick: () => this.openTest(row)},
+                    ]
+                    if (canViewPassword && row.passwordMasked) {
+                        actions.push({label: '查看密码', onClick: () => this.viewPassword(row)})
+                    }
+                    actions.push(
+                        {label: '编辑', perm: 'registry:save', onClick: () => this.edit(row)},
+                        {
+                            label: '删除', perm: 'registry:save', danger: true,
+                            confirm: '确定删除该注册中心？默认注册中心需先到「系统管理 - 系统参数」中更换，已被项目使用的注册中心需先解除绑定。',
+                            onClick: () => this.remove(row.id),
+                        },
+                    )
+                    return <PermActions size='small' actions={actions}/>
+                },
+            },
         ]
+    }
+
+    render() {
+        const {modalOpen, editing, formValues, pwdOpen, pwdLoading, pwdRow, pwdValue,
+            testOpen, testRow, testing, testResult} = this.state
+
         return <Page padding>
-            <Card title='镜像注册中心' className='page-card'
-                  extra={<PermActions actions={[
-                      {label: '新增注册中心', perm: 'registry:save', type: 'primary', onClick: this.create},
-                  ]}/>}>
-                <Table rowKey='id' loading={loading} dataSource={rows} columns={columns} pagination={false}/>
-            </Card>
+            <ProTable
+                actionRef={this.tableRef}
+                searchInline
+                toolBarRightRender={() => (
+                    <PermActions actions={[
+                        {
+                            label: '新增注册中心', perm: 'registry:save', type: 'primary',
+                            icon: <PlusOutlined/>, onClick: this.create,
+                        },
+                    ]}/>
+                )}
+                searchFormRender={() => (
+                    <Form.Item name='searchText' noStyle>
+                        <Input prefix={<SearchOutlined/>} placeholder='搜索地址 / 命名空间 / 用户名' allowClear/>
+                    </Form.Item>
+                )}
+                request={(params) => HttpClient.get('admin/registry/page', params)}
+                columns={this.getColumns()}
+            />
+
             <Modal title={editing ? '编辑注册中心' : '新增注册中心'} open={modalOpen} destroyOnHidden
                    onCancel={() => this.setState({modalOpen: false})}
                    onOk={() => this.formRef.current?.submit()}>
@@ -94,6 +157,30 @@ export default class extends React.Component {
                     </Form.Item>
                 </Form>
             </Modal>
+
+            <Modal title='测试注册中心' open={testOpen} destroyOnHidden width={560}
+                   onCancel={() => this.setState({testOpen: false})}
+                   footer={[
+                       <Button key='close' onClick={() => this.setState({testOpen: false})}>关闭</Button>,
+                       <Button key='test' type='primary' loading={testing}
+                               onClick={() => this.runTest()}>重新测试</Button>,
+                   ]}>
+                <div style={{marginBottom: 12}}>
+                    <Typography.Text strong>{testRow?.url || ''}</Typography.Text>
+                    <Typography.Text type='secondary' style={{marginLeft: 8}}>
+                        {testRow?.namespace}{testRow?.username ? '，账号 ' + testRow.username : '，匿名'}
+                    </Typography.Text>
+                </div>
+                {testing && <div style={{marginBottom: 12}}><Spin/> <Typography.Text type='secondary'>正在测试…</Typography.Text></div>}
+                {testResult &&
+                    <Alert type={testResult.ok ? 'success' : 'error'} showIcon
+                           message={testResult.ok ? '测试通过' : '测试失败'}
+                           description={<div>
+                               <div>{testResult.message}</div>
+                               <Typography.Text type='secondary'>耗时 {testResult.elapsedMs} ms</Typography.Text>
+                           </div>}/>}
+            </Modal>
+
             <Modal title='查看密码' open={pwdOpen} destroyOnHidden
                    onCancel={() => this.setState({pwdOpen: false})}
                    footer={<Button onClick={() => this.setState({pwdOpen: false})}>关闭</Button>}>
