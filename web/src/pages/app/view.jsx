@@ -444,6 +444,12 @@ export default class extends React.Component {
 
         const items = [
             {
+                key: 'deployLog',
+                label: '部署日志',
+                children: <DeployLogList key={'deployLog-' + tabTokens.deployLog} appId={app.id}
+                                         deploying={container?.state === 'deploying'}/>
+            },
+            {
                 key: 'containerLog',
                 label: '容器日志',
                 children: container && container.id
@@ -467,12 +473,6 @@ export default class extends React.Component {
                 children: <PublishForm key={'deploy-' + tabTokens.deploy} appId={app.id}
                                        containerState={container?.state}
                                        onChange={this.handleChanged}/>
-            },
-            {
-                key: 'deployLog',
-                label: '部署日志',
-                children: <DeployLogList key={'deployLog-' + tabTokens.deployLog} appId={app.id}
-                                         deploying={container?.state === 'deploying'}/>
             },
             {
                 key: 'setting',
