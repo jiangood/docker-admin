@@ -1,9 +1,14 @@
 package io.github.jiangood.docker.admin.controller;
 
 import io.github.jiangood.docker.admin.config.DockerSettings;
+import io.github.jiangood.docker.admin.dto.ConvertToAppRequest;
+import io.github.jiangood.docker.admin.dto.ConvertToAppVo;
+import io.github.jiangood.docker.admin.entity.App;
+import io.github.jiangood.docker.admin.entity.DeployTrigger;
 import io.github.jiangood.docker.admin.entity.Host;
 import io.github.jiangood.docker.admin.dto.ContainerFileVo;
 import io.github.jiangood.docker.admin.dto.ContainerFileWriteRequest;
+import io.github.jiangood.docker.admin.service.AppService;
 import io.github.jiangood.docker.admin.service.ContainerService;
 import io.github.jiangood.docker.admin.service.HostService;
 import io.github.jiangood.docker.admin.util.ContainerPermTool;
@@ -13,7 +18,9 @@ import io.github.jiangood.openadmin.util.BusinessException;
 import io.github.jiangood.openadmin.util.dto.AjaxResult;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.Valid;
 import org.springframework.util.Assert;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -35,6 +42,9 @@ public class ContainerController {
 
     @Resource
     private ContainerService containerService;
+
+    @Resource
+    private AppService appService;
 
     @Resource
     private DockerLogService dockerLogService;
@@ -60,6 +70,48 @@ public class ContainerController {
         Host host = requireHost(hostId);
         Assert.hasText(containerId, "containerId 不能为空");
         return AjaxResult.ok().data(containerService.inspect(host, containerId));
+    }
+
+    // ------------------------------------------------------------ 转为应用
+
+    /**
+     * 「容器转为应用」的预填数据：按容器 inspect 生成应用草稿与提示信息。
+     */
+    @HasPermission("app:save")
+    @RequestMapping("appDraft")
+    public AjaxResult appDraft(String hostId, String containerId) {
+        // 容器来自主机 / 应用详情，仍需具备对应的查看权限
+        ContainerPermTool.assertView();
+        Host host = requireHost(hostId);
+        Assert.hasText(containerId, "containerId 不能为空");
+        ConvertToAppVo draft = appService.draftFromContainer(host, containerId);
+        return AjaxResult.ok().data(draft);
+    }
+
+    /**
+     * 把已存在的容器登记为平台应用。
+     * <p>
+     * 默认保留当前容器（只建立关联，不重启）；选择「重建容器」时会按应用配置重新部署，
+     * 因此额外要求 {@code app:deploy} 权限。
+     */
+    @HasPermission("app:save")
+    @PostMapping("convertToApp")
+    public AjaxResult convertToApp(@RequestBody @Valid ConvertToAppRequest request) {
+        ContainerPermTool.assertView();
+        Assert.notNull(request.getApp(), "应用信息不能为空");
+        boolean recreate = Boolean.TRUE.equals(request.getRecreate());
+        if (recreate && !ContainerPermTool.has("app:deploy")) {
+            throw new AccessDeniedException("缺少应用部署权限，无法在转换后重建容器");
+        }
+
+        Host host = requireHost(request.getHostId());
+        App saved = appService.convertToApp(request.getApp(), host, request.getContainerId());
+        if (recreate) {
+            appService.deploy(saved, false, DeployTrigger.ADOPT);
+        }
+        return AjaxResult.ok()
+                .msg(recreate ? "已转为应用，正在按配置重建容器" : "已转为应用")
+                .data(saved);
     }
 
     /**

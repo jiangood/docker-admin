@@ -4,6 +4,7 @@ import {DeleteOutlined, ExportOutlined, ImportOutlined, ReloadOutlined} from '@a
 import {HttpClient, Page, PageUtils, PermUtils} from "@jiangood/open-admin"
 import HostImageExportModal from "../../components/HostImageExportModal"
 import HostImageImportModal from "../../components/HostImageImportModal"
+import ConvertToAppModal from "../../components/ConvertToAppModal"
 import LinkButton from "../../components/LinkButton"
 import {
     formatBytes,
@@ -104,6 +105,9 @@ export default class extends React.Component {
         pruneLoading: false,
         // 清理构建临时容器同样要逐个 inspect / 删除，按钮单独 loading
         pruneContainersLoading: false,
+
+        // 「容器转为应用」弹窗的目标容器
+        convertTarget: null,
 
         // 实时用量（docker stats）：每次轮询都让后端现采一轮，不用定时任务的快照
         usage: null,
@@ -311,6 +315,17 @@ export default class extends React.Component {
     }
 
     /**
+     * 打开「容器转为应用」弹窗：把历史遗留 / 手工创建的容器登记为应用。
+     * 默认不重启容器，也可在弹窗里勾选按配置重建。
+     */
+    openConvertToApp = record => {
+        if (!record) {
+            return
+        }
+        this.setState({convertTarget: record})
+    }
+
+    /**
      * 刷新当前 Tab：容器 / 镜像 / 监控的数据在父组件 state 里，重取一次即可。
      */
     refreshTab = () => {
@@ -456,6 +471,7 @@ export default class extends React.Component {
         const canContainerFile = PermUtils.hasPermission('container:file')
         const canContainerExec = PermUtils.hasPermission('container:exec')
         const canContainerOperate = PermUtils.hasPermission('container:operate')
+        const canAppSave = PermUtils.hasPermission('app:save')
 
         const containerColumns = [
             {
@@ -481,9 +497,10 @@ export default class extends React.Component {
             },
             {title: '创建时间', dataIndex: 'created', width: 170, render: v => formatTime(v)},
             {
-                // 四个入口都跳转到容器详情页：详情 / 日志只需查看权限（host:list），
-                // 文件 / 终端分别要求 container:file / container:exec；停止 / 删除在容器页里做
-                title: '操作', width: 170,
+                // 详情 / 日志只需查看权限（host:list），文件 / 终端分别要求
+                // container:file / container:exec，转为应用要求 app:save；
+                // 停止 / 删除在容器页里做
+                title: '操作', width: 280,
                 render: (_, record) => <Space size={4}>
                     <LinkButton size='small'
                                 onClick={() => this.openContainer(record, 'info')}>详情</LinkButton>
@@ -495,6 +512,9 @@ export default class extends React.Component {
                     {canContainerExec &&
                         <LinkButton size='small'
                                     onClick={() => this.openContainer(record, 'console')}>终端</LinkButton>}
+                    {canAppSave &&
+                        <LinkButton size='small'
+                                    onClick={() => this.openConvertToApp(record)}>转为应用</LinkButton>}
                 </Space>
             },
         ]
@@ -676,6 +696,19 @@ export default class extends React.Component {
                                   }}/>
 
             <HostImageExportModal ref={this.exportModalRef} hostId={this.state.id}/>
+
+            <ConvertToAppModal open={!!this.state.convertTarget}
+                               hostId={this.state.id}
+                               containerId={this.state.convertTarget?.id}
+                               onCancel={() => this.setState({convertTarget: null})}
+                               onSuccess={() => {
+                                   const id = this.state.id
+                                   // 选择重建时旧容器会被异步停止 / 删除，稍后刷新列表
+                                   setTimeout(() => {
+                                       this.loadContainers(id)
+                                       this.loadInfo(id)
+                                   }, 1500)
+                               }}/>
         </Page>
     }
 }

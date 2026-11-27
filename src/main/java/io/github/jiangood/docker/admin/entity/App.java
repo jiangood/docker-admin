@@ -116,6 +116,17 @@ public class App extends BaseEntity {
     @Convert(converter = AppConfigConverter.class)
     AppConfig config;
 
+    /**
+     * 「转为应用」接管的容器 id。
+     * <p>
+     * 平台创建的应用容器带 {@code app.name} 标签，按标签即可找到；而手工 / 历史遗留的容器
+     * 没有该标签（甚至容器名不符合应用名规则），只能先按 id 关联。下一次成功部署会写入平台
+     * 标签并清空该字段，此后完全按标签 + 容器名管理。
+     */
+    @Remark("接管容器ID")
+    @Column(length = 100)
+    String adoptedContainerId;
+
     @Remark("备注")
     String remark;
 

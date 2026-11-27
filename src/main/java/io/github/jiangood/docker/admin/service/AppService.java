@@ -5,6 +5,8 @@ import cn.hutool.extra.spring.SpringUtil;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.command.CreateContainerCmd;
 import com.github.dockerjava.api.command.CreateContainerResponse;
+import com.github.dockerjava.api.command.InspectContainerResponse;
+import com.github.dockerjava.api.command.InspectContainerResponse.Mount;
 import com.github.dockerjava.api.exception.NotFoundException;
 import com.github.dockerjava.api.model.*;
 import io.github.jiangood.docker.admin.BuildSuccessEvent;
@@ -13,6 +15,7 @@ import io.github.jiangood.docker.admin.dao.AppRepository;
 import io.github.jiangood.docker.admin.dao.DeployLogRepository;
 import io.github.jiangood.docker.admin.dao.HostRepository;
 import io.github.jiangood.docker.admin.dto.ContainerVo;
+import io.github.jiangood.docker.admin.dto.ConvertToAppVo;
 import io.github.jiangood.docker.admin.dto.ImageConfigMetaVo;
 import io.github.jiangood.docker.admin.entity.App;
 import io.github.jiangood.docker.admin.entity.BuildLog;
@@ -74,6 +77,9 @@ public class AppService extends BaseService<App> {
     /** 部署前探测 bind 源目录的超时（仅本机部署时探测） */
     private static final Duration BIND_CHECK_TIMEOUT = Duration.ofSeconds(5);
 
+    /** 「转为应用」读取容器 inspect 的兜底超时 */
+    private static final Duration CONTAINER_INSPECT_TIMEOUT = Duration.ofSeconds(30);
+
     /**
      * 定时更新检查的兜底超时。平台只读注册中心的 manifest，通常几秒内返回；
      * 注册中心不可达时不能把 Quartz 线程一直挂住。
@@ -128,6 +134,423 @@ public class AppService extends BaseService<App> {
             saved = update(input, updateFields);
         }
         return saved;
+    }
+
+    // ---------------- 容器转为应用 ----------------
+
+    /**
+     * 按容器 inspect 结果生成「转为应用」的预填应用。
+     * <p>
+     * 只读容器，不改动任何运行状态；端口 / 目录 / 环境变量 / 标签 / 设备请求等尽量还原，
+     * 无法还原的配置以 warnings 返回给前端提示。
+     */
+    public ConvertToAppVo draftFromContainer(Host host, String containerId) {
+        Assert.notNull(host, "主机不存在");
+        Assert.hasText(containerId, "containerId 不能为空");
+
+        DockerClient client = dockerManager.getClient(host);
+        try {
+            InspectContainerResponse inspect = dockerManager.callWithTimeout(CONTAINER_INSPECT_TIMEOUT,
+                    "读取容器 " + containerId,
+                    () -> client.inspectContainerCmd(containerId).exec());
+            return buildDraft(host, inspect, client);
+        } finally {
+            IOUtils.closeQuietly(client);
+        }
+    }
+
+    /**
+     * 把一个已经存在的容器登记为平台应用（不重启容器）。
+     * <p>
+     * 只接受用户可编辑的字段（名称 / 镜像 / 组织 / 备注 / 容器配置），主机与容器 id
+     * 一律以服务端参数为准，避免前端伪造其它主机或容器。新应用通过
+     * {@link App#getAdoptedContainerId()} 关联当前容器，下一次部署成功后自动清空。
+     */
+    @Transactional
+    public App convertToApp(App input, Host host, String containerId) {
+        Assert.notNull(input, "应用信息不能为空");
+        Assert.notNull(host, "主机不存在");
+        Assert.hasText(containerId, "containerId 不能为空");
+
+        DockerClient client = dockerManager.getClient(host);
+        InspectContainerResponse inspect;
+        try {
+            inspect = dockerManager.callWithTimeout(CONTAINER_INSPECT_TIMEOUT,
+                    "读取容器 " + containerId,
+                    () -> client.inspectContainerCmd(containerId).exec());
+        } finally {
+            IOUtils.closeQuietly(client);
+        }
+
+        String containerName = firstNameFromInspect(inspect.getName());
+        String name = StrUtil.trim(input.getName());
+        if (StrUtil.isBlank(name)) {
+            name = deriveAppName(containerName, input.getImageUrl());
+        }
+        Assert.isTrue(StrUtil.isNotBlank(name) && Character.isLetter(name.charAt(0)),
+                "应用名称必须以字母开头");
+        Assert.isTrue(!appRepository.existsByName(name), "应用名称已存在：" + name);
+
+        ContainerConfig cfg = inspect.getConfig();
+        String managedName = cfg == null || cfg.getLabels() == null ? null : cfg.getLabels().get("app.name");
+        if (StrUtil.isNotBlank(managedName) && appRepository.existsByName(managedName)) {
+            throw new BusinessException("该容器已由应用「" + managedName + "」管理，无需重复转换");
+        }
+        if (StrUtil.isNotBlank(containerName) && !containerName.equals(name)
+                && appRepository.existsByName(containerName)) {
+            throw new BusinessException("容器名「" + containerName
+                    + "」已被其它应用占用，转换为其它名称会导致两个应用管理同一容器，请先处理该应用");
+        }
+
+        App app = new App();
+        app.setName(name);
+        app.setHost(host);
+        app.setImageUrl(StrUtil.trimToNull(input.getImageUrl()));
+        Assert.hasText(app.getImageUrl(), "镜像地址不能为空");
+        app.setImageTag(StrUtil.blankToDefault(StrUtil.trimToNull(input.getImageTag()), LATEST_TAG));
+        app.setSysOrg(input.getSysOrg());
+        app.setRemark(input.getRemark());
+        App.AppConfig config = input.getConfig() == null ? new App.AppConfig() : input.getConfig();
+        normalizeConfig(config);
+        app.setConfig(config);
+        // 先按容器 id 关联：旧容器没有 app.name 标签、名称也可能被用户改过
+        app.setAdoptedContainerId(inspect.getId());
+
+        return saveApp(app, null);
+    }
+
+    private ConvertToAppVo buildDraft(Host host, InspectContainerResponse inspect, DockerClient client) {
+        ConvertToAppVo vo = new ConvertToAppVo();
+        vo.setContainerId(inspect.getId());
+        String containerName = firstNameFromInspect(inspect.getName());
+        vo.setContainerName(containerName);
+        if (inspect.getState() != null) {
+            vo.setContainerState(inspect.getState().getStatus());
+        }
+
+        List<String> warnings = vo.getWarnings();
+        ContainerConfig cfg = inspect.getConfig();
+        HostConfig hc = inspect.getHostConfig();
+
+        String imageRef = resolveImageRef(client, inspect, cfg, warnings);
+        String imageUrl = "";
+        String imageTag = LATEST_TAG;
+        if (StrUtil.isNotBlank(imageRef)) {
+            if (imageRef.contains("@")) {
+                imageUrl = StrUtil.subBefore(imageRef, "@", false);
+                warnings.add("容器使用 digest 固定镜像，应用只保存 tag，已按 latest 处理");
+            } else if (!imageRef.startsWith("sha256:")) {
+                imageUrl = ImageUrlUtils.repoOf(imageRef);
+                imageTag = StrUtil.blankToDefault(ImageUrlUtils.tagOf(imageRef), LATEST_TAG);
+            }
+        }
+
+        App app = new App();
+        app.setHost(host);
+        app.setName(deriveAppName(containerName, imageUrl));
+        app.setImageUrl(imageUrl);
+        app.setImageTag(imageTag);
+
+        App.AppConfig config = new App.AppConfig();
+        if (hc != null) {
+            config.setNetworkMode(StrUtil.blankToDefault(hc.getNetworkMode(), "bridge"));
+            // extraHosts 在应用里是空格分隔的一行文本
+            if (hc.getExtraHosts() != null && hc.getExtraHosts().length > 0) {
+                config.setExtraHosts(String.join(" ", hc.getExtraHosts()));
+            }
+            String networkMode = hc.getNetworkMode();
+            if (networkMode != null && networkMode.startsWith("container:")) {
+                warnings.add("容器共享了其他容器的网络命名空间（" + networkMode + "），重新部署后需确保目标容器仍存在");
+            } else if (StrUtil.isNotBlank(networkMode)
+                    && !"bridge".equals(networkMode) && !"host".equals(networkMode)
+                    && !"none".equals(networkMode) && !"default".equals(networkMode)) {
+                warnings.add("容器使用自定义网络「" + networkMode
+                        + "」，应用不会创建网络，重新部署前需确保该网络仍然存在");
+            }
+            RestartPolicy rp = hc.getRestartPolicy();
+            if (rp != null && StrUtil.isNotBlank(rp.getName()) && !"no".equals(rp.getName())) {
+                String policy = rp.getName();
+                if (rp.getMaximumRetryCount() != null && rp.getMaximumRetryCount() > 0) {
+                    policy = policy + ":" + rp.getMaximumRetryCount();
+                }
+                if (!"on-failure:5".equals(policy)) {
+                    warnings.add("容器重启策略为 " + policy + "，平台应用统一使用 on-failure:5，重新部署后会改为该值");
+                }
+            }
+            if (hc.getDeviceRequests() != null && !hc.getDeviceRequests().isEmpty()) {
+                for (DeviceRequest dr : hc.getDeviceRequests()) {
+                    App.DeviceRequest item = new App.DeviceRequest();
+                    item.setDriver(dr.getDriver());
+                    item.setCount(dr.getCount());
+                    item.setCapabilities(dr.getCapabilities());
+                    config.getDeviceRequests().add(item);
+                }
+            }
+        }
+        config.setPorts(portsOf(inspect));
+        config.setBinds(bindsOf(inspect, warnings));
+        config.setEnvs(envsOf(cfg));
+        config.setLabels(labelsOf(cfg, warnings));
+
+        if (cfg != null && cfg.getLabels() != null
+                && cfg.getLabels().containsKey(HostAgentService.LABEL_AGENT)) {
+            warnings.add("该容器是「主机 Agent」辅助容器，转为应用后可能与 Agent 的部署 / 更新功能冲突");
+        }
+
+        if (cfg != null) {
+            String[] cmd = cfg.getCmd();
+            if (cmd != null && cmd.length > 0) {
+                boolean spaced = Arrays.stream(cmd).anyMatch(s -> s != null && s.contains(" "));
+                if (spaced) {
+                    warnings.add("启动命令包含带空格的参数，应用按空格拆分保存，重新部署后可能改变语义");
+                }
+                config.setCmd(String.join(" ", cmd));
+            }
+            if (cfg.getEntrypoint() != null && cfg.getEntrypoint().length > 0) {
+                warnings.add("容器使用自定义 entrypoint（" + String.join(" ", cfg.getEntrypoint())
+                        + "），应用配置不支持 entrypoint，重新部署时以镜像默认值为准");
+            }
+
+            List<String> unsupported = new ArrayList<>();
+            if (StrUtil.isNotBlank(cfg.getHostName())) {
+                unsupported.add("hostname=" + cfg.getHostName());
+            }
+            if (StrUtil.isNotBlank(cfg.getUser())) {
+                unsupported.add("user=" + cfg.getUser());
+            }
+            if (StrUtil.isNotBlank(cfg.getWorkingDir())) {
+                unsupported.add("workingDir=" + cfg.getWorkingDir());
+            }
+            if (!unsupported.isEmpty()) {
+                warnings.add("以下配置不在应用配置中，重新部署时不会保留：" + String.join("，", unsupported));
+            }
+        }
+        app.setConfig(config);
+        vo.setApp(app);
+
+        String managedName = cfg == null || cfg.getLabels() == null ? null : cfg.getLabels().get("app.name");
+        if (StrUtil.isNotBlank(managedName) && appRepository.existsByName(managedName)) {
+            vo.setManagedAppName(managedName);
+            warnings.add("该容器已由应用「" + managedName + "」管理，无需重复转换");
+        } else {
+            if (StrUtil.isNotBlank(managedName)) {
+                warnings.add("容器带有平台标签 app.name=" + managedName
+                        + "，但应用记录已不存在，转换后可直接恢复管理");
+            }
+            if (StrUtil.isNotBlank(containerName) && !containerName.equals(app.getName())
+                    && appRepository.existsByName(containerName)) {
+                // 容器名与应用名不同时，若已有同名应用，两个应用会同时按名称命中这个容器
+                vo.setManagedAppName(containerName);
+                warnings.add("已存在与容器同名的应用「" + containerName
+                        + "」，为避免两个应用管理同一容器，请先处理该应用");
+            } else {
+                if (StrUtil.isNotBlank(app.getName()) && appRepository.existsByName(app.getName())) {
+                    warnings.add("应用名称「" + app.getName() + "」已被占用，请修改名称");
+                }
+                if (StrUtil.isNotBlank(containerName) && !containerName.equals(app.getName())) {
+                    warnings.add("容器名不符合应用名规则（需字母开头），已自动改为「" + app.getName()
+                            + "」，平台仍按容器 ID 接管");
+                }
+            }
+        }
+
+        return vo;
+    }
+
+    /**
+     * 解析容器使用的镜像引用：优先 config.image，容器按镜像 ID 启动时从本地镜像的 RepoTags 兜底。
+     */
+    private String resolveImageRef(DockerClient client, InspectContainerResponse inspect,
+                                   ContainerConfig cfg, List<String> warnings) {
+        String ref = cfg == null ? null : StrUtil.trimToNull(cfg.getImage());
+        if (StrUtil.isNotBlank(ref) && !ref.startsWith("sha256:")) {
+            return ref;
+        }
+        try {
+            var image = client.inspectImageCmd(inspect.getImageId()).exec();
+            if (image.getRepoTags() != null) {
+                for (String tag : image.getRepoTags()) {
+                    if (StrUtil.isNotBlank(tag) && !"<none>:<none>".equals(tag)) {
+                        return tag;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.debug("读取容器 {} 的镜像信息失败: {}", inspect.getId(), e.getMessage());
+        }
+        warnings.add("无法确定容器镜像的仓库与版本（可能是本地构建的镜像），请手动填写镜像地址与版本");
+        return ref;
+    }
+
+    /** 容器名称去掉 inspect 返回值的前导斜杠。 */
+    private static String firstNameFromInspect(String name) {
+        if (name == null) {
+            return "";
+        }
+        return name.startsWith("/") ? name.substring(1) : name;
+    }
+
+    /**
+     * 由容器名推导应用名：平台要求字母开头，容器名以数字等开头时补 {@code app-} 前缀；
+     * 容器名没有可用字符时退回镜像名，仍为空则用 app。
+     */
+    private static String deriveAppName(String containerName, String imageUrl) {
+        String name = StrUtil.trim(StrUtil.nullToEmpty(containerName));
+        if (StrUtil.isNotBlank(name)) {
+            return Character.isLetter(name.charAt(0)) ? name : "app-" + name;
+        }
+        String last = StrUtil.nullToEmpty(imageUrl).split("@")[0];
+        last = last.substring(last.lastIndexOf('/') + 1);
+        int colon = last.lastIndexOf(':');
+        if (colon >= 0) {
+            last = last.substring(0, colon);
+        }
+        last = StrUtil.trim(last);
+        if (StrUtil.isBlank(last)) {
+            return "app";
+        }
+        return Character.isLetter(last.charAt(0)) ? last : "app-" + last;
+    }
+
+    /**
+     * 端口映射：以 HostConfig.portBindings 为准，未绑定的声明端口也保留（重建时会继续暴露）。
+     */
+    private static List<App.PortBinding> portsOf(InspectContainerResponse inspect) {
+        Map<String, App.PortBinding> ports = new LinkedHashMap<>();
+
+        HostConfig hc = inspect.getHostConfig();
+        if (hc != null && hc.getPortBindings() != null && hc.getPortBindings().getBindings() != null) {
+            for (Map.Entry<ExposedPort, Ports.Binding[]> entry : hc.getPortBindings().getBindings().entrySet()) {
+                ExposedPort ep = entry.getKey();
+                Ports.Binding[] bindings = entry.getValue();
+                if (bindings == null || bindings.length == 0) {
+                    portBinding(ports, ep, null);
+                } else {
+                    for (Ports.Binding binding : bindings) {
+                        portBinding(ports, ep, parsePort(binding.getHostPortSpec()));
+                    }
+                }
+            }
+        }
+        ContainerConfig cfg = inspect.getConfig();
+        if (cfg != null && cfg.getExposedPorts() != null) {
+            for (ExposedPort ep : cfg.getExposedPorts()) {
+                portBinding(ports, ep, null);
+            }
+        }
+        return new ArrayList<>(ports.values());
+    }
+
+    private static void portBinding(Map<String, App.PortBinding> ports, ExposedPort ep, Integer publicPort) {
+        if (ep == null) {
+            return;
+        }
+        String protocol = ep.getProtocol() == null ? "tcp" : ep.getProtocol().toString();
+        String key = ep.getPort() + "/" + protocol;
+        App.PortBinding binding = ports.computeIfAbsent(key, k -> {
+            App.PortBinding item = new App.PortBinding();
+            item.setPrivatePort(ep.getPort());
+            item.setProtocol(protocol);
+            return item;
+        });
+        if (publicPort != null) {
+            binding.setPublicPort(publicPort);
+        }
+    }
+
+    private static Integer parsePort(String spec) {
+        if (StrUtil.isBlank(spec)) {
+            return null;
+        }
+        try {
+            return Integer.parseInt(spec.trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    /**
+     * 目录挂载：只保留 bind 类型；命名卷无法用应用的文件映射表达，跳过并提示。
+     */
+    private static List<App.BindConfig> bindsOf(InspectContainerResponse inspect, List<String> warnings) {
+        List<App.BindConfig> binds = new ArrayList<>();
+        List<String> namedVolumes = new ArrayList<>();
+        if (inspect.getMounts() == null) {
+            return binds;
+        }
+        for (Mount mount : inspect.getMounts()) {
+            String destination = mount.getDestination() == null ? null : mount.getDestination().getPath();
+            if (StrUtil.isBlank(destination)) {
+                continue;
+            }
+            if (StrUtil.isNotBlank(mount.getName())) {
+                namedVolumes.add(mount.getName() + " → " + destination);
+                continue;
+            }
+            if (StrUtil.isBlank(mount.getSource())) {
+                continue;
+            }
+            App.BindConfig bind = new App.BindConfig();
+            bind.setPublicVolume(mount.getSource());
+            bind.setPrivateVolume(destination);
+            bind.setReadOnly(mount.getRW() == null ? null : !mount.getRW());
+            binds.add(bind);
+        }
+        if (!namedVolumes.isEmpty()) {
+            warnings.add("容器使用了命名卷（" + String.join("，", namedVolumes)
+                    + "），应用配置只支持主机目录挂载，重新部署后不会复用这些卷");
+        }
+        return binds;
+    }
+
+    private static List<App.EnvVar> envsOf(ContainerConfig cfg) {
+        List<App.EnvVar> envs = new ArrayList<>();
+        if (cfg == null || cfg.getEnv() == null) {
+            return envs;
+        }
+        for (String item : cfg.getEnv()) {
+            if (StrUtil.isBlank(item)) {
+                continue;
+            }
+            int eq = item.indexOf('=');
+            if (eq <= 0) {
+                continue;
+            }
+            App.EnvVar env = new App.EnvVar();
+            env.setName(item.substring(0, eq));
+            env.setValue(item.substring(eq + 1));
+            envs.add(env);
+        }
+        return envs;
+    }
+
+    /**
+     * 容器标签：跳过平台编排标签与 Compose 自身标签，其余按用户标签导入。
+     */
+    private static List<App.Label> labelsOf(ContainerConfig cfg, List<String> warnings) {
+        List<App.Label> labels = new ArrayList<>();
+        if (cfg == null || cfg.getLabels() == null) {
+            return labels;
+        }
+        boolean compose = false;
+        for (Map.Entry<String, String> entry : cfg.getLabels().entrySet()) {
+            String key = entry.getKey();
+            if (StrUtil.isBlank(key) || "app.name".equals(key)) {
+                continue;
+            }
+            if (key.startsWith("com.docker.compose.")) {
+                compose = true;
+                continue;
+            }
+            App.Label label = new App.Label();
+            label.setName(key);
+            label.setValue(entry.getValue());
+            labels.add(label);
+        }
+        if (compose) {
+            warnings.add("容器由 Docker Compose 创建，Compose 自身标签不会导入；重新部署后该容器将不再属于原 Compose 项目");
+        }
+        return labels;
     }
 
     @Async
@@ -230,7 +653,7 @@ public class AppService extends BaseService<App> {
             List<String> volumePaths = volumesFromConfig(cfg);
 
 
-            List<Container> containers = getContainer(app.getName(), client);
+            List<Container> containers = getContainer(app, client);
 
 
             for (Container container : containers) {
@@ -418,6 +841,18 @@ public class AppService extends BaseService<App> {
             // 之前记录保存失败会在 finally 里再次抛出，后面的 remove 永远执行不到，
             // 应用会一直卡在「部署中」，定时更新也从下一轮开始被永久跳过。
             try {
+                // 部署成功说明新容器已经写入平台标签，接管容器 id 不再需要
+                if (success) {
+                    try {
+                        App latest = appRepository.findById(appId).orElse(null);
+                        if (latest != null && StrUtil.isNotBlank(latest.getAdoptedContainerId())) {
+                            latest.setAdoptedContainerId(null);
+                            appRepository.save(latest);
+                        }
+                    } catch (Exception e) {
+                        log.warn("清理应用 {} 的接管容器 id 失败", appId, e);
+                    }
+                }
                 if (logSaved) {
                     deployLog.setSuccess(success);
                     deployLog.setCompleteTime(LocalDateTime.now());
@@ -519,7 +954,7 @@ public class AppService extends BaseService<App> {
                 // 容器查询要兜底超时：后台任务不能被单个失联主机卡住
                 Container container = dockerManager.callWithTimeout(SCHEDULED_UPDATE_QUERY_TIMEOUT,
                         "查询容器 " + app.getName(),
-                        () -> getContainer(app.getName(), client).stream().findFirst().orElse(null));
+                        () -> getContainer(app, client).stream().findFirst().orElse(null));
 
                 if (container == null) {
                     message = "容器未部署，跳过";
@@ -700,7 +1135,7 @@ public class AppService extends BaseService<App> {
 
         DockerClient client = dockerManager.getClient(app.getHost());
         try {
-            List<Container> list = getContainer(app.getName(), client);
+            List<Container> list = getContainer(app, client);
             int stopGraceSeconds = dockerSettings.graceSeconds();
 
             for (Container container : list) {
@@ -720,7 +1155,7 @@ public class AppService extends BaseService<App> {
 
         DockerClient client = dockerManager.getClient(app.getHost());
         try {
-            List<Container> list = getContainer(app.getName(), client);
+            List<Container> list = getContainer(app, client);
 
             for (Container container : list) {
                 client.startContainerCmd(container.getId()).exec();
@@ -747,12 +1182,50 @@ public class AppService extends BaseService<App> {
         return saved;
     }
 
-    private List<Container> getContainer(String name, DockerClient client) {
+    /**
+     * 应用对应的容器。
+     * <p>
+     * 正常应用按平台标签 {@code app.name} 定位；「转为应用」接管的旧容器没有该标签，
+     * 因此再按容器名兜底，最后按接管时记录的容器 id 精确定位。
+     */
+    private List<Container> getContainer(App app, DockerClient client) {
+        String name = app.getName();
+        String adoptedId = app.getAdoptedContainerId();
+        if (StrUtil.isNotBlank(adoptedId)) {
+            List<Container> adopted = client.listContainersCmd()
+                    .withIdFilter(List.of(adoptedId))
+                    .withShowAll(true).exec();
+            if (!adopted.isEmpty()) {
+                return adopted;
+            }
+            // 接管的容器已不在（可能刚被重新部署替换），继续按标签 / 名称查找
+        }
+
         Map<String, String> labels = dockerManager.getAppLabelFilter(name);
-        List<Container> list = client.listContainersCmd()
+        List<Container> byLabel = client.listContainersCmd()
                 .withLabelFilter(labels)
                 .withShowAll(true).exec();
-        return list;
+        if (!byLabel.isEmpty()) {
+            return byLabel;
+        }
+
+        // 兼容没有平台标签的同名容器（转为应用时、标签写入之前）
+        List<Container> all = client.listContainersCmd().withShowAll(true).exec();
+        List<Container> matched = new ArrayList<>();
+        for (Container c : all) {
+            if (name.equals(firstName(c.getNames()))) {
+                matched.add(c);
+            }
+        }
+        return matched;
+    }
+
+    private static String firstName(String[] names) {
+        if (names == null || names.length == 0) {
+            return null;
+        }
+        String name = names[0];
+        return name != null && name.startsWith("/") ? name.substring(1) : name;
     }
 
 
@@ -771,23 +1244,14 @@ public class AppService extends BaseService<App> {
 
     public Container getContainer(App app) {
         DockerClient client = dockerManager.getClient(app.getHost());
-
-        String name = app.getName();
-
-        Map<String, String> labels = dockerManager.getAppLabelFilter(name);
         try {
-
-
-            List<Container> list = client.listContainersCmd().withLabelFilter(labels).withShowAll(true).exec();
-            if (!list.isEmpty()) {
-                return list.get(0);
-            }
+            List<Container> list = getContainer(app, client);
+            return list.isEmpty() ? null : list.get(0);
         } catch (Exception e) {
             throw new BusinessException("查询容器状态失败", e);
         } finally {
             IOUtils.closeQuietly(client);
         }
-        return null;
     }
 
     @Transactional
@@ -832,8 +1296,7 @@ public class AppService extends BaseService<App> {
     private void deleteContainer(App app) {
         DockerClient client = dockerManager.getClient(app.getHost());
         try {
-            Map<String, String> labels = dockerManager.getAppLabelFilter(app.getName());
-            List<Container> list = client.listContainersCmd().withLabelFilter(labels).withShowAll(true).exec();
+            List<Container> list = getContainer(app, client);
             log.info("已有容器个数 {}", list.size());
             int stopGraceSeconds = dockerSettings.graceSeconds();
 
@@ -1154,7 +1617,7 @@ public class AppService extends BaseService<App> {
     private App buildCopiedApp(App app, String newName, Host host) {
         App newApp = new App();
         BeanUtils.copyProperties(app, newApp, "id", "name", "host", "createUser", "createTime",
-                "updateUser", "updateTime", "logUrl", "config",
+                "updateUser", "updateTime", "logUrl", "config", "adoptedContainerId",
                 // 复制出来的应用默认不开启定时更新，避免多出一份没人预期的自动拉取；间隔偏好保留
                 "scheduledUpdate", "scheduledUpdateLastCheckTime",
                 "scheduledUpdateLastSuccess", "scheduledUpdateLastResult");

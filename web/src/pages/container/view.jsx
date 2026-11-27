@@ -7,6 +7,7 @@ import ContainerConfig from '../../components/container/ContainerConfig'
 import ContainerLogs from '../../components/container/ContainerLogs'
 import ContainerFiles from '../../components/container/ContainerFiles'
 import ContainerConsole from '../../components/container/ContainerConsole'
+import ConvertToAppModal from '../../components/ConvertToAppModal'
 import {formatRunningDuration, formatTime, isRunningState, stateColor, stateLabel, wsContainerLogPath} from '../../components/container/utils'
 
 export const pageMeta = {
@@ -49,6 +50,9 @@ export default class extends React.Component {
 
         // 容器操作按钮的 loading 状态：'start' / 'stop' / 'restart' / null
         actionLoading: null,
+
+        // 「容器转为应用」弹窗
+        convertOpen: false,
     }
 
     componentDidMount() {
@@ -178,6 +182,7 @@ export default class extends React.Component {
 
         const runningDuration = running ? formatRunningDuration(detail.startedAt) : null
         const canOperate = PermUtils.hasPermission('container:operate')
+        const canAppSave = !appId && PermUtils.hasPermission('app:save')
 
         const header = <Card size='small' className='mb-3' styles={{body: {padding: '12px 16px'}}}>
             <div style={{
@@ -213,6 +218,8 @@ export default class extends React.Component {
                         <Button size='small' danger disabled={!!actionLoading}
                                 onClick={this.openRemoveModal}>删除</Button>
                     </>}
+                    {canAppSave &&
+                        <Button size='small' onClick={() => this.setState({convertOpen: true})}>转为应用</Button>}
                     <Button size='small' icon={<ReloadOutlined/>} onClick={this.load}>刷新</Button>
                 </Space>
             </div>
@@ -285,6 +292,11 @@ export default class extends React.Component {
                     </Checkbox>
                 </>}
             </Modal>
+
+            <ConvertToAppModal open={this.state.convertOpen}
+                               hostId={hostId}
+                               containerId={targetId}
+                               onCancel={() => this.setState({convertOpen: false})}/>
         </Page>
     }
 }

@@ -31,6 +31,9 @@ public enum DeployTrigger {
     BUILD,
 
     @DictItem(label = "定时更新")
-    SCHEDULE
+    SCHEDULE,
+
+    @DictItem(label = "转为应用")
+    ADOPT
 
 }

@@ -212,6 +212,16 @@ git tag vx.y.z && git push && git push origin vx.y.z
   保留终端内容），并每 25 秒发 `{"type":"ping"}` 心跳，避免 nginx / 隧道按空闲连接断开。
   **容器控制台不参与持久化**（`ContainerConsole` 不传 `autoReconnect`），行为与以前一致；
   平台重启或辅助容器重建 / 切换目录后主机终端会话也会丢失（shell 运行在辅助容器内）。
+- **容器转为应用（容器数据还在、应用记录丢失时的恢复入口）：** 主机详情「容器」Tab 的操作栏
+  与容器详情页顶部都有「转为应用」按钮（权限 `app:save`，重建容器额外要求 `app:deploy`）。
+  弹窗组件是 `web/src/components/ConvertToAppModal.jsx`：后端按容器 inspect 生成应用草稿
+  （`admin/container/appDraft`：名称 / 镜像 / 端口 / 目录挂载 / 环境变量 / 标签 / 启动命令 /
+  设备请求，命名卷、自定义 entrypoint、Compose 标签等无法完整还原的项以 warnings 提示），
+  用户修改后提交 `admin/container/convertToApp`。
+  默认**只登记应用、不重启当前容器**：新应用通过 `App.adoptedContainerId` 关联旧容器，
+  `AppService#getContainer` 按「接管 id → 平台标签 → 容器名」查找，因此状态 / 启停 / 日志 /
+  删除立即可用；下一次成功部署会写入 `app.name` 标签并清空 `adoptedContainerId`。
+  勾选「重建容器」时按应用配置重新部署（`DeployTrigger.ADOPT`），由部署流程停掉旧容器后创建新容器。
 - **容器详情页：** 容器不再用弹窗 / 内嵌页签展示，统一走独立页面 `/container/view`
   （`web/src/pages/container/view.jsx`，pageMeta「容器详情」）。参数为 `hostId` + `containerId`（主机维度）
   或 `appId`（应用维度，走 `admin/app/containerDetail` 与 `/admin/ws/log/{appId}`），
